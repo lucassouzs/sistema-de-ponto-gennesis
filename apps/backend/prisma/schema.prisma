@@ -1,0 +1,246 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuário
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  cpf       String   @unique
+  role      UserRole @default(EMPLOYEE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relacionamentos
+  employee     Employee?
+  timeRecords  TimeRecord[]
+  vacations    Vacation[]
+  overtime     Overtime[]
+  reports      Report[]
+
+  @@map("users")
+}
+
+// Modelo de Funcionário
+model Employee {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  employeeId        String    @unique // Matrícula
+  department        String
+  position          String
+  hireDate          DateTime
+  salary            Decimal   @db.Decimal(10, 2)
+  workSchedule      Json      // Horário de trabalho em JSON
+  isRemote          Boolean   @default(false)
+  allowedLocations  Json?     // Locais permitidos para bater ponto
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relacionamentos
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeRecords TimeRecord[]
+  vacations   Vacation[]
+  overtime    Overtime[]
+
+  @@map("employees")
+}
+
+// Modelo de Registro de Ponto
+model TimeRecord {
+  id          String        @id @default(cuid())
+  userId      String
+  employeeId  String
+  type        TimeRecordType
+  timestamp   DateTime      @default(now())
+  latitude    Float?
+  longitude   Float?
+  photoUrl    String?
+  photoKey    String?       // Chave do S3
+  isValid     Boolean       @default(true)
+  reason      String?       // Motivo se inválido
+  approvedBy  String?       // ID do aprovador
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relacionamentos
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("time_records")
+}
+
+// Modelo de Férias
+model Vacation {
+  id          String         @id @default(cuid())
+  userId      String
+  employeeId  String
+  startDate   DateTime
+  endDate     DateTime
+  days        Int
+  type        VacationType   @default(ANNUAL)
+  status      VacationStatus @default(PENDING)
+  reason      String?
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relacionamentos
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("vacations")
+}
+
+// Modelo de Horas Extras
+model Overtime {
+  id          String        @id @default(cuid())
+  userId      String
+  employeeId  String
+  date        DateTime
+  hours       Decimal       @db.Decimal(4, 2)
+  type        OvertimeType
+  description String?
+  status      OvertimeStatus @default(PENDING)
+  approvedBy  String?
+  approvedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relacionamentos
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("overtime")
+}
+
+// Modelo de Relatórios
+model Report {
+  id          String     @id @default(cuid())
+  userId      String
+  type        ReportType
+  title       String
+  description String?
+  data        Json       // Dados do relatório em JSON
+  period      Json       // Período do relatório
+  status      ReportStatus @default(GENERATED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relacionamentos
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+// Modelo de Configurações da Empresa
+model CompanySettings {
+  id                    String   @id @default(cuid())
+  name                  String
+  cnpj                  String   @unique
+  address               String
+  phone                 String?
+  email                 String?
+  workStartTime         String   @default("08:00")
+  workEndTime           String   @default("17:00")
+  lunchStartTime        String   @default("12:00")
+  lunchEndTime          String   @default("13:00")
+  toleranceMinutes      Int      @default(10)
+  maxOvertimeHours      Int      @default(2)
+  maxDistanceMeters     Int      @default(1000)
+  defaultLatitude       Float    @default(-23.5505)
+  defaultLongitude      Float    @default(-46.6333)
+  vacationDaysPerYear   Int      @default(30)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("company_settings")
+}
+
+// Modelo de Logs de Auditoria
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum TimeRecordType {
+  ENTRY
+  EXIT
+  LUNCH_START
+  LUNCH_END
+  BREAK_START
+  BREAK_END
+}
+
+enum VacationType {
+  ANNUAL
+  SICK
+  MATERNITY
+  PATERNITY
+  EMERGENCY
+}
+
+enum VacationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum OvertimeType {
+  REGULAR
+  WEEKEND
+  HOLIDAY
+  NIGHT
+}
+
+enum OvertimeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ReportType {
+  ATTENDANCE
+  OVERTIME
+  VACATION
+  PRODUCTIVITY
+  CUSTOM
+}
+
+enum ReportStatus {
+  GENERATED
+  PROCESSING
+  ERROR
+}
