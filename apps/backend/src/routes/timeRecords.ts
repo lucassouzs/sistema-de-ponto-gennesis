@@ -14,6 +14,7 @@ router.post('/punch', uploadPhoto.single('photo'), handleUploadError, timeRecord
 router.get('/my-records', timeRecordController.getMyRecords);
 router.get('/my-records/today', timeRecordController.getTodayRecords);
 router.get('/my-records/period', timeRecordController.getRecordsByPeriod);
+router.get('/my-records/bank-hours', timeRecordController.getBankHours);
 
 // Rotas para administradores e RH
 router.get('/', authorize('ADMIN', 'HR'), timeRecordController.getAllRecords);

@@ -39,6 +39,12 @@ export interface PeriodSummary {
 }
 
 export class TimeRecordService {
+  private getExpectedWorkHoursByRule(date: Date): number {
+    const dow = moment(date).day(); // 0 dom, 1 seg ... 6 sáb
+    if (dow >= 1 && dow <= 4) return 9; // seg-qui: 9h (7-17 com 1h almoço)
+    if (dow === 5) return 8; // sexta: 8h (7-16 com 1h almoço)
+    return 0; // fim de semana
+  }
   async calculateWorkHours(userId: string, date: Date): Promise<WorkHoursCalculation> {
     const startOfDay = moment(date).startOf('day').toDate();
     const endOfDay = moment(date).endOf('day').toDate();
@@ -98,8 +104,7 @@ export class TimeRecordService {
     const effectiveHours = totalHours - lunchHours;
 
     // Buscar configurações da empresa
-    const companySettings = await prisma.companySettings.findFirst();
-    const regularWorkHours = companySettings ? 8 : 8; // 8 horas por padrão
+    const regularWorkHours = 8; // Mantemos aqui, pois banco de horas usará a regra externa de 9h/8h
 
     if (effectiveHours > regularWorkHours) {
       regularHours = regularWorkHours;
@@ -252,6 +257,158 @@ export class TimeRecordService {
       lateArrivals,
       earlyDepartures,
       issues
+    };
+  }
+
+  async calculateBankHours(userId: string, startDate: Date, endDate: Date) {
+    // Respeitar data de admissão para não contar antes do ingresso
+    const employee = await prisma.employee.findFirst({ where: { userId } });
+    const adjustedStart = employee ? moment.max(moment(startDate).startOf('day'), moment(employee.hireDate).startOf('day')) : moment(startDate).startOf('day');
+    const cursor = adjustedStart.clone();
+    // Limitar até o dia atual (não incluir dias futuros)
+    const today = moment().endOf('day');
+    const end = moment.min(moment(endDate).endOf('day'), today);
+    let totalOvertimeHours = 0;
+    let totalOwedHours = 0;
+
+    while (cursor.isSameOrBefore(end, 'day')) {
+      const expected = this.getExpectedWorkHoursByRule(cursor.toDate());
+      if (expected > 0) {
+        // Buscar registros do dia (incluindo inválidos) para não perder horas trabalhadas
+        const dayStart = cursor.clone().startOf('day').toDate();
+        const dayEnd = cursor.clone().endOf('day').toDate();
+        const dayRecords = await prisma.timeRecord.findMany({
+          where: {
+            userId,
+            timestamp: { gte: dayStart, lte: dayEnd },
+          },
+          orderBy: { timestamp: 'asc' },
+        });
+
+        let effective = 0;
+        if (dayRecords.length === 0) {
+          // Ausência completa
+          totalOwedHours += expected;
+        } else {
+          const entry = dayRecords.find(r => r.type === TimeRecordType.ENTRY);
+          const exit = [...dayRecords].reverse().find(r => r.type === TimeRecordType.EXIT);
+          if (entry && exit) {
+            const total = moment(exit.timestamp).diff(moment(entry.timestamp), 'hours', true);
+            const lunchStart = dayRecords.find(r => r.type === TimeRecordType.LUNCH_START);
+            const lunchEnd = dayRecords.find(r => r.type === TimeRecordType.LUNCH_END);
+            let lunch = 0;
+            if (lunchStart && lunchEnd) {
+              lunch = moment(lunchEnd.timestamp).diff(moment(lunchStart.timestamp), 'hours', true);
+            } else {
+              // Assumir 1h de almoço na ausência de registros
+              lunch = 1;
+            }
+            effective = Math.max(0, total - lunch);
+          } else {
+            // Sem entrada/saída completos: considera ausência
+            totalOwedHours += expected;
+          }
+
+          if (effective > 0) {
+            if (effective >= expected) totalOvertimeHours += (effective - expected);
+            else totalOwedHours += (expected - effective);
+          }
+        }
+      }
+      cursor.add(1, 'day');
+    }
+
+    return {
+      startDate: adjustedStart.toDate(),
+      endDate,
+      totalOvertimeHours,
+      totalOwedHours,
+      balanceHours: totalOvertimeHours - totalOwedHours,
+    };
+  }
+
+  async calculateBankHoursDetailed(userId: string, startDate: Date, endDate: Date) {
+    const employee = await prisma.employee.findFirst({ where: { userId } });
+    const adjustedStart = employee ? moment.max(moment(startDate).startOf('day'), moment(employee.hireDate).startOf('day')) : moment(startDate).startOf('day');
+    const cursor = adjustedStart.clone();
+    // Limitar até o dia atual (não incluir dias futuros)
+    const today = moment().endOf('day');
+    const end = moment.min(moment(endDate).endOf('day'), today);
+
+    const days: Array<{
+      date: Date;
+      expectedHours: number;
+      workedHours: number;
+      overtimeHours: number;
+      owedHours: number;
+      notes: string[];
+    }> = [];
+
+    while (cursor.isSameOrBefore(end, 'day')) {
+      const expected = this.getExpectedWorkHoursByRule(cursor.toDate());
+      let worked = 0;
+      let overtime = 0;
+      let owed = 0;
+      const notes: string[] = [];
+
+      if (expected > 0) {
+        const dayStart = cursor.clone().startOf('day').toDate();
+        const dayEnd = cursor.clone().endOf('day').toDate();
+        const dayRecords = await prisma.timeRecord.findMany({
+          where: { userId, timestamp: { gte: dayStart, lte: dayEnd } },
+          orderBy: { timestamp: 'asc' },
+        });
+
+        if (dayRecords.length === 0) {
+          owed = expected;
+          notes.push('Ausência no dia');
+        } else {
+          const entry = dayRecords.find(r => r.type === TimeRecordType.ENTRY);
+          const exit = [...dayRecords].reverse().find(r => r.type === TimeRecordType.EXIT);
+          const lunchStart = dayRecords.find(r => r.type === TimeRecordType.LUNCH_START);
+          const lunchEnd = dayRecords.find(r => r.type === TimeRecordType.LUNCH_END);
+
+          if (!entry) notes.push('Entrada não registrada');
+          if (!exit) notes.push('Saída não registrada');
+          if (entry && exit) {
+            const total = moment(exit.timestamp).diff(moment(entry.timestamp), 'hours', true);
+            let lunch = 0;
+            if (lunchStart && lunchEnd) {
+              lunch = moment(lunchEnd.timestamp).diff(moment(lunchStart.timestamp), 'hours', true);
+            } else {
+              lunch = 1; // assume 1h
+              notes.push('Almoço não registrado - assumindo 1h');
+            }
+            worked = Math.max(0, total - lunch);
+            if (worked >= expected) overtime = worked - expected; else owed = expected - worked;
+          } else {
+            owed = expected;
+          }
+        }
+      }
+
+      days.push({
+        date: cursor.toDate(),
+        expectedHours: expected,
+        workedHours: Number(worked.toFixed(2)),
+        overtimeHours: Number(overtime.toFixed(2)),
+        owedHours: Number(owed.toFixed(2)),
+        notes,
+      });
+
+      cursor.add(1, 'day');
+    }
+
+    const totalOvertimeHours = days.reduce((acc, d) => acc + d.overtimeHours, 0);
+    const totalOwedHours = days.reduce((acc, d) => acc + d.owedHours, 0);
+
+    return {
+      startDate: adjustedStart.toDate(),
+      endDate,
+      totalOvertimeHours: Number(totalOvertimeHours.toFixed(2)),
+      totalOwedHours: Number(totalOwedHours.toFixed(2)),
+      balanceHours: Number((totalOvertimeHours - totalOwedHours).toFixed(2)),
+      days,
     };
   }
 

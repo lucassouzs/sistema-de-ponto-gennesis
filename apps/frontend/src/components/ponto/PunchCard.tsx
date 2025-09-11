@@ -67,9 +67,6 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Bater Ponto
             </h2>
-            <p className="text-gray-600">
-              Temporariamente sem foto; a captura será reativada depois
-            </p>
           </div>
 
           {/* Tipo de Ponto */}

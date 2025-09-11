@@ -247,7 +247,7 @@ export class TimeRecordController {
             lte: end
           }
         },
-        orderBy: { timestamp: 'desc' },
+        orderBy: { timestamp: 'asc' },
         include: {
           employee: {
             select: { employeeId: true, department: true }
@@ -266,6 +266,26 @@ export class TimeRecordController {
           period: { startDate: start, endDate: end }
         }
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getBankHours(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user!.id;
+      const { startDate, endDate, detailed } = req.query as any;
+
+      const now = new Date();
+      const start = startDate ? new Date(startDate as string) : new Date(now.getFullYear(), now.getMonth(), 1);
+      // Sempre limitar até hoje, mesmo quando endDate não é especificada
+      const end = endDate ? new Date(endDate as string) : now;
+
+      const result = detailed === 'true'
+        ? await timeRecordService.calculateBankHoursDetailed(userId, start, end)
+        : await timeRecordService.calculateBankHours(userId, start, end);
+
+      res.json({ success: true, data: result });
     } catch (error) {
       next(error);
     }
