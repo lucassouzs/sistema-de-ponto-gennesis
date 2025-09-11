@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3 } from 'lucide-react';
+import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { PunchCard } from '@/components/ponto/PunchCard';
 import { TimeRecordsList } from '@/components/ponto/TimeRecordsList';
@@ -43,6 +43,8 @@ export function UserInfoPanel({ name, cpf, onLogout }: UserInfoPanelProps) {
 }
 
 export default function DashboardPage() {
+  const now = new Date();
+  
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
     queryFn: async () => {
@@ -68,7 +70,6 @@ export default function DashboardPage() {
   });
 
   // Painel "Ver mais" com filtros de data (dia/mês/ano)
-  const now = new Date();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1); // 1-12
@@ -87,32 +88,31 @@ export default function DashboardPage() {
     }
   });
 
-  // Banco de horas do mês atual
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  // Banco de horas total (desde a admissão)
   const { data: bankHoursData } = useQuery({
-    queryKey: ['bank-hours', startOfMonth.toISOString(), endOfMonth.toISOString()],
+    queryKey: ['bank-hours-total'],
     queryFn: async () => {
-      const res = await api.get('/time-records/my-records/bank-hours', {
-        params: {
-          startDate: startOfMonth.toISOString(),
-          endDate: endOfMonth.toISOString(),
-        }
-      });
+      const res = await api.get('/time-records/my-records/bank-hours');
       return res.data;
     }
   });
 
   // Detalhamento do banco de horas (modal)
   const [isBankDetailsOpen, setIsBankDetailsOpen] = useState(false);
+  const [selectedBankYear, setSelectedBankYear] = useState<number>(now.getFullYear());
+  const [selectedBankMonth, setSelectedBankMonth] = useState<number>(now.getMonth() + 1); // 1-12
+  
   const { data: bankHoursDetailed } = useQuery({
-    queryKey: ['bank-hours-detailed', startOfMonth.toISOString(), endOfMonth.toISOString(), isBankDetailsOpen],
+    queryKey: ['bank-hours-detailed', selectedBankYear, selectedBankMonth, isBankDetailsOpen],
     enabled: isBankDetailsOpen,
     queryFn: async () => {
+      const startDate = new Date(selectedBankYear, selectedBankMonth - 1, 1);
+      const endDate = new Date(selectedBankYear, selectedBankMonth, 0); // Último dia do mês
+      
       const res = await api.get('/time-records/my-records/bank-hours', {
         params: {
-          startDate: startOfMonth.toISOString(),
-          endDate: endOfMonth.toISOString(),
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
           detailed: true,
         }
       });
@@ -126,6 +126,60 @@ export default function DashboardPage() {
     sessionStorage.removeItem('token');
     // Redireciona para a tela de login
     window.location.href = '/auth/login';
+  };
+
+  const exportToExcel = async () => {
+    try {
+      if (!bankHoursDetailed?.data?.days) return;
+      
+      // Criar dados para o Excel
+      const excelData = [
+        ['FUNCIONÁRIO', '', '', '', '', ''],
+        ['Nome:', userData?.data?.name || '', '', '', '', ''],
+        ['CPF:', userData?.data?.cpf || '', '', '', '', ''],
+        ['Período:', `${selectedBankMonth.toString().padStart(2, '0')}/${selectedBankYear}`, '', '', '', ''],
+        ['', '', '', '', '', ''],
+        ['Data', 'Horas Esperadas', 'Horas Trabalhadas', 'Horas Extras', 'Horas Devidas', 'Observações'],
+        ...bankHoursDetailed.data.days.map((day: any) => [
+          new Date(day.date).toLocaleDateString('pt-BR'),
+          day.expectedHours,
+          day.workedHours,
+          day.overtimeHours,
+          day.owedHours,
+          day.notes?.join(', ') || ''
+        ]),
+        ['', '', '', '', '', ''],
+        ['RESUMO', '', '', '', '', ''],
+        ['Total de Horas Extras:', bankHoursDetailed.data.totalOvertimeHours || 0, '', '', '', ''],
+        ['Total de Horas Devidas:', bankHoursDetailed.data.totalOwedHours || 0, '', '', '', ''],
+        ['Saldo:', bankHoursDetailed.data.balanceHours || 0, '', '', '', '']
+      ];
+
+      // Criar workbook e worksheet
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet(excelData);
+      
+      // Definir larguras das colunas
+      ws['!cols'] = [
+        { width: 15 }, // Data
+        { width: 15 }, // Horas Esperadas
+        { width: 15 }, // Horas Trabalhadas
+        { width: 15 }, // Horas Extras
+        { width: 15 }, // Horas Devidas
+        { width: 30 }  // Observações
+      ];
+      
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Banco de Horas');
+
+      // Nome do arquivo
+      const fileName = `banco_horas_${userData?.data?.name?.replace(/\s+/g, '_') || 'funcionario'}_${selectedBankMonth.toString().padStart(2, '0')}_${selectedBankYear}.xlsx`;
+      
+      // Baixar arquivo
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Erro ao exportar Excel:', error);
+    }
   };
 
   if (loadingDashboard || loadingUser || (isPanelOpen && loadingDay)) {
@@ -368,32 +422,36 @@ export default function DashboardPage() {
         {/* Banco de horas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
           <Card className="w-full max-w-2xl mx-auto">
-            <CardHeader className="pb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Banco de Horas (mês atual)</h3>
-            </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-4 bg-blue-50 rounded">
-                  <div className="text-sm text-gray-600">Horas Extras</div>
-                  <div className="text-2xl font-bold text-blue-700">{bankHoursData?.data?.totalOvertimeHours?.toFixed ? bankHoursData.data.totalOvertimeHours.toFixed(1) : (bankHoursData?.data?.totalOvertimeHours || 0)}h</div>
+              <div className="space-y-6">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    Banco de Horas
+                  </h2>
                 </div>
-                <div className="p-4 bg-red-50 rounded">
-                  <div className="text-sm text-gray-600">Horas Devidas</div>
-                  <div className="text-2xl font-bold text-red-700">{bankHoursData?.data?.totalOwedHours?.toFixed ? bankHoursData.data.totalOwedHours.toFixed(1) : (bankHoursData?.data?.totalOwedHours || 0)}h</div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 bg-blue-50 rounded">
+                    <div className="text-sm text-gray-600">Horas Extras</div>
+                    <div className="text-2xl font-bold text-blue-700">{bankHoursData?.data?.totalOvertimeHours?.toFixed ? bankHoursData.data.totalOvertimeHours.toFixed(1) : (bankHoursData?.data?.totalOvertimeHours || 0)}h</div>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded">
+                    <div className="text-sm text-gray-600">Horas Devidas</div>
+                    <div className="text-2xl font-bold text-red-700">{bankHoursData?.data?.totalOwedHours?.toFixed ? bankHoursData.data.totalOwedHours.toFixed(1) : (bankHoursData?.data?.totalOwedHours || 0)}h</div>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded">
+                    <div className="text-sm text-gray-600">Saldo</div>
+                    <div className="text-2xl font-bold text-gray-900">{bankHoursData?.data?.balanceHours?.toFixed ? bankHoursData.data.balanceHours.toFixed(1) : (bankHoursData?.data?.balanceHours || 0)}h</div>
+                  </div>
                 </div>
-                <div className="p-4 bg-gray-50 rounded">
-                  <div className="text-sm text-gray-600">Saldo</div>
-                  <div className="text-2xl font-bold text-gray-900">{bankHoursData?.data?.balanceHours?.toFixed ? bankHoursData.data.balanceHours.toFixed(1) : (bankHoursData?.data?.balanceHours || 0)}h</div>
+                <div className="mt-4">
+                  <button
+                    onClick={() => setIsBankDetailsOpen(true)}
+                    className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    <span className="text-sm font-medium">Ver detalhamento</span>
+                  </button>
                 </div>
-              </div>
-              <div className="mt-4">
-                <button
-                  onClick={() => setIsBankDetailsOpen(true)}
-                  className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  <span className="text-sm font-medium">Ver detalhamento</span>
-                </button>
               </div>
             </CardContent>
           </Card>
@@ -403,15 +461,77 @@ export default function DashboardPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setIsBankDetailsOpen(false)} />
             <div className="relative w-full max-w-4xl mx-4 bg-white rounded-lg shadow-2xl overflow-hidden">
-              <div className="px-6 py-4 border-b flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Detalhamento do Banco de Horas (mês atual)</h3>
-                <button
-                  onClick={() => setIsBankDetailsOpen(false)}
-                  className="p-2 rounded hover:bg-gray-100 text-gray-600"
-                  aria-label="Fechar"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              <div className="px-6 py-4 border-b">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Detalhamento do Banco de Horas</h3>
+                    <div className="mt-1 text-sm text-gray-600">
+                      <span className="font-medium">{userData?.data?.name}</span>
+                      <span className="mx-2">•</span>
+                      <span>CPF: {userData?.data?.cpf}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={exportToExcel}
+                      className="flex items-center space-x-2 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500"
+                      aria-label="Baixar Excel"
+                    >
+                      <Download className="w-4 h-4" />
+                      <span className="text-sm font-medium">Excel</span>
+                    </button>
+                    <button
+                      onClick={() => setIsBankDetailsOpen(false)}
+                      className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                      aria-label="Fechar"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Seletores de mês e ano */}
+                <div className="flex items-center space-x-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Mês</label>
+                    <select
+                      value={selectedBankMonth}
+                      onChange={(e) => setSelectedBankMonth(Number(e.target.value))}
+                      className="w-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value={1}>Janeiro</option>
+                      <option value={2}>Fevereiro</option>
+                      <option value={3}>Março</option>
+                      <option value={4}>Abril</option>
+                      <option value={5}>Maio</option>
+                      <option value={6}>Junho</option>
+                      <option value={7}>Julho</option>
+                      <option value={8}>Agosto</option>
+                      <option value={9}>Setembro</option>
+                      <option value={10}>Outubro</option>
+                      <option value={11}>Novembro</option>
+                      <option value={12}>Dezembro</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Ano</label>
+                    <select
+                      value={selectedBankYear}
+                      onChange={(e) => setSelectedBankYear(Number(e.target.value))}
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({ length: 10 }, (_, i) => {
+                        const year = now.getFullYear() - 5 + i;
+                        return (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
               </div>
               <div className="max-h-[70vh] overflow-auto p-6">
                 <div className="w-full overflow-x-auto">

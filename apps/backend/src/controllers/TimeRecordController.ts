@@ -309,7 +309,16 @@ export class TimeRecordController {
       const { startDate, endDate, detailed } = req.query as any;
 
       const now = new Date();
-      const start = startDate ? new Date(startDate as string) : new Date(now.getFullYear(), now.getMonth(), 1);
+      let start: Date;
+      
+      if (startDate) {
+        start = new Date(startDate as string);
+      } else {
+        // Se não há startDate, usar a data de admissão do funcionário
+        const employee = await prisma.employee.findFirst({ where: { userId } });
+        start = employee ? employee.hireDate : new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      
       // Sempre limitar até hoje, mesmo quando endDate não é especificada
       const end = endDate ? new Date(endDate as string) : now;
 
