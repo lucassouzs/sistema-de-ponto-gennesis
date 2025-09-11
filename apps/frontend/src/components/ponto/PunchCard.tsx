@@ -156,13 +156,10 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
           <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
             <MapPin className="w-5 h-5 text-gray-500" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Localização (Opcional)</p>
+              <p className="text-sm font-medium text-gray-700">Localização</p>
               <Badge variant={locationStatus.variant} size="sm">
                 {locationStatus.text}
               </Badge>
-              <div className="text-xs text-gray-400 mt-1">
-                Você pode bater ponto de qualquer lugar. A localização será registrada para auditoria.
-              </div>
             </div>
             {location && (
               <div className="text-xs text-gray-500">
