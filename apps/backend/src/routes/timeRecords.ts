@@ -22,6 +22,9 @@ router.get('/:id', authorize('ADMIN', 'HR'), timeRecordController.getRecordById)
 router.put('/:id/validate', authorize('ADMIN', 'HR'), timeRecordController.validateRecord);
 router.put('/:id/invalidate', authorize('ADMIN', 'HR'), timeRecordController.invalidateRecord);
 
+// Rota para editar registros - APENAS ADMINISTRADORES
+router.put('/:id', authorize('ADMIN'), timeRecordController.updateRecord);
+
 // Relatórios
 router.get('/reports/attendance', authorize('ADMIN', 'HR'), timeRecordController.getAttendanceReport);
 router.get('/reports/late-arrivals', authorize('ADMIN', 'HR'), timeRecordController.getLateArrivalsReport);

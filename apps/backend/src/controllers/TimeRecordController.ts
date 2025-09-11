@@ -412,6 +412,68 @@ export class TimeRecordController {
     }
   }
 
+  async updateRecord(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { type, timestamp, reason } = req.body;
+
+      // Verificar se o registro existe
+      const existingRecord = await prisma.timeRecord.findUnique({
+        where: { id },
+        include: {
+          user: {
+            select: { name: true, email: true }
+          }
+        }
+      });
+
+      if (!existingRecord) {
+        throw createError('Registro não encontrado', 404);
+      }
+
+      // Validar tipo se fornecido
+      if (type && !Object.values(TimeRecordType).includes(type)) {
+        throw createError('Tipo de registro inválido', 400);
+      }
+
+      // Validar timestamp se fornecido
+      let newTimestamp = existingRecord.timestamp;
+      if (timestamp) {
+        newTimestamp = new Date(timestamp);
+        if (isNaN(newTimestamp.getTime())) {
+          throw createError('Data/hora inválida', 400);
+        }
+      }
+
+      // Atualizar registro
+      const updatedRecord = await prisma.timeRecord.update({
+        where: { id },
+        data: {
+          ...(type && { type }),
+          ...(timestamp && { timestamp: newTimestamp }),
+          ...(reason !== undefined && { reason }),
+          updatedAt: new Date()
+        },
+        include: {
+          user: {
+            select: { name: true, email: true }
+          },
+          employee: {
+            select: { employeeId: true, department: true, position: true }
+          }
+        }
+      });
+
+      res.json({
+        success: true,
+        data: updatedRecord,
+        message: 'Registro atualizado com sucesso'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async validateRecord(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;

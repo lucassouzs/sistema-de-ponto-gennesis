@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
@@ -35,6 +35,16 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [editingRecord, setEditingRecord] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    type: string;
+    timestamp: string;
+    reason: string;
+  }>({
+    type: '',
+    timestamp: '',
+    reason: ''
+  });
 
   const queryClient = useQueryClient();
 
@@ -233,8 +243,47 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     }
   });
 
+  // Atualizar registro de ponto
+  const updateRecordMutation = useMutation({
+    mutationFn: async ({ recordId, data }: { recordId: string; data: any }) => {
+      const res = await api.put(`/time-records/${recordId}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employee-records', selectedEmployee?.id, selectedMonth, selectedYear] });
+      setEditingRecord(null);
+      setEditForm({ type: '', timestamp: '', reason: '' });
+    },
+    onError: (error: any) => {
+      console.error('Erro ao atualizar registro:', error);
+    }
+  });
+
   const handleDelete = (employeeId: string) => {
     deleteEmployeeMutation.mutate(employeeId);
+  };
+
+  const handleEditRecord = (record: any) => {
+    setEditingRecord(record.id);
+    setEditForm({
+      type: record.type,
+      timestamp: new Date(record.timestamp).toISOString().slice(0, 16),
+      reason: record.reason || ''
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (editingRecord) {
+      updateRecordMutation.mutate({
+        recordId: editingRecord,
+        data: editForm
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRecord(null);
+    setEditForm({ type: '', timestamp: '', reason: '' });
   };
 
   const formatDate = (dateString: string) => {
@@ -639,6 +688,15 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                      record.type === 'LUNCH_START' ? 'Início Almoço' :
                                      record.type === 'LUNCH_END' ? 'Fim Almoço' : record.type}
                                   </span>
+                                  {userRole === 'ADMIN' && (
+                                    <button
+                                      onClick={() => handleEditRecord(record)}
+                                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                      title="Editar registro"
+                                    >
+                                      <Edit className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -667,6 +725,85 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                     )}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de edição de registro */}
+        {editingRecord && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={handleCancelEdit} />
+            <div className="relative w-full max-w-md mx-4 bg-white rounded-lg shadow-2xl">
+              <div className="px-6 py-4 border-b flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Editar Registro</h3>
+                <button
+                  onClick={handleCancelEdit}
+                  className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                  aria-label="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tipo de Registro
+                  </label>
+                  <select
+                    value={editForm.type}
+                    onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="ENTRY">Entrada</option>
+                    <option value="LUNCH_START">Início Almoço</option>
+                    <option value="LUNCH_END">Fim Almoço</option>
+                    <option value="EXIT">Saída</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data e Hora
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editForm.timestamp}
+                    onChange={(e) => setEditForm({ ...editForm, timestamp: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observação
+                  </label>
+                  <textarea
+                    value={editForm.reason}
+                    onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Motivo da alteração..."
+                  />
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={updateRecordMutation.isPending}
+                    className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{updateRecordMutation.isPending ? 'Salvando...' : 'Salvar'}</span>
+                  </button>
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
