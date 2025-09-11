@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3, Download } from 'lucide-react';
+import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3, Download, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { PunchCard } from '@/components/ponto/PunchCard';
 import { TimeRecordsList } from '@/components/ponto/TimeRecordsList';
+import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
 import api from '@/lib/api';
 
 type UserInfoPanelProps = {
@@ -101,6 +102,9 @@ export default function DashboardPage() {
   const [isBankDetailsOpen, setIsBankDetailsOpen] = useState(false);
   const [selectedBankYear, setSelectedBankYear] = useState<number>(now.getFullYear());
   const [selectedBankMonth, setSelectedBankMonth] = useState<number>(now.getMonth() + 1); // 1-12
+
+  // Modal de criação de funcionário
+  const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   
   const { data: bankHoursDetailed } = useQuery({
     queryKey: ['bank-hours-detailed', selectedBankYear, selectedBankMonth, isBankDetailsOpen],
@@ -372,6 +376,32 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Card de criação de funcionários - apenas para RH/Admin */}
+        {isAdminOrHR && (
+          <Card className="mb-8">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 bg-green-100 rounded-lg">
+                    <UserPlus className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Gerenciar Funcionários</h3>
+                    <p className="text-sm text-gray-600">Criar novos funcionários e gerenciar a equipe</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCreateEmployeeOpen(true)}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center space-x-2"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Novo Funcionário</span>
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Mensagem para RH/Admin quando não há sistema de ponto */}
         {isAdminOrHR && (
           <Card className="mb-8">
@@ -596,6 +626,11 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal de criação de funcionário */}
+        {isCreateEmployeeOpen && (
+          <CreateEmployeeForm onClose={() => setIsCreateEmployeeOpen(false)} />
         )}
       </div>
     </div>
