@@ -195,8 +195,13 @@ export default function DashboardPage() {
 
   const user = userData?.data || {
     name: 'Usuário',
-    cpf: '000.000.000-00'
+    cpf: '000.000.000-00',
+    role: 'EMPLOYEE'
   };
+
+  // Verificar se o usuário é RH ou Admin
+  const isAdminOrHR = user.role === 'ADMIN' || user.role === 'HR';
+  const isEmployee = user.role === 'EMPLOYEE';
 
   const stats = dashboardData?.data || {
     totalEmployees: 0,
@@ -222,142 +227,168 @@ export default function DashboardPage() {
 
         <UserInfoPanel name={user.name} cpf={user.cpf} onLogout={handleLogout} />
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <Users className="w-6 h-6 text-blue-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Funcionários</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-green-100 rounded-lg">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Presentes Hoje</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.presentToday}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-red-100 rounded-lg">
-                  <XCircle className="w-6 h-6 text-red-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Ausentes Hoje</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.absentToday}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center">
-                <div className="p-3 bg-yellow-100 rounded-lg">
-                  <AlertCircle className="w-6 h-6 text-yellow-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Atrasos Hoje</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.lateToday}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="mb-8">
-          <CardHeader className="pb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Taxa de Frequência</h3>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center space-x-6">
-              <div className="flex-1">
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
-                    style={{ width: `${widthPercent}%` }} 
-                  />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-gray-900 min-w-[60px] text-right">
-                {widthPercent}%
-              </div>
-            </div>
-            <div className="mt-3 text-sm text-gray-500">
-              {stats.presentToday} de {stats.totalEmployees} funcionários presentes hoje
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div>
-            <PunchCard />
-          </div>
-
-          <Card className="w-full max-w-2xl mx-auto">
-            <CardHeader className="pb-4 border-b-0 pt-4">
-              <h2 className="text-2xl font-bold text-gray-900 text-center">Registros</h2>
-            </CardHeader>
-            <CardContent>
-              <div className="max-w-2xl mx-auto">
-                <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
-                {(() => {
-                  const recs = todayRecords?.data?.records || [];
-                  const getTime = (type: string) => {
-                    const found = recs.find((r: any) => r.type === type);
-                    if (!found) return '--:--';
-                    const d = new Date(found.timestamp);
-                    const hh = String(d.getHours()).padStart(2, '0');
-                    const mm = String(d.getMinutes()).padStart(2, '0');
-                    return `${hh}:${mm}`;
-                  };
-                  const tiles = [
-                    { icon: <DoorOpen className="w-6 h-6" />, type: 'ENTRY' },
-                    { icon: <Utensils className="w-6 h-6" />, type: 'LUNCH_START' },
-                    { icon: <UtensilsCrossed className="w-6 h-6" />, type: 'LUNCH_END' },
-                    { icon: <DoorClosed className="w-6 h-6" />, type: 'EXIT' },
-                  ];
-                  return (
-                    <div className="grid grid-cols-2 gap-3">
-                      {tiles.map(t => (
-                        <div key={t.type} className="p-4 rounded-lg border-2 bg-white border-gray-200">
-                          <div className="flex flex-col items-center justify-center space-y-2">
-                            {t.icon}
-                            <div className="text-lg font-semibold text-gray-900">{getTime(t.type)}</div>
-                          </div>
-                        </div>
-                      ))}
+        {/* Métricas administrativas - apenas para RH e Admin */}
+        {isAdminOrHR && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-blue-100 rounded-lg">
+                      <Users className="w-6 h-6 text-blue-600" />
                     </div>
-                  );
-                })()}
-              </div>
-              <div className="pt-4">
-                <button
-                  onClick={() => setIsPanelOpen(true)}
-                  className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <Eye className="w-4 h-4" />
-                  <span className="text-sm font-medium">Ver mais</span>
-                </button>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Total Funcionários</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-green-100 rounded-lg">
+                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Presentes Hoje</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.presentToday}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-red-100 rounded-lg">
+                      <XCircle className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Ausentes Hoje</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.absentToday}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center">
+                    <div className="p-3 bg-yellow-100 rounded-lg">
+                      <AlertCircle className="w-6 h-6 text-yellow-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Atrasos Hoje</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.lateToday}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="mb-8">
+              <CardHeader className="pb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Taxa de Frequência</h3>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-6">
+                  <div className="flex-1">
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div 
+                        className="bg-blue-600 h-3 rounded-full transition-all duration-500 ease-out" 
+                        style={{ width: `${widthPercent}%` }} 
+                      />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 min-w-[60px] text-right">
+                    {widthPercent}%
+                  </div>
+                </div>
+                <div className="mt-3 text-sm text-gray-500">
+                  {stats.presentToday} de {stats.totalEmployees} funcionários presentes hoje
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {/* Sistema de ponto e registros - apenas para funcionários */}
+        {isEmployee && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div>
+              <PunchCard />
+            </div>
+
+            <Card className="w-full max-w-2xl mx-auto">
+              <CardHeader className="pb-4 border-b-0 pt-4">
+                <h2 className="text-2xl font-bold text-gray-900 text-center">Registros</h2>
+              </CardHeader>
+              <CardContent>
+                <div className="max-w-2xl mx-auto">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
+                  {(() => {
+                    const recs = todayRecords?.data?.records || [];
+                    const getTime = (type: string) => {
+                      const found = recs.find((r: any) => r.type === type);
+                      if (!found) return '--:--';
+                      const d = new Date(found.timestamp);
+                      const hh = String(d.getHours()).padStart(2, '0');
+                      const mm = String(d.getMinutes()).padStart(2, '0');
+                      return `${hh}:${mm}`;
+                    };
+                    const tiles = [
+                      { icon: <DoorOpen className="w-6 h-6" />, type: 'ENTRY' },
+                      { icon: <Utensils className="w-6 h-6" />, type: 'LUNCH_START' },
+                      { icon: <UtensilsCrossed className="w-6 h-6" />, type: 'LUNCH_END' },
+                      { icon: <DoorClosed className="w-6 h-6" />, type: 'EXIT' },
+                    ];
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        {tiles.map(t => (
+                          <div key={t.type} className="p-4 rounded-lg border-2 bg-white border-gray-200">
+                            <div className="flex flex-col items-center justify-center space-y-2">
+                              {t.icon}
+                              <div className="text-lg font-semibold text-gray-900">{getTime(t.type)}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="pt-4">
+                  <button
+                    onClick={() => setIsPanelOpen(true)}
+                    className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span className="text-sm font-medium">Ver mais</span>
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Mensagem para RH/Admin quando não há sistema de ponto */}
+        {isAdminOrHR && (
+          <Card className="mb-8">
+            <CardContent className="p-8 text-center">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="p-4 bg-blue-100 rounded-full">
+                  <Users className="w-8 h-8 text-blue-600" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">Painel Administrativo</h3>
+                <p className="text-gray-600 max-w-md">
+                  Como RH/Administrador, você tem acesso às métricas gerais da empresa. 
+                  O sistema de bater ponto é exclusivo para funcionários.
+                </p>
               </div>
             </CardContent>
           </Card>
-        </div>
+        )}
         {isPanelOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setIsPanelOpen(false)} />
@@ -419,43 +450,45 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Banco de horas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
-          <Card className="w-full max-w-2xl mx-auto">
-            <CardContent>
-              <div className="space-y-6">
-                <div className="text-center">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                    Banco de Horas
-                  </h2>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="p-4 bg-blue-50 rounded">
-                    <div className="text-sm text-gray-600">Horas Extras</div>
-                    <div className="text-2xl font-bold text-blue-700">{bankHoursData?.data?.totalOvertimeHours?.toFixed ? bankHoursData.data.totalOvertimeHours.toFixed(1) : (bankHoursData?.data?.totalOvertimeHours || 0)}h</div>
+        {/* Banco de horas - apenas para funcionários */}
+        {isEmployee && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+            <Card className="w-full max-w-2xl mx-auto">
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                      Banco de Horas
+                    </h2>
                   </div>
-                  <div className="p-4 bg-red-50 rounded">
-                    <div className="text-sm text-gray-600">Horas Devidas</div>
-                    <div className="text-2xl font-bold text-red-700">{bankHoursData?.data?.totalOwedHours?.toFixed ? bankHoursData.data.totalOwedHours.toFixed(1) : (bankHoursData?.data?.totalOwedHours || 0)}h</div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-blue-50 rounded">
+                      <div className="text-sm text-gray-600">Horas Extras</div>
+                      <div className="text-2xl font-bold text-blue-700">{bankHoursData?.data?.totalOvertimeHours?.toFixed ? bankHoursData.data.totalOvertimeHours.toFixed(1) : (bankHoursData?.data?.totalOvertimeHours || 0)}h</div>
+                    </div>
+                    <div className="p-4 bg-red-50 rounded">
+                      <div className="text-sm text-gray-600">Horas Devidas</div>
+                      <div className="text-2xl font-bold text-red-700">{bankHoursData?.data?.totalOwedHours?.toFixed ? bankHoursData.data.totalOwedHours.toFixed(1) : (bankHoursData?.data?.totalOwedHours || 0)}h</div>
+                    </div>
+                    <div className="p-4 bg-gray-50 rounded">
+                      <div className="text-sm text-gray-600">Saldo</div>
+                      <div className="text-2xl font-bold text-gray-900">{bankHoursData?.data?.balanceHours?.toFixed ? bankHoursData.data.balanceHours.toFixed(1) : (bankHoursData?.data?.balanceHours || 0)}h</div>
+                    </div>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded">
-                    <div className="text-sm text-gray-600">Saldo</div>
-                    <div className="text-2xl font-bold text-gray-900">{bankHoursData?.data?.balanceHours?.toFixed ? bankHoursData.data.balanceHours.toFixed(1) : (bankHoursData?.data?.balanceHours || 0)}h</div>
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setIsBankDetailsOpen(true)}
+                      className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                      <span className="text-sm font-medium">Ver detalhamento</span>
+                    </button>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <button
-                    onClick={() => setIsBankDetailsOpen(true)}
-                    className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Ver detalhamento</span>
-                  </button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {isBankDetailsOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
