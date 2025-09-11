@@ -404,10 +404,13 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* Lista de funcionários - apenas para Admin */}
-        {isAdmin && (
+        {/* Lista de funcionários - para Admin e RH */}
+        {(isAdmin || user.role === 'HR') && (
           <div className="mb-8">
-            <EmployeeList userRole={user.role} />
+            <EmployeeList 
+              userRole={user.role} 
+              showDeleteButton={isAdmin}
+            />
           </div>
         )}
 

@@ -23,9 +23,10 @@ interface Employee {
 
 interface EmployeeListProps {
   userRole: string;
+  showDeleteButton?: boolean;
 }
 
-export function EmployeeList({ userRole }: EmployeeListProps) {
+export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -89,7 +90,7 @@ export function EmployeeList({ userRole }: EmployeeListProps) {
     setCurrentPage(1);
   };
 
-  if (userRole !== 'ADMIN') {
+  if (userRole !== 'ADMIN' && userRole !== 'HR') {
     return null;
   }
 
@@ -102,8 +103,15 @@ export function EmployeeList({ userRole }: EmployeeListProps) {
               <Users className="w-6 h-6 text-red-600" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Gerenciar Funcionários</h3>
-              <p className="text-sm text-gray-600">Visualizar e gerenciar funcionários cadastrados</p>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {userRole === 'ADMIN' ? 'Gerenciar Funcionários' : 'Lista de Funcionários'}
+              </h3>
+              <p className="text-sm text-gray-600">
+                {userRole === 'ADMIN' 
+                  ? 'Visualizar e gerenciar funcionários cadastrados' 
+                  : 'Visualizar funcionários cadastrados'
+                }
+              </p>
             </div>
           </div>
         </div>
@@ -177,15 +185,17 @@ export function EmployeeList({ userRole }: EmployeeListProps) {
                   </div>
                 </div>
                 
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setDeleteConfirm(employee.id)}
-                    className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
-                    title="Excluir funcionário"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+                {showDeleteButton && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setDeleteConfirm(employee.id)}
+                      className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
+                      title="Excluir funcionário"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             </div>
