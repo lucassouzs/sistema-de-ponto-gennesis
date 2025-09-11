@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
 
@@ -31,8 +32,155 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   const queryClient = useQueryClient();
+
+  // Função para agrupar registros por dia
+  const groupRecordsByDay = (records: any[]) => {
+    const grouped = records.reduce((acc: Record<string, any[]>, record: any) => {
+      const date = new Date(record.timestamp).toLocaleDateString('pt-BR');
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(record);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    // Ordenar registros dentro de cada dia por timestamp
+    Object.keys(grouped).forEach(date => {
+      grouped[date].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    });
+
+    return grouped;
+  };
+
+  // Função para exportar registros como XLSX
+  const exportToExcel = () => {
+    if (!selectedEmployee || !employeeRecordsData?.data) return;
+
+    const records = employeeRecordsData.data;
+    const groupedRecords = groupRecordsByDay(records);
+
+    // Preparar dados para exportação
+    const exportData = [];
+    
+    // Cabeçalho com informações do funcionário
+    exportData.push(['INFORMAÇÕES DO FUNCIONÁRIO']);
+    exportData.push(['Nome:', selectedEmployee.name]);
+    exportData.push(['Email:', selectedEmployee.email]);
+    exportData.push(['CPF:', selectedEmployee.cpf]);
+    exportData.push(['Matrícula:', selectedEmployee.employee?.employeeId || 'N/A']);
+    exportData.push(['Setor:', selectedEmployee.employee?.department || 'N/A']);
+    exportData.push(['Cargo:', selectedEmployee.employee?.position || 'N/A']);
+    exportData.push(['Data de Admissão:', selectedEmployee.employee?.hireDate ? 
+      new Date(selectedEmployee.employee.hireDate).toLocaleDateString('pt-BR') : 'N/A']);
+    exportData.push(['Período:', `${selectedMonth.toString().padStart(2, '0')}/${selectedYear}`]);
+    exportData.push(['']); // Linha em branco
+
+    // Cabeçalho dos registros
+    exportData.push([
+      'Data',
+      'Entrada',
+      'Início Almoço',
+      'Fim Almoço',
+      'Saída',
+      'Observações'
+    ]);
+
+    // Dados agrupados por dia
+    Object.entries(groupedRecords).forEach(([date, dayRecords]) => {
+      const dayData = {
+        date: date,
+        entrada: '',
+        inicioAlmoco: '',
+        fimAlmoco: '',
+        saida: '',
+        observacoes: [] as string[]
+      };
+
+      // Processar registros do dia
+      dayRecords.forEach((record: any) => {
+        const time = new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        });
+
+        switch (record.type) {
+          case 'ENTRY':
+            dayData.entrada = time;
+            break;
+          case 'LUNCH_START':
+            dayData.inicioAlmoco = time;
+            break;
+          case 'LUNCH_END':
+            dayData.fimAlmoco = time;
+            break;
+          case 'EXIT':
+            dayData.saida = time;
+            break;
+        }
+
+        // Adicionar observações se existirem
+        if (record.reason) {
+          dayData.observacoes.push(`${time} - ${record.reason}`);
+        }
+      });
+
+      // Adicionar linha do dia
+      exportData.push([
+        dayData.date,
+        dayData.entrada,
+        dayData.inicioAlmoco,
+        dayData.fimAlmoco,
+        dayData.saida,
+        dayData.observacoes.join('; ')
+      ]);
+    });
+
+    // Criar workbook
+    const ws = XLSX.utils.aoa_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Registros de Ponto');
+
+    // Definir larguras das colunas
+    ws['!cols'] = [
+      { wch: 12 }, // Data
+      { wch: 10 }, // Entrada
+      { wch: 12 }, // Início Almoço
+      { wch: 12 }, // Fim Almoço
+      { wch: 10 }, // Saída
+      { wch: 40 }  // Observações
+    ];
+
+    // Estilizar cabeçalho do funcionário
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let row = 0; row <= 8; row++) {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: 0 });
+      if (!ws[cellRef]) ws[cellRef] = { v: '' };
+      ws[cellRef].s = { font: { bold: true } };
+    }
+
+    // Estilizar cabeçalho dos registros
+    const headerRow = 9;
+    for (let col = 0; col <= 5; col++) {
+      const cellRef = XLSX.utils.encode_cell({ r: headerRow, c: col });
+      if (!ws[cellRef]) ws[cellRef] = { v: '' };
+      ws[cellRef].s = { 
+        font: { bold: true }, 
+        fill: { fgColor: { rgb: "E3F2FD" } },
+        alignment: { horizontal: "center" }
+      };
+    }
+
+    // Gerar nome do arquivo
+    const fileName = `registros_${selectedEmployee.name.replace(/\s+/g, '_')}_${selectedMonth.toString().padStart(2, '0')}_${selectedYear}.xlsx`;
+    
+    // Download
+    XLSX.writeFile(wb, fileName);
+  };
 
   // Buscar funcionários
   const { data: employeesData, isLoading } = useQuery({
@@ -43,6 +191,26 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
           search: searchTerm, 
           page: currentPage,
           limit: itemsPerPage
+        }
+      });
+      return res.data;
+    }
+  });
+
+  // Buscar registros de ponto do funcionário selecionado
+  const { data: employeeRecordsData, isLoading: loadingRecords } = useQuery({
+    queryKey: ['employee-records', selectedEmployee?.id, selectedMonth, selectedYear],
+    enabled: !!selectedEmployee,
+    queryFn: async () => {
+      const startDate = new Date(selectedYear, selectedMonth - 1, 1);
+      const endDate = new Date(selectedYear, selectedMonth, 0);
+      
+      const res = await api.get('/time-records', {
+        params: {
+          userId: selectedEmployee?.id,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          limit: 1000
         }
       });
       return res.data;
@@ -158,7 +326,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
               {filteredEmployees.map((employee: Employee) => (
               <div
                 key={employee.id}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                onClick={() => setSelectedEmployee(employee)}
+                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
               >
                 <div className="flex-1">
                   <div className="flex items-center space-x-4">
@@ -288,6 +457,216 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                     )}
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de detalhes do funcionário */}
+        {selectedEmployee && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedEmployee(null)} />
+            <div className="relative w-full max-w-6xl mx-4 bg-white rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <User className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {selectedEmployee.name}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {selectedEmployee.employee?.position} - {selectedEmployee.employee?.department}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedEmployee(null)}
+                  className="p-2 rounded hover:bg-gray-100 text-gray-600"
+                  aria-label="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6">
+                {/* Informações do funcionário */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados Pessoais</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Nome:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.name}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Email:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.email}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">CPF:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.cpf}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Matrícula:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.employee?.employeeId}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados Profissionais</h4>
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Setor:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.employee?.department}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Cargo:</span>
+                        <span className="text-sm font-medium">{selectedEmployee.employee?.position}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Data de Admissão:</span>
+                        <span className="text-sm font-medium">
+                          {selectedEmployee.employee?.hireDate ? formatDate(selectedEmployee.employee.hireDate) : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seletor de mês/ano */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-md font-semibold text-gray-900">Registros de Ponto</h4>
+                    {employeeRecordsData?.data && employeeRecordsData.data.length > 0 && (
+                      <button
+                        onClick={exportToExcel}
+                        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Exportar XLSX</span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mês</label>
+                      <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={1}>Janeiro</option>
+                        <option value={2}>Fevereiro</option>
+                        <option value={3}>Março</option>
+                        <option value={4}>Abril</option>
+                        <option value={5}>Maio</option>
+                        <option value={6}>Junho</option>
+                        <option value={7}>Julho</option>
+                        <option value={8}>Agosto</option>
+                        <option value={9}>Setembro</option>
+                        <option value={10}>Outubro</option>
+                        <option value={11}>Novembro</option>
+                        <option value={12}>Dezembro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Ano</label>
+                      <select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {Array.from({ length: 5 }, (_, i) => {
+                          const year = new Date().getFullYear() - 2 + i;
+                          return (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de registros */}
+                {loadingRecords ? (
+                  <div className="text-center py-8">
+                    <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
+                    <p className="text-gray-600">Carregando registros...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900">
+                      Registros de {selectedMonth.toString().padStart(2, '0')}/{selectedYear}
+                    </h4>
+                    
+                    {employeeRecordsData?.data?.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600">Nenhum registro encontrado para este período</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {Object.entries(groupRecordsByDay(employeeRecordsData?.data || [])).map(([date, records]: [string, any[]]) => (
+                          <div key={date} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-2">
+                                <Calendar className="w-4 h-4 text-gray-500" />
+                                <span className="font-semibold text-gray-900">{date}</span>
+                              </div>
+                              <span className="text-sm text-gray-600">
+                                {records.length} registro{records.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2">
+                              {records.map((record: any, index: number) => (
+                                <div key={index} className="flex items-center space-x-2 px-3 py-1 bg-white rounded-md border">
+                                  <Clock className="w-3 h-3 text-gray-500" />
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
+                                      hour: '2-digit', 
+                                      minute: '2-digit' 
+                                    })}
+                                  </span>
+                                  <span className="text-xs text-gray-600">
+                                    {record.type === 'ENTRY' ? 'Entrada' :
+                                     record.type === 'EXIT' ? 'Saída' :
+                                     record.type === 'LUNCH_START' ? 'Início Almoço' :
+                                     record.type === 'LUNCH_END' ? 'Fim Almoço' : record.type}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* Mostrar observações se houver */}
+                            {records.some((record: any) => record.reason) && (
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <div className="text-sm text-gray-600">
+                                  <strong>Observações:</strong>
+                                  <ul className="mt-1 space-y-1">
+                                    {records
+                                      .filter((record: any) => record.reason)
+                                      .map((record: any, index: number) => (
+                                        <li key={index} className="flex items-start space-x-2">
+                                          <span className="text-gray-500">•</span>
+                                          <span>{record.reason}</span>
+                                        </li>
+                                      ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
