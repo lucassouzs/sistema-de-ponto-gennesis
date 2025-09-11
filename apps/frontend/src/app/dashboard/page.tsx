@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { PunchCard } from '@/components/ponto/PunchCard';
 import { TimeRecordsList } from '@/components/ponto/TimeRecordsList';
 import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
+import { EmployeeList } from '@/components/employee/EmployeeList';
 import api from '@/lib/api';
 
 type UserInfoPanelProps = {
@@ -206,6 +207,7 @@ export default function DashboardPage() {
   // Verificar se o usuário é RH ou Admin
   const isAdminOrHR = user.role === 'ADMIN' || user.role === 'HR';
   const isEmployee = user.role === 'EMPLOYEE';
+  const isAdmin = user.role === 'ADMIN';
 
   const stats = dashboardData?.data || {
     totalEmployees: 0,
@@ -400,6 +402,13 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Lista de funcionários - apenas para Admin */}
+        {isAdmin && (
+          <div className="mb-8">
+            <EmployeeList userRole={user.role} />
+          </div>
         )}
 
         {/* Mensagem para RH/Admin quando não há sistema de ponto */}
