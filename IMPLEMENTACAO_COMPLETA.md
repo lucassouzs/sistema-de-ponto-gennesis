@@ -161,35 +161,6 @@ npm run dev
 # Frontend: http://localhost:3000
 # Backend: http://localhost:5000
 # Mobile: Expo Dev Tools
-```
-
----
-
-## 📋 **CRONOGRAMA REALIZADO**
-
-### **✅ Fase 1: Estrutura (1-2 semanas)**
-- Configuração do monorepo
-- Setup de todas as tecnologias
-- Schema do banco de dados
-- Estrutura de código
-
-### **✅ Fase 2: Backend (4-5 semanas)**
-- Controllers completos
-- Serviços de negócio
-- Integrações (S3, geolocalização)
-- Sistema de autenticação
-
-### **✅ Fase 3: Frontend Web (3-4 semanas)**
-- Componentes React
-- Páginas completas
-- Captura de foto via webcam
-- Dashboard administrativo
-
-### **✅ Fase 4: Mobile (2-3 semanas)**
-- App React Native
-- Câmera e GPS nativos
-- Interface mobile otimizada
-- Navegação fluida
 
 ---
 

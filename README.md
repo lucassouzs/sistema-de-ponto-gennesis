@@ -47,47 +47,6 @@ sistema-ponto-engenharia/
 - **React Native Camera**
 - **React Native Geolocation**
 
-## 📅 Cronograma de Desenvolvimento (12-16 semanas)
-
-### Fase 1: Planejamento e Configuração (1-2 semanas)
-- [x] Estrutura do projeto
-- [ ] Configuração do banco de dados
-- [ ] Setup do backend
-- [ ] Setup do frontend
-- [ ] Setup do mobile
-
-### Fase 2: Autenticação e Usuários (2-3 semanas)
-- [ ] Sistema de autenticação JWT
-- [ ] CRUD de usuários
-- [ ] Perfis de usuário (colaborador, admin, RH)
-- [ ] Middleware de autorização
-
-### Fase 3: Sistema de Ponto (3-4 semanas)
-- [ ] Captura de foto
-- [ ] Geolocalização
-- [ ] Validações de ponto
-- [ ] Histórico de pontos
-- [ ] Relatórios de frequência
-
-### Fase 4: Cálculos e Regras de Negócio (3-4 semanas)
-- [ ] Cálculo de horas trabalhadas
-- [ ] Horas extras
-- [ ] Banco de horas
-- [ ] Cálculo de férias
-- [ ] Faltas e atrasos
-
-### Fase 5: Painel Administrativo (2-3 semanas)
-- [ ] Dashboard principal
-- [ ] Gestão de colaboradores
-- [ ] Relatórios avançados
-- [ ] Configurações da empresa
-
-### Fase 6: Testes e Deploy (1-2 semanas)
-- [ ] Testes automatizados
-- [ ] Deploy em produção
-- [ ] Documentação final
-- [ ] Treinamento dos usuários
-
 ## 🛠️ Como Executar
 
 ### Pré-requisitos
