@@ -32,6 +32,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -194,13 +195,14 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
   // Buscar funcionários
   const { data: employeesData, isLoading } = useQuery({
-    queryKey: ['employees', searchTerm, currentPage],
+    queryKey: ['employees', searchTerm, currentPage, statusFilter],
     queryFn: async () => {
       const res = await api.get('/users', {
         params: { 
           search: searchTerm, 
           page: currentPage,
-          limit: itemsPerPage
+          limit: itemsPerPage,
+          status: statusFilter
         }
       });
       return res.data;
@@ -336,15 +338,29 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       <CardContent>
         {/* Busca */}
         <div className="mb-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Buscar funcionários por nome, email ou CPF..."
-              value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center space-x-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Buscar funcionários por nome, email ou CPF..."
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Status:</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
+                className="px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="active">Ativos</option>
+                <option value="inactive">Inativos</option>
+                <option value="all">Todos</option>
+              </select>
+            </div>
           </div>
         </div>
 

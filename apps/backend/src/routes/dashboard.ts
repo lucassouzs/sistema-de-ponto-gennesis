@@ -16,7 +16,15 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
     dayEnd.setDate(dayEnd.getDate() + 1);
 
     const [totalEmployees, presentUsers, lateToday] = await Promise.all([
-      prisma.user.count({ where: { role: { in: ['EMPLOYEE'] }, isActive: true } }),
+      prisma.user.count({ 
+        where: { 
+          role: 'EMPLOYEE', 
+          isActive: true,
+          employee: {
+            isNot: null
+          }
+        } 
+      }),
       prisma.timeRecord.findMany({
         where: {
           timestamp: { gte: dayStart, lt: dayEnd },
@@ -86,7 +94,15 @@ router.get('/', async (req: AuthRequest, res, next) => {
       dayEnd.setDate(dayEnd.getDate() + 1);
 
       const [totalEmployees, presentUsers, lateToday] = await Promise.all([
-        prisma.user.count({ where: { role: { in: ['EMPLOYEE'] }, isActive: true } }),
+        prisma.user.count({ 
+          where: { 
+            role: 'EMPLOYEE', 
+            isActive: true,
+            employee: {
+              isNot: null
+            }
+          } 
+        }),
         prisma.timeRecord.findMany({
           where: {
             timestamp: { gte: dayStart, lt: dayEnd },

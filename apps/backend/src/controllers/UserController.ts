@@ -10,12 +10,26 @@ const prisma = new PrismaClient();
 export class UserController {
   async getAllUsers(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { page = 1, limit = 10, search, role, department } = req.query;
+      const { page = 1, limit = 10, search, role, department, status } = req.query;
       const skip = (Number(page) - 1) * Number(limit);
 
-      const where: any = {
-        isActive: true,
-      };
+      const where: any = {};
+
+      // Filtro de status (ativo/inativo)
+      if (status === 'inactive') {
+        where.isActive = false;
+      } else if (status === 'all') {
+        // Mostrar todos (ativos e inativos)
+        // Não adiciona filtro de isActive
+      } else {
+        // Padrão: apenas ativos
+        where.isActive = true;
+      }
+
+      // Se não especificar role, mostrar apenas funcionários por padrão
+      if (!role) {
+        where.role = 'EMPLOYEE';
+      }
 
       if (search) {
         where.OR = [
