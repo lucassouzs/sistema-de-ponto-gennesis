@@ -101,6 +101,38 @@ export class TimeRecordController {
         throw createError(`Já existe um registro de ${type.toLowerCase()} para hoje`, 400);
       }
 
+      // Validar sequência obrigatória de batidas
+
+      const todayRecords = await prisma.timeRecord.findMany({
+        where: {
+          userId,
+          timestamp: {
+            gte: today,
+            lt: tomorrow
+          }
+        },
+        orderBy: { timestamp: 'asc' }
+      });
+
+      // Verificar sequência obrigatória
+      const hasEntry = todayRecords.some(r => r.type === TimeRecordType.ENTRY);
+      const hasLunchStart = todayRecords.some(r => r.type === TimeRecordType.LUNCH_START);
+      const hasLunchEnd = todayRecords.some(r => r.type === TimeRecordType.LUNCH_END);
+      const hasExit = todayRecords.some(r => r.type === TimeRecordType.EXIT);
+
+      // Validações de sequência
+      if (type === TimeRecordType.LUNCH_START && !hasEntry) {
+        throw createError('Você precisa bater o ponto de entrada antes de bater o ponto do almoço', 400);
+      }
+      
+      if (type === TimeRecordType.LUNCH_END && !hasLunchStart) {
+        throw createError('Você precisa bater o ponto do almoço antes de bater o ponto do retorno', 400);
+      }
+      
+      if (type === TimeRecordType.EXIT && !hasLunchEnd) {
+        throw createError('Você precisa bater o ponto do retorno antes de bater o ponto de saída', 400);
+      }
+
       // Criar registro de ponto
       const timeRecord = await prisma.timeRecord.create({
         data: {
