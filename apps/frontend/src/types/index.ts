@@ -38,7 +38,7 @@ export interface TimeRecordFormData {
   type: string;
   latitude?: number;
   longitude?: number;
-  photo?: File;
+  photo?: string | File;
 }
 
 export interface VacationFormData {

@@ -318,7 +318,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-red-100 rounded-lg">
+            <div className="p-3 bg-red-100 rounded-lg">
               <Users className="w-6 h-6 text-red-600" />
             </div>
             <div>
@@ -676,7 +676,9 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {Object.entries(groupRecordsByDay(employeeRecordsData?.data || [])).map(([date, records]: [string, any[]]) => (
+                        {Object.entries(groupRecordsByDay(employeeRecordsData?.data || []))
+                          .sort(([a], [b]) => new Date(a.split('/').reverse().join('-')).getTime() - new Date(b.split('/').reverse().join('-')).getTime())
+                          .map(([date, records]: [string, any[]]) => (
                           <div key={date} className="p-4 border border-gray-200 rounded-lg bg-gray-50">
                             <div className="flex items-center justify-between mb-3">
                               <div className="flex items-center space-x-2">

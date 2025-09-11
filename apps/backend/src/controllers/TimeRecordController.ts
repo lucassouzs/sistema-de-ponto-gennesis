@@ -42,32 +42,20 @@ export class TimeRecordController {
         throw createError('Tipo de registro inválido', 400);
       }
 
-      // Validar localização se fornecida
+      // Sempre permitir bater ponto de qualquer lugar, mas salvar a localização
       let isValidLocation = true;
       let locationReason = '';
 
-      // Corrigir allowedLocations para garantir que é array
-      let allowedLocations: any[] = [];
-      if (employee.allowedLocations) {
-        if (Array.isArray(employee.allowedLocations)) {
-          allowedLocations = employee.allowedLocations;
-        } else if (typeof employee.allowedLocations === 'string') {
-          try {
-            allowedLocations = JSON.parse(employee.allowedLocations);
-          } catch {
-            allowedLocations = [];
-          }
-        }
-      }
-
+      // Se a localização foi fornecida, validar e salvar
       if (latNum !== null && lonNum !== null && !Number.isNaN(latNum) && !Number.isNaN(lonNum)) {
-        const locationValidation = await locationService.validateLocation(
-          latNum,
-          lonNum,
-          allowedLocations
-        );
-        isValidLocation = locationValidation.isValid;
-        locationReason = locationValidation.reason;
+        // Verificar se as coordenadas são válidas
+        if (locationService.isValidCoordinates(latNum, lonNum)) {
+          locationReason = `Localização registrada: ${locationService.formatLocation(latNum, lonNum)}`;
+        } else {
+          locationReason = 'Coordenadas inválidas fornecidas';
+        }
+      } else {
+        locationReason = 'Localização não fornecida';
       }
 
       // Upload da foto se fornecida
@@ -143,8 +131,8 @@ export class TimeRecordController {
           longitude: lonNum !== null && !Number.isNaN(lonNum) ? lonNum : null,
           photoUrl: photoUrl || null,
           photoKey: photoKey || null,
-          isValid: isValidLocation,
-          reason: !isValidLocation ? locationReason : null
+          isValid: true, // Sempre válido - permitir bater ponto de qualquer lugar
+          reason: locationReason // Sempre incluir informações da localização
         },
         include: {
           user: {
@@ -167,8 +155,8 @@ export class TimeRecordController {
         data: {
           timeRecord,
           workHours,
-          locationValid: isValidLocation,
-          locationReason
+          locationValid: true, // Sempre válido - permitir bater ponto de qualquer lugar
+          locationReason: locationReason
         },
         message: 'Ponto registrado com sucesso'
       });

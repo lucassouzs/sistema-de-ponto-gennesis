@@ -209,6 +209,33 @@ export class LocationService {
   }
 
   /**
+   * Registra informações de localização para auditoria
+   */
+  async logLocationInfo(
+    latitude: number, 
+    longitude: number, 
+    userId: string, 
+    recordType: string
+  ): Promise<{
+    coordinates: string;
+    formattedLocation: string;
+    timestamp: Date;
+    userAgent?: string;
+    ipAddress?: string;
+  }> {
+    const coordinates = `${latitude},${longitude}`;
+    const formattedLocation = this.formatLocation(latitude, longitude);
+    
+    return {
+      coordinates,
+      formattedLocation,
+      timestamp: new Date(),
+      userAgent: undefined, // Pode ser passado do request
+      ipAddress: undefined  // Pode ser passado do request
+    };
+  }
+
+  /**
    * Cria um local permitido
    */
   createAllowedLocation(

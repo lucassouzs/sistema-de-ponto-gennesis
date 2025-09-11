@@ -1,14 +1,15 @@
 import React from 'react';
-import { Clock, MapPin, Camera, CheckCircle, XCircle, DoorOpen, DoorClosed, Utensils, UtensilsCrossed } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/Card';
+import { Clock, MapPin, Camera, CheckCircle, XCircle, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, Eye } from 'lucide-react';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { TimeRecord } from '@/types';
 
 interface TimeRecordsListProps {
   records: TimeRecord[];
+  onViewMore?: () => void;
 }
 
-export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records }) => {
+export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onViewMore }) => {
   const getTypeLabel = (type: string) => {
     const types = {
       ENTRY: 'Entrada',
@@ -63,8 +64,13 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records }) => 
 
   return (
     <Card>
-      <CardContent className="p-0">
-        <div className="divide-y divide-gray-200">
+      <CardHeader className="pb-4 border-b-0 pt-4">
+        <h2 className="text-2xl font-bold text-gray-900 text-center">Registros</h2>
+      </CardHeader>
+      <CardContent>
+        <div className="max-w-2xl mx-auto">
+          <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
+          <div className="divide-y divide-gray-200">
           {records.map((record) => (
             <div key={record.id} className="p-4 hover:bg-gray-50 transition-colors">
               <div className="flex items-center justify-between">
@@ -102,7 +108,7 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records }) => 
                       {record.latitude && record.longitude && (
                         <span className="flex items-center">
                           <MapPin className="w-3 h-3 mr-1" />
-                          Localizado
+                          {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
                         </span>
                       )}
                       {record.photoUrl && (
@@ -118,15 +124,22 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records }) => 
                   <div className="text-sm font-medium text-gray-900">
                     {formatDate(record.timestamp)}
                   </div>
-                  {record.reason && (
-                    <div className="text-xs text-red-600 mt-1">
-                      {record.reason}
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
-          ))}
+          )          )}
+          </div>
+          {onViewMore && (
+            <div className="pt-4">
+              <button
+                onClick={onViewMore}
+                className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <Eye className="w-4 h-4" />
+                <span className="text-sm font-medium">Ver mais</span>
+              </button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -155,9 +155,9 @@ export default function DashboardPage() {
         ]),
         ['', '', '', '', '', ''],
         ['RESUMO', '', '', '', '', ''],
-        ['Total de Horas Extras:', bankHoursDetailed.data.totalOvertimeHours || 0, '', '', '', ''],
-        ['Total de Horas Devidas:', bankHoursDetailed.data.totalOwedHours || 0, '', '', '', ''],
-        ['Saldo:', bankHoursDetailed.data.balanceHours || 0, '', '', '', '']
+        ['Total de Horas Extras:', formatHours(bankHoursDetailed.data.totalOvertimeHours || 0), '', '', '', ''],
+        ['Total de Horas Devidas:', formatHours(bankHoursDetailed.data.totalOwedHours || 0), '', '', '', ''],
+        ['Saldo:', formatHours(bankHoursDetailed.data.balanceHours || 0), '', '', '', '']
       ];
 
       // Criar workbook e worksheet
@@ -220,6 +220,14 @@ export default function DashboardPage() {
   };
 
   const widthPercent = Math.min(100, Math.max(0, Number(stats.attendanceRate || 0)));
+
+  // Função para formatar horas decimais para horas:minutos
+  const formatHours = (decimalHours: number) => {
+    const hours = Math.floor(Math.abs(decimalHours));
+    const minutes = Math.round((Math.abs(decimalHours) - hours) * 60);
+    const sign = decimalHours < 0 ? '-' : '';
+    return `${sign}${hours}h ${minutes.toString().padStart(2, '0')}min`;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -322,59 +330,15 @@ export default function DashboardPage() {
 
         {/* Sistema de ponto e registros - apenas para funcionários */}
         {isEmployee && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             <div>
               <PunchCard />
             </div>
 
-            <Card className="w-full max-w-2xl mx-auto">
-              <CardHeader className="pb-4 border-b-0 pt-4">
-                <h2 className="text-2xl font-bold text-gray-900 text-center">Registros</h2>
-              </CardHeader>
-              <CardContent>
-                <div className="max-w-2xl mx-auto">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
-                  {(() => {
-                    const recs = todayRecords?.data?.records || [];
-                    const getTime = (type: string) => {
-                      const found = recs.find((r: any) => r.type === type);
-                      if (!found) return '--:--';
-                      const d = new Date(found.timestamp);
-                      const hh = String(d.getHours()).padStart(2, '0');
-                      const mm = String(d.getMinutes()).padStart(2, '0');
-                      return `${hh}:${mm}`;
-                    };
-                    const tiles = [
-                      { icon: <DoorOpen className="w-6 h-6" />, type: 'ENTRY' },
-                      { icon: <Utensils className="w-6 h-6" />, type: 'LUNCH_START' },
-                      { icon: <UtensilsCrossed className="w-6 h-6" />, type: 'LUNCH_END' },
-                      { icon: <DoorClosed className="w-6 h-6" />, type: 'EXIT' },
-                    ];
-                    return (
-                      <div className="grid grid-cols-2 gap-3">
-                        {tiles.map(t => (
-                          <div key={t.type} className="p-4 rounded-lg border-2 bg-white border-gray-200">
-                            <div className="flex flex-col items-center justify-center space-y-2">
-                              {t.icon}
-                              <div className="text-lg font-semibold text-gray-900">{getTime(t.type)}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div className="pt-4">
-                  <button
-                    onClick={() => setIsPanelOpen(true)}
-                    className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <Eye className="w-4 h-4" />
-                    <span className="text-sm font-medium">Ver mais</span>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
+            <TimeRecordsList 
+              records={todayRecords?.data?.records || []} 
+              onViewMore={() => setIsPanelOpen(true)}
+            />
           </div>
         )}
 
@@ -506,15 +470,15 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-4 bg-blue-50 rounded">
                       <div className="text-sm text-gray-600">Horas Extras</div>
-                      <div className="text-2xl font-bold text-blue-700">{bankHoursData?.data?.totalOvertimeHours?.toFixed ? bankHoursData.data.totalOvertimeHours.toFixed(1) : (bankHoursData?.data?.totalOvertimeHours || 0)}h</div>
+                      <div className="text-2xl font-bold text-blue-700">{formatHours(bankHoursData?.data?.totalOvertimeHours || 0)}</div>
                     </div>
                     <div className="p-4 bg-red-50 rounded">
                       <div className="text-sm text-gray-600">Horas Devidas</div>
-                      <div className="text-2xl font-bold text-red-700">{bankHoursData?.data?.totalOwedHours?.toFixed ? bankHoursData.data.totalOwedHours.toFixed(1) : (bankHoursData?.data?.totalOwedHours || 0)}h</div>
+                      <div className="text-2xl font-bold text-red-700">{formatHours(bankHoursData?.data?.totalOwedHours || 0)}</div>
                     </div>
                     <div className="p-4 bg-gray-50 rounded">
                       <div className="text-sm text-gray-600">Saldo</div>
-                      <div className="text-2xl font-bold text-gray-900">{bankHoursData?.data?.balanceHours?.toFixed ? bankHoursData.data.balanceHours.toFixed(1) : (bankHoursData?.data?.balanceHours || 0)}h</div>
+                      <div className="text-2xl font-bold text-gray-900">{formatHours(bankHoursData?.data?.balanceHours || 0)}</div>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -625,10 +589,10 @@ export default function DashboardPage() {
                       {(bankHoursDetailed?.data?.days || []).map((d: any, idx: number) => (
                         <tr key={idx} className="border-b">
                           <td className="py-2 pr-4">{new Date(d.date).toLocaleDateString('pt-BR')}</td>
-                          <td className="py-2 pr-4">{(d.expectedHours || 0).toFixed ? d.expectedHours.toFixed(1) : d.expectedHours}h</td>
-                          <td className="py-2 pr-4">{(d.workedHours || 0).toFixed ? d.workedHours.toFixed(1) : d.workedHours}h</td>
-                          <td className="py-2 pr-4 text-blue-700">{(d.overtimeHours || 0).toFixed ? d.overtimeHours.toFixed(1) : d.overtimeHours}h</td>
-                          <td className="py-2 pr-4 text-red-700">{(d.owedHours || 0).toFixed ? d.owedHours.toFixed(1) : d.owedHours}h</td>
+                          <td className="py-2 pr-4">{formatHours(d.expectedHours || 0)}</td>
+                          <td className="py-2 pr-4">{formatHours(d.workedHours || 0)}</td>
+                          <td className="py-2 pr-4 text-blue-700">{formatHours(d.overtimeHours || 0)}</td>
+                          <td className="py-2 pr-4 text-red-700">{formatHours(d.owedHours || 0)}</td>
                           <td className="py-2 pr-4 text-gray-600">{(d.notes || []).join(', ')}</td>
                         </tr>
                       ))}
