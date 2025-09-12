@@ -350,7 +350,7 @@ export default function DashboardPage() {
           <div className="mb-8">
             <EmployeeList 
               userRole={user.role} 
-              showDeleteButton={isAdmin}
+              showDeleteButton={isAdmin || user.role === 'HR'}
             />
           </div>
         )}
