@@ -31,6 +31,8 @@
     "npm": ">=8.0.0"
   },
   "dependencies": {
-    "react-calendar": "^6.0.0"
+    "react-calendar": "^6.0.0",
+    "react-native-web": "~0.19.6",
+    "@expo/webpack-config": "^19.0.0"
   }
 }
