@@ -56,6 +56,7 @@ export interface TimeRecord {
   photoKey?: string;
   isValid: boolean;
   reason?: string;
+  observation?: string;
   approvedBy?: string;
   approvedAt?: string;
   createdAt: string;
@@ -242,6 +243,7 @@ export interface PunchRequest {
   latitude?: number;
   longitude?: number;
   photo?: File | string; // File para web, string (base64) para mobile
+  observation?: string;
 }
 
 export interface VacationRequest {

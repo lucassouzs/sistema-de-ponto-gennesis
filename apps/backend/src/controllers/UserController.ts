@@ -61,6 +61,8 @@ export class UserController {
                 department: true,
                 position: true,
                 hireDate: true,
+                costCenter: true,
+                client: true,
               }
             }
           },
@@ -168,7 +170,9 @@ export class UserController {
                 toleranceMinutes: 10
               },
               isRemote: employeeData.isRemote || false,
-              allowedLocations: employeeData.allowedLocations || []
+              allowedLocations: employeeData.allowedLocations || [],
+              costCenter: employeeData.costCenter || null,
+              client: employeeData.client || null
             }
           });
         }
@@ -251,7 +255,9 @@ export class UserController {
               ...(employeeData.salary && { salary: employeeData.salary }),
               ...(employeeData.workSchedule && { workSchedule: employeeData.workSchedule }),
               ...(employeeData.isRemote !== undefined && { isRemote: employeeData.isRemote }),
-              ...(employeeData.allowedLocations && { allowedLocations: employeeData.allowedLocations })
+              ...(employeeData.allowedLocations && { allowedLocations: employeeData.allowedLocations }),
+              ...(employeeData.costCenter !== undefined && { costCenter: employeeData.costCenter }),
+              ...(employeeData.client !== undefined && { client: employeeData.client })
             }
           });
         }

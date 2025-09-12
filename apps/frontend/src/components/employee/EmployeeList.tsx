@@ -19,6 +19,8 @@ interface Employee {
     department: string;
     position: string;
     hireDate: string;
+    costCenter?: string;
+    client?: string;
   };
 }
 
@@ -41,10 +43,12 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     type: string;
     timestamp: string;
     reason: string;
+    observation: string;
   }>({
     type: '',
     timestamp: '',
-    reason: ''
+    reason: '',
+    observation: ''
   });
 
   const queryClient = useQueryClient();
@@ -88,6 +92,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     exportData.push(['Cargo:', selectedEmployee.employee?.position || 'N/A']);
     exportData.push(['Data de Admissão:', selectedEmployee.employee?.hireDate ? 
       new Date(selectedEmployee.employee.hireDate).toLocaleDateString('pt-BR') : 'N/A']);
+    exportData.push(['Centro de Custo:', selectedEmployee.employee?.costCenter || 'N/A']);
+    exportData.push(['Tomador:', selectedEmployee.employee?.client || 'N/A']);
     exportData.push(['Período:', `${selectedMonth.toString().padStart(2, '0')}/${selectedYear}`]);
     exportData.push(['']); // Linha em branco
 
@@ -98,7 +104,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       'Início Almoço',
       'Fim Almoço',
       'Saída',
-      'Observações'
+      'Motivo de Alterações'
     ]);
 
     // Dados agrupados por dia
@@ -116,7 +122,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       dayRecords.forEach((record: any) => {
         const time = new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
           hour: '2-digit', 
-          minute: '2-digit' 
+          minute: '2-digit',
+          second: '2-digit'
         });
 
         switch (record.type) {
@@ -134,7 +141,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
             break;
         }
 
-        // Adicionar observações se existirem
+        // Adicionar motivo de alterações se existirem
         if (record.reason) {
           dayData.observacoes.push(`${time} - ${record.reason}`);
         }
@@ -163,7 +170,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       { wch: 12 }, // Início Almoço
       { wch: 12 }, // Fim Almoço
       { wch: 10 }, // Saída
-      { wch: 40 }  // Observações
+      { wch: 40 }  // Motivo de Alterações
     ];
 
     // Estilizar cabeçalho do funcionário
@@ -194,7 +201,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   };
 
   // Buscar funcionários
-  const { data: employeesData, isLoading } = useQuery({
+  const { data: employeesData, isLoading, error } = useQuery({
     queryKey: ['employees', searchTerm, currentPage, statusFilter],
     queryFn: async () => {
       const res = await api.get('/users', {
@@ -206,8 +213,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
         }
       });
       return res.data;
-    }
+    },
+    enabled: userRole === 'ADMIN' || userRole === 'HR',
   });
+
 
   // Buscar registros de ponto do funcionário selecionado
   const { data: employeeRecordsData, isLoading: loadingRecords } = useQuery({
@@ -254,7 +263,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employee-records', selectedEmployee?.id, selectedMonth, selectedYear] });
       setEditingRecord(null);
-      setEditForm({ type: '', timestamp: '', reason: '' });
+      setEditForm({ type: '', timestamp: '', reason: '', observation: '' } as any);
     },
     onError: (error: any) => {
       console.error('Erro ao atualizar registro:', error);
@@ -270,7 +279,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     setEditForm({
       type: record.type,
       timestamp: new Date(record.timestamp).toISOString().slice(0, 16),
-      reason: record.reason || ''
+      reason: record.reason || '',
+      observation: record.observation || ''
     });
   };
 
@@ -285,7 +295,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
   const handleCancelEdit = () => {
     setEditingRecord(null);
-    setEditForm({ type: '', timestamp: '', reason: '' });
+    setEditForm({ type: '', timestamp: '', reason: '', observation: '' });
   };
 
   const formatDate = (dateString: string) => {
@@ -409,6 +419,16 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                             <span className="text-xs text-gray-500">
                               {employee.employee.department} - {employee.employee.position}
                             </span>
+                            {employee.employee.costCenter && (
+                              <span className="text-xs text-gray-500">
+                                Centro: {employee.employee.costCenter}
+                              </span>
+                            )}
+                            {employee.employee.client && (
+                              <span className="text-xs text-gray-500">
+                                Tomador: {employee.employee.client}
+                              </span>
+                            )}
                             <span className="text-xs text-gray-500">
                               Admitido em: {formatDate(employee.employee.hireDate)}
                             </span>
@@ -422,7 +442,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                 {showDeleteButton && (
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setDeleteConfirm(employee.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm(employee.id);
+                      }}
                       className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors"
                       title="Excluir funcionário"
                     >
@@ -597,6 +620,22 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                           {selectedEmployee.employee?.hireDate ? formatDate(selectedEmployee.employee.hireDate) : 'N/A'}
                         </span>
                       </div>
+                      {selectedEmployee.employee?.costCenter && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Centro de Custo:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.costCenter}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.client && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Tomador:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.client}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -692,41 +731,49 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                             
                             <div className="flex flex-wrap gap-2">
                               {records.map((record: any, index: number) => (
-                                <div key={index} className="flex items-center space-x-2 px-3 py-1 bg-white rounded-md border">
-                                  <Clock className="w-3 h-3 text-gray-500" />
-                                  <span className="text-sm font-medium text-gray-900">
-                                    {new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
-                                      hour: '2-digit', 
-                                      minute: '2-digit' 
-                                    })}
-                                  </span>
-                                  <span className="text-xs text-gray-600">
-                                    {record.type === 'ENTRY' ? 'Entrada' :
-                                     record.type === 'EXIT' ? 'Saída' :
-                                     record.type === 'LUNCH_START' ? 'Início Almoço' :
-                                     record.type === 'LUNCH_END' ? 'Fim Almoço' : record.type}
-                                  </span>
-                                  {userRole === 'ADMIN' && (
-                                    <button
-                                      onClick={() => handleEditRecord(record)}
-                                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                      title="Editar registro"
-                                    >
-                                      <Edit className="w-3 h-3" />
-                                    </button>
+                                <div key={index} className="px-3 py-2 bg-white rounded-md border">
+                                  <div className="flex items-center space-x-2">
+                                    <Clock className="w-3 h-3 text-gray-500" />
+                                    <span className="text-sm font-medium text-gray-900">
+                                      {new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
+                                        hour: '2-digit', 
+                                        minute: '2-digit',
+                                        second: '2-digit'
+                                      })}
+                                    </span>
+                                    <span className="text-xs text-gray-600">
+                                      {record.type === 'ENTRY' ? 'Entrada' :
+                                       record.type === 'EXIT' ? 'Saída' :
+                                       record.type === 'LUNCH_START' ? 'Início Almoço' :
+                                       record.type === 'LUNCH_END' ? 'Fim Almoço' : record.type}
+                                    </span>
+                                    {userRole === 'ADMIN' && (
+                                      <button
+                                        onClick={() => handleEditRecord(record)}
+                                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                        title="Editar registro"
+                                      >
+                                        <Edit className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  {record.observation && (
+                                    <div className="mt-1 text-xs text-gray-500 italic">
+                                      <strong>Obs:</strong> {record.observation}
+                                    </div>
                                   )}
                                 </div>
                               ))}
                             </div>
                             
-                            {/* Mostrar observações se houver */}
-                            {records.some((record: any) => record.reason) && (
+                            {/* Mostrar motivo de alterações apenas se houver */}
+                            {records.some((record: any) => record.reason && !record.reason.includes('Localização registrada')) && (
                               <div className="mt-3 pt-3 border-t border-gray-200">
                                 <div className="text-sm text-gray-600">
-                                  <strong>Observações:</strong>
+                                  <strong>Motivo de Alterações:</strong>
                                   <ul className="mt-1 space-y-1">
                                     {records
-                                      .filter((record: any) => record.reason)
+                                      .filter((record: any) => record.reason && !record.reason.includes('Localização registrada'))
                                       .map((record: any, index: number) => (
                                         <li key={index} className="flex items-start space-x-2">
                                           <span className="text-gray-500">•</span>
@@ -795,7 +842,20 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Observação
+                    Observação do Funcionário
+                  </label>
+                  <textarea
+                    value={editForm.observation}
+                    onChange={(e) => setEditForm({ ...editForm, observation: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Observação do funcionário..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Motivo da Alteração
                   </label>
                   <textarea
                     value={editForm.reason}

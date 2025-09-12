@@ -185,12 +185,14 @@ export default function DashboardPage() {
 
   const widthPercent = Math.min(100, Math.max(0, Number(stats.attendanceRate || 0)));
 
-  // Função para formatar horas decimais para horas:minutos
+  // Função para formatar horas decimais para HH:MM:SS
   const formatHours = (decimalHours: number) => {
-    const hours = Math.floor(Math.abs(decimalHours));
-    const minutes = Math.round((Math.abs(decimalHours) - hours) * 60);
+    const totalSeconds = Math.round(Math.abs(decimalHours) * 3600);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     const sign = decimalHours < 0 ? '-' : '';
-    return `${sign}${hours}h ${minutes.toString().padStart(2, '0')}min`;
+    return `${sign}${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   // Função para formatar data

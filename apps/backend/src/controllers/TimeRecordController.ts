@@ -16,8 +16,9 @@ export class TimeRecordController {
   async punchInOut(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { type, latitude, longitude } = req.body;
+      const { type, latitude, longitude, observation } = req.body;
       const photo = req.file; // Arquivo enviado via multer
+
 
       // Normalizar latitude/longitude para número
       const latNum = latitude !== undefined && latitude !== null && latitude !== '' ? Number(latitude) : null;
@@ -121,6 +122,7 @@ export class TimeRecordController {
         throw createError('Você precisa bater o ponto do retorno antes de bater o ponto de saída', 400);
       }
 
+
       // Criar registro de ponto
       const timeRecord = await prisma.timeRecord.create({
         data: {
@@ -132,7 +134,8 @@ export class TimeRecordController {
           photoUrl: photoUrl || null,
           photoKey: photoKey || null,
           isValid: true, // Sempre válido - permitir bater ponto de qualquer lugar
-          reason: locationReason // Sempre incluir informações da localização
+          reason: locationReason, // Sempre incluir informações da localização
+          observation: observation && observation.trim() ? observation.trim() : null // Observação do funcionário
         },
         include: {
           user: {
@@ -403,7 +406,7 @@ export class TimeRecordController {
   async updateRecord(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { type, timestamp, reason } = req.body;
+      const { type, timestamp, reason, observation } = req.body;
 
       // Verificar se o registro existe
       const existingRecord = await prisma.timeRecord.findUnique({
@@ -440,6 +443,7 @@ export class TimeRecordController {
           ...(type && { type }),
           ...(timestamp && { timestamp: newTimestamp }),
           ...(reason !== undefined && { reason }),
+          ...(observation !== undefined && { observation: observation?.trim() || null }),
           updatedAt: new Date()
         },
         include: {

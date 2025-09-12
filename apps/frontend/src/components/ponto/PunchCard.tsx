@@ -9,15 +9,18 @@ import { usePunchInOut } from '@/hooks/usePunchInOut';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import { useWebcam } from '@/hooks/useWebcam';
 import { TimeRecordType } from '@/types';
+import api from '@/lib/api';
 
 interface PunchCardProps {
   onSuccess?: () => void;
 }
 
 export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
-  const [selectedType, setSelectedType] = useState<TimeRecordType>(TimeRecordType.ENTRY);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [lastRecord, setLastRecord] = useState<TimeRecordType | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [observation, setObservation] = useState('');
   
   const { location, error: locationError, loading: locationLoading } = useGeolocation();
   const { 
@@ -44,6 +47,65 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
     { type: TimeRecordType.LUNCH_END, label: 'Retorno', icon: <UtensilsCrossed className="w-5 h-5" /> },
     { type: TimeRecordType.EXIT, label: 'Saída', icon: <DoorClosed className="w-5 h-5" /> },
   ];
+
+  // Função para determinar o próximo tipo de ponto baseado no último registro
+  const getNextPunchType = (): TimeRecordType => {
+    if (!lastRecord) {
+      return TimeRecordType.ENTRY; // Se não há registro, é entrada
+    }
+
+    switch (lastRecord) {
+      case TimeRecordType.ENTRY:
+        return TimeRecordType.LUNCH_START; // Após entrada, é almoço
+      case TimeRecordType.LUNCH_START:
+        return TimeRecordType.LUNCH_END; // Após almoço, é retorno
+      case TimeRecordType.LUNCH_END:
+        return TimeRecordType.EXIT; // Após retorno, é saída
+      case TimeRecordType.EXIT:
+        return TimeRecordType.ENTRY; // Após saída, volta para entrada (novo dia)
+      default:
+        return TimeRecordType.ENTRY;
+    }
+  };
+
+  const selectedType = getNextPunchType();
+
+  // Atualizar horário atual a cada segundo
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Buscar último registro do usuário
+  useEffect(() => {
+    const fetchLastRecord = async () => {
+      try {
+        const response = await api.get('/time-records/my-records/today');
+        const records = response.data.data || [];
+        
+        if (records.length > 0) {
+          // Ordenar por data/hora e pegar o último registro
+          const sortedRecords = records.sort((a: any, b: any) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          const lastRecordType = sortedRecords[0].type;
+          setLastRecord(lastRecordType);
+          console.log('Último registro encontrado:', lastRecordType);
+        } else {
+          setLastRecord(null);
+          console.log('Nenhum registro encontrado para hoje');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar último registro:', error);
+        setLastRecord(null);
+      }
+    };
+
+    fetchLastRecord();
+  }, []);
 
   // Cleanup da câmera quando componente for desmontado
   useEffect(() => {
@@ -94,9 +156,13 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
         latitude: location?.latitude || null,
         longitude: location?.longitude || null,
         photo: capturedPhoto,
+        observation: observation.trim(),
       } as any);
       
+      // Atualizar o último registro para o próximo tipo
+      setLastRecord(selectedType);
       setCapturedPhoto(null);
+      setObservation('');
       onSuccess?.();
     } catch (error) {
       console.error('Erro ao bater ponto:', error);
@@ -121,34 +187,38 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Bater Ponto
             </h2>
+            <div className="space-y-2">
+              <div className="text-lg font-medium text-gray-600">
+                {currentTime.toLocaleDateString('pt-BR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </div>
+              <div className="text-2xl font-mono font-bold text-gray-800 tracking-wider">
+                {currentTime.toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Tipo de Ponto */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              Tipo de Registro
+              Próximo Registro
             </label>
-            <div className="grid grid-cols-2 gap-3">
-              {punchTypes.map((punchType) => (
-                <button
-                  key={punchType.type}
-                  onClick={() => setSelectedType(punchType.type)}
-                  className={`
-                    p-4 rounded-lg border-2 transition-all text-center
-                    ${selectedType === punchType.type
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  <div className="flex flex-col items-center space-y-2">
-                    <div className="text-gray-600">
-                      {punchType.icon}
-                    </div>
-                    <span className="font-medium text-gray-900">{punchType.label}</span>
-                  </div>
-                </button>
-              ))}
+            <div className="p-4 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 text-center">
+              <div className="flex flex-col items-center space-y-2">
+                <div className="text-blue-600">
+                  {punchTypes.find(p => p.type === selectedType)?.icon}
+                </div>
+                <span className="font-medium text-blue-900">
+                  {punchTypes.find(p => p.type === selectedType)?.label}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -262,6 +332,24 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Campo de Observação */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Observação (Opcional)
+            </label>
+            <textarea
+              value={observation}
+              onChange={(e) => setObservation(e.target.value)}
+              placeholder="Digite uma observação sobre este registro de ponto..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+              rows={3}
+              maxLength={500}
+            />
+            <div className="text-right text-xs text-gray-500 mt-1">
+              {observation.length}/500 caracteres
+            </div>
           </div>
 
           {/* Botão de Confirmar */}

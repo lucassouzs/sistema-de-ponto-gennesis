@@ -45,6 +45,8 @@ model Employee {
   workSchedule      Json      // Horário de trabalho em JSON
   isRemote          Boolean   @default(false)
   allowedLocations  Json?     // Locais permitidos para bater ponto
+  costCenter        String?   // Centro de custo
+  client            String?   // Tomador
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -70,6 +72,7 @@ model TimeRecord {
   photoKey    String?       // Chave do S3
   isValid     Boolean       @default(true)
   reason      String?       // Motivo se inválido
+  observation String?       // Observação do funcionário
   approvedBy  String?       // ID do aprovador
   approvedAt  DateTime?
   createdAt   DateTime      @default(now())

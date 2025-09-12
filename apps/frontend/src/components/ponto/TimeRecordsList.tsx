@@ -38,6 +38,7 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
     return new Date(timestamp).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
     });
   };
 
@@ -118,6 +119,11 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
                         </span>
                       )}
                     </div>
+                    {(record as any).observation && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        <strong>Observação:</strong> {(record as any).observation}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">

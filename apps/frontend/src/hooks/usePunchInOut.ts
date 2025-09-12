@@ -30,6 +30,7 @@ export const usePunchInOut = () => {
         const file = await dataUrlToFile(data.photo, `punch-${Date.now()}.jpg`);
         formData.append('photo', file);
       }
+      formData.append('observation', data.observation || '');
 
       const response = await api.post('/time-records/punch', formData);
       return response.data;
