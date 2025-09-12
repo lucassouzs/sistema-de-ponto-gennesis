@@ -106,6 +106,7 @@ export class AuthController {
         data: {
           user: userWithoutPassword,
           token,
+          isFirstLogin: user.isFirstLogin,
         },
         message: 'Login realizado com sucesso'
       });
@@ -176,42 +177,6 @@ export class AuthController {
         success: true,
         data: user,
         message: 'Perfil atualizado com sucesso'
-      });
-    } catch (error) {
-      return next(error);
-    }
-  }
-
-  async changePassword(req: AuthRequest, res: Response, next: NextFunction) {
-    try {
-      const { currentPassword, newPassword } = req.body;
-      const userId = req.user!.id;
-
-      // Buscar usuário com senha
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (!user) {
-        throw createError('Usuário não encontrado', 404);
-      }
-
-      // Verificar senha atual
-      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-      if (!isCurrentPasswordValid) {
-        throw createError('Senha atual incorreta', 400);
-      }
-
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { password: hashedPassword }
-      });
-
-      return res.json({
-        success: true,
-        message: 'Senha alterada com sucesso'
       });
     } catch (error) {
       return next(error);
@@ -302,6 +267,47 @@ export class AuthController {
         success: true,
         data: { token },
         message: 'Token renovado com sucesso'
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async changePassword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      const userId = req.user!.id;
+
+      // Buscar usuário
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw createError('Usuário não encontrado', 404);
+      }
+
+      // Verificar senha atual
+      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isCurrentPasswordValid) {
+        throw createError('Senha atual incorreta', 400);
+      }
+
+      // Criptografar nova senha
+      const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+      // Atualizar senha e marcar como não é mais primeiro login
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          password: hashedNewPassword,
+          isFirstLogin: false,
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Senha alterada com sucesso'
       });
     } catch (error) {
       return next(error);

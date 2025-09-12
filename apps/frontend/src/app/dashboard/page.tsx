@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3, Download, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Users, CheckCircle, XCircle, AlertCircle, User, LogOut, X, Eye, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, BarChart3, UserPlus } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { PunchCard } from '@/components/ponto/PunchCard';
 import { TimeRecordsList } from '@/components/ponto/TimeRecordsList';
 import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
 import { EmployeeList } from '@/components/employee/EmployeeList';
+import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import api from '@/lib/api';
 
 type UserInfoPanelProps = {
@@ -46,6 +47,7 @@ export function UserInfoPanel({ name, cpf, onLogout }: UserInfoPanelProps) {
 
 export default function DashboardPage() {
   const now = new Date();
+  const queryClient = useQueryClient();
   
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -107,6 +109,9 @@ export default function DashboardPage() {
   // Modal de criação de funcionário
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   
+  // Modal de troca de senha
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  
   const { data: bankHoursDetailed } = useQuery({
     queryKey: ['bank-hours-detailed', selectedBankYear, selectedBankMonth, isBankDetailsOpen],
     enabled: isBankDetailsOpen,
@@ -133,59 +138,16 @@ export default function DashboardPage() {
     window.location.href = '/auth/login';
   };
 
-  const exportToExcel = async () => {
-    try {
-      if (!bankHoursDetailed?.data?.days) return;
-      
-      // Criar dados para o Excel
-      const excelData = [
-        ['FUNCIONÁRIO', '', '', '', '', ''],
-        ['Nome:', userData?.data?.name || '', '', '', '', ''],
-        ['CPF:', userData?.data?.cpf || '', '', '', '', ''],
-        ['Período:', `${selectedBankMonth.toString().padStart(2, '0')}/${selectedBankYear}`, '', '', '', ''],
-        ['', '', '', '', '', ''],
-        ['Data', 'Horas Esperadas', 'Horas Trabalhadas', 'Horas Extras', 'Horas Devidas', 'Observações'],
-        ...bankHoursDetailed.data.days.map((day: any) => [
-          new Date(day.date).toLocaleDateString('pt-BR'),
-          day.expectedHours,
-          day.workedHours,
-          day.overtimeHours,
-          day.owedHours,
-          day.notes?.join(', ') || ''
-        ]),
-        ['', '', '', '', '', ''],
-        ['RESUMO', '', '', '', '', ''],
-        ['Total de Horas Extras:', formatHours(bankHoursDetailed.data.totalOvertimeHours || 0), '', '', '', ''],
-        ['Total de Horas Devidas:', formatHours(bankHoursDetailed.data.totalOwedHours || 0), '', '', '', ''],
-        ['Saldo:', formatHours(bankHoursDetailed.data.balanceHours || 0), '', '', '', '']
-      ];
 
-      // Criar workbook e worksheet
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet(excelData);
-      
-      // Definir larguras das colunas
-      ws['!cols'] = [
-        { width: 15 }, // Data
-        { width: 15 }, // Horas Esperadas
-        { width: 15 }, // Horas Trabalhadas
-        { width: 15 }, // Horas Extras
-        { width: 15 }, // Horas Devidas
-        { width: 30 }  // Observações
-      ];
-      
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Banco de Horas');
+  // Verificar se é o primeiro login
+  const isFirstLogin = userData?.data?.isFirstLogin || false;
 
-      // Nome do arquivo
-      const fileName = `banco_horas_${userData?.data?.name?.replace(/\s+/g, '_') || 'funcionario'}_${selectedBankMonth.toString().padStart(2, '0')}_${selectedBankYear}.xlsx`;
-      
-      // Baixar arquivo
-      XLSX.writeFile(wb, fileName);
-    } catch (error) {
-      console.error('Erro ao exportar Excel:', error);
+  // Abrir modal de troca de senha automaticamente no primeiro login
+  useEffect(() => {
+    if (isFirstLogin && userData) {
+      setIsChangePasswordOpen(true);
     }
-  };
+  }, [isFirstLogin, userData]);
 
   if (loadingDashboard || loadingUser || (isPanelOpen && loadingDay) || !userData) {
     return (
@@ -229,6 +191,19 @@ export default function DashboardPage() {
     const minutes = Math.round((Math.abs(decimalHours) - hours) * 60);
     const sign = decimalHours < 0 ? '-' : '';
     return `${sign}${hours}h ${minutes.toString().padStart(2, '0')}min`;
+  };
+
+  // Função para formatar data
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  // Função para obter dia da semana
+  const getWeekday = (dateString: string) => {
+    const date = new Date(dateString);
+    const weekday = date.toLocaleDateString('pt-BR', { weekday: 'long' });
+    return weekday.charAt(0).toUpperCase() + weekday.slice(1);
   };
 
   return (
@@ -512,14 +487,6 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={exportToExcel}
-                      className="flex items-center space-x-2 px-3 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500"
-                      aria-label="Baixar Excel"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span className="text-sm font-medium">Excel</span>
-                    </button>
-                    <button
                       onClick={() => setIsBankDetailsOpen(false)}
                       className="p-2 rounded hover:bg-gray-100 text-gray-600"
                       aria-label="Fechar"
@@ -578,6 +545,7 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="text-left text-gray-600 border-b">
                         <th className="py-2 pr-4">Data</th>
+                        <th className="py-2 pr-4">Dia da Semana</th>
                         <th className="py-2 pr-4">Esperado</th>
                         <th className="py-2 pr-4">Trabalhado</th>
                         <th className="py-2 pr-4">Extras</th>
@@ -588,7 +556,8 @@ export default function DashboardPage() {
                     <tbody>
                       {(bankHoursDetailed?.data?.days || []).map((d: any, idx: number) => (
                         <tr key={idx} className="border-b">
-                          <td className="py-2 pr-4">{new Date(d.date).toLocaleDateString('pt-BR')}</td>
+                          <td className="py-2 pr-4">{formatDate(d.date)}</td>
+                          <td className="py-2 pr-4">{getWeekday(d.date)}</td>
                           <td className="py-2 pr-4">{formatHours(d.expectedHours || 0)}</td>
                           <td className="py-2 pr-4">{formatHours(d.workedHours || 0)}</td>
                           <td className="py-2 pr-4 text-blue-700">{formatHours(d.overtimeHours || 0)}</td>
@@ -607,6 +576,19 @@ export default function DashboardPage() {
         {/* Modal de criação de funcionário */}
         {isCreateEmployeeOpen && (
           <CreateEmployeeForm onClose={() => setIsCreateEmployeeOpen(false)} />
+        )}
+
+        {/* Modal de troca de senha (primeiro login) */}
+        {isFirstLogin && (
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            onSuccess={() => {
+              setIsChangePasswordOpen(false);
+              // Invalidar query para recarregar dados do usuário
+              queryClient.invalidateQueries({ queryKey: ['user'] });
+            }}
+          />
         )}
       </div>
     </div>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -18,17 +18,26 @@ export default function LoginPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
     try {
       await authService.login(formData);
       toast.success('Login realizado com sucesso!');
       router.push('/dashboard');
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao fazer login');
+      // Verificar se é erro de credenciais inválidas
+      if (error.message?.includes('Credenciais inválidas') || 
+          error.message?.includes('incorreta') ||
+          error.message?.includes('inválidas')) {
+        setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+      } else {
+        setError(error.message || 'Erro ao fazer login');
+      }
     } finally {
       setLoading(false);
     }
@@ -39,6 +48,10 @@ export default function LoginPage() {
       ...prev,
       [e.target.name]: e.target.value
     }));
+    // Limpar erro quando usuário começar a digitar
+    if (error) {
+      setError('');
+    }
   };
 
   return (
@@ -97,6 +110,18 @@ export default function LoginPage() {
                 }
                 placeholder="Sua senha"
               />
+
+              {error && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Erro no login</p>
+                      <p className="text-sm text-red-600 mt-1">{error}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <Button
                 type="submit"
