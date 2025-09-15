@@ -35,6 +35,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [positionFilter, setPositionFilter] = useState<string>('all');
+  const [costCenterFilter, setCostCenterFilter] = useState<string>('all');
+  const [clientFilter, setClientFilter] = useState<string>('all');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -52,6 +56,122 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   });
 
   const queryClient = useQueryClient();
+
+  // Listas de opções para filtros
+  const departments = [
+    'Todos',
+    'Engenharia Civil',
+    'Engenharia Elétrica',
+    'Engenharia Mecânica',
+    'Engenharia de Software',
+    'Recursos Humanos',
+    'Financeiro',
+    'Comercial',
+    'Marketing',
+    'Operações',
+    'Qualidade',
+    'Segurança do Trabalho',
+    'Administrativo',
+    'Tecnologia da Informação',
+    'Projetos',
+    'Manutenção',
+    'Produção',
+    'Vendas',
+    'Atendimento ao Cliente',
+    'Jurídico',
+    'Contabilidade',
+    'Compras',
+    'Almoxarifado'
+  ];
+
+  const positions = [
+    'Todos',
+    'Analista',
+    'Assistente',
+    'Coordenador',
+    'Diretor',
+    'Engenheiro',
+    'Especialista',
+    'Estagiário',
+    'Gerente',
+    'Líder Técnico',
+    'Operador',
+    'Supervisor',
+    'Técnico',
+    'Consultor',
+    'Desenvolvedor',
+    'Designer',
+    'Arquiteto',
+    'Projetista',
+    'Inspetor',
+    'Auditor',
+    'Contador',
+    'Advogado',
+    'Vendedor',
+    'Atendente',
+    'Auxiliar',
+    'Secretário',
+    'Recepcionista',
+    'Motorista',
+    'Segurança',
+    'Limpeza',
+    'Manutenção'
+  ];
+
+  const costCenters = [
+    'Todos',
+    'SEDES',
+    'DF - ADM LOCAL',
+    'ITAMARATY - SERVIÇOS EVENTUAIS',
+    'ITAMARATY - MÃO DE OBRA',
+    'SES GDF - LOTE 14',
+    'SES GDF - LOTE 10',
+    'ADM CENTRAL ENGPAC',
+    'DIRETOR'
+  ];
+
+  const clients = [
+    'Todos',
+    '004 - ADMINISTRATIVO DF',
+    '017 - CODEVASF',
+    '022 - UFRN 2',
+    '056 - SUPERINTENDENCIA REGIONAL DA RFB NA 4A R',
+    '058 - INCRA NATAL',
+    '064 - UFRN PINTURA',
+    '068 - PARQUE 3 RUAS - JOÃO PESSOA',
+    '069 - SUBSECAO JUDICIARIA ANAPOLIS-GO',
+    '070 - SUBSECAO JUDICIARIA RIO VERDE-GO',
+    '071 - SUBSECAO JUDICIARIA ITUMBIARA-GO',
+    '072 - SUBSECAO JUDICIARIA LUZIANIA-GO',
+    '073 - SUBSECAO JUDICIARIA URUACU-GO',
+    '074 - SUBSECAO JUDICIARIA FORMOSA-GO',
+    '075 - SUBSECAO JUDICIARIA JATAI-GO',
+    '076 - MIN DAS RELAÇÕES EXTERIORES -ITAMARATY',
+    '077 - SEDES - SEC EST DESENVOLVIMENTO SOCIAL DF',
+    '078 - SES - SEC ESTADO DE SAUDE -TAGUATINGA',
+    '079 - SES - SEC ESTADO DE SAUDE -CEILANDIA',
+    '080 - SES - SEC ESTADO DE SAUDE -SAMAMBAIA/REC',
+    '085 - ADMINISTRATIVO RS',
+    '086 - CORREIOS E TELEGRAFOS 824 SE/RS',
+    '087 - TRE RIO GRANDE DO SUL',
+    '088 - BANRISUL',
+    '090 - INMETRO RS',
+    '092 - TJGO RETROFIT ITAJA',
+    '093 - TJGO RETROFIT CAÇU',
+    '094 - TJGO RETROFIT PARANAIGUARA',
+    '096 - BANCO DO BRASIL GOIAS',
+    '097 - SEINFRA PAVIMENTACAO PB',
+    '098 - UFPE IMPERMEABILIZAÇÃO',
+    '099 - TRIBUNAL DE JUSTICA DE GOIAS - RIO VERDE',
+    '100 - TRIBUNAL DE JUSTICA DE GOIAS - CALDAS NOVAS',
+    '102 - TJ GO RETROFIT LOTE 05',
+    '103 - TJ GO RETROFIT LOTE 04',
+    '106 - SMED RS 17/2023 LOTE 01 - REGIAO NORTE',
+    '107 - BANCO DO BRASIL JARDIM AMERICA',
+    '108 - BANCO DO BRASIL FORMOSA',
+    '109 - CORREIOS DA SE/RS',
+    '110 - NOVO PROGRESSO'
+  ];
 
   // Função para agrupar registros por dia
   const groupRecordsByDay = (records: any[]) => {
@@ -305,8 +425,24 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const employees = employeesData?.data || [];
   const pagination = employeesData?.pagination || { total: 0, totalPages: 0 };
 
-  // Filtrar apenas funcionários (não RH/Admin)
-  const filteredEmployees = employees.filter((emp: Employee) => emp.role === 'EMPLOYEE');
+  // Filtrar apenas funcionários (não RH/Admin) e por todos os filtros
+  const filteredEmployees = employees.filter((emp: Employee) => {
+    const isEmployee = emp.role === 'EMPLOYEE';
+    
+    const matchesDepartment = departmentFilter === 'all' || 
+      (emp.employee?.department && emp.employee.department.toLowerCase().includes(departmentFilter.toLowerCase()));
+    
+    const matchesPosition = positionFilter === 'all' || 
+      (emp.employee?.position && emp.employee.position.toLowerCase().includes(positionFilter.toLowerCase()));
+    
+    const matchesCostCenter = costCenterFilter === 'all' || 
+      (emp.employee?.costCenter && emp.employee.costCenter.toLowerCase().includes(costCenterFilter.toLowerCase()));
+    
+    const matchesClient = clientFilter === 'all' || 
+      (emp.employee?.client && emp.employee.client.toLowerCase().includes(clientFilter.toLowerCase()));
+    
+    return isEmployee && matchesDepartment && matchesPosition && matchesCostCenter && matchesClient;
+  });
 
   // Calcular informações de paginação
   const totalPages = Math.ceil(pagination.total / itemsPerPage);
@@ -369,6 +505,81 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                 <option value="active">Ativos</option>
                 <option value="inactive">Inativos</option>
                 <option value="all">Todos</option>
+              </select>
+            </div>
+          </div>
+          
+          {/* Filtros adicionais */}
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Setor:</label>
+              <select
+                value={departmentFilter}
+                onChange={(e) => setDepartmentFilter(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {departments.map((dept) => (
+                  <option 
+                    key={dept} 
+                    value={dept === 'Todos' ? 'all' : dept}
+                  >
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Cargo:</label>
+              <select
+                value={positionFilter}
+                onChange={(e) => setPositionFilter(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {positions.map((pos) => (
+                  <option 
+                    key={pos} 
+                    value={pos === 'Todos' ? 'all' : pos}
+                  >
+                    {pos}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Centro de Custo:</label>
+              <select
+                value={costCenterFilter}
+                onChange={(e) => setCostCenterFilter(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {costCenters.map((cc) => (
+                  <option 
+                    key={cc} 
+                    value={cc === 'Todos' ? 'all' : cc}
+                  >
+                    {cc}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm font-medium text-gray-700">Tomador:</label>
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {clients.map((client) => (
+                  <option 
+                    key={client} 
+                    value={client === 'Todos' ? 'all' : client}
+                  >
+                    {client}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

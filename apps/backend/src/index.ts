@@ -31,7 +31,7 @@ app.use(compression());
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requests por IP
+  max: 1000, // máximo 1000 requests por IP (mais permissivo para desenvolvimento)
   message: 'Muitas tentativas de acesso. Tente novamente em 15 minutos.',
 });
 app.use(limiter);

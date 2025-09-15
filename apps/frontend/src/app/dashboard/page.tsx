@@ -329,8 +329,8 @@ export default function DashboardPage() {
                     <UserPlus className="w-6 h-6 text-green-600" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Gerenciar Funcionários</h3>
-                    <p className="text-sm text-gray-600">Criar novos funcionários e gerenciar a equipe</p>
+                    <h3 className="text-lg font-semibold text-gray-900">Cadastrar Funcionários</h3>
+                    <p className="text-sm text-gray-600">Adicionar novos funcionários ao sistema</p>
                   </div>
                 </div>
                 <button

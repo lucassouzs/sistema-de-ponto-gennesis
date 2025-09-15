@@ -10,26 +10,69 @@ router.use(authenticate);
 // Endpoint para métricas administrativas - apenas RH e Admin
 router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, next) => {
   try {
+    const { department, position, costCenter, client } = req.query;
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart);
     dayEnd.setDate(dayEnd.getDate() + 1);
 
+    // Construir filtros para funcionários
+    const employeeWhere: any = {
+      isNot: null
+    };
+
+    if (department && department !== 'all') {
+      employeeWhere.department = { contains: department as string, mode: 'insensitive' };
+    }
+    if (position && position !== 'all') {
+      employeeWhere.position = { contains: position as string, mode: 'insensitive' };
+    }
+    if (costCenter && costCenter !== 'all') {
+      employeeWhere.costCenter = { contains: costCenter as string, mode: 'insensitive' };
+    }
+    if (client && client !== 'all') {
+      employeeWhere.client = { contains: client as string, mode: 'insensitive' };
+    }
+
+    // Buscar IDs dos usuários que atendem aos filtros
+    let userIds: string[] = [];
+    if (department !== 'all' || position !== 'all' || costCenter !== 'all' || client !== 'all') {
+      const usersInFilter = await prisma.user.findMany({
+        where: {
+          role: 'EMPLOYEE',
+          isActive: true,
+          employee: employeeWhere
+        },
+        select: { id: true }
+      });
+      userIds = usersInFilter.map(u => u.id);
+    }
+
     const [totalEmployees, presentUsers, lateToday] = await Promise.all([
       prisma.user.count({ 
-        where: { 
+        where: userIds.length > 0 ? {
+          role: 'EMPLOYEE', 
+          isActive: true,
+          id: { in: userIds }
+        } : {
           role: 'EMPLOYEE', 
           isActive: true,
           employee: {
             isNot: null
           }
-        } 
+        }
       }),
       prisma.timeRecord.findMany({
         where: {
           timestamp: { gte: dayStart, lt: dayEnd },
           type: { in: ['ENTRY', 'LUNCH_END'] },
           isValid: true,
+          userId: userIds.length > 0 ? { in: userIds } : undefined,
+          user: userIds.length > 0 ? undefined : {
+            role: 'EMPLOYEE',
+            isActive: true,
+            employee: { isNot: null }
+          }
         },
         select: { userId: true },
         distinct: ['userId'],
@@ -39,6 +82,12 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
           type: 'ENTRY',
           timestamp: { gte: dayStart, lt: dayEnd },
           reason: { contains: 'atraso', mode: 'insensitive' },
+          userId: userIds.length > 0 ? { in: userIds } : undefined,
+          user: userIds.length > 0 ? undefined : {
+            role: 'EMPLOYEE',
+            isActive: true,
+            employee: { isNot: null }
+          }
         },
       }),
     ]);
@@ -88,26 +137,69 @@ router.get('/', async (req: AuthRequest, res, next) => {
       });
     } else {
       // RH e Admin veem métricas administrativas
+      const { department, position, costCenter, client } = req.query;
       const dayStart = new Date();
       dayStart.setHours(0, 0, 0, 0);
       const dayEnd = new Date(dayStart);
       dayEnd.setDate(dayEnd.getDate() + 1);
 
+      // Construir filtros para funcionários
+      const employeeWhere: any = {
+        isNot: null
+      };
+
+      if (department && department !== 'all') {
+        employeeWhere.department = { contains: department as string, mode: 'insensitive' };
+      }
+      if (position && position !== 'all') {
+        employeeWhere.position = { contains: position as string, mode: 'insensitive' };
+      }
+      if (costCenter && costCenter !== 'all') {
+        employeeWhere.costCenter = { contains: costCenter as string, mode: 'insensitive' };
+      }
+      if (client && client !== 'all') {
+        employeeWhere.client = { contains: client as string, mode: 'insensitive' };
+      }
+
+      // Buscar IDs dos usuários que atendem aos filtros
+      let userIds: string[] = [];
+      if (department !== 'all' || position !== 'all' || costCenter !== 'all' || client !== 'all') {
+        const usersInFilter = await prisma.user.findMany({
+          where: {
+            role: 'EMPLOYEE',
+            isActive: true,
+            employee: employeeWhere
+          },
+          select: { id: true }
+        });
+        userIds = usersInFilter.map(u => u.id);
+      }
+
       const [totalEmployees, presentUsers, lateToday] = await Promise.all([
         prisma.user.count({ 
-          where: { 
+          where: userIds.length > 0 ? {
+            role: 'EMPLOYEE', 
+            isActive: true,
+            id: { in: userIds }
+          } : {
             role: 'EMPLOYEE', 
             isActive: true,
             employee: {
               isNot: null
             }
-          } 
+          }
         }),
         prisma.timeRecord.findMany({
           where: {
             timestamp: { gte: dayStart, lt: dayEnd },
             type: { in: ['ENTRY', 'LUNCH_END'] },
             isValid: true,
+            userId: userIds.length > 0 ? { in: userIds } : undefined,
+            user: userIds.length > 0 ? undefined : {
+              role: 'EMPLOYEE',
+              isActive: true,
+              employee: { isNot: null }
+            }
           },
           select: { userId: true },
           distinct: ['userId'],
@@ -117,6 +209,12 @@ router.get('/', async (req: AuthRequest, res, next) => {
             type: 'ENTRY',
             timestamp: { gte: dayStart, lt: dayEnd },
             reason: { contains: 'atraso', mode: 'insensitive' },
+            userId: userIds.length > 0 ? { in: userIds } : undefined,
+            user: userIds.length > 0 ? undefined : {
+              role: 'EMPLOYEE',
+              isActive: true,
+              employee: { isNot: null }
+            }
           },
         }),
       ]);

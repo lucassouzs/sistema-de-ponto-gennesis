@@ -84,7 +84,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
     const fetchLastRecord = async () => {
       try {
         const response = await api.get('/time-records/my-records/today');
-        const records = response.data.data || [];
+        const records = response.data.data?.records || [];
         
         if (records.length > 0) {
           // Ordenar por data/hora e pegar o último registro
@@ -190,12 +190,12 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
             <div className="space-y-2">
               <div className="text-lg font-medium text-gray-600">
                 {currentTime.toLocaleDateString('pt-BR', {
-                  year: 'numeric',
+                  weekday: 'long',
                   month: 'long',
                   day: 'numeric'
-                })}
+                }).replace(/^\w/, c => c.toUpperCase())}
               </div>
-              <div className="text-2xl font-mono font-bold text-gray-800 tracking-wider">
+              <div className="text-2xl font-semibold text-gray-800 tracking-wide">
                 {currentTime.toLocaleTimeString('pt-BR', {
                   hour: '2-digit',
                   minute: '2-digit',
