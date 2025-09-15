@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
@@ -43,6 +43,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [editingRecord, setEditingRecord] = useState<string | null>(null);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(true);
   const [editForm, setEditForm] = useState<{
     type: string;
     timestamp: string;
@@ -482,105 +483,133 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
         </div>
       </CardHeader>
       <CardContent>
-        {/* Busca */}
-        <div className="mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Buscar funcionários por nome, email ou CPF..."
-                value={searchTerm}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Status:</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-                className="px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        {/* Busca e Filtros */}
+        <div className="mb-6 border border-gray-200 rounded-lg">
+          {/* Cabeçalho dos Filtros */}
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Filter className="w-5 h-5 text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
+              </div>
+              <button
+                onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+                className="flex items-center space-x-2 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-md transition-colors"
               >
-                <option value="active">Ativos</option>
-                <option value="inactive">Inativos</option>
-                <option value="all">Todos</option>
-              </select>
+                <span>{isFilterExpanded ? 'Minimizar' : 'Expandir'}</span>
+                {isFilterExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
             </div>
           </div>
           
-          {/* Filtros adicionais */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Setor:</label>
-              <select
-                value={departmentFilter}
-                onChange={(e) => setDepartmentFilter(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {departments.map((dept) => (
-                  <option 
-                    key={dept} 
-                    value={dept === 'Todos' ? 'all' : dept}
+          {/* Conteúdo dos Filtros */}
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            isFilterExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          }`}>
+            <div className="p-4">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Buscar funcionários por nome, email ou CPF..."
+                    value={searchTerm}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Status:</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
+                    className="px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Cargo:</label>
-              <select
-                value={positionFilter}
-                onChange={(e) => setPositionFilter(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {positions.map((pos) => (
-                  <option 
-                    key={pos} 
-                    value={pos === 'Todos' ? 'all' : pos}
+                    <option value="active">Ativos</option>
+                    <option value="inactive">Inativos</option>
+                    <option value="all">Todos</option>
+                  </select>
+                </div>
+              </div>
+              
+              {/* Filtros adicionais */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Setor:</label>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {pos}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Centro de Custo:</label>
-              <select
-                value={costCenterFilter}
-                onChange={(e) => setCostCenterFilter(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {costCenters.map((cc) => (
-                  <option 
-                    key={cc} 
-                    value={cc === 'Todos' ? 'all' : cc}
+                    {departments.map((dept) => (
+                      <option 
+                        key={dept} 
+                        value={dept === 'Todos' ? 'all' : dept}
+                      >
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Cargo:</label>
+                  <select
+                    value={positionFilter}
+                    onChange={(e) => setPositionFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {cc}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700">Tomador:</label>
-              <select
-                value={clientFilter}
-                onChange={(e) => setClientFilter(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {clients.map((client) => (
-                  <option 
-                    key={client} 
-                    value={client === 'Todos' ? 'all' : client}
+                    {positions.map((pos) => (
+                      <option 
+                        key={pos} 
+                        value={pos === 'Todos' ? 'all' : pos}
+                      >
+                        {pos}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Centro de Custo:</label>
+                  <select
+                    value={costCenterFilter}
+                    onChange={(e) => setCostCenterFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {client}
-                  </option>
-                ))}
-              </select>
+                    {costCenters.map((cc) => (
+                      <option 
+                        key={cc} 
+                        value={cc === 'Todos' ? 'all' : cc}
+                      >
+                        {cc}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">Tomador:</label>
+                  <select
+                    value={clientFilter}
+                    onChange={(e) => setClientFilter(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {clients.map((client) => (
+                      <option 
+                        key={client} 
+                        value={client === 'Todos' ? 'all' : client}
+                      >
+                        {client}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
         </div>

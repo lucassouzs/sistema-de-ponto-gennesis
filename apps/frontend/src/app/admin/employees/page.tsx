@@ -18,7 +18,10 @@ import {
   Building,
   Briefcase,
   Calendar,
-  DollarSign
+  DollarSign,
+  ChevronDown,
+  ChevronUp,
+  Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -49,6 +52,7 @@ export default function EmployeesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isFilterExpanded, setIsFilterExpanded] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -267,7 +271,33 @@ export default function EmployeesPage() {
 
         {/* Filtros */}
         <Card className="mb-6">
-          <CardContent className="p-6">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Filter className="w-5 h-5 text-gray-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+                className="flex items-center space-x-2"
+              >
+                <span className="text-sm">
+                  {isFilterExpanded ? 'Minimizar' : 'Expandir'}
+                </span>
+                {isFilterExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          
+          <CardContent className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            isFilterExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+          }`}>
             <div className="flex items-center space-x-4">
               <div className="relative flex-1" ref={dropdownRef}>
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
