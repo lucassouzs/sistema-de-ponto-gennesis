@@ -185,9 +185,28 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       return acc;
     }, {} as Record<string, any[]>);
 
-    // Ordenar registros dentro de cada dia por timestamp
+    // Ordenar registros dentro de cada dia por tipo e timestamp
     Object.keys(grouped).forEach(date => {
-      grouped[date].sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      grouped[date].sort((a: any, b: any) => {
+        // Definir ordem de prioridade dos tipos
+        const typeOrder = {
+          'ENTRY': 1,
+          'LUNCH_START': 2,
+          'LUNCH_END': 3,
+          'EXIT': 4
+        };
+        
+        const aOrder = typeOrder[a.type as keyof typeof typeOrder] || 999;
+        const bOrder = typeOrder[b.type as keyof typeof typeOrder] || 999;
+        
+        // Se os tipos são diferentes, ordenar por tipo
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder;
+        }
+        
+        // Se os tipos são iguais, ordenar por timestamp
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      });
     });
 
     return grouped;
@@ -222,19 +241,26 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     exportData.push([
       'Data',
       'Entrada',
-      'Início Almoço',
-      'Fim Almoço',
+      'Almoço',
+      'Retorno',
       'Saída',
       'Motivo de Alterações'
     ]);
 
-    // Dados agrupados por dia
-    Object.entries(groupedRecords).forEach(([date, dayRecords]) => {
+    // Dados agrupados por dia - ordenar por data
+    Object.entries(groupedRecords)
+      .sort(([a], [b]) => {
+        // Converter strings de data para objetos Date para ordenação correta
+        const dateA = new Date(a.split('/').reverse().join('-'));
+        const dateB = new Date(b.split('/').reverse().join('-'));
+        return dateA.getTime() - dateB.getTime();
+      })
+      .forEach(([date, dayRecords]) => {
       const dayData = {
         date: date,
         entrada: '',
-        inicioAlmoco: '',
-        fimAlmoco: '',
+        almoco: '',
+        retorno: '',
         saida: '',
         observacoes: [] as string[]
       };
@@ -252,18 +278,18 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
             dayData.entrada = time;
             break;
           case 'LUNCH_START':
-            dayData.inicioAlmoco = time;
+            dayData.almoco = time;
             break;
           case 'LUNCH_END':
-            dayData.fimAlmoco = time;
+            dayData.retorno = time;
             break;
           case 'EXIT':
             dayData.saida = time;
             break;
         }
 
-        // Adicionar motivo de alterações se existirem
-        if (record.reason) {
+        // Adicionar motivo de alterações se existirem (exceto localização registrada)
+        if (record.reason && !record.reason.includes('Localização registrada')) {
           dayData.observacoes.push(`${time} - ${record.reason}`);
         }
       });
@@ -272,8 +298,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
       exportData.push([
         dayData.date,
         dayData.entrada,
-        dayData.inicioAlmoco,
-        dayData.fimAlmoco,
+        dayData.almoco,
+        dayData.retorno,
         dayData.saida,
         dayData.observacoes.join('; ')
       ]);
@@ -400,7 +426,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     setEditForm({
       type: record.type,
       timestamp: new Date(record.timestamp).toISOString().slice(0, 16),
-      reason: record.reason || '',
+      reason: (record.reason && !record.reason.includes('Localização registrada')) ? record.reason : '',
       observation: record.observation || ''
     });
   };
@@ -984,8 +1010,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                     <span className="text-xs text-gray-600">
                                       {record.type === 'ENTRY' ? 'Entrada' :
                                        record.type === 'EXIT' ? 'Saída' :
-                                       record.type === 'LUNCH_START' ? 'Início Almoço' :
-                                       record.type === 'LUNCH_END' ? 'Fim Almoço' : record.type}
+                                       record.type === 'LUNCH_START' ? 'Almoço' :
+                                       record.type === 'LUNCH_END' ? 'Retorno' : record.type}
                                     </span>
                                     {userRole === 'ADMIN' && (
                                       <button
@@ -1062,8 +1088,8 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="ENTRY">Entrada</option>
-                    <option value="LUNCH_START">Início Almoço</option>
-                    <option value="LUNCH_END">Fim Almoço</option>
+                    <option value="LUNCH_START">Almoço</option>
+                    <option value="LUNCH_END">Retorno</option>
                     <option value="EXIT">Saída</option>
                   </select>
                 </div>
