@@ -267,11 +267,11 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
       // Processar registros do dia
       dayRecords.forEach((record: any) => {
-        const time = new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          second: '2-digit'
-        });
+        const date = new Date(record.timestamp);
+        const hours = date.getUTCHours().toString().padStart(2, '0');
+        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+        const time = `${hours}:${minutes}:${seconds}`;
 
         switch (record.type) {
           case 'ENTRY':
@@ -553,7 +553,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-                    className="px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     <option value="active">Ativos</option>
                     <option value="inactive">Inativos</option>
@@ -569,7 +569,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {departments.map((dept) => (
                       <option 
@@ -587,7 +587,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={positionFilter}
                     onChange={(e) => setPositionFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {positions.map((pos) => (
                       <option 
@@ -605,7 +605,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={costCenterFilter}
                     onChange={(e) => setCostCenterFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {costCenters.map((cc) => (
                       <option 
@@ -623,7 +623,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={clientFilter}
                     onChange={(e) => setClientFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {clients.map((client) => (
                       <option 
@@ -1001,11 +1001,13 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                   <div className="flex items-center space-x-2">
                                     <Clock className="w-3 h-3 text-gray-500" />
                                     <span className="text-sm font-medium text-gray-900">
-                                      {new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
-                                        hour: '2-digit', 
-                                        minute: '2-digit',
-                                        second: '2-digit'
-                                      })}
+                                      {(() => {
+                                        const date = new Date(record.timestamp);
+                                        const hours = date.getUTCHours().toString().padStart(2, '0');
+                                        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                        return `${hours}:${minutes}:${seconds}`;
+                                      })()}
                                     </span>
                                     <span className="text-xs text-gray-600">
                                       {record.type === 'ENTRY' ? 'Entrada' :

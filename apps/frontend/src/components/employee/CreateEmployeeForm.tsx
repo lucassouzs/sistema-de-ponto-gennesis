@@ -314,9 +314,14 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-4xl mx-4 bg-white rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">Criar Novo Funcionário</h3>
-            <p className="text-sm text-gray-600">Preencha os dados para cadastrar um novo funcionário</p>
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <UserPlus className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Cadastrar Novo Funcionário</h3>
+              <p className="text-sm text-gray-600">Preencha os dados para cadastrar um novo funcionário</p>
+            </div>
           </div>
           <button
             onClick={onClose}

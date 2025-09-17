@@ -131,13 +131,16 @@ export class TimeRecordController {
       }
 
 
-      // Criar registro de ponto
+      // Criar registro de ponto com timestamp correto (horário local do Brasil)
+      const now = new Date();
+      const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000)); // Subtrair 3 horas para converter UTC para horário de Brasília
+      
       const timeRecord = await prisma.timeRecord.create({
         data: {
           userId,
           employeeId: employee.id,
           type,
-          timestamp: new Date(), // Adicionar timestamp
+          timestamp: brazilTime, // Usar horário local do Brasil
           latitude: latNum !== null && !Number.isNaN(latNum) ? latNum : null,
           longitude: lonNum !== null && !Number.isNaN(lonNum) ? lonNum : null,
           photoUrl: photoUrl || null,
