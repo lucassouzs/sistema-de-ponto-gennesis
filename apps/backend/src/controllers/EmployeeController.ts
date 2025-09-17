@@ -26,7 +26,35 @@ export const getAllEmployees = async (req: Request, res: Response) => {
       }
     });
 
-    return res.json(employees);
+    // Buscar a última foto de cada funcionário
+    const employeesWithPhotos = await Promise.all(
+      employees.map(async (employee) => {
+        const lastTimeRecord = await prisma.timeRecord.findFirst({
+          where: {
+            userId: employee.userId,
+            photoUrl: {
+              not: null
+            }
+          },
+          orderBy: {
+            timestamp: 'desc'
+          },
+          select: {
+            photoUrl: true
+          }
+        });
+
+        return {
+          ...employee,
+          lastPhotoUrl: lastTimeRecord?.photoUrl || null
+        };
+      })
+    );
+
+    return res.json({
+      success: true,
+      data: employeesWithPhotos
+    });
   } catch (error) {
     console.error('Erro ao buscar funcionários:', error);
     return res.status(500).json({ error: 'Erro interno do servidor' });

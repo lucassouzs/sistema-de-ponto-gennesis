@@ -21,6 +21,8 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
   const [lastRecord, setLastRecord] = useState<TimeRecordType | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [observation, setObservation] = useState('');
+  const [todayRecords, setTodayRecords] = useState<any[]>([]);
+  const [allPointsCompleted, setAllPointsCompleted] = useState(false);
   
   const { location, error: locationError, loading: locationLoading } = useGeolocation();
   const { 
@@ -70,6 +72,16 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
 
   const selectedType = getNextPunchType();
 
+  // Função para verificar se todos os 4 pontos foram batidos
+  const checkAllPointsCompleted = (records: any[]) => {
+    const hasEntry = records.some(r => r.type === TimeRecordType.ENTRY);
+    const hasLunchStart = records.some(r => r.type === TimeRecordType.LUNCH_START);
+    const hasLunchEnd = records.some(r => r.type === TimeRecordType.LUNCH_END);
+    const hasExit = records.some(r => r.type === TimeRecordType.EXIT);
+    
+    return hasEntry && hasLunchStart && hasLunchEnd && hasExit;
+  };
+
   // Atualizar horário atual a cada segundo
   useEffect(() => {
     const timer = setInterval(() => {
@@ -79,12 +91,14 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Buscar último registro do usuário
+  // Buscar registros do usuário para hoje
   useEffect(() => {
-    const fetchLastRecord = async () => {
+    const fetchTodayRecords = async () => {
       try {
         const response = await api.get('/time-records/my-records/today');
         const records = response.data.data?.records || [];
+        
+        setTodayRecords(records);
         
         if (records.length > 0) {
           // Ordenar por data/hora e pegar o último registro
@@ -98,13 +112,20 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
           setLastRecord(null);
           console.log('Nenhum registro encontrado para hoje');
         }
+        
+        // Verificar se todos os 4 pontos foram batidos
+        const completed = checkAllPointsCompleted(records);
+        setAllPointsCompleted(completed);
+        
       } catch (error) {
-        console.error('Erro ao buscar último registro:', error);
+        console.error('Erro ao buscar registros:', error);
         setLastRecord(null);
+        setTodayRecords([]);
+        setAllPointsCompleted(false);
       }
     };
 
-    fetchLastRecord();
+    fetchTodayRecords();
   }, []);
 
   // Cleanup da câmera quando componente for desmontado
@@ -163,6 +184,13 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
       setLastRecord(selectedType);
       setCapturedPhoto(null);
       setObservation('');
+      
+      // Atualizar registros e verificar se todos os pontos foram completados
+      const updatedRecords = [...todayRecords, { type: selectedType, timestamp: new Date() }];
+      setTodayRecords(updatedRecords);
+      const completed = checkAllPointsCompleted(updatedRecords);
+      setAllPointsCompleted(completed);
+      
       onSuccess?.();
     } catch (error) {
       console.error('Erro ao bater ponto:', error);
@@ -182,7 +210,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
     <Card className="w-full max-w-2xl mx-auto">
       <CardContent>
         <div className="space-y-6">
-          {/* Header */}
+          {/* Header - sempre visível */}
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Bater Ponto
@@ -205,184 +233,221 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
             </div>
           </div>
 
-          {/* Tipo de Ponto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Próximo Registro
-            </label>
-            <div className="p-4 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 text-center">
-              <div className="flex flex-col items-center space-y-2">
-                <div className="text-blue-600">
-                  {punchTypes.find(p => p.type === selectedType)?.icon}
+          {allPointsCompleted ? (
+            // Mostrar apenas a mensagem de parabéns quando todos os pontos foram batidos
+            <div className="text-center space-y-4">
+              <div className="p-6 bg-green-50 border-2 border-green-200 rounded-lg">
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                    <Clock className="w-8 h-8 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-800 mb-2">
+                      Parabéns! Todos os pontos foram batidos hoje
+                    </h3>
+                    <p className="text-green-700 text-sm">
+                      Você completou todos os 4 registros obrigatórios: Entrada, Almoço, Retorno e Saída.
+                    </p>
+                    <p className="text-green-600 text-sm mt-2 font-medium">
+                      Você poderá bater ponto novamente amanhã.
+                    </p>
+                  </div>
                 </div>
-                <span className="font-medium text-blue-900">
-                  {punchTypes.find(p => p.type === selectedType)?.label}
-                </span>
+              </div>
+              
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-center space-x-2 text-blue-700">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-sm font-medium">
+                    Próximo ponto: Entrada (amanhã)
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            // Mostrar o formulário normal quando ainda há pontos para bater
+            <>
 
-          {/* Status da Localização */}
-          <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-            <MapPin className="w-5 h-5 text-gray-500" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-gray-700">Localização</p>
-              <Badge variant={locationStatus.variant} size="sm">
-                {locationStatus.text}
-              </Badge>
+            {/* Tipo de Ponto */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Próximo Registro
+              </label>
+              <div className="p-4 rounded-lg border-2 border-blue-500 bg-blue-50 text-blue-700 text-center">
+                <div className="flex flex-col items-center space-y-2">
+                  <div className="text-blue-600">
+                    {punchTypes.find(p => p.type === selectedType)?.icon}
+                  </div>
+                  <span className="font-medium text-blue-900">
+                    {punchTypes.find(p => p.type === selectedType)?.label}
+                  </span>
+                </div>
+              </div>
             </div>
-            {location && (
-              <div className="text-xs text-gray-500">
-                {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-              </div>
-            )}
-          </div>
 
-          {/* Seção de Foto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Foto do Funcionário
-            </label>
-            
-            {!capturedPhoto && !showCamera && (
-              <div className="flex justify-center">
-                <Button
-                  onClick={handleOpenCamera}
-                  variant="outline"
-                  className="w-full max-w-xs"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Tirar Foto
-                </Button>
+            {/* Status da Localização */}
+            <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+              <MapPin className="w-5 h-5 text-gray-500" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-700">Localização</p>
+                <Badge variant={locationStatus.variant} size="sm">
+                  {locationStatus.text}
+                </Badge>
               </div>
-            )}
+              {location && (
+                <div className="text-xs text-gray-500">
+                  {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                </div>
+              )}
+            </div>
 
-            {showCamera && (
-              <div className="space-y-4">
-                <div className="relative bg-black rounded-lg overflow-hidden">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-64 object-cover"
-                  />
-                  <canvas ref={canvasRef} className="hidden" />
-                  
-                  {!cameraReady && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
-                      <div className="text-white text-center">
-                        <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
-                        <p>Iniciando câmera...</p>
+            {/* Seção de Foto */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Foto do Funcionário
+              </label>
+              
+              {!capturedPhoto && !showCamera && (
+                <div className="flex justify-center">
+                  <Button
+                    onClick={handleOpenCamera}
+                    variant="outline"
+                    className="w-full max-w-xs"
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Tirar Foto
+                  </Button>
+                </div>
+              )}
+
+              {showCamera && (
+                <div className="space-y-4">
+                  <div className="relative bg-black rounded-lg overflow-hidden">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-64 object-cover"
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                    
+                    {!cameraReady && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50">
+                        <div className="text-white text-center">
+                          <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
+                          <p>Iniciando câmera...</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {cameraError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="flex items-center space-x-2 text-red-600">
+                        <AlertCircle className="w-4 h-4" />
+                        <span className="text-sm">{cameraError}</span>
                       </div>
                     </div>
                   )}
-                </div>
 
-                {cameraError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center space-x-2 text-red-600">
-                      <AlertCircle className="w-4 h-4" />
-                      <span className="text-sm">{cameraError}</span>
-                    </div>
+                  <div className="flex space-x-3">
+                    <Button
+                      onClick={handleTakePhoto}
+                      disabled={!cameraReady}
+                      className="flex-1"
+                    >
+                      <Camera className="w-4 h-4 mr-2" />
+                      Capturar Foto
+                    </Button>
+                    <Button
+                      onClick={handleCloseCamera}
+                      variant="outline"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Cancelar
+                    </Button>
                   </div>
-                )}
-
-                <div className="flex space-x-3">
-                  <Button
-                    onClick={handleTakePhoto}
-                    disabled={!cameraReady}
-                    className="flex-1"
-                  >
-                    <Camera className="w-4 h-4 mr-2" />
-                    Capturar Foto
-                  </Button>
-                  <Button
-                    onClick={handleCloseCamera}
-                    variant="outline"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Cancelar
-                  </Button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {capturedPhoto && (
-              <div className="space-y-4">
-                <div className="relative">
-                  <img
-                    src={capturedPhoto}
-                    alt="Foto capturada"
-                    className="w-full max-w-sm mx-auto rounded-lg border"
-                  />
-                  <Badge variant="success" className="absolute top-2 right-2">
-                    Foto Capturada
-                  </Badge>
+              {capturedPhoto && (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <img
+                      src={capturedPhoto}
+                      alt="Foto capturada"
+                      className="w-full max-w-sm mx-auto rounded-lg border"
+                    />
+                    <Badge variant="success" className="absolute top-2 right-2">
+                      Foto Capturada
+                    </Badge>
+                  </div>
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={handleRetakePhoto}
+                      variant="outline"
+                      size="sm"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Tirar Nova Foto
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex justify-center">
-                  <Button
-                    onClick={handleRetakePhoto}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    Tirar Nova Foto
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Campo de Observação */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Observação (Opcional)
-            </label>
-            <textarea
-              value={observation}
-              onChange={(e) => setObservation(e.target.value)}
-              placeholder="Digite uma observação sobre este registro de ponto..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              rows={3}
-              maxLength={500}
-            />
-            <div className="text-right text-xs text-gray-500 mt-1">
-              {observation.length}/500 caracteres
+              )}
             </div>
-          </div>
 
-          {/* Botão de Confirmar */}
-          <div className="pt-4">
-            <Button
-              onClick={handlePunch}
-              loading={punchLoading}
-              disabled={!location || !!locationError || !capturedPhoto}
-              className="w-full"
-              size="lg"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Bater Ponto - {punchTypes.find(p => p.type === selectedType)?.label}
-            </Button>
-
-            {!capturedPhoto && (
-              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <div className="flex items-center space-x-2 text-yellow-600">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">Tire uma foto antes de bater o ponto</span>
-                </div>
+            {/* Campo de Observação */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Observação (Opcional)
+              </label>
+              <textarea
+                value={observation}
+                onChange={(e) => setObservation(e.target.value)}
+                placeholder="Digite uma observação sobre este registro de ponto..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                rows={3}
+                maxLength={500}
+              />
+              <div className="text-right text-xs text-gray-500 mt-1">
+                {observation.length}/500 caracteres
               </div>
-            )}
+            </div>
 
-            {punchError && (
-              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center space-x-2 text-red-600">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm">{punchError}</span>
+            {/* Botão de Confirmar */}
+            <div className="pt-4">
+              <Button
+                onClick={handlePunch}
+                loading={punchLoading}
+                disabled={!location || !!locationError || !capturedPhoto}
+                className="w-full"
+                size="lg"
+              >
+                <Clock className="w-4 h-4 mr-2" />
+                Bater Ponto - {punchTypes.find(p => p.type === selectedType)?.label}
+              </Button>
+
+              {!capturedPhoto && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center space-x-2 text-yellow-600">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">Tire uma foto antes de bater o ponto</span>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {punchError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center space-x-2 text-red-600">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">{punchError}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

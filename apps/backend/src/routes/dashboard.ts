@@ -48,7 +48,7 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
       userIds = usersInFilter.map(u => u.id);
     }
 
-    const [totalEmployees, presentUsers, lateToday] = await Promise.all([
+    const [totalEmployees, presentUsers, allTodayRecords] = await Promise.all([
       prisma.user.count({ 
         where: userIds.length > 0 ? {
           role: 'EMPLOYEE', 
@@ -77,11 +77,10 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
         select: { userId: true },
         distinct: ['userId'],
       }),
-      prisma.timeRecord.count({
+      prisma.timeRecord.findMany({
         where: {
-          type: 'ENTRY',
           timestamp: { gte: dayStart, lt: dayEnd },
-          reason: { contains: 'atraso', mode: 'insensitive' },
+          isValid: true,
           userId: userIds.length > 0 ? { in: userIds } : undefined,
           user: userIds.length > 0 ? undefined : {
             role: 'EMPLOYEE',
@@ -89,6 +88,7 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
             employee: { isNot: null }
           }
         },
+        select: { userId: true, type: true },
       }),
     ]);
 
@@ -96,13 +96,35 @@ router.get('/admin', authorize('HR', 'ADMIN'), async (req: AuthRequest, res, nex
     const absentToday = Math.max(totalEmployees - presentToday, 0);
     const attendanceRate = totalEmployees > 0 ? Math.min(100, Math.max(0, Math.round((presentToday / totalEmployees) * 100))) : 0;
 
+    // Calcular funcionários pendentes (que não bateram os 4 pontos)
+    const recordsByUser = new Map<string, Set<string>>();
+    allTodayRecords.forEach(record => {
+      if (!recordsByUser.has(record.userId)) {
+        recordsByUser.set(record.userId, new Set());
+      }
+      recordsByUser.get(record.userId)!.add(record.type);
+    });
+
+    let pendingToday = 0;
+    recordsByUser.forEach((userRecords) => {
+      const hasEntry = userRecords.has('ENTRY');
+      const hasLunchStart = userRecords.has('LUNCH_START');
+      const hasLunchEnd = userRecords.has('LUNCH_END');
+      const hasExit = userRecords.has('EXIT');
+      
+      // Se não tem todos os 4 pontos, está pendente
+      if (!(hasEntry && hasLunchStart && hasLunchEnd && hasExit)) {
+        pendingToday++;
+      }
+    });
+
     res.json({
       success: true,
       data: {
         totalEmployees,
         presentToday,
         absentToday,
-        lateToday,
+        pendingToday,
         pendingVacations: 0,
         pendingOvertime: 0,
         averageAttendance: attendanceRate,
@@ -175,7 +197,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
         userIds = usersInFilter.map(u => u.id);
       }
 
-      const [totalEmployees, presentUsers, lateToday] = await Promise.all([
+      const [totalEmployees, presentUsers, allTodayRecords] = await Promise.all([
         prisma.user.count({ 
           where: userIds.length > 0 ? {
             role: 'EMPLOYEE', 
@@ -204,11 +226,10 @@ router.get('/', async (req: AuthRequest, res, next) => {
           select: { userId: true },
           distinct: ['userId'],
         }),
-        prisma.timeRecord.count({
+        prisma.timeRecord.findMany({
           where: {
-            type: 'ENTRY',
             timestamp: { gte: dayStart, lt: dayEnd },
-            reason: { contains: 'atraso', mode: 'insensitive' },
+            isValid: true,
             userId: userIds.length > 0 ? { in: userIds } : undefined,
             user: userIds.length > 0 ? undefined : {
               role: 'EMPLOYEE',
@@ -216,6 +237,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
               employee: { isNot: null }
             }
           },
+          select: { userId: true, type: true },
         }),
       ]);
 
@@ -223,13 +245,35 @@ router.get('/', async (req: AuthRequest, res, next) => {
       const absentToday = Math.max(totalEmployees - presentToday, 0);
       const attendanceRate = totalEmployees > 0 ? Math.min(100, Math.max(0, Math.round((presentToday / totalEmployees) * 100))) : 0;
 
+      // Calcular funcionários pendentes (que não bateram os 4 pontos)
+      const recordsByUser = new Map<string, Set<string>>();
+      allTodayRecords.forEach(record => {
+        if (!recordsByUser.has(record.userId)) {
+          recordsByUser.set(record.userId, new Set());
+        }
+        recordsByUser.get(record.userId)!.add(record.type);
+      });
+
+      let pendingToday = 0;
+      recordsByUser.forEach((userRecords) => {
+        const hasEntry = userRecords.has('ENTRY');
+        const hasLunchStart = userRecords.has('LUNCH_START');
+        const hasLunchEnd = userRecords.has('LUNCH_END');
+        const hasExit = userRecords.has('EXIT');
+        
+        // Se não tem todos os 4 pontos, está pendente
+        if (!(hasEntry && hasLunchStart && hasLunchEnd && hasExit)) {
+          pendingToday++;
+        }
+      });
+
       res.json({
         success: true,
         data: {
           totalEmployees,
           presentToday,
           absentToday,
-          lateToday,
+          pendingToday,
           pendingVacations: 0,
           pendingOvertime: 0,
           averageAttendance: attendanceRate,

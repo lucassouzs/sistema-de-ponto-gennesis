@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, MapPin, Camera, CheckCircle, XCircle, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, Eye } from 'lucide-react';
+import { Clock, MapPin, Camera, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { TimeRecord } from '@/types';
@@ -73,49 +73,31 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
           <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
           <div className="divide-y divide-gray-200">
           {records.map((record) => (
-            <div key={record.id} className="p-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="text-gray-600">
-                    {getTypeIcon(record.type)}
+            <div key={record.id} className="p-3 sm:p-4 hover:bg-gray-50 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                <div className="flex items-start space-x-3">
+                  <div className="flex items-center justify-center h-16 sm:h-12">
+                    <div className="text-gray-600 flex-shrink-0">
+                      {getTypeIcon(record.type)}
+                    </div>
                   </div>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-2">
                       <span className="font-medium text-gray-900">
                         {getTypeLabel(record.type)}
                       </span>
-                      <Badge 
-                        variant={record.isValid ? 'success' : 'error'}
-                        size="sm"
-                      >
-                        {record.isValid ? (
-                          <>
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Válido
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Inválido
-                          </>
-                        )}
-                      </Badge>
                     </div>
-                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-gray-500 mt-1">
                       <span className="flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
+                        <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
                         {formatTime(record.timestamp)}
                       </span>
                       {record.latitude && record.longitude && (
                         <span className="flex items-center">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
-                        </span>
-                      )}
-                      {record.photoUrl && (
-                        <span className="flex items-center">
-                          <Camera className="w-3 h-3 mr-1" />
-                          Foto
+                          <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">
+                            {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -126,8 +108,22 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium text-gray-900">
+                
+                {/* Câmera e data - lado direito */}
+                <div className="flex items-center justify-between sm:justify-end space-x-3">
+                  {/* Câmera */}
+                  {record.photoUrl && (
+                    <button
+                      onClick={() => window.open(record.photoUrl, '_blank')}
+                      className="p-2 text-gray-400 hover:text-yellow-600 transition-colors rounded-lg hover:bg-yellow-50 flex items-center justify-center flex-shrink-0"
+                      title="Ver foto"
+                    >
+                      <Camera className="w-4 h-4 text-yellow-600" />
+                    </button>
+                  )}
+                  
+                  {/* Data */}
+                  <div className="text-sm font-medium text-gray-900 flex-shrink-0">
                     {formatDate(record.timestamp)}
                   </div>
                 </div>

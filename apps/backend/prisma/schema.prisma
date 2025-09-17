@@ -157,7 +157,7 @@ model CompanySettings {
   address               String
   phone                 String?
   email                 String?
-  workStartTime         String   @default("08:00")
+  workStartTime         String   @default("07:00")
   workEndTime           String   @default("17:00")
   lunchStartTime        String   @default("12:00")
   lunchEndTime          String   @default("13:00")

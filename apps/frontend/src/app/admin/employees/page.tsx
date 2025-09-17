@@ -42,6 +42,7 @@ interface Employee {
   hireDate: string;
   salary: number;
   isRemote: boolean;
+  lastPhotoUrl?: string;
 }
 
 export default function EmployeesPage() {
@@ -365,9 +366,23 @@ export default function EmployeesPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Users className="w-5 h-5 text-blue-600" />
-                    </div>
+                    {employee.lastPhotoUrl ? (
+                      <div className="relative">
+                        <img
+                          src={employee.lastPhotoUrl}
+                          alt={`Foto de ${employee.user.name}`}
+                          className="w-12 h-12 rounded-lg object-cover border-2 border-blue-200"
+                          onClick={() => window.open(employee.lastPhotoUrl, '_blank')}
+                          style={{ cursor: 'pointer' }}
+                          title="Clique para ver foto em tamanho real"
+                        />
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <Users className="w-5 h-5 text-blue-600" />
+                      </div>
+                    )}
                     <div>
                       <h3 className="font-semibold text-gray-900">{employee.user.name}</h3>
                       <p className="text-sm text-gray-600">#{employee.employeeId}</p>

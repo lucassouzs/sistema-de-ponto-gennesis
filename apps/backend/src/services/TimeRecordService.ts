@@ -200,6 +200,9 @@ export class TimeRecordService {
     let earlyDepartures = 0;
     const issues: string[] = [];
 
+    // Buscar configurações da empresa uma única vez
+    const companySettings = await prisma.companySettings.findFirst();
+
     // Iterar por cada dia do período
     const currentDate = moment(startDate);
     const endMoment = moment(endDate);
@@ -220,7 +223,12 @@ export class TimeRecordService {
         const entryRecord = dayRecords.find(r => r.type === TimeRecordType.ENTRY);
         if (entryRecord) {
           const entryTime = moment(entryRecord.timestamp);
-          const expectedEntryTime = moment(entryTime).hour(8).minute(0).second(0);
+          
+          // Usar configurações da empresa para horário de entrada
+          const workStartTime = companySettings?.workStartTime || '07:00';
+          const [startHour, startMinute] = workStartTime.split(':').map(Number);
+          
+          const expectedEntryTime = moment(entryTime).hour(startHour).minute(startMinute).second(0);
           
           if (entryTime.isAfter(expectedEntryTime)) {
             lateArrivals++;
@@ -231,7 +239,12 @@ export class TimeRecordService {
         const exitRecord = dayRecords.find(r => r.type === TimeRecordType.EXIT);
         if (exitRecord) {
           const exitTime = moment(exitRecord.timestamp);
-          const expectedExitTime = moment(exitTime).hour(17).minute(0).second(0);
+          
+          // Buscar configurações da empresa para horário de saída
+          const workEndTime = companySettings?.workEndTime || '17:00';
+          const [endHour, endMinute] = workEndTime.split(':').map(Number);
+          
+          const expectedExitTime = moment(exitTime).hour(endHour).minute(endMinute).second(0);
           
           if (exitTime.isBefore(expectedExitTime)) {
             earlyDepartures++;
@@ -534,16 +547,22 @@ export class TimeRecordService {
       orderBy: { timestamp: 'asc' }
     });
 
-    // Filtrar apenas atrasos (após 8:10)
+    // Buscar configurações da empresa para horário de entrada
+    const companySettings = await prisma.companySettings.findFirst();
+    const workStartTime = companySettings?.workStartTime || '07:00';
+    const toleranceMinutes = companySettings?.toleranceMinutes || 10;
+    const [startHour, startMinute] = workStartTime.split(':').map(Number);
+    
+    // Filtrar apenas atrasos (após horário + tolerância)
     const lateArrivals = entryRecords.filter(record => {
       const entryTime = moment(record.timestamp);
-      const expectedTime = moment(entryTime).hour(8).minute(10).second(0);
+      const expectedTime = moment(entryTime).hour(startHour).minute(startMinute + toleranceMinutes).second(0);
       return entryTime.isAfter(expectedTime);
     });
 
     const report = lateArrivals.map(record => {
       const entryTime = moment(record.timestamp);
-      const expectedTime = moment(entryTime).hour(8).minute(0).second(0);
+      const expectedTime = moment(entryTime).hour(startHour).minute(startMinute).second(0);
       const delayMinutes = entryTime.diff(expectedTime, 'minutes');
 
       return {

@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
@@ -1014,13 +1014,24 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                        record.type === 'LUNCH_END' ? 'Retorno' : record.type}
                                     </span>
                                     {userRole === 'ADMIN' && (
-                                      <button
-                                        onClick={() => handleEditRecord(record)}
-                                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                        title="Editar registro"
-                                      >
-                                        <Edit className="w-3 h-3" />
-                                      </button>
+                                      <>
+                                        {record.photoUrl && (
+                                          <button
+                                            onClick={() => window.open(record.photoUrl, '_blank')}
+                                            className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                            title="Ver foto"
+                                          >
+                                            <Camera className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleEditRecord(record)}
+                                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                          title="Editar registro"
+                                        >
+                                          <Edit className="w-3 h-3" />
+                                        </button>
+                                      </>
                                     )}
                                   </div>
                                   {record.observation && (

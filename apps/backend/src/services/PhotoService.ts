@@ -28,6 +28,12 @@ export class PhotoService {
       || !process.env.AWS_ACCESS_KEY_ID
       || !process.env.AWS_SECRET_ACCESS_KEY;
 
+    console.log('🔍 PhotoService Debug:');
+    console.log('  - STORAGE_PROVIDER:', process.env.STORAGE_PROVIDER);
+    console.log('  - AWS_ACCESS_KEY_ID:', process.env.AWS_ACCESS_KEY_ID ? 'OK' : 'FALTANDO');
+    console.log('  - AWS_SECRET_ACCESS_KEY:', process.env.AWS_SECRET_ACCESS_KEY ? 'OK' : 'FALTANDO');
+    console.log('  - useLocal:', this.useLocal);
+
     // Configurar AWS S3 quando aplicável
     this.s3 = this.useLocal ? null : new AWS.S3({
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -36,6 +42,7 @@ export class PhotoService {
     });
     
     this.bucketName = process.env.AWS_S3_BUCKET || 'sistema-ponto-fotos';
+    console.log('  - bucketName:', this.bucketName);
   }
 
   /**
@@ -133,14 +140,23 @@ export class PhotoService {
    */
   async uploadPhoto(photo: any, userId: string): Promise<PhotoUploadResult> {
     try {
+      console.log('📸 PhotoService.uploadPhoto chamado:');
+      console.log('  - userId:', userId);
+      console.log('  - photo existe:', !!photo);
+      console.log('  - useLocal:', this.useLocal);
+      console.log('  - s3 existe:', !!this.s3);
+
       const validation = this.validatePhoto(photo);
       if (!validation.isValid) {
         throw new Error(validation.reason);
       }
 
       if (this.useLocal || !this.s3) {
+        console.log('💾 Usando armazenamento LOCAL');
         return await this.saveLocalPhoto(photo, userId);
       }
+
+      console.log('☁️ Usando AWS S3');
 
       const fileExtension = this.getFileExtension(photo.mimetype || 'image/jpeg');
       const fileName = `ponto/${userId}/${uuidv4()}.${fileExtension}`;

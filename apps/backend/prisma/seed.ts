@@ -12,20 +12,20 @@ async function main() {
     update: {},
     create: {
       id: 'default',
-      name: 'Empresa de Engenharia Ltda',
-      cnpj: '12.345.678/0001-90',
-      address: 'Rua das Engenharias, 123 - Centro - São Paulo/SP',
-      phone: '(11) 99999-9999',
+      name: 'Gennesis Engenharia',
+      cnpj: '38.294.339/0001-10',
+      address: '24, St. de Habitações Individuais Sul QI 11 - Lago Sul, Brasília - DF, 70297-400',
+      phone: '(61) 99517-6932',
       email: 'contato@engenharia.com.br',
-      workStartTime: '08:00',
+      workStartTime: '07:00',
       workEndTime: '17:00',
       lunchStartTime: '12:00',
       lunchEndTime: '13:00',
       toleranceMinutes: 10,
       maxOvertimeHours: 2,
       maxDistanceMeters: 1000,
-      defaultLatitude: -23.5505,
-      defaultLongitude: -46.6333,
+      defaultLatitude: -15.835840,
+      defaultLongitude: -47.873407,
       vacationDaysPerYear: 30
     }
   });
@@ -69,12 +69,12 @@ async function main() {
   // Criar funcionário de exemplo
   const employeePassword = await bcrypt.hash('func123', 12);
   const employee = await prisma.user.upsert({
-    where: { email: 'joao.silva@engenharia.com.br' },
+    where: { email: 'teste@engenharia.com.br' },
     update: {},
     create: {
-      email: 'joao.silva@engenharia.com.br',
+      email: 'teste@engenharia.com.br',
       password: employeePassword,
-      name: 'João Silva',
+      name: 'Teste',
       cpf: '12345678900',
       role: UserRole.EMPLOYEE,
       isActive: true
@@ -90,10 +90,10 @@ async function main() {
       employeeId: 'EMP001',
       department: 'Engenharia Civil',
       position: 'Engenheiro Civil',
-      hireDate: new Date('2023-01-15'),
-      salary: 8000.00,
+      hireDate: new Date('2025-09-01 07:00:00'),
+      salary: 10000.00,
       workSchedule: {
-        startTime: '08:00',
+        startTime: '07:00',
         endTime: '17:00',
         lunchStartTime: '12:00',
         lunchEndTime: '13:00',
@@ -105,15 +105,15 @@ async function main() {
         {
           id: 'loc_1',
           name: 'Escritório Principal',
-          latitude: -23.5505,
-          longitude: -46.6333,
+          latitude: -15.835840,
+          longitude: -47.873407,
           radius: 100
         }
       ]
     }
   });
 
-  console.log('✅ Funcionário de exemplo criado: joao.silva@engenharia.com.br / func123');
+  console.log('✅ Funcionário de exemplo criado: teste@engenharia.com.br / func123');
 }
 
 main()

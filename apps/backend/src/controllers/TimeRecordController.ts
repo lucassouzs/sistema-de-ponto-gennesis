@@ -20,6 +20,7 @@ export class TimeRecordController {
       const photo = req.file; // Arquivo enviado via multer
 
 
+
       // Normalizar latitude/longitude para número
       const latNum = latitude !== undefined && latitude !== null && latitude !== '' ? Number(latitude) : null;
       const lonNum = longitude !== undefined && longitude !== null && longitude !== '' ? Number(longitude) : null;
@@ -109,6 +110,13 @@ export class TimeRecordController {
       const hasLunchEnd = todayRecords.some(r => r.type === TimeRecordType.LUNCH_END);
       const hasExit = todayRecords.some(r => r.type === TimeRecordType.EXIT);
 
+      // Verificar se todos os 4 pontos já foram batidos
+      const allPointsCompleted = hasEntry && hasLunchStart && hasLunchEnd && hasExit;
+      
+      if (allPointsCompleted) {
+        throw createError('Todos os pontos obrigatórios já foram batidos hoje. Você poderá bater ponto novamente amanhã.', 400);
+      }
+
       // Validações de sequência
       if (type === TimeRecordType.LUNCH_START && !hasEntry) {
         throw createError('Você precisa bater o ponto de entrada antes de bater o ponto do almoço', 400);
@@ -129,6 +137,7 @@ export class TimeRecordController {
           userId,
           employeeId: employee.id,
           type,
+          timestamp: new Date(), // Adicionar timestamp
           latitude: latNum !== null && !Number.isNaN(latNum) ? latNum : null,
           longitude: lonNum !== null && !Number.isNaN(lonNum) ? lonNum : null,
           photoUrl: photoUrl || null,

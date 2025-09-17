@@ -6,18 +6,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 const api = axios.create({
   baseURL: API_URL,
   timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Removendo Content-Type fixo para permitir multipart/form-data
 });
 
-// Interceptor para adicionar token de autenticação
+// Interceptor para adicionar token de autenticação e configurar Content-Type
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Se for FormData, não definir Content-Type (deixar o browser definir)
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    } else {
+      // Para outros tipos, usar application/json
+      config.headers['Content-Type'] = 'application/json';
+    }
+    
     return config;
   },
   (error) => {

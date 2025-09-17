@@ -221,58 +221,58 @@ export default function DashboardPage() {
         {/* Métricas administrativas - apenas para RH e Admin */}
         {isAdminOrHR && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-blue-100 rounded-lg">
-                      <Users className="w-6 h-6 text-blue-600" />
+                    <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0">
+                      <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Funcionários</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
+                    <div className="ml-3 sm:ml-4 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Total Funcionários</p>
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.totalEmployees}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-green-100 rounded-lg">
-                      <CheckCircle className="w-6 h-6 text-green-600" />
+                    <div className="p-2 sm:p-3 bg-green-100 rounded-lg flex-shrink-0">
+                      <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Presentes Hoje</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.presentToday}</p>
+                    <div className="ml-3 sm:ml-4 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Presentes Hoje</p>
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.presentToday}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-red-100 rounded-lg">
-                      <XCircle className="w-6 h-6 text-red-600" />
+                    <div className="p-2 sm:p-3 bg-red-100 rounded-lg flex-shrink-0">
+                      <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Ausentes Hoje</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.absentToday}</p>
+                    <div className="ml-3 sm:ml-4 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Ausentes Hoje</p>
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.absentToday}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center">
-                    <div className="p-3 bg-yellow-100 rounded-lg">
-                      <AlertCircle className="w-6 h-6 text-yellow-600" />
+                    <div className="p-2 sm:p-3 bg-yellow-100 rounded-lg flex-shrink-0">
+                      <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
                     </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Atrasos Hoje</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.lateToday}</p>
+                    <div className="ml-3 sm:ml-4 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Pendência Hoje</p>
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">{stats.pendingToday}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -444,18 +444,18 @@ export default function DashboardPage() {
                       Banco de Horas
                     </h2>
                   </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-blue-50 rounded">
-                      <div className="text-sm text-gray-600">Horas Extras</div>
-                      <div className="text-2xl font-bold text-blue-700">{formatHours(bankHoursData?.data?.totalOvertimeHours || 0)}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                    <div className="p-3 sm:p-4 bg-blue-50 rounded">
+                      <div className="text-xs sm:text-sm text-gray-600">Horas Extras</div>
+                      <div className="text-lg sm:text-2xl font-bold text-blue-700 break-all">{formatHours(bankHoursData?.data?.totalOvertimeHours || 0)}</div>
                     </div>
-                    <div className="p-4 bg-red-50 rounded">
-                      <div className="text-sm text-gray-600">Horas Devidas</div>
-                      <div className="text-2xl font-bold text-red-700">{formatHours(bankHoursData?.data?.totalOwedHours || 0)}</div>
+                    <div className="p-3 sm:p-4 bg-red-50 rounded">
+                      <div className="text-xs sm:text-sm text-gray-600">Horas Devidas</div>
+                      <div className="text-lg sm:text-2xl font-bold text-red-700 break-all">{formatHours(bankHoursData?.data?.totalOwedHours || 0)}</div>
                     </div>
-                    <div className="p-4 bg-gray-50 rounded">
-                      <div className="text-sm text-gray-600">Saldo</div>
-                      <div className="text-2xl font-bold text-gray-900">{formatHours(bankHoursData?.data?.balanceHours || 0)}</div>
+                    <div className="p-3 sm:p-4 bg-gray-50 rounded">
+                      <div className="text-xs sm:text-sm text-gray-600">Saldo</div>
+                      <div className="text-lg sm:text-2xl font-bold text-gray-900 break-all">{formatHours(bankHoursData?.data?.balanceHours || 0)}</div>
                     </div>
                   </div>
                   <div className="mt-4">
