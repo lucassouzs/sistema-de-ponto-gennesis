@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Clock, Users, TrendingUp, Calendar, Filter, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import * as XLSX from 'xlsx';
 import api from '@/lib/api';
 
@@ -23,12 +24,14 @@ interface BankHoursData {
   totalExpectedHours: number;
   bankHours: number;
   overtimeHours: number;
+  overtimeMultipliedHours: number;
   pendingHours: number;
   lastUpdate: string;
 }
 
 export default function BankHoursPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -45,19 +48,32 @@ export default function BankHoursPage() {
   });
   const [endDateFilter, setEndDateFilter] = useState(() => {
     const today = new Date();
-    today.setHours(23, 0, 0, 0);
     return today.toISOString().split('T')[0];
   });
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [costCenterFilter, setCostCenterFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     router.push('/auth/login');
   };
+
+  // Listener para abrir modal de alterar senha via sidebar
+  useEffect(() => {
+    const handleOpenChangePasswordModal = () => {
+      setIsChangePasswordOpen(true);
+    };
+
+    window.addEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
+    
+    return () => {
+      window.removeEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
+    };
+  }, []);
 
   // Verificar se o usuário tem permissão para acessar esta página
   if (userData?.data?.role === 'EMPLOYEE') {
@@ -129,6 +145,7 @@ export default function BankHoursPage() {
       'Horas Trabalhadas': formatTime(employee.totalWorkedHours),
       'Horas Esperadas': formatTime(employee.totalExpectedHours),
       'Banco de Horas': formatTime(employee.bankHours),
+      'Horas Extras (Multiplicadas)': formatTime(employee.overtimeMultipliedHours),
       'Status': getStatusText(employee.bankHours)
     }));
 
@@ -149,6 +166,7 @@ export default function BankHoursPage() {
       { wch: 15 }, // Horas Trabalhadas
       { wch: 15 }, // Horas Esperadas
       { wch: 15 }, // Banco de Horas
+      { wch: 20 }, // Horas Extras (Multiplicadas)
       { wch: 10 }  // Status
     ];
     ws['!cols'] = colWidths;
@@ -459,6 +477,7 @@ export default function BankHoursPage() {
                       <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Trabalhadas</th>
                       <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Esperadas</th>
                       <th className="text-center py-3 px-4 font-medium text-gray-700">Banco de Horas</th>
+                      <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Extras (Multiplicadas)</th>
                       <th className="text-center py-3 px-4 font-medium text-gray-700">Status</th>
                     </tr>
                   </thead>
@@ -487,6 +506,11 @@ export default function BankHoursPage() {
                           </span>
                         </td>
                         <td className="py-3 px-4 text-center">
+                          <span className="font-medium text-orange-600">
+                            {formatTime(employee.overtimeMultipliedHours)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
                           <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(employee.bankHours)}`}>
                             {getStatusText(employee.bankHours)}
                           </span>
@@ -500,6 +524,17 @@ export default function BankHoursPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de alterar senha */}
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        onSuccess={() => {
+          setIsChangePasswordOpen(false);
+          // Invalidar query para recarregar dados do usuário
+          queryClient.invalidateQueries({ queryKey: ['user'] });
+        }}
+      />
     </MainLayout>
   );
 }

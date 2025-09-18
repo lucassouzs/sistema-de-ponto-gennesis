@@ -172,7 +172,7 @@ export default function PontoPage() {
       userName={user.name} 
       onLogout={handleLogout}
     >
-      <div className="space-y-8">
+      <div className="space-y-6 w-full px-4">
       {/* Header */}
       <div className="text-center">
         <h1 className="text-3xl font-bold text-gray-900">Controle de Ponto</h1>
@@ -180,22 +180,24 @@ export default function PontoPage() {
       </div>
 
       {/* Cards principais */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
         {/* Card de bater ponto */}
-        <div>
+        <div className="h-full">
           <PunchCard />
         </div>
 
         {/* Card de registros do dia */}
-        <TimeRecordsList 
-          records={todayRecords?.data?.records || []} 
-          onViewMore={() => setIsPanelOpen(true)}
-        />
+        <div className="h-full">
+          <TimeRecordsList 
+            records={todayRecords?.data?.records || []} 
+            onViewMore={() => setIsPanelOpen(true)}
+          />
+        </div>
       </div>
 
       {/* Banco de horas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card className="w-full max-w-2xl mx-auto">
+      <div className="w-full">
+        <Card className="w-full">
           <CardContent>
             <div className="space-y-6">
               <div className="text-center">

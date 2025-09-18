@@ -442,7 +442,10 @@ export class TimeRecordController {
       // Validar timestamp se fornecido
       let newTimestamp = existingRecord.timestamp;
       if (timestamp) {
-        newTimestamp = new Date(timestamp);
+        // Converter timestamp para horário local (Brasília) sem conversão de timezone
+        const date = new Date(timestamp);
+        const brazilTime = new Date(date.getTime() - (3 * 60 * 60 * 1000)); // Subtrair 3 horas para converter UTC para horário de Brasília
+        newTimestamp = brazilTime;
         if (isNaN(newTimestamp.getTime())) {
           throw createError('Data/hora inválida', 400);
         }

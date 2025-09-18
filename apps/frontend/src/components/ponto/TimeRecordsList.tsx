@@ -66,14 +66,14 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
   }
 
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader className="pb-4 border-b-0 pt-4">
         <h2 className="text-2xl font-bold text-gray-900 text-center">Registros</h2>
       </CardHeader>
-      <CardContent>
-        <div className="max-w-2xl mx-auto">
+      <CardContent className="flex-1 flex flex-col">
+        <div className="w-full flex-1 flex flex-col">
           <label className="block text-sm font-medium text-gray-700 mb-3">Últimos Registros</label>
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-gray-200 flex-1">
           {records.map((record) => (
             <div key={record.id} className="p-3 sm:p-4 hover:bg-gray-50 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
@@ -134,10 +134,10 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
           )          )}
           </div>
           {onViewMore && (
-            <div className="pt-4">
+            <div className="pt-4 mt-auto">
               <button
                 onClick={onViewMore}
-                className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               >
                 <Eye className="w-4 h-4" />
                 <span className="text-sm font-medium">Ver mais</span>

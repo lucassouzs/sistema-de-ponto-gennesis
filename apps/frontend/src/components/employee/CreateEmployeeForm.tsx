@@ -168,7 +168,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         employeeId: data.employeeId,
         department: data.sector,
         position: data.position,
-        hireDate: new Date(`${data.hireDate}T${data.hireTime}:00`).toISOString(),
+        hireDate: `${data.hireDate}T${data.hireTime}:00`,
         salary: parseFloat(data.salary),
         isRemote: data.isRemote,
         workSchedule: {

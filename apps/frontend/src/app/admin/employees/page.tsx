@@ -1,17 +1,19 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Users, UserPlus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
 import { EmployeeList } from '@/components/employee/EmployeeList';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import api from '@/lib/api';
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -22,12 +24,26 @@ export default function EmployeesPage() {
   });
 
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     router.push('/auth/login');
   };
+
+  // Listener para abrir modal de alterar senha via sidebar
+  useEffect(() => {
+    const handleOpenChangePasswordModal = () => {
+      setIsChangePasswordOpen(true);
+    };
+
+    window.addEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
+    
+    return () => {
+      window.removeEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
+    };
+  }, []);
 
   if (loadingUser) {
     return (
@@ -95,6 +111,17 @@ export default function EmployeesPage() {
         {isCreateEmployeeOpen && (
           <CreateEmployeeForm onClose={() => setIsCreateEmployeeOpen(false)} />
         )}
+
+        {/* Modal de alterar senha */}
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          onSuccess={() => {
+            setIsChangePasswordOpen(false);
+            // Invalidar query para recarregar dados do usuário
+            queryClient.invalidateQueries({ queryKey: ['user'] });
+          }}
+        />
       </div>
     </MainLayout>
   );

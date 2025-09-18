@@ -159,7 +159,7 @@ export class UserController {
               employeeId: employeeData.employeeId,
               department: employeeData.department,
               position: employeeData.position,
-              hireDate: new Date(employeeData.hireDate),
+              hireDate: new Date(employeeData.hireDate + 'T00:00:00'),
               salary: employeeData.salary,
               workSchedule: employeeData.workSchedule || {
                 startTime: '08:00',

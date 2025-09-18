@@ -156,7 +156,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           employeeId,
           department,
           position,
-          hireDate: new Date(hireDate),
+          hireDate: new Date(hireDate + 'T00:00:00'),
           salary: parseFloat(salary),
           isRemote
         },
@@ -262,7 +262,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           ...(employeeId && { employeeId }),
           ...(department && { department }),
           ...(position && { position }),
-          ...(hireDate && { hireDate: new Date(hireDate) }),
+          ...(hireDate && { hireDate: new Date(hireDate + 'T00:00:00') }),
           ...(salary && { salary: parseFloat(salary) }),
           ...(isRemote !== undefined && { isRemote })
         },

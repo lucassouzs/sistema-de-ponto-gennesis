@@ -423,9 +423,19 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
   const handleEditRecord = (record: any) => {
     setEditingRecord(record.id);
+    
+    // Converter timestamp para formato local sem conversão de timezone
+    const date = new Date(record.timestamp);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const localTimestamp = `${year}-${month}-${day}T${hours}:${minutes}`;
+    
     setEditForm({
       type: record.type,
-      timestamp: new Date(record.timestamp).toISOString().slice(0, 16),
+      timestamp: localTimestamp,
       reason: (record.reason && !record.reason.includes('Localização registrada')) ? record.reason : '',
       observation: record.observation || ''
     });

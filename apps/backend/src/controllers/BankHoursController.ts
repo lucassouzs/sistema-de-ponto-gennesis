@@ -27,7 +27,7 @@ export class BankHoursController {
         // Fallback para mês atual se não fornecido
         const now = new Date();
         startDateFilter = new Date(now.getFullYear(), now.getMonth(), 1, 1, 0, 0);
-        endDateFilter = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 0, 0);
+        endDateFilter = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 0, 0);
       }
 
       // Buscar funcionários com filtros
@@ -102,62 +102,116 @@ export class BankHoursController {
             }
           });
 
-          // Calcular horas trabalhadas
-          let totalWorkedHours = 0;
-          let currentDay = '';
-          let dayStart = null;
-          let dayEnd = null;
-          let lunchStart = null;
-          let lunchEnd = null;
 
+          // Função para calcular multiplicador de horas extras
+          const calculateOvertimeMultiplier = (timestamp: Date, dayOfWeek: number) => {
+            const hour = timestamp.getHours();
+            const isSunday = dayOfWeek === 0;
+            const isSaturday = dayOfWeek === 6;
+            const isAfter22h = hour >= 22;
+            
+            if (isSunday) {
+              // Domingo: 100% adicional (1h extra = 2h)
+              return 2.0;
+            } else if (isSaturday) {
+              // Sábado: 50% adicional (1h extra = 1h30)
+              return 1.5;
+            } else if (isAfter22h) {
+              // Depois das 22h: 100% adicional (1h extra = 2h)
+              return 2.0;
+            } else {
+              // Segunda a sexta, após jornada normal: 50% adicional (1h extra = 1h30)
+              return 1.5;
+            }
+          };
+
+          // Calcular horas trabalhadas agrupando por dia
+          let totalWorkedHours = 0;
+          let totalOvertimeHours = 0;
+          
+          // Agrupar registros por dia
+          const recordsByDay = new Map();
+          
           for (const record of timeRecords) {
             const recordDate = record.timestamp.toISOString().split('T')[0];
             
-            if (recordDate !== currentDay) {
-              // Processar dia anterior se existir
-              if (currentDay && dayStart && dayEnd) {
-                let dayHours = 0;
-                if (lunchStart && lunchEnd) {
-                  const morningHours = (lunchStart.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
-                  const afternoonHours = (dayEnd.getTime() - lunchEnd.getTime()) / (1000 * 60 * 60);
-                  dayHours = morningHours + afternoonHours;
-                } else {
-                  dayHours = (dayEnd.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
-                }
-                totalWorkedHours += dayHours;
-              }
-              
-              // Iniciar novo dia
-              currentDay = recordDate;
-              dayStart = null;
-              dayEnd = null;
-              lunchStart = null;
-              lunchEnd = null;
+            if (!recordsByDay.has(recordDate)) {
+              recordsByDay.set(recordDate, []);
             }
-
-            // Processar registro atual
-            if (record.type === 'ENTRY') {
-              dayStart = record.timestamp;
-            } else if (record.type === 'EXIT') {
-              dayEnd = record.timestamp;
-            } else if (record.type === 'LUNCH_START') {
-              lunchStart = record.timestamp;
-            } else if (record.type === 'LUNCH_END') {
-              lunchEnd = record.timestamp;
-            }
+            recordsByDay.get(recordDate).push(record);
           }
 
-          // Processar último dia
-          if (currentDay && dayStart && dayEnd) {
-            let dayHours = 0;
-            if (lunchStart && lunchEnd) {
-              const morningHours = (lunchStart.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
-              const afternoonHours = (dayEnd.getTime() - lunchEnd.getTime()) / (1000 * 60 * 60);
-              dayHours = morningHours + afternoonHours;
-            } else {
-              dayHours = (dayEnd.getTime() - dayStart.getTime()) / (1000 * 60 * 60);
+          // Processar cada dia
+          for (const [date, dayRecords] of recordsByDay) {
+            const dayOfWeek = new Date(date).getDay();
+            
+            // Encontrar registros específicos do dia
+            const entryRecord = dayRecords.find((r: any) => r.type === 'ENTRY');
+            const exitRecord = dayRecords.find((r: any) => r.type === 'EXIT');
+            const lunchStartRecord = dayRecords.find((r: any) => r.type === 'LUNCH_START');
+            const lunchEndRecord = dayRecords.find((r: any) => r.type === 'LUNCH_END');
+            
+            // Só calcular se tiver pelo menos entrada e saída
+            if (entryRecord && exitRecord) {
+              let dayHours = 0;
+              let overtimeHours = 0;
+              let regularHours = 0;
+              
+              // Usar a mesma lógica do TimeRecordService
+              const entryTime = new Date(entryRecord.timestamp);
+              const exitTime = new Date(exitRecord.timestamp);
+              
+              // Calcular horas totais (entrada até saída)
+              const totalHours = (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60);
+              
+              // Calcular horas de almoço
+              let lunchHours = 0;
+              if (lunchStartRecord && lunchEndRecord) {
+                const lunchStart = new Date(lunchStartRecord.timestamp);
+                const lunchEnd = new Date(lunchEndRecord.timestamp);
+                lunchHours = (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
+              } else {
+                // Assumir 1 hora de almoço se não registrado
+                lunchHours = 1;
+              }
+              
+              // Calcular horas efetivas de trabalho
+              dayHours = Math.max(0, totalHours - lunchHours);
+              
+              // Determinar jornada esperada para o dia
+              let expectedHours = 0;
+              if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+                expectedHours = 9; // Segunda a quinta: 9h
+              } else if (dayOfWeek === 5) {
+                expectedHours = 8; // Sexta: 8h
+              }
+              // Sábado e domingo: 0h esperadas (toda hora trabalhada é extra)
+              
+              // Calcular horas extras
+              if (dayOfWeek === 0 || dayOfWeek === 6) {
+                // Fim de semana: todas as horas são extras
+                regularHours = 0;
+                overtimeHours = dayHours;
+              } else {
+                // Dia útil: separar horas normais das extras
+                if (dayHours > expectedHours) {
+                  regularHours = expectedHours;
+                  overtimeHours = dayHours - expectedHours;
+                } else {
+                  regularHours = dayHours;
+                  overtimeHours = 0;
+                }
+              }
+              
+              // Aplicar multiplicador apenas sobre as horas extras
+              if (overtimeHours > 0) {
+                const multiplier = calculateOvertimeMultiplier(entryTime, dayOfWeek);
+                const multipliedOvertimeHours = overtimeHours * multiplier;
+                totalOvertimeHours += multipliedOvertimeHours;
+              }
+              
+              totalWorkedHours += dayHours;
             }
-            totalWorkedHours += dayHours;
           }
 
           // Calcular horas esperadas usando a mesma lógica do TimeRecordService
@@ -178,8 +232,9 @@ export class BankHoursController {
             currentDate.setDate(currentDate.getDate() + 1);
           }
           const bankHours = totalWorkedHours - totalExpectedHours;
-          const overtimeHours = Math.max(0, bankHours);
+          const regularOvertimeHours = Math.max(0, bankHours);
           const pendingHours = Math.max(0, -bankHours);
+
 
           return {
             employeeId: employee.employeeId,
@@ -194,7 +249,8 @@ export class BankHoursController {
             totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
             totalExpectedHours: Math.round(totalExpectedHours * 10) / 10,
             bankHours: Math.round(bankHours * 10) / 10,
-            overtimeHours: Math.round(overtimeHours * 10) / 10,
+            overtimeHours: Math.round(regularOvertimeHours * 10) / 10,
+            overtimeMultipliedHours: Math.round(totalOvertimeHours * 10) / 10,
             pendingHours: Math.round(pendingHours * 10) / 10,
             lastUpdate: new Date().toISOString().split('T')[0]
           };

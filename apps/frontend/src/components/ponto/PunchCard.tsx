@@ -207,9 +207,9 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
   const locationStatus = getLocationStatus();
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
-      <CardContent>
-        <div className="space-y-6">
+    <Card className="w-full h-full flex flex-col">
+      <CardContent className="flex-1 flex flex-col">
+        <div className="space-y-6 flex-1 flex flex-col">
           {/* Header - sempre visível */}
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
