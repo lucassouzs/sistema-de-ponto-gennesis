@@ -178,7 +178,9 @@ export class UserController {
               isRemote: employeeData.isRemote || false,
               allowedLocations: employeeData.allowedLocations || [],
               costCenter: employeeData.costCenter || null,
-              client: employeeData.client || null
+              client: employeeData.client || null,
+              dailyFoodVoucher: employeeData.dailyFoodVoucher || 33.40,
+              dailyTransportVoucher: employeeData.dailyTransportVoucher || 11.00
             }
           });
         }

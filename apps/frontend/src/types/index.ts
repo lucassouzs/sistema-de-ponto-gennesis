@@ -120,6 +120,8 @@ export interface TimeRecordWithDetails {
   isValid: boolean;
   createdAt: string;
   updatedAt: string;
+  foodVoucherAmount?: number;
+  transportVoucherAmount?: number;
   employee?: {
     employeeId: string;
     department: string;

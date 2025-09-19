@@ -190,7 +190,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
   };
 
   const handleCancel = (certificate: MedicalCertificate) => {
-    if (window.confirm('Tem certeza que deseja cancelar este atestado?')) {
+    if (window.confirm('Tem certeza que deseja cancelar esta ausência?')) {
       cancelMutation.mutate(certificate.id);
     }
   };
@@ -224,7 +224,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
         <CardContent className="p-6">
           <div className="flex items-center justify-center">
             <Clock className="w-6 h-6 animate-spin text-blue-600 mr-2" />
-            <span>Carregando atestados...</span>
+            <span>Carregando registros de ausências...</span>
           </div>
         </CardContent>
       </Card>
@@ -287,12 +287,12 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
             <CardContent className="p-6 text-center">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Nenhum atestado encontrado
+                Nenhum registro de ausência encontrado
               </h3>
               <p className="text-gray-500">
                 {userRole === 'EMPLOYEE' 
-                  ? 'Você ainda não enviou nenhum atestado.'
-                  : 'Não há atestados que correspondam aos filtros selecionados.'
+                  ? 'Você ainda não enviou nenhum registro de ausência.'
+                  : 'Não há registros de ausência que correspondam aos filtros selecionados.'
                 }
               </p>
             </CardContent>
@@ -461,7 +461,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                   className="w-full bg-green-600 hover:bg-green-700"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Aprovar Atestado
+                  Aprovar Ausência
                 </Button>
 
                 <div className="space-y-2">
@@ -482,7 +482,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                     className="w-full border-red-300 text-red-700 hover:bg-red-50"
                   >
                     <XCircle className="w-4 h-4 mr-2" />
-                    Rejeitar Atestado
+                    Rejeitar Ausência
                   </Button>
                 </div>
               </div>

@@ -23,6 +23,8 @@ export interface Employee {
   workSchedule: WorkSchedule;
   isRemote: boolean;
   allowedLocations?: Location[];
+  dailyFoodVoucher?: number; // Vale Alimentação diário
+  dailyTransportVoucher?: number; // Vale Transporte diário
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +61,8 @@ export interface TimeRecord {
   observation?: string;
   approvedBy?: string;
   approvedAt?: string;
+  foodVoucherAmount?: number; // Valor do VA no dia
+  transportVoucherAmount?: number; // Valor do VT no dia
   createdAt: string;
   updatedAt: string;
 }

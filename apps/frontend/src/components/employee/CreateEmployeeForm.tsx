@@ -30,6 +30,8 @@ interface EmployeeFormData {
   toleranceMinutes: string;
   costCenter: string;
   client: string;
+  dailyFoodVoucher: string;
+  dailyTransportVoucher: string;
 }
 
 interface CreateEmployeeFormProps {
@@ -124,7 +126,9 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     lunchEndTime: '13:00',
     toleranceMinutes: '10',
     costCenter: '',
-    client: ''
+    client: '',
+    dailyFoodVoucher: '33.40',
+    dailyTransportVoucher: '11.00'
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -181,6 +185,8 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         },
         costCenter: data.costCenter,
         client: data.client,
+        dailyFoodVoucher: parseFloat(data.dailyFoodVoucher),
+        dailyTransportVoucher: parseFloat(data.dailyTransportVoucher),
         allowedLocations: []
       };
 
@@ -271,7 +277,18 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     else if (isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
       newErrors.salary = 'Salário deve ser um valor válido';
     }
-
+    
+    // Validação dos campos VA e VT
+    if (!formData.dailyFoodVoucher.trim()) newErrors.dailyFoodVoucher = 'Vale Alimentação é obrigatório';
+    else if (isNaN(parseFloat(formData.dailyFoodVoucher)) || parseFloat(formData.dailyFoodVoucher) < 0) {
+      newErrors.dailyFoodVoucher = 'Vale Alimentação deve ser um valor válido';
+    }
+    
+    if (!formData.dailyTransportVoucher.trim()) newErrors.dailyTransportVoucher = 'Vale Transporte é obrigatório';
+    else if (isNaN(parseFloat(formData.dailyTransportVoucher)) || parseFloat(formData.dailyTransportVoucher) < 0) {
+      newErrors.dailyTransportVoucher = 'Vale Transporte deve ser um valor válido';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -444,10 +461,62 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
                   <option value="EMPLOYEE">Funcionário</option>
                   <option value="HR">Recursos Humanos</option>
                   <option value="ADMIN">Administrador</option>
-                </select>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
+
+            {/* Campos VA e VT */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Vales Diários</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vale Alimentação Diário (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.dailyFoodVoucher}
+                    onChange={(e) => handleInputChange('dailyFoodVoucher', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.dailyFoodVoucher ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="33.40"
+                  />
+                  {errors.dailyFoodVoucher && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.dailyFoodVoucher}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vale Transporte Diário (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.dailyTransportVoucher}
+                    onChange={(e) => handleInputChange('dailyTransportVoucher', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.dailyTransportVoucher ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="11.00"
+                  />
+                  {errors.dailyTransportVoucher && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.dailyTransportVoucher}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
 
           {/* Dados Profissionais */}
           <div className="space-y-4">

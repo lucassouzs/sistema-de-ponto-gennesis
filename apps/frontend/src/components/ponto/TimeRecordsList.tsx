@@ -116,20 +116,22 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
                         )}
                       </div>
                     ) : (
-                      /* Para outros tipos de registro, mostrar horário e localização */
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-gray-500 mt-1">
-                        <span className="flex items-center">
-                          <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
-                          {formatTime(record.timestamp)}
-                        </span>
-                        {record.latitude && record.longitude && (
+                      /* Para outros tipos de registro, mostrar horário, localização e VA/VT */
+                      <div className="space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-gray-500">
                           <span className="flex items-center">
-                            <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                            <span className="truncate">
-                              {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
-                            </span>
+                            <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
+                            {formatTime(record.timestamp)}
                           </span>
-                        )}
+                          {record.latitude && record.longitude && (
+                            <span className="flex items-center">
+                              <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                              <span className="truncate">
+                                {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
+                              </span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                     {(record as any).observation && (
