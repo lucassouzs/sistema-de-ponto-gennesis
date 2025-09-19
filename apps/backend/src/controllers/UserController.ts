@@ -166,6 +166,7 @@ export class UserController {
               department: employeeData.department,
               position: employeeData.position,
               hireDate: hireDate,
+              birthDate: employeeData.birthDate ? new Date(employeeData.birthDate) : null,
               salary: employeeData.salary,
               workSchedule: employeeData.workSchedule || {
                 startTime: '08:00',

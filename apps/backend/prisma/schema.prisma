@@ -43,6 +43,7 @@ model Employee {
   department        String
   position          String
   hireDate          DateTime
+  birthDate         DateTime? // Data de nascimento para aniversários
   salary            Decimal   @db.Decimal(10, 2)
   workSchedule      Json      // Horário de trabalho em JSON
   isRemote          Boolean   @default(false)

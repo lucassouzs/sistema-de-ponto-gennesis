@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Lock,
   Timer,
-  Stethoscope
+  Stethoscope,
+  Cake
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -78,6 +79,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/admin/atestados',
           icon: Stethoscope,
           description: 'Gerenciar ausências'
+        },
+        {
+          name: 'Aniversariantes',
+          href: '/admin/aniversariantes',
+          icon: Cake,
+          description: 'Ver aniversariantes do mês'
         },
         {
           name: 'Banco de Horas',

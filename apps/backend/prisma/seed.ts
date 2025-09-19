@@ -91,6 +91,7 @@ async function main() {
       department: 'Engenharia Civil',
       position: 'Engenheiro Civil',
       hireDate: new Date('2025-09-01 07:00:00'),
+      birthDate: new Date('1995-09-24'), // Aniversário em 24/09
       salary: 10000.00,
       workSchedule: {
         startTime: '07:00',
@@ -114,6 +115,90 @@ async function main() {
   });
 
   console.log('✅ Funcionário de exemplo criado: teste@engenharia.com.br / func123');
+
+  // Criar mais funcionários de teste com aniversários
+  const employees = [
+    {
+      email: 'joao@engenharia.com.br',
+      name: 'João Silva',
+      cpf: '12345678901',
+      employeeId: 'EMP002',
+      department: 'Engenharia Elétrica',
+      position: 'Engenheiro Elétrico',
+      birthDate: new Date('1990-09-15'), // 15/09
+      hireDate: new Date('2024-01-15')
+    },
+    {
+      email: 'maria@engenharia.com.br',
+      name: 'Maria Santos',
+      cpf: '12345678902',
+      employeeId: 'EMP003',
+      department: 'Recursos Humanos',
+      position: 'Analista de RH',
+      birthDate: new Date('1988-09-30'), // 30/09
+      hireDate: new Date('2023-06-01')
+    },
+    {
+      email: 'pedro@engenharia.com.br',
+      name: 'Pedro Oliveira',
+      cpf: '12345678903',
+      employeeId: 'EMP004',
+      department: 'Engenharia Civil',
+      position: 'Arquiteto',
+      birthDate: new Date('1992-10-05'), // 05/10 (outro mês)
+      hireDate: new Date('2024-03-10')
+    }
+  ];
+
+  for (const empData of employees) {
+    const empPassword = await bcrypt.hash('func123', 12);
+    const emp = await prisma.user.upsert({
+      where: { email: empData.email },
+      update: {},
+      create: {
+        email: empData.email,
+        password: empPassword,
+        name: empData.name,
+        cpf: empData.cpf,
+        role: UserRole.EMPLOYEE,
+        isActive: true
+      }
+    });
+
+    await prisma.employee.upsert({
+      where: { userId: emp.id },
+      update: {},
+      create: {
+        userId: emp.id,
+        employeeId: empData.employeeId,
+        department: empData.department,
+        position: empData.position,
+        hireDate: empData.hireDate,
+        birthDate: empData.birthDate,
+        salary: 8000.00,
+        workSchedule: {
+          startTime: '07:00',
+          endTime: '17:00',
+          lunchStartTime: '12:00',
+          lunchEndTime: '13:00',
+          workDays: [1, 2, 3, 4, 5],
+          toleranceMinutes: 10
+        },
+        isRemote: false,
+        allowedLocations: [
+          {
+            id: 'loc_1',
+            name: 'Escritório Principal',
+            latitude: -15.835840,
+            longitude: -47.873407,
+            radius: 100
+          }
+        ]
+      }
+    });
+
+    console.log(`✅ Funcionário criado: ${empData.email} / func123`);
+  }
 }
 
 main()

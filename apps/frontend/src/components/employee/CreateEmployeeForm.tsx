@@ -20,6 +20,7 @@ interface EmployeeFormData {
   sector: string;
   position: string;
   hireDate: string;
+  birthDate: string;
   hireTime: string;
   salary: string;
   isRemote: boolean;
@@ -117,6 +118,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     sector: '',
     position: '',
     hireDate: new Date().toISOString().split('T')[0],
+    birthDate: '',
     hireTime: '07:00',
     salary: '',
     isRemote: false,
@@ -173,6 +175,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         department: data.sector,
         position: data.position,
         hireDate: `${data.hireDate}T${data.hireTime}:00`,
+        birthDate: data.birthDate || null,
         salary: parseFloat(data.salary),
         isRemote: data.isRemote,
         workSchedule: {
@@ -595,6 +598,22 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
                 {errors.hireDate && (
                   <p className="text-red-500 text-sm mt-1">{errors.hireDate}</p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data de Nascimento
+                </label>
+                <input
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => handleInputChange('birthDate', e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  max={new Date().toISOString().split('T')[0]} // Não permitir data futura
+                />
+                <p className="text-gray-500 text-xs mt-1">
+                  Opcional - usado para aniversários
+                </p>
               </div>
 
               <div>

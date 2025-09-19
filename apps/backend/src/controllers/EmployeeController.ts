@@ -327,3 +327,149 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Erro interno do servidor' });
   }
 };
+
+// Buscar aniversariantes do mês
+export const getBirthdayEmployees = async (req: Request, res: Response) => {
+  try {
+    const { month, year, department, search, showAll } = req.query;
+    
+    // Usar mês e ano atual se não fornecidos
+    const currentDate = new Date();
+    const targetMonth = month ? parseInt(month as string) : currentDate.getMonth() + 1;
+    const targetYear = year ? parseInt(year as string) : currentDate.getFullYear();
+    
+    // Construir filtros
+    const whereClause: any = {
+      birthDate: {
+        not: null // Apenas funcionários com data de nascimento
+      },
+      user: {
+        isActive: true // Apenas usuários ativos
+      }
+    };
+    
+    // Filtro por departamento
+    if (department && department !== '') {
+      whereClause.department = department as string;
+    }
+    
+    // Filtro por nome (busca)
+    if (search && search !== '') {
+      whereClause.user = {
+        ...whereClause.user,
+        name: {
+          contains: search as string,
+          mode: 'insensitive'
+        }
+      };
+    }
+    
+    // Buscar funcionários com aniversário no mês especificado
+    const employees = await prisma.employee.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      },
+      orderBy: {
+        birthDate: 'asc'
+      }
+    });
+    
+    // Filtrar apenas os que fazem aniversário no mês/ano especificado
+    const birthdayEmployees = employees.filter(employee => {
+      if (!employee.birthDate) return false;
+      
+      const birthDate = new Date(employee.birthDate);
+      const birthMonth = birthDate.getMonth() + 1; // getMonth() retorna 0-11
+      const birthDay = birthDate.getDate();
+      
+      // Verificar se é do mês correto
+      if (birthMonth !== targetMonth) return false;
+      
+      // Se o usuário não solicitou mostrar todos os aniversários
+      if (showAll !== 'true') {
+        // Se estivermos vendo o mês atual, filtrar apenas aniversários que ainda não passaram
+        const currentDate = new Date();
+        const currentMonth = currentDate.getMonth() + 1;
+        const currentYear = currentDate.getFullYear();
+        
+        if (targetMonth === currentMonth && targetYear === currentYear) {
+          const today = currentDate.getDate();
+          return birthDay >= today; // Só mostrar aniversários de hoje em diante
+        }
+      }
+      
+      // Para meses futuros, passados ou quando showAll=true, mostrar todos os aniversários do mês
+      return true;
+    }).map(employee => {
+      const birthDate = new Date(employee.birthDate!);
+      const birthDay = birthDate.getDate();
+      
+      // Calcular idade que fará
+      const currentYear = targetYear;
+      const age = currentYear - birthDate.getFullYear();
+      
+      // Calcular dias restantes até o aniversário
+      const today = new Date();
+      const thisYearBirthday = new Date(currentYear, targetMonth - 1, birthDay);
+      
+      // Se o aniversário já passou este ano, usar próximo ano
+      if (thisYearBirthday < today) {
+        thisYearBirthday.setFullYear(currentYear + 1);
+      }
+      
+      const timeDiff = thisYearBirthday.getTime() - today.getTime();
+      const daysUntilBirthday = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      
+      return {
+        id: employee.id,
+        userId: employee.userId,
+        employeeId: employee.employeeId,
+        name: employee.user.name,
+        email: employee.user.email,
+        department: employee.department,
+        position: employee.position,
+        birthDate: employee.birthDate,
+        birthDay,
+        age,
+        daysUntilBirthday,
+        isTodayBirthday: daysUntilBirthday === 0
+      };
+    }).sort((a, b) => a.birthDay - b.birthDay); // Ordenar por dia do mês
+    
+    // Estatísticas
+    const stats = {
+      total: birthdayEmployees.length,
+      todayBirthdays: birthdayEmployees.filter(emp => emp.isTodayBirthday).length,
+      byDepartment: {} as Record<string, number>
+    };
+    
+    // Contar por departamento
+    birthdayEmployees.forEach(employee => {
+      stats.byDepartment[employee.department] = (stats.byDepartment[employee.department] || 0) + 1;
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        employees: birthdayEmployees,
+        stats,
+        month: targetMonth,
+        year: targetYear
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erro ao buscar aniversariantes:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erro interno do servidor' 
+    });
+  }
+};
