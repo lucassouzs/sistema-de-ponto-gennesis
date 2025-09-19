@@ -68,8 +68,8 @@ export default function AdminAtestadosPage() {
       <div className="space-y-6">
         {/* Cabeçalho */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Registros de Ausência</h1>
-          <p className="text-gray-600">Gerencie todas as ausências da empresa</p>
+          <h1 className="text-3xl font-bold text-gray-900">Registros de Ausência</h1>
+          <p className="mt-2 text-gray-600">Gerencie todas as ausências da empresa</p>
         </div>
 
         {/* Estatísticas */}
@@ -81,7 +81,7 @@ export default function AdminAtestadosPage() {
                   <Users className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Ausências</p>
+                  <p className="text-sm font-medium text-gray-600">Total Registros</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
                 </div>
               </div>

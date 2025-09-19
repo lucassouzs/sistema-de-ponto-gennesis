@@ -236,7 +236,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
       {/* Filtros */}
       {userRole !== 'EMPLOYEE' && (
         <Card>
-          <CardContent className="p-0">
+          <CardContent className="p-0 pt-0">
             {/* Cabeçalho dos Filtros */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-2">

@@ -55,8 +55,8 @@ export default function AtestadosPage() {
       <div className="space-y-6">
         {/* Cabeçalho */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Registrar Ausência</h1>
-          <p className="text-gray-600">Gerencie suas ausências e acompanhe o status</p>
+          <h1 className="text-3xl font-bold text-gray-900">Ausências</h1>
+          <p className="mt-2 text-gray-600">Gerencie suas ausências e acompanhe o status</p>
         </div>
 
         {/* Abas */}

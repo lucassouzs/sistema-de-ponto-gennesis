@@ -71,6 +71,11 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
       return;
     }
 
+    if (!file) {
+      alert('Por favor, anexe um arquivo para justificar a ausência');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -79,10 +84,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
       submitData.append('startDate', formData.startDate);
       submitData.append('endDate', formData.endDate);
       submitData.append('description', formData.description);
-      
-      if (file) {
-        submitData.append('file', file);
-      }
+      submitData.append('file', file!);
 
       await submitMutation.mutateAsync(submitData);
       alert('Atestado enviado com sucesso!');
@@ -209,7 +211,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               <div className="flex items-center gap-2">
                 <Upload className="w-4 h-4 text-gray-600" />
-                Anexar Arquivo
+                Anexar Arquivo *
               </div>
             </label>
             <input
@@ -225,7 +227,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
               </div>
             )}
             <p className="text-sm text-gray-500 mt-2">
-              Formatos aceitos: PDF, JPG, PNG, DOC, DOCX
+              Formatos aceitos: PDF, JPG, PNG, DOC, DOCX (Obrigatório)
             </p>
           </div>
 
