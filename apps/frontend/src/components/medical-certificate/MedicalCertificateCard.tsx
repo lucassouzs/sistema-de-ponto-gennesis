@@ -133,7 +133,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
           <div className="p-2 bg-blue-50 rounded-lg">
             <FileText className="w-5 h-5 text-blue-600" />
           </div>
-          <h3 className="text-xl font-semibold text-gray-900">Enviar Atestado</h3>
+          <h3 className="text-xl font-semibold text-gray-900">Registrar Ausência</h3>
         </div>
       </CardHeader>
       <CardContent>
@@ -141,7 +141,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
           {/* Tipo de Atestado */}
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Tipo de Atestado
+              Tipo de Ausência
             </label>
             <select
               value={formData.type}
@@ -200,7 +200,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="input w-full min-h-[100px] resize-none"
-              placeholder="Adicione observações sobre o atestado..."
+              placeholder="Adicione observações sobre a ausência..."
             />
           </div>
 
@@ -243,7 +243,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
             ) : (
               <>
                 <FileText className="w-5 h-5 mr-2" />
-                Enviar Atestado
+                Registrar Ausência
               </>
             )}
           </Button>

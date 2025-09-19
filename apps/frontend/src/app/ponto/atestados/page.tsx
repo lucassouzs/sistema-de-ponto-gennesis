@@ -55,8 +55,8 @@ export default function AtestadosPage() {
       <div className="space-y-6">
         {/* Cabeçalho */}
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Atestados Médicos</h1>
-          <p className="text-gray-600">Envie seus atestados e acompanhe o status</p>
+          <h1 className="text-2xl font-bold text-gray-900">Registrar Ausência</h1>
+          <p className="text-gray-600">Gerencie suas ausências e acompanhe o status</p>
         </div>
 
         {/* Abas */}
@@ -71,7 +71,7 @@ export default function AtestadosPage() {
               }`}
             >
               <Plus className="w-4 h-4" />
-              Enviar Atestado
+              Registrar Ausência
             </button>
             <button
               onClick={() => setActiveTab('list')}
@@ -82,7 +82,7 @@ export default function AtestadosPage() {
               }`}
             >
               <List className="w-4 h-4" />
-              Meus Atestados
+              Meus Registros
             </button>
           </nav>
         </div>

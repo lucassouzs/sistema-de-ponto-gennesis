@@ -77,7 +77,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           name: 'Ausências',
           href: '/admin/atestados',
           icon: Stethoscope,
-          description: 'Gerenciar ausências médicas'
+          description: 'Gerenciar ausências'
         },
         {
           name: 'Banco de Horas',
