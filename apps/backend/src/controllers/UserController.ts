@@ -154,7 +154,7 @@ export class UserController {
 
         if (employeeData) {
           // Validar se a data de contratação é válida
-          const hireDate = new Date(employeeData.hireDate);
+          const hireDate = new Date(employeeData.hireDate + 'T04:00:00');
           if (isNaN(hireDate.getTime())) {
             throw new Error('Data de contratação inválida');
           }
@@ -166,7 +166,7 @@ export class UserController {
               department: employeeData.department,
               position: employeeData.position,
               hireDate: hireDate,
-              birthDate: employeeData.birthDate ? new Date(employeeData.birthDate) : null,
+              birthDate: employeeData.birthDate ? new Date(employeeData.birthDate + 'T04:00:00') : null,
               salary: employeeData.salary,
               workSchedule: employeeData.workSchedule || {
                 startTime: '08:00',
@@ -266,7 +266,8 @@ export class UserController {
               ...(employeeData.isRemote !== undefined && { isRemote: employeeData.isRemote }),
               ...(employeeData.allowedLocations && { allowedLocations: employeeData.allowedLocations }),
               ...(employeeData.costCenter !== undefined && { costCenter: employeeData.costCenter }),
-              ...(employeeData.client !== undefined && { client: employeeData.client })
+              ...(employeeData.client !== undefined && { client: employeeData.client }),
+              ...(employeeData.birthDate && { birthDate: new Date(employeeData.birthDate + 'T04:00:00') })
             }
           });
         }
