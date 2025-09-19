@@ -29,6 +29,8 @@ model User {
   vacations    Vacation[]
   overtime     Overtime[]
   reports      Report[]
+  medicalCertificates MedicalCertificate[]
+  approvedCertificates MedicalCertificate[] @relation("CertificateApprover")
 
   @@map("users")
 }
@@ -55,6 +57,7 @@ model Employee {
   timeRecords TimeRecord[]
   vacations   Vacation[]
   overtime    Overtime[]
+  medicalCertificates MedicalCertificate[]
 
   @@map("employees")
 }
@@ -204,6 +207,7 @@ enum TimeRecordType {
   LUNCH_END
   BREAK_START
   BREAK_END
+  ABSENCE_JUSTIFIED
 }
 
 enum VacationType {
@@ -247,4 +251,51 @@ enum ReportStatus {
   GENERATED
   PROCESSING
   ERROR
+}
+
+// Modelo de Atestados Médicos
+model MedicalCertificate {
+  id              String                    @id @default(cuid())
+  userId          String
+  employeeId      String
+  type            MedicalCertificateType    @default(MEDICAL)
+  startDate       DateTime                  // Data de início (pode ser futura)
+  endDate         DateTime                  // Data de fim (pode ser futura)
+  days            Int                       // Quantidade de dias (calculado automaticamente)
+  description     String?                   // Descrição/observações do funcionário
+  fileName        String?                   // Nome do arquivo anexado
+  fileUrl         String?                   // URL do arquivo no S3
+  fileKey         String?                   // Chave do arquivo no S3
+  status          MedicalCertificateStatus  @default(PENDING)
+  reason          String?                   // Motivo da reprovação (se aplicável)
+  approvedBy      String?                   // ID do RH que aprovou/reprovou
+  approvedAt      DateTime?                 // Data da aprovação/reprovação
+  submittedAt     DateTime                  @default(now()) // Data de envio
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  // Relacionamentos
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee        Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?                     @relation("CertificateApprover", fields: [approvedBy], references: [id])
+
+  @@map("medical_certificates")
+}
+
+enum MedicalCertificateType {
+  MEDICAL        // Atestado médico
+  DENTAL         // Atestado odontológico
+  PREVENTIVE     // Atestado de exame preventivo
+  ACCIDENT       // Atestado de acidente de trabalho
+  COVID          // Atestado COVID-19
+  MATERNITY      // Atestado de maternidade
+  PATERNITY      // Atestado de paternidade
+  OTHER          // Outros
+}
+
+enum MedicalCertificateStatus {
+  PENDING        // Aguardando aprovação
+  APPROVED       // Aprovado
+  REJECTED       // Rejeitado
+  CANCELLED      // Cancelado pelo funcionário
 }

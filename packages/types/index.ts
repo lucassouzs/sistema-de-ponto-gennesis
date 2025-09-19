@@ -155,7 +155,8 @@ export enum TimeRecordType {
   LUNCH_START = 'LUNCH_START',
   LUNCH_END = 'LUNCH_END',
   BREAK_START = 'BREAK_START',
-  BREAK_END = 'BREAK_END'
+  BREAK_END = 'BREAK_END',
+  ABSENCE_JUSTIFIED = 'ABSENCE_JUSTIFIED'
 }
 
 export enum VacationType {

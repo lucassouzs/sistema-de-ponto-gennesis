@@ -145,14 +145,20 @@ export class BankHoursController {
           for (const [date, dayRecords] of recordsByDay) {
             const dayOfWeek = new Date(date).getDay();
             
+            // Verificar se há ausência justificada para este dia
+            const hasAbsenceJustified = dayRecords.some((r: any) => r.type === 'ABSENCE_JUSTIFIED');
+            
             // Encontrar registros específicos do dia
             const entryRecord = dayRecords.find((r: any) => r.type === 'ENTRY');
             const exitRecord = dayRecords.find((r: any) => r.type === 'EXIT');
             const lunchStartRecord = dayRecords.find((r: any) => r.type === 'LUNCH_START');
             const lunchEndRecord = dayRecords.find((r: any) => r.type === 'LUNCH_END');
             
-            // Só calcular se tiver pelo menos entrada e saída
-            if (entryRecord && exitRecord) {
+            if (hasAbsenceJustified) {
+              // Ausência justificada - não trabalhou, não conta horas
+              // Não adicionar horas trabalhadas nem horas extras
+            } else if (entryRecord && exitRecord) {
+              // Só calcular se tiver pelo menos entrada e saída
               let dayHours = 0;
               let overtimeHours = 0;
               let regularHours = 0;
@@ -220,14 +226,22 @@ export class BankHoursController {
           
           while (currentDate <= endDateFilter) {
             const dayOfWeek = currentDate.getDay();
+            const dateStr = currentDate.toISOString().split('T')[0];
             
-            // Usar a mesma lógica do TimeRecordService.getExpectedWorkHoursByRule
-            if (dayOfWeek >= 1 && dayOfWeek <= 4) {
-              totalExpectedHours += 9; // Segunda a quinta: 9h
-            } else if (dayOfWeek === 5) {
-              totalExpectedHours += 8; // Sexta: 8h
+            // Verificar se há ausência justificada para este dia
+            const dayRecords = recordsByDay.get(dateStr) || [];
+            const hasAbsenceJustified = dayRecords.some((r: any) => r.type === 'ABSENCE_JUSTIFIED');
+            
+            // Se não tem ausência justificada, contar as horas esperadas
+            if (!hasAbsenceJustified) {
+              // Usar a mesma lógica do TimeRecordService.getExpectedWorkHoursByRule
+              if (dayOfWeek >= 1 && dayOfWeek <= 4) {
+                totalExpectedHours += 9; // Segunda a quinta: 9h
+              } else if (dayOfWeek === 5) {
+                totalExpectedHours += 8; // Sexta: 8h
+              }
+              // Sábado (6) e domingo (0): 0 horas esperadas
             }
-            // Sábado (6) e domingo (0): 0 horas esperadas
             
             currentDate.setDate(currentDate.getDate() + 1);
           }

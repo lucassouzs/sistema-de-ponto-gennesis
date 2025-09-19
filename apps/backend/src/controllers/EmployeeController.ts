@@ -158,6 +158,13 @@ export const createEmployee = async (req: Request, res: Response) => {
           position,
           hireDate: new Date(hireDate + 'T00:00:00'),
           salary: parseFloat(salary),
+          workSchedule: {
+            startTime: "08:00",
+            endTime: "17:00",
+            lunchStartTime: "12:00",
+            lunchEndTime: "13:00",
+            workDays: [1, 2, 3, 4, 5] // Segunda a sexta
+          },
           isRemote
         },
         include: {

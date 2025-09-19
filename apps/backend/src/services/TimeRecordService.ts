@@ -233,7 +233,10 @@ export class TimeRecordService {
       const dayStr = currentDate.format('YYYY-MM-DD');
       const dayRecords = recordsByDay.get(dayStr) || [];
 
-      if (dayRecords.length > 0) {
+      // Verificar se há ausência justificada para este dia
+      const hasAbsenceJustified = dayRecords.some(r => r.type === TimeRecordType.ABSENCE_JUSTIFIED);
+      
+      if (dayRecords.length > 0 && !hasAbsenceJustified) {
         presentDays++;
         const dayWorkHours = await this.calculateWorkHours(userId, currentDate.toDate());
         totalHours += dayWorkHours.totalHours;
@@ -270,6 +273,14 @@ export class TimeRecordService {
           if (exitTime.isBefore(expectedExitTime)) {
             earlyDepartures++;
           }
+        }
+      } else if (hasAbsenceJustified) {
+        // Dia com ausência justificada - não conta como ausência nem presença
+        // Não incrementa presentDays nem absentDays
+        // Mas pode contar como horas regulares se configurado
+        const expectedHours = this.getExpectedWorkHoursByRule(currentDate.toDate());
+        if (expectedHours > 0) {
+          regularHours += expectedHours; // Considerar como horas regulares trabalhadas
         }
       } else {
         absentDays++;
@@ -320,9 +331,16 @@ export class TimeRecordService {
         });
 
         let effective = 0;
+        
+        // Verificar se há ausência justificada para este dia
+        const hasAbsenceJustified = dayRecords.some(r => r.type === TimeRecordType.ABSENCE_JUSTIFIED);
+        
         if (dayRecords.length === 0) {
           // Ausência completa
           totalOwedHours += expected;
+        } else if (hasAbsenceJustified) {
+          // Ausência justificada - considerar como horas trabalhadas
+          effective = expected;
         } else {
           const entry = dayRecords.find(r => r.type === TimeRecordType.ENTRY);
           const exit = [...dayRecords].reverse().find(r => r.type === TimeRecordType.EXIT);
@@ -400,9 +418,17 @@ export class TimeRecordService {
           orderBy: { timestamp: 'asc' },
         });
 
+        // Verificar se há ausência justificada para este dia
+        const hasAbsenceJustified = dayRecords.some(r => r.type === TimeRecordType.ABSENCE_JUSTIFIED);
+        
         if (dayRecords.length === 0) {
           owed = expected;
           notes.push('Ausência no dia');
+        } else if (hasAbsenceJustified) {
+          // Ausência justificada - não trabalhou, mas não deve horas
+          worked = 0;
+          owed = 0; // Não deve horas
+          notes.push('Ausência Justificada');
         } else {
           const entry = dayRecords.find(r => r.type === TimeRecordType.ENTRY);
           const exit = [...dayRecords].reverse().find(r => r.type === TimeRecordType.EXIT);

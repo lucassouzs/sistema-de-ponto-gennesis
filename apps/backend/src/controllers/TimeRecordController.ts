@@ -1,11 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient, TimeRecordType } from '@prisma/client';
+import { PrismaClient, TimeRecordType, MedicalCertificateStatus } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { TimeRecordService } from '../services/TimeRecordService';
 import { LocationService } from '../services/LocationService';
 import { PhotoService } from '../services/PhotoService';
 import { uploadPhoto, handleUploadError } from '../middleware/upload';
+import moment from 'moment';
 
 const prisma = new PrismaClient();
 const timeRecordService = new TimeRecordService();
@@ -247,13 +248,47 @@ export class TimeRecordController {
         orderBy: { timestamp: 'asc' }
       });
 
+      // Buscar detalhes do atestado médico para registros de ausência justificada
+      const recordsWithDetails = await Promise.all(records.map(async (record) => {
+        if (record.type === TimeRecordType.ABSENCE_JUSTIFIED) {
+          const recordDate = moment(record.timestamp).startOf('day').toDate();
+
+          const medicalCertificate = await prisma.medicalCertificate.findFirst({
+            where: {
+              userId: record.userId,
+              status: MedicalCertificateStatus.APPROVED,
+              startDate: {
+                lte: recordDate,
+              },
+              endDate: {
+                gte: recordDate,
+              },
+            },
+            select: {
+              startDate: true,
+              endDate: true,
+              days: true,
+              submittedAt: true,
+              description: true,
+              type: true,
+            },
+          });
+
+          return {
+            ...record,
+            medicalCertificateDetails: medicalCertificate,
+          };
+        }
+        return record;
+      }));
+
       // Calcular resumo do dia
       const summary = await timeRecordService.calculateDaySummary(userId, today);
 
       res.json({
         success: true,
         data: {
-          records,
+          records: recordsWithDetails,
           summary
         }
       });
@@ -290,13 +325,47 @@ export class TimeRecordController {
         }
       });
 
+      // Buscar detalhes do atestado médico para registros de ausência justificada
+      const recordsWithDetails = await Promise.all(records.map(async (record) => {
+        if (record.type === TimeRecordType.ABSENCE_JUSTIFIED) {
+          const recordDate = moment(record.timestamp).startOf('day').toDate();
+
+          const medicalCertificate = await prisma.medicalCertificate.findFirst({
+            where: {
+              userId: record.userId,
+              status: MedicalCertificateStatus.APPROVED,
+              startDate: {
+                lte: recordDate,
+              },
+              endDate: {
+                gte: recordDate,
+              },
+            },
+            select: {
+              startDate: true,
+              endDate: true,
+              days: true,
+              submittedAt: true,
+              description: true,
+              type: true,
+            },
+          });
+
+          return {
+            ...record,
+            medicalCertificateDetails: medicalCertificate,
+          };
+        }
+        return record;
+      }));
+
       // Calcular resumo do período
       const summary = await timeRecordService.calculatePeriodSummary(userId, start, end);
 
       res.json({
         success: true,
         data: {
-          records,
+          records: recordsWithDetails,
           summary,
           period: { startDate: start, endDate: end }
         }
@@ -371,9 +440,43 @@ export class TimeRecordController {
         prisma.timeRecord.count({ where })
       ]);
 
+      // Buscar detalhes do atestado médico para registros de ausência justificada
+      const recordsWithDetails = await Promise.all(records.map(async (record) => {
+        if (record.type === TimeRecordType.ABSENCE_JUSTIFIED) {
+          const recordDate = moment(record.timestamp).startOf('day').toDate();
+
+          const medicalCertificate = await prisma.medicalCertificate.findFirst({
+            where: {
+              userId: record.userId,
+              status: MedicalCertificateStatus.APPROVED,
+              startDate: {
+                lte: recordDate,
+              },
+              endDate: {
+                gte: recordDate,
+              },
+            },
+            select: {
+              startDate: true,
+              endDate: true,
+              days: true,
+              submittedAt: true,
+              description: true,
+              type: true,
+            },
+          });
+
+          return {
+            ...record,
+            medicalCertificateDetails: medicalCertificate,
+          };
+        }
+        return record;
+      }));
+
       res.json({
         success: true,
-        data: records,
+        data: recordsWithDetails,
         pagination: {
           page: Number(page),
           limit: Number(limit),

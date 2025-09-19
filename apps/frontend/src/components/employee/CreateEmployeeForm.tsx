@@ -263,6 +263,10 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     // Matrícula é gerada automaticamente, não precisa validar
     if (!formData.sector.trim()) newErrors.sector = 'Setor é obrigatório';
     if (!formData.position.trim()) newErrors.position = 'Cargo é obrigatório';
+    if (!formData.hireDate.trim()) newErrors.hireDate = 'Data de contratação é obrigatória';
+    else if (isNaN(new Date(formData.hireDate).getTime())) {
+      newErrors.hireDate = 'Data de contratação inválida';
+    }
     if (!formData.salary.trim()) newErrors.salary = 'Salário é obrigatório';
     else if (isNaN(parseFloat(formData.salary)) || parseFloat(formData.salary) <= 0) {
       newErrors.salary = 'Salário deve ser um valor válido';
@@ -515,8 +519,13 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
                   type="date"
                   value={formData.hireDate}
                   onChange={(e) => handleInputChange('hireDate', e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.hireDate ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 />
+                {errors.hireDate && (
+                  <p className="text-red-500 text-sm mt-1">{errors.hireDate}</p>
+                )}
               </div>
 
               <div>

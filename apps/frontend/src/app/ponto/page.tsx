@@ -389,7 +389,11 @@ export default function PontoPage() {
                       <tr key={idx} className="border-b">
                         <td className="py-2 pr-4">{formatDate(d.date)}</td>
                         <td className="py-2 pr-4">{getWeekday(d.date)}</td>
-                        <td className="py-2 pr-4">{formatHours(d.expectedHours || 0)}</td>
+                        <td className="py-2 pr-4">
+                          <span className={d.notes?.includes('Ausência Justificada') ? 'line-through text-gray-500' : ''}>
+                            {formatHours(d.expectedHours || 0)}
+                          </span>
+                        </td>
                         <td className="py-2 pr-4">{formatHours(d.workedHours || 0)}</td>
                         <td className="py-2 pr-4 text-blue-700">{formatHours(d.overtimeHours || 0)}</td>
                         <td className="py-2 pr-4 text-red-700">{formatHours(d.owedHours || 0)}</td>

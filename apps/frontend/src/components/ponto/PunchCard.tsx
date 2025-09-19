@@ -72,12 +72,18 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
 
   const selectedType = getNextPunchType();
 
-  // Função para verificar se todos os 4 pontos foram batidos
+  // Função para verificar se todos os 4 pontos foram batidos ou se há ausência justificada
   const checkAllPointsCompleted = (records: any[]) => {
     const hasEntry = records.some(r => r.type === TimeRecordType.ENTRY);
     const hasLunchStart = records.some(r => r.type === TimeRecordType.LUNCH_START);
     const hasLunchEnd = records.some(r => r.type === TimeRecordType.LUNCH_END);
     const hasExit = records.some(r => r.type === TimeRecordType.EXIT);
+    const hasAbsenceJustified = records.some(r => r.type === TimeRecordType.ABSENCE_JUSTIFIED);
+    
+    // Se há ausência justificada, considerar como "completo" (não pode bater ponto)
+    if (hasAbsenceJustified) {
+      return true;
+    }
     
     return hasEntry && hasLunchStart && hasLunchEnd && hasExit;
   };
@@ -234,36 +240,67 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
           </div>
 
           {allPointsCompleted ? (
-            // Mostrar apenas a mensagem de parabéns quando todos os pontos foram batidos
-            <div className="text-center space-y-4">
-              <div className="p-6 bg-green-50 border-2 border-green-200 rounded-lg">
-                <div className="flex flex-col items-center space-y-3">
-                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                    <Clock className="w-8 h-8 text-green-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-green-800 mb-2">
-                      Parabéns! Todos os pontos foram batidos hoje
-                    </h3>
-                    <p className="text-green-700 text-sm">
-                      Você completou todos os 4 registros obrigatórios: Entrada, Almoço, Retorno e Saída.
-                    </p>
-                    <p className="text-green-600 text-sm mt-2 font-medium">
-                      Você poderá bater ponto novamente amanhã.
-                    </p>
-                  </div>
-                </div>
-              </div>
+            // Verificar se é ausência justificada ou todos os pontos batidos
+            (() => {
+              const hasAbsenceJustified = todayRecords.some(r => r.type === TimeRecordType.ABSENCE_JUSTIFIED);
               
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-center space-x-2 text-blue-700">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-sm font-medium">
-                    Próximo ponto: Entrada (amanhã)
-                  </span>
-                </div>
-              </div>
-            </div>
+              if (hasAbsenceJustified) {
+                return (
+                  <div className="text-center space-y-4">
+                    <div className="p-6 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
+                          <Clock className="w-8 h-8 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                            Ausência Justificada
+                          </h3>
+                          <p className="text-blue-700 text-sm">
+                            Você possui ausência justificada para hoje. Não é necessário bater ponto.
+                          </p>
+                          <p className="text-blue-600 text-sm mt-2 font-medium">
+                            Você poderá bater ponto novamente amanhã.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="text-center space-y-4">
+                    <div className="p-6 bg-green-50 border-2 border-green-200 rounded-lg">
+                      <div className="flex flex-col items-center space-y-3">
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                          <Clock className="w-8 h-8 text-green-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-green-800 mb-2">
+                            Parabéns! Todos os pontos foram batidos hoje
+                          </h3>
+                          <p className="text-green-700 text-sm">
+                            Você completou todos os 4 registros obrigatórios: Entrada, Almoço, Retorno e Saída.
+                          </p>
+                          <p className="text-green-600 text-sm mt-2 font-medium">
+                            Você poderá bater ponto novamente amanhã.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-center space-x-2 text-blue-700">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-sm font-medium">
+                          Próximo ponto: Entrada (amanhã)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+            })()
           ) : (
             // Mostrar o formulário normal quando ainda há pontos para bater
             <>

@@ -1,11 +1,11 @@
 import React from 'react';
-import { Clock, MapPin, Camera, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, Eye } from 'lucide-react';
+import { Clock, MapPin, Camera, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, Eye, FileCheck, Calendar, User } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { TimeRecord } from '@/types';
+import { TimeRecord, TimeRecordWithDetails } from '@/types';
 
 interface TimeRecordsListProps {
-  records: TimeRecord[];
+  records: TimeRecordWithDetails[];
   onViewMore?: () => void;
 }
 
@@ -18,6 +18,7 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
       LUNCH_END: 'Retorno',
       BREAK_START: 'Início Pausa',
       BREAK_END: 'Fim Pausa',
+      ABSENCE_JUSTIFIED: 'Ausência Justificada',
     };
     return types[type as keyof typeof types] || type;
   };
@@ -30,6 +31,7 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
       LUNCH_END: <UtensilsCrossed className="w-5 h-5" />,
       BREAK_START: <Clock className="w-5 h-5" />,
       BREAK_END: <Clock className="w-5 h-5" />,
+      ABSENCE_JUSTIFIED: <FileCheck className="w-5 h-5" />,
     };
     return icons[type as keyof typeof icons] || <Clock className="w-5 h-5" />;
   };
@@ -77,7 +79,7 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
           {records.map((record) => (
             <div key={record.id} className="p-3 sm:p-4 hover:bg-gray-50 transition-colors">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-                <div className="flex items-start space-x-3">
+                <div className="flex items-center space-x-3">
                   <div className="flex items-center justify-center h-16 sm:h-12">
                     <div className="text-gray-600 flex-shrink-0">
                       {getTypeIcon(record.type)}
@@ -89,20 +91,47 @@ export const TimeRecordsList: React.FC<TimeRecordsListProps> = ({ records, onVie
                         {getTypeLabel(record.type)}
                       </span>
                     </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-gray-500 mt-1">
-                      <span className="flex items-center">
-                        <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
-                        {formatTime(record.timestamp)}
-                      </span>
-                      {record.latitude && record.longitude && (
-                        <span className="flex items-center">
-                          <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                          <span className="truncate">
-                            {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
+                    
+                    {/* Para ausência justificada, mostrar detalhes do atestado */}
+                    {record.type === 'ABSENCE_JUSTIFIED' && record.medicalCertificateDetails ? (
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-3 h-3 text-600" />
+                          <span>
+                            {new Date(record.medicalCertificateDetails.startDate).toLocaleDateString('pt-BR')} - {new Date(record.medicalCertificateDetails.endDate).toLocaleDateString('pt-BR')}
                           </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-3 h-3 text-600" />
+                          <span>{record.medicalCertificateDetails.days} dias</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <User className="w-3 h-3 text-600" />
+                          <span>Enviado em {new Date(record.medicalCertificateDetails.submittedAt).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                        {record.medicalCertificateDetails.description && (
+                          <div className="text-gray-500 text-xs mt-1">
+                            <strong>Obs:</strong> {record.medicalCertificateDetails.description}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Para outros tipos de registro, mostrar horário e localização */
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-1 sm:space-y-0 text-sm text-gray-500 mt-1">
+                        <span className="flex items-center">
+                          <Clock className="w-3 h-3 mr-1 flex-shrink-0" />
+                          {formatTime(record.timestamp)}
                         </span>
-                      )}
-                    </div>
+                        {record.latitude && record.longitude && (
+                          <span className="flex items-center">
+                            <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <span className="truncate">
+                              {record.latitude.toFixed(6)}, {record.longitude.toFixed(6)}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {(record as any).observation && (
                       <div className="mt-2 text-sm text-gray-600">
                         <strong>Observação:</strong> {(record as any).observation}

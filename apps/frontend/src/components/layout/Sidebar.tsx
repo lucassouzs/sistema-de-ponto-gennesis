@@ -20,7 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Lock,
-  Timer
+  Timer,
+  Stethoscope
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -48,6 +49,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/ponto',
           icon: Clock,
           description: 'Bater ponto e consultar registros'
+        },
+        {
+          name: 'Ausências',
+          href: '/ponto/atestados',
+          icon: Stethoscope,
+          description: 'Enviar e acompanhar ausências'
         }
       ];
     }
@@ -65,6 +72,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/admin/employees',
           icon: Users,
           description: 'Gerenciar funcionários'
+        },
+        {
+          name: 'Ausências',
+          href: '/admin/atestados',
+          icon: Stethoscope,
+          description: 'Gerenciar ausências médicas'
         },
         {
           name: 'Banco de Horas',

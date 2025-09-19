@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera, FileCheck, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
@@ -44,6 +44,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [editingRecord, setEditingRecord] = useState<string | null>(null);
   const [isFilterExpanded, setIsFilterExpanded] = useState(true);
+  const [viewingCertificate, setViewingCertificate] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
     type: string;
     timestamp: string;
@@ -1010,23 +1011,37 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                 <div key={index} className="px-3 py-2 bg-white rounded-md border">
                                   <div className="flex items-center space-x-2">
                                     <Clock className="w-3 h-3 text-gray-500" />
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {(() => {
-                                        const date = new Date(record.timestamp);
-                                        const hours = date.getUTCHours().toString().padStart(2, '0');
-                                        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
-                                        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
-                                        return `${hours}:${minutes}:${seconds}`;
-                                      })()}
-                                    </span>
+                                    {record.type !== 'ABSENCE_JUSTIFIED' && (
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {(() => {
+                                          const date = new Date(record.timestamp);
+                                          const hours = date.getUTCHours().toString().padStart(2, '0');
+                                          const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                          const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                          return `${hours}:${minutes}:${seconds}`;
+                                        })()}
+                                      </span>
+                                    )}
                                     <span className="text-xs text-gray-600">
                                       {record.type === 'ENTRY' ? 'Entrada' :
                                        record.type === 'EXIT' ? 'Saída' :
                                        record.type === 'LUNCH_START' ? 'Almoço' :
-                                       record.type === 'LUNCH_END' ? 'Retorno' : record.type}
+                                       record.type === 'LUNCH_END' ? 'Retorno' :
+                                       record.type === 'BREAK_START' ? 'Início Pausa' :
+                                       record.type === 'BREAK_END' ? 'Fim Pausa' :
+                                       record.type === 'ABSENCE_JUSTIFIED' ? 'Ausência Justificada' : record.type}
                                     </span>
                                     {userRole === 'ADMIN' && (
                                       <>
+                                        {record.type === 'ABSENCE_JUSTIFIED' && record.medicalCertificateDetails && (
+                                          <button
+                                            onClick={() => setViewingCertificate(viewingCertificate === `${date}-${index}` ? null : `${date}-${index}`)}
+                                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                            title="Ver detalhes do atestado"
+                                          >
+                                            <Eye className="w-3 h-3" />
+                                          </button>
+                                        )}
                                         {record.photoUrl && (
                                           <button
                                             onClick={() => window.open(record.photoUrl, '_blank')}
@@ -1046,6 +1061,38 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                       </>
                                     )}
                                   </div>
+                                  
+                                  {/* Detalhes do atestado médico para ausência justificada */}
+                                  {record.type === 'ABSENCE_JUSTIFIED' && record.medicalCertificateDetails && viewingCertificate === `${date}-${index}` && (
+                                    <div className="mt-2 p-2">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <FileCheck className="w-3 h-3 text-600" />
+                                        <span className="text-xs font-medium text-800">Detalhes do Atestado</span>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-gray-700">
+                                        <div className="flex items-center space-x-2">
+                                          <Calendar className="w-3 h-3" />
+                                          <span>
+                                            {new Date(record.medicalCertificateDetails.startDate).toLocaleDateString('pt-BR')} - {new Date(record.medicalCertificateDetails.endDate).toLocaleDateString('pt-BR')}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <Clock className="w-3 h-3" />
+                                          <span>{record.medicalCertificateDetails.days} dias</span>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <User className="w-3 h-3" />
+                                          <span>Enviado em {new Date(record.medicalCertificateDetails.submittedAt).toLocaleDateString('pt-BR')}</span>
+                                        </div>
+                                        {record.medicalCertificateDetails.description && (
+                                          <div className="text-xs text-600 mt-1">
+                                            <strong>Obs:</strong> {record.medicalCertificateDetails.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {record.observation && (
                                     <div className="mt-1 text-xs text-gray-500 italic">
                                       <strong>Obs:</strong> {record.observation}

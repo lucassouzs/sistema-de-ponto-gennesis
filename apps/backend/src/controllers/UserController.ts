@@ -153,13 +153,19 @@ export class UserController {
         });
 
         if (employeeData) {
+          // Validar se a data de contratação é válida
+          const hireDate = new Date(employeeData.hireDate);
+          if (isNaN(hireDate.getTime())) {
+            throw new Error('Data de contratação inválida');
+          }
+
           await tx.employee.create({
             data: {
               userId: user.id,
               employeeId: employeeData.employeeId,
               department: employeeData.department,
               position: employeeData.position,
-              hireDate: new Date(employeeData.hireDate + 'T00:00:00'),
+              hireDate: hireDate,
               salary: employeeData.salary,
               workSchedule: employeeData.workSchedule || {
                 startTime: '08:00',

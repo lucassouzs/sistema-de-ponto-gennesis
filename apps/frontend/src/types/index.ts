@@ -56,6 +56,77 @@ export interface OvertimeFormData {
   description?: string;
 }
 
+export interface MedicalCertificateFormData {
+  type: string;
+  startDate: string;
+  endDate: string;
+  description?: string;
+  file?: File;
+}
+
+export interface MedicalCertificate {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  description?: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileKey?: string;
+  status: string;
+  reason?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    name: string;
+    email: string;
+  };
+  employee: {
+    employeeId: string;
+    department: string;
+    position: string;
+  };
+  approver?: {
+    name: string;
+    email: string;
+  };
+}
+
+export interface MedicalCertificateDetails {
+  startDate: string;
+  endDate: string;
+  days: number;
+  submittedAt: string;
+  description?: string;
+  type: string;
+}
+
+export interface TimeRecordWithDetails {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  timestamp: string;
+  latitude?: number;
+  longitude?: number;
+  photoUrl?: string;
+  observation?: string;
+  isValid: boolean;
+  createdAt: string;
+  updatedAt: string;
+  employee?: {
+    employeeId: string;
+    department: string;
+  };
+  medicalCertificateDetails?: MedicalCertificateDetails;
+}
+
 export interface UserFormData {
   email: string;
   name: string;

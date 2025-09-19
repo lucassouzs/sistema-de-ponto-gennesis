@@ -19,7 +19,7 @@ export default function DashboardPage() {
       return res.data;
     },
     staleTime: 0, // Sempre buscar dados frescos
-    cacheTime: 0 // Não cachear
+    gcTime: 0 // Não cachear
   });
 
   const handleLogout = () => {
