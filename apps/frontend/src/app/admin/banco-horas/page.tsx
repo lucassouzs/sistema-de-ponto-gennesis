@@ -452,10 +452,10 @@ export default function BankHoursPage() {
               </div>
               <button 
                 onClick={exportToExcel}
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                <span>Exportar</span>
+                <span>Exportar XLSX</span>
               </button>
             </div>
           </CardHeader>

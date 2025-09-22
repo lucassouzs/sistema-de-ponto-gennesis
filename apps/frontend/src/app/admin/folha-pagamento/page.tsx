@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Search, Filter, Download, Calculator, Calendar } from 'lucide-react';
+import { DollarSign, Search, Filter, Download, Calculator, Calendar, Clock, BadgeDollarSign, FileSpreadsheet } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import api from '@/lib/api';
 import { PayrollEmployee, PayrollFilters, MonthlyPayrollData } from '@/types';
+import * as XLSX from 'xlsx';
 
 // Remover interfaces duplicadas - já importadas do types
 
@@ -78,13 +79,61 @@ export default function FolhaPagamentoPage() {
   };
 
   const clearFilters = () => {
-    setFilters({ 
-      search: '', 
-      department: '', 
-      company: '', 
-      month: currentMonth, 
-      year: currentYear 
+    setFilters({
+      search: '',
+      department: '',
+      company: '',
+      month: currentMonth,
+      year: currentYear
     });
+  };
+
+  const exportToExcel = () => {
+    if (!payrollData || payrollData.employees.length === 0) {
+      alert('Não há dados para exportar');
+      return;
+    }
+
+    // Preparar dados para exportação
+    const exportData = payrollData.employees.map(employee => ({
+      'Nome': employee.name,
+      'Função': employee.position,
+      'Departamento': employee.department,
+      'ID Funcionário': employee.employeeId,
+      'Empresa': employee.company || 'Não informado',
+      'Contrato Atual': employee.currentContract || 'Não informado',
+      'Centro de Custo': employee.costCenter || 'Não informado',
+      'Cliente': employee.client || 'Não informado',
+      'CPF': employee.cpf,
+      'Banco': employee.bank || 'Não informado',
+      'Tipo de Conta': employee.accountType || 'Não informado',
+      'Agência': employee.agency || 'Não informado',
+      'Operação': employee.operation || 'Não informado',
+      'Conta': employee.account || 'Não informado',
+      'Dígito': employee.digit || 'Não informado',
+      'Tipo PIX': employee.pixKeyType || 'Não informado',
+      'Chave PIX': employee.pixKey || 'Não informado',
+      'Salário': employee.salary,
+      'VA Diário': employee.dailyFoodVoucher,
+      'VT Diário': employee.dailyTransportVoucher,
+      'Total VA': employee.totalFoodVoucher,
+      'Total VT': employee.totalTransportVoucher,
+      'Acréscimos': employee.totalAdjustments,
+      'Dias Trabalhados': employee.daysWorked
+    }));
+
+    // Criar planilha
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Folha de Pagamento');
+
+    // Gerar nome do arquivo
+    const monthName = payrollData.period.monthName;
+    const year = payrollData.period.year;
+    const fileName = `Folha_Pagamento_${monthName}_${year}.xlsx`;
+
+    // Baixar arquivo
+    XLSX.writeFile(wb, fileName);
   };
 
   if (loadingUser) {
@@ -228,6 +277,30 @@ export default function FolhaPagamentoPage() {
 
         {/* Lista de Funcionários */}
         <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0">
+                  <BadgeDollarSign className="w-6 h-6 text-blue-600" />
+                </div>
+                <div className="ml-3 sm:ml-4 min-w-0">
+                  <h3 className="text-lg font-semibold text-gray-900">Folha de Pagamento</h3>
+                  <p className="text-sm text-gray-600">Dados de remuneração dos funcionários.</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={exportToExcel}
+                  disabled={!payrollData || payrollData.employees.length === 0}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="Exportar para Excel"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Exportar XLSX</span>
+                </button>
+              </div>
+            </div>
+          </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -429,12 +502,12 @@ export default function FolhaPagamentoPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className="text-sm font-medium text-green-600">
                             R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className="text-sm font-medium text-blue-600">
                             R$ {employee.salary.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
