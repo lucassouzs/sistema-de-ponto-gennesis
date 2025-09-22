@@ -2,10 +2,13 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera, FileCheck, Eye } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera, FileCheck, Eye, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { AdjustmentsList } from './AdjustmentsList';
+import { AdjustmentForm } from './AdjustmentForm';
 import api from '@/lib/api';
+import { SalaryAdjustment, CreateAdjustmentData, UpdateAdjustmentData } from '@/types';
 
 interface Employee {
   id: string;
@@ -15,12 +18,23 @@ interface Employee {
   role: string;
   isActive: boolean;
   employee?: {
+    id: string;
     employeeId: string;
     department: string;
     position: string;
     hireDate: string;
     costCenter?: string;
     client?: string;
+    company?: string;
+    currentContract?: string;
+    bank?: string;
+    accountType?: string;
+    agency?: string;
+    operation?: string;
+    account?: string;
+    digit?: string;
+    pixKeyType?: string;
+    pixKey?: string;
   };
 }
 
@@ -45,6 +59,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [editingRecord, setEditingRecord] = useState<string | null>(null);
   const [isFilterExpanded, setIsFilterExpanded] = useState(true);
   const [viewingCertificate, setViewingCertificate] = useState<string | null>(null);
+  const [showAddAdjustmentForm, setShowAddAdjustmentForm] = useState(false);
+  const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
+  const [adjustments, setAdjustments] = useState<SalaryAdjustment[]>([]);
+  const [isAdjustmentsMinimized, setIsAdjustmentsMinimized] = useState(true);
   const [editForm, setEditForm] = useState<{
     type: string;
     timestamp: string;
@@ -418,6 +436,59 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     }
   });
 
+  // Buscar acréscimos do funcionário
+  const { data: adjustmentsData } = useQuery({
+    queryKey: ['salary-adjustments', selectedEmployee?.employee?.id],
+    queryFn: async () => {
+      if (!selectedEmployee?.employee?.id) return { data: [] };
+      const res = await api.get(`/salary-adjustments/employee/${selectedEmployee.employee.id}`);
+      return res.data;
+    },
+    enabled: !!selectedEmployee?.employee?.id
+  });
+
+  // Atualizar lista de acréscimos quando os dados mudarem
+  React.useEffect(() => {
+    if (adjustmentsData?.data) {
+      setAdjustments(adjustmentsData.data);
+    }
+  }, [adjustmentsData]);
+
+  // Criar acréscimo
+  const createAdjustmentMutation = useMutation({
+    mutationFn: async (data: CreateAdjustmentData) => {
+      const res = await api.post('/salary-adjustments', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+      setShowAddAdjustmentForm(false);
+    }
+  });
+
+  // Atualizar acréscimo
+  const updateAdjustmentMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateAdjustmentData }) => {
+      const res = await api.put(`/salary-adjustments/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+      setEditingAdjustment(null);
+    }
+  });
+
+  // Deletar acréscimo
+  const deleteAdjustmentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/salary-adjustments/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+    }
+  });
+
   const handleDelete = (employeeId: string) => {
     deleteEmployeeMutation.mutate(employeeId);
   };
@@ -454,6 +525,42 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const handleCancelEdit = () => {
     setEditingRecord(null);
     setEditForm({ type: '', timestamp: '', reason: '', observation: '' });
+  };
+
+  // Handlers para acréscimos salariais
+  const handleAddAdjustment = (data: CreateAdjustmentData | UpdateAdjustmentData) => {
+    if ('employeeId' in data) {
+      // É CreateAdjustmentData
+      createAdjustmentMutation.mutate(data as CreateAdjustmentData);
+    } else {
+      // É UpdateAdjustmentData
+      if (editingAdjustment) {
+        updateAdjustmentMutation.mutate({
+          id: editingAdjustment.id,
+          data: data as UpdateAdjustmentData
+        });
+      }
+    }
+  };
+
+  const handleUpdateAdjustment = (data: UpdateAdjustmentData) => {
+    if (editingAdjustment) {
+      updateAdjustmentMutation.mutate({
+        id: editingAdjustment.id,
+        data
+      });
+    }
+  };
+
+  const handleDeleteAdjustment = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este acréscimo?')) {
+      deleteAdjustmentMutation.mutate(id);
+    }
+  };
+
+  const handleEditAdjustment = (adjustment: SalaryAdjustment) => {
+    setEditingAdjustment(adjustment);
+    setIsAdjustmentsMinimized(false);
   };
 
   const formatDate = (dateString: string) => {
@@ -1022,6 +1129,78 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                     </div>
                   </div>
                 )}
+
+                
+
+                {/* Seção de Acréscimos Salariais */}
+                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <h4 className="text-md font-semibold text-gray-900">
+                        Acréscimos Salariais
+                        {adjustments.length > 0 && (
+                          <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                            {adjustments.length}
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        onClick={() => setIsAdjustmentsMinimized(!isAdjustmentsMinimized)}
+                        className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                        title={isAdjustmentsMinimized ? "Expandir seção" : "Minimizar seção"}
+                      >
+                        {isAdjustmentsMinimized ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowAddAdjustmentForm(true);
+                        setIsAdjustmentsMinimized(false);
+                      }}
+                      className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <span>+</span>
+                      <span>Adicionar Acréscimo</span>
+                    </button>
+                  </div>
+                  
+                  {/* Conteúdo da seção - só exibe se não estiver minimizada */}
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isAdjustmentsMinimized ? 'max-h-0 opacity-0' : 'max-h-screen opacity-100'
+                  }`}>
+                    <div className="space-y-4">
+                      {/* Formulário para adicionar acréscimo */}
+                      {showAddAdjustmentForm && selectedEmployee.employee && (
+                        <AdjustmentForm 
+                          employeeId={selectedEmployee.employee.id}
+                          onSave={handleAddAdjustment}
+                          onCancel={() => setShowAddAdjustmentForm(false)}
+                        />
+                      )}
+                      
+                      {/* Formulário de edição */}
+                      {editingAdjustment && selectedEmployee.employee && (
+                        <AdjustmentForm 
+                          employeeId={selectedEmployee.employee.id}
+                          adjustment={editingAdjustment}
+                          onSave={handleUpdateAdjustment}
+                          onCancel={() => setEditingAdjustment(null)}
+                        />
+                      )}
+                      
+                      {/* Lista de acréscimos existentes */}
+                      <AdjustmentsList 
+                        adjustments={adjustments}
+                        onEdit={handleEditAdjustment}
+                        onDelete={handleDeleteAdjustment}
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Seletor de mês/ano */}
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">

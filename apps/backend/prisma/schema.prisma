@@ -31,6 +31,7 @@ model User {
   reports      Report[]
   medicalCertificates MedicalCertificate[]
   approvedCertificates MedicalCertificate[] @relation("CertificateApprover")
+  salaryAdjustments SalaryAdjustment[]
 
   @@map("users")
 }
@@ -78,6 +79,7 @@ model Employee {
   vacations   Vacation[]
   overtime    Overtime[]
   medicalCertificates MedicalCertificate[]
+  salaryAdjustments SalaryAdjustment[]
 
   @@map("employees")
 }
@@ -354,4 +356,29 @@ enum PixKeyType {
   CNPJ              // CNPJ
   CPF               // CPF
   EMAIL             // E-MAIL
+}
+
+// Modelo de Acréscimos Salariais
+model SalaryAdjustment {
+  id          String           @id @default(cuid())
+  employeeId  String
+  type        AdjustmentType
+  description String
+  amount      Decimal          @db.Decimal(10, 2)
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relacionamentos
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("salary_adjustments")
+}
+
+enum AdjustmentType {
+  BONUS        // Bônus/Prêmio
+  OVERTIME     // Horas Extras
+  COMMISSION   // Comissão
+  OTHER        // Outros
 }

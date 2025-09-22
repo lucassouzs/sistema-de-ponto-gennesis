@@ -182,10 +182,6 @@ export default function FolhaPagamentoPage() {
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Segunda linha - Filtros de período */}
-              <div className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="sm:w-48">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Mês
@@ -195,7 +191,7 @@ export default function FolhaPagamentoPage() {
                     <select
                       value={filters.month}
                       onChange={handleMonthChange}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none bg-white"
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                     >
                       {monthOptions.map(month => (
                         <option key={month.value} value={month.value}>
@@ -215,7 +211,7 @@ export default function FolhaPagamentoPage() {
                     <select
                       value={filters.year}
                       onChange={handleYearChange}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 appearance-none bg-white"
+                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                     >
                       {yearOptions.map(year => (
                         <option key={year} value={year}>
@@ -224,15 +220,6 @@ export default function FolhaPagamentoPage() {
                       ))}
                     </select>
                   </div>
-                </div>
-
-                <div className="flex space-x-2">
-                  <button
-                    onClick={clearFilters}
-                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Limpar
-                  </button>
                 </div>
               </div>
             </div>
@@ -244,7 +231,7 @@ export default function FolhaPagamentoPage() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="border-b border-gray-200">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome
@@ -307,6 +294,9 @@ export default function FolhaPagamentoPage() {
                       TOTAL VT
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acréscimos
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Salário
                     </th>
                   </tr>
@@ -314,7 +304,7 @@ export default function FolhaPagamentoPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loadingPayroll ? (
                     <tr>
-                      <td colSpan={21} className="px-6 py-8 text-center">
+                      <td colSpan={22} className="px-6 py-8 text-center">
                         <div className="flex items-center justify-center">
                           <div className="loading-spinner w-6 h-6 mr-2" />
                           <span className="text-gray-600">Carregando folha de pagamento...</span>
@@ -323,7 +313,7 @@ export default function FolhaPagamentoPage() {
                     </tr>
                   ) : employees.length === 0 ? (
                     <tr>
-                      <td colSpan={21} className="px-6 py-8 text-center">
+                      <td colSpan={22} className="px-6 py-8 text-center">
                         <div className="text-gray-500">
                           <p>Nenhum funcionário encontrado.</p>
                           <p className="text-sm mt-1">Tente ajustar os filtros de busca.</p>
@@ -440,6 +430,11 @@ export default function FolhaPagamentoPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="text-sm font-medium text-gray-900">
+                            R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className="text-sm font-medium text-gray-900">
                             R$ {employee.salary.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </td>
@@ -452,7 +447,7 @@ export default function FolhaPagamentoPage() {
 
             {/* Estatísticas */}
             {employees.length > 0 && payrollData && (
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
                 <div className="flex items-center justify-between text-sm text-gray-600">
                   <div className="flex items-center space-x-6">
                     <span>

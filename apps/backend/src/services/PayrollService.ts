@@ -27,6 +27,7 @@ export interface PayrollEmployee {
   dailyTransportVoucher: number;
   totalFoodVoucher: number;
   totalTransportVoucher: number;
+  totalAdjustments: number;
   daysWorked: number;
 }
 
@@ -41,6 +42,7 @@ export interface MonthlyPayrollData {
     totalEmployees: number;
     totalFoodVoucher: number;
     totalTransportVoucher: number;
+    totalAdjustments: number;
   };
 }
 
@@ -84,6 +86,28 @@ export class PayrollService {
       totalVT, 
       daysWorked: timeRecords.length 
     };
+  }
+
+  /**
+   * Calcula o total de acréscimos salariais para um funcionário no período
+   */
+  private async calculateMonthlyAdjustments(employeeId: string, month: number, year: number): Promise<number> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    
+    const adjustments = await prisma.salaryAdjustment.findMany({
+      where: {
+        employeeId,
+        createdAt: {
+          gte: startDate,
+          lte: endDate
+        }
+      }
+    });
+    
+    return adjustments.reduce((sum, adjustment) => 
+      sum + Number(adjustment.amount), 0
+    );
   }
 
   /**
@@ -173,6 +197,7 @@ export class PayrollService {
         }
 
         const totals = await this.calculateMonthlyTotals(employee.id, month, year);
+        const totalAdjustments = await this.calculateMonthlyAdjustments(employee.id, month, year);
         
         return {
           id: employee.id,
@@ -198,6 +223,7 @@ export class PayrollService {
           dailyTransportVoucher: employee.dailyTransportVoucher || 0,
           totalFoodVoucher: totals.totalVA,
           totalTransportVoucher: totals.totalVT,
+          totalAdjustments,
           daysWorked: totals.daysWorked
         } as PayrollEmployee;
       })
@@ -213,6 +239,10 @@ export class PayrollService {
     
     const totalTransportVoucher = activeEmployees.reduce(
       (sum, emp) => sum + emp.totalTransportVoucher, 0
+    );
+
+    const totalAdjustments = activeEmployees.reduce(
+      (sum, emp) => sum + emp.totalAdjustments, 0
     );
 
     // Nome do mês em português
@@ -231,7 +261,8 @@ export class PayrollService {
       totals: {
         totalEmployees: activeEmployees.length,
         totalFoodVoucher,
-        totalTransportVoucher
+        totalTransportVoucher,
+        totalAdjustments
       }
     };
   }
@@ -258,6 +289,7 @@ export class PayrollService {
     }
 
     const totals = await this.calculateMonthlyTotals(employee.id, month, year);
+    const totalAdjustments = await this.calculateMonthlyAdjustments(employee.id, month, year);
 
     return {
       id: employee.id,
@@ -283,6 +315,7 @@ export class PayrollService {
       dailyTransportVoucher: employee.dailyTransportVoucher || 0,
       totalFoodVoucher: totals.totalVA,
       totalTransportVoucher: totals.totalVT,
+      totalAdjustments,
       daysWorked: totals.daysWorked
     };
   }

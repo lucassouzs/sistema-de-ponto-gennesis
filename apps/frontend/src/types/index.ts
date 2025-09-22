@@ -318,6 +318,7 @@ export interface PayrollEmployee {
   dailyTransportVoucher: number;
   totalFoodVoucher: number;
   totalTransportVoucher: number;
+  totalAdjustments: number;
   daysWorked: number;
 }
 
@@ -332,6 +333,7 @@ export interface MonthlyPayrollData {
     totalEmployees: number;
     totalFoodVoucher: number;
     totalTransportVoucher: number;
+    totalAdjustments: number;
   };
 }
 
@@ -356,4 +358,50 @@ export interface PayrollPagination {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+// Tipos para Acréscimos Salariais
+export type AdjustmentType = 'BONUS' | 'OVERTIME' | 'COMMISSION' | 'OTHER';
+
+export interface SalaryAdjustment {
+  id: string;
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateAdjustmentData {
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+}
+
+export interface UpdateAdjustmentData {
+  type?: AdjustmentType;
+  description?: string;
+  amount?: number;
+}
+
+export interface AdjustmentTypeOption {
+  value: AdjustmentType;
+  label: string;
+  color: string;
 }

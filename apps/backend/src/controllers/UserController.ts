@@ -57,6 +57,7 @@ export class UserController {
           include: {
             employee: {
               select: {
+                id: true,
                 employeeId: true,
                 department: true,
                 position: true,
