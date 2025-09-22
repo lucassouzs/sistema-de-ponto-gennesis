@@ -33,6 +33,22 @@ interface EmployeeFormData {
   client: string;
   dailyFoodVoucher: string;
   dailyTransportVoucher: string;
+  
+  // Novos campos - Dados da Empresa e Contrato
+  company: string;
+  currentContract: string;
+  
+  // Novos campos - Dados Bancários
+  bank: string;
+  accountType: string;
+  agency: string;
+  operation: string;
+  account: string;
+  digit: string;
+  
+  // Novos campos - Dados PIX
+  pixKeyType: string;
+  pixKey: string;
 }
 
 interface CreateEmployeeFormProps {
@@ -100,6 +116,55 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     'Manutenção'
   ];
 
+  // Lista de empresas
+  const companies = [
+    'ABRASIL',
+    'GÊNNESIS',
+    'MÉTRICA'
+  ];
+
+  // Lista de bancos
+  const banks = [
+    'BANCO DO BRASIL',
+    'BRADESCO',
+    'C6',
+    'CAIXA ECONÔMICA',
+    'CEF',
+    'INTER',
+    'ITAÚ',
+    'NUBANK',
+    'PICPAY',
+    'SANTANDER'
+  ];
+
+  // Lista de tipos de conta
+  const accountTypes = [
+    'CONTA SALÁRIO',
+    'CONTA CORRENTE',
+    'POUPANÇA'
+  ];
+
+  // Lista de tipos de chave PIX
+  const pixKeyTypes = [
+    'ALEATÓRIA',
+    'CELULAR',
+    'CNPJ',
+    'CPF',
+    'E-MAIL'
+  ];
+
+  // Lista de contratos (baseado nos centros de custo)
+  const contracts = [
+    'SEDES',
+    'DF - ADM LOCAL',
+    'ITAMARATY - SERVIÇOS EVENTUAIS',
+    'ITAMARATY - MÃO DE OBRA',
+    'SES GDF - LOTE 14',
+    'SES GDF - LOTE 10',
+    'ADM CENTRAL ENGPAC',
+    'DIRETOR'
+  ];
+
   // Função para gerar matrícula aleatória
   const generateEmployeeId = () => {
     // Gera um número de 6 dígitos com prefixo baseado no ano atual
@@ -130,7 +195,18 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     costCenter: '',
     client: '',
     dailyFoodVoucher: '33.40',
-    dailyTransportVoucher: '11.00'
+    dailyTransportVoucher: '11.00',
+    // Novos campos
+    company: '',
+    currentContract: '',
+    bank: '',
+    accountType: '',
+    agency: '',
+    operation: '',
+    account: '',
+    digit: '',
+    pixKeyType: '',
+    pixKey: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -190,7 +266,18 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         client: data.client,
         dailyFoodVoucher: parseFloat(data.dailyFoodVoucher),
         dailyTransportVoucher: parseFloat(data.dailyTransportVoucher),
-        allowedLocations: []
+        allowedLocations: [],
+        // Novos campos
+        company: data.company,
+        currentContract: data.currentContract,
+        bank: data.bank,
+        accountType: data.accountType,
+        agency: data.agency,
+        operation: data.operation,
+        account: data.account,
+        digit: data.digit,
+        pixKeyType: data.pixKeyType,
+        pixKey: data.pixKey
       };
 
       const response = await api.post('/users', {
@@ -717,6 +804,212 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
                 <label htmlFor="isRemote" className="text-sm font-medium text-gray-700">
                   Trabalho Remoto
                 </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados da Empresa e Contrato */}
+          <div className="space-y-4">
+            <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados da Empresa e Contrato</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Empresa *
+                </label>
+                <select
+                  value={formData.company}
+                  onChange={(e) => handleInputChange('company', e.target.value)}
+                  className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                    errors.company ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Selecione uma empresa</option>
+                  {companies.map((company) => (
+                    <option key={company} value={company}>
+                      {company}
+                    </option>
+                  ))}
+                </select>
+                {errors.company && <p className="text-red-500 text-xs mt-1">{errors.company}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Contrato Atual *
+                </label>
+                <select
+                  value={formData.currentContract}
+                  onChange={(e) => handleInputChange('currentContract', e.target.value)}
+                  className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                    errors.currentContract ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Selecione um contrato</option>
+                  {contracts.map((contract) => (
+                    <option key={contract} value={contract}>
+                      {contract}
+                    </option>
+                  ))}
+                </select>
+                {errors.currentContract && <p className="text-red-500 text-xs mt-1">{errors.currentContract}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Dados Bancários */}
+          <div className="space-y-4">
+            <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados Bancários</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Banco *
+                </label>
+                <select
+                  value={formData.bank}
+                  onChange={(e) => handleInputChange('bank', e.target.value)}
+                  className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                    errors.bank ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Selecione um banco</option>
+                  {banks.map((bank) => (
+                    <option key={bank} value={bank}>
+                      {bank}
+                    </option>
+                  ))}
+                </select>
+                {errors.bank && <p className="text-red-500 text-xs mt-1">{errors.bank}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Conta *
+                </label>
+                <select
+                  value={formData.accountType}
+                  onChange={(e) => handleInputChange('accountType', e.target.value)}
+                  className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                    errors.accountType ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Selecione o tipo</option>
+                  {accountTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {errors.accountType && <p className="text-red-500 text-xs mt-1">{errors.accountType}</p>}
+              </div>
+
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Agência *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.agency}
+                    onChange={(e) => handleInputChange('agency', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.agency ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="1234"
+                  />
+                  {errors.agency && <p className="text-red-500 text-xs mt-1">{errors.agency}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    OP. *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.operation}
+                    onChange={(e) => handleInputChange('operation', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.operation ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="01"
+                  />
+                  {errors.operation && <p className="text-red-500 text-xs mt-1">{errors.operation}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Conta *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.account}
+                    onChange={(e) => handleInputChange('account', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.account ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="12345"
+                  />
+                  {errors.account && <p className="text-red-500 text-xs mt-1">{errors.account}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Dígito *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.digit}
+                    onChange={(e) => handleInputChange('digit', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.digit ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="6"
+                    maxLength={2}
+                  />
+                  {errors.digit && <p className="text-red-500 text-xs mt-1">{errors.digit}</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados PIX */}
+          <div className="space-y-4">
+            <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados PIX</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Chave *
+                </label>
+                <select
+                  value={formData.pixKeyType}
+                  onChange={(e) => handleInputChange('pixKeyType', e.target.value)}
+                  className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                    errors.pixKeyType ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Selecione o tipo</option>
+                  {pixKeyTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {errors.pixKeyType && <p className="text-red-500 text-xs mt-1">{errors.pixKeyType}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Chave PIX *
+                </label>
+                <input
+                  type="text"
+                  value={formData.pixKey}
+                  onChange={(e) => handleInputChange('pixKey', e.target.value)}
+                  className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                    errors.pixKey ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Digite a chave PIX"
+                />
+                {errors.pixKey && <p className="text-red-500 text-xs mt-1">{errors.pixKey}</p>}
               </div>
             </div>
           </div>

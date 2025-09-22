@@ -126,7 +126,18 @@ async function main() {
       department: 'Engenharia Elétrica',
       position: 'Engenheiro Elétrico',
       birthDate: new Date('1990-09-15'), // 15/09
-      hireDate: new Date('2024-01-15')
+      hireDate: new Date('2024-01-15'),
+      // Novos campos de exemplo
+      company: 'GÊNNESIS',
+      currentContract: 'PROJETO ELÉTRICO A',
+      bank: 'BANCO DO BRASIL',
+      accountType: 'CONTA CORRENTE',
+      agency: '1234',
+      operation: '01',
+      account: '12345',
+      digit: '6',
+      pixKeyType: 'CPF',
+      pixKey: '12345678901'
     },
     {
       email: 'maria@engenharia.com.br',
@@ -136,7 +147,18 @@ async function main() {
       department: 'Recursos Humanos',
       position: 'Analista de RH',
       birthDate: new Date('1988-09-30'), // 30/09
-      hireDate: new Date('2023-06-01')
+      hireDate: new Date('2023-06-01'),
+      // Novos campos de exemplo
+      company: 'GÊNNESIS',
+      currentContract: 'ADMINISTRATIVO',
+      bank: 'ITAÚ',
+      accountType: 'CONTA SALÁRIO',
+      agency: '5678',
+      operation: '05',
+      account: '67890',
+      digit: '7',
+      pixKeyType: 'CELULAR',
+      pixKey: '(61) 99999-9999'
     },
     {
       email: 'pedro@engenharia.com.br',
@@ -146,7 +168,18 @@ async function main() {
       department: 'Engenharia Civil',
       position: 'Arquiteto',
       birthDate: new Date('1992-10-05'), // 05/10 (outro mês)
-      hireDate: new Date('2024-03-10')
+      hireDate: new Date('2024-03-10'),
+      // Novos campos de exemplo
+      company: 'MÉTRICA',
+      currentContract: 'PROJETO CIVIL B',
+      bank: 'BRADESCO',
+      accountType: 'POUPANÇA',
+      agency: '9012',
+      operation: '13',
+      account: '11111',
+      digit: '8',
+      pixKeyType: 'E-MAIL',
+      pixKey: 'pedro@engenharia.com.br'
     }
   ];
 
@@ -193,7 +226,18 @@ async function main() {
             longitude: -47.873407,
             radius: 100
           }
-        ]
+        ],
+        // Novos campos
+        company: empData.company,
+        currentContract: empData.currentContract,
+        bank: empData.bank,
+        accountType: empData.accountType,
+        agency: empData.agency,
+        operation: empData.operation,
+        account: empData.account,
+        digit: empData.digit,
+        pixKeyType: empData.pixKeyType,
+        pixKey: empData.pixKey
       }
     });
 

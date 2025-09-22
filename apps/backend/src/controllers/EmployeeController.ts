@@ -105,7 +105,18 @@ export const createEmployee = async (req: Request, res: Response) => {
       hireDate,
       salary,
       isRemote = false,
-      role = 'EMPLOYEE'
+      role = 'EMPLOYEE',
+      // Novos campos
+      company,
+      currentContract,
+      bank,
+      accountType,
+      agency,
+      operation,
+      account,
+      digit,
+      pixKeyType,
+      pixKey
     } = req.body;
 
     // Verificar se email já existe
@@ -156,7 +167,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           employeeId,
           department,
           position,
-          hireDate: new Date(hireDate + 'T04:00:00'),
+          hireDate: hireDate.includes('T') ? new Date(hireDate) : new Date(hireDate + 'T04:00:00'),
           salary: parseFloat(salary),
           workSchedule: {
             startTime: "08:00",
@@ -165,7 +176,18 @@ export const createEmployee = async (req: Request, res: Response) => {
             lunchEndTime: "13:00",
             workDays: [1, 2, 3, 4, 5] // Segunda a sexta
           },
-          isRemote
+          isRemote,
+          // Novos campos
+          company,
+          currentContract,
+          bank,
+          accountType,
+          agency,
+          operation,
+          account,
+          digit,
+          pixKeyType,
+          pixKey
         },
         include: {
           user: {
@@ -205,7 +227,18 @@ export const updateEmployee = async (req: Request, res: Response) => {
       salary,
       isRemote,
       role,
-      isActive
+      isActive,
+      // Novos campos
+      company,
+      currentContract,
+      bank,
+      accountType,
+      agency,
+      operation,
+      account,
+      digit,
+      pixKeyType,
+      pixKey
     } = req.body;
 
     const employee = await prisma.employee.findUnique({
@@ -269,9 +302,20 @@ export const updateEmployee = async (req: Request, res: Response) => {
           ...(employeeId && { employeeId }),
           ...(department && { department }),
           ...(position && { position }),
-          ...(hireDate && { hireDate: new Date(hireDate + 'T04:00:00') }),
+          ...(hireDate && { hireDate: hireDate.includes('T') ? new Date(hireDate) : new Date(hireDate + 'T04:00:00') }),
           ...(salary && { salary: parseFloat(salary) }),
-          ...(isRemote !== undefined && { isRemote })
+          ...(isRemote !== undefined && { isRemote }),
+          // Novos campos
+          ...(company !== undefined && { company }),
+          ...(currentContract !== undefined && { currentContract }),
+          ...(bank !== undefined && { bank }),
+          ...(accountType !== undefined && { accountType }),
+          ...(agency !== undefined && { agency }),
+          ...(operation !== undefined && { operation }),
+          ...(account !== undefined && { account }),
+          ...(digit !== undefined && { digit }),
+          ...(pixKeyType !== undefined && { pixKeyType }),
+          ...(pixKey !== undefined && { pixKey })
         },
         include: {
           user: {

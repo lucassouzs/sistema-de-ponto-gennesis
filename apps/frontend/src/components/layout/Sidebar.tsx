@@ -22,7 +22,8 @@ import {
   Lock,
   Timer,
   Stethoscope,
-  Cake
+  Cake,
+  DollarSign
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -91,6 +92,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/admin/banco-horas',
           icon: Timer,
           description: 'Controle de banco de horas'
+        },
+        {
+          name: 'Folha de Pagamento',
+          href: '/admin/folha-pagamento',
+          icon: DollarSign,
+          description: 'Gestão de folha de pagamento'
         }
       ];
     }

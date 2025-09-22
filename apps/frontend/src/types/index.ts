@@ -143,6 +143,17 @@ export interface UserFormData {
     workSchedule?: any;
     isRemote: boolean;
     allowedLocations?: any[];
+    // Novos campos
+    company?: string;
+    currentContract?: string;
+    bank?: string;
+    accountType?: string;
+    agency?: string;
+    operation?: string;
+    account?: string;
+    digit?: string;
+    pixKeyType?: string;
+    pixKey?: string;
   };
 }
 
@@ -280,4 +291,69 @@ export interface Theme {
     md: string;
     lg: string;
   };
+}
+
+// Tipos para Folha de Pagamento
+export interface PayrollEmployee {
+  id: string;
+  name: string;
+  position: string;
+  department: string;
+  employeeId: string;
+  company: string | null;
+  currentContract: string | null;
+  costCenter: string | null;
+  client: string | null;
+  cpf: string;
+  bank: string | null;
+  accountType: string | null;
+  agency: string | null;
+  operation: string | null;
+  account: string | null;
+  digit: string | null;
+  pixKeyType: string | null;
+  pixKey: string | null;
+  salary: number;
+  dailyFoodVoucher: number;
+  dailyTransportVoucher: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+  daysWorked: number;
+}
+
+export interface MonthlyPayrollData {
+  employees: PayrollEmployee[];
+  period: {
+    month: number;
+    year: number;
+    monthName: string;
+  };
+  totals: {
+    totalEmployees: number;
+    totalFoodVoucher: number;
+    totalTransportVoucher: number;
+  };
+}
+
+export interface PayrollFilters {
+  search?: string;
+  company?: string;
+  department?: string;
+  month: number;
+  year: number;
+}
+
+export interface PayrollStats {
+  company?: string;
+  department?: string;
+  totalEmployees: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+}
+
+export interface PayrollPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }

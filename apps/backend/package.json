@@ -72,5 +72,8 @@
     "express"
   ],
   "author": "Sistema Ponto Engenharia",
-  "license": "MIT"
+  "license": "MIT",
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  }
 }

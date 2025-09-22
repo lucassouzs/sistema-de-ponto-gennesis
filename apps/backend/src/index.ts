@@ -19,6 +19,7 @@ import companyRoutes from './routes/company';
 import dashboardRoutes from './routes/dashboard';
 import bankHoursRoutes from './routes/bankHours';
 import medicalCertificateRoutes from './routes/medicalCertificates';
+import payrollRoutes from './routes/payroll';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -80,6 +81,7 @@ app.use('/api/company', companyRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/bank-hours', bankHoursRoutes);
 app.use('/api/medical-certificates', medicalCertificateRoutes);
+app.use('/api/payroll', payrollRoutes);
 
 // Middleware de erro 404
 app.use(notFound);

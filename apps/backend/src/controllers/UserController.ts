@@ -63,6 +63,19 @@ export class UserController {
                 hireDate: true,
                 costCenter: true,
                 client: true,
+                // Novos campos
+                company: true,
+                currentContract: true,
+                bank: true,
+                accountType: true,
+                agency: true,
+                operation: true,
+                account: true,
+                digit: true,
+                pixKeyType: true,
+                pixKey: true,
+                dailyFoodVoucher: true,
+                dailyTransportVoucher: true,
               }
             }
           },
@@ -154,7 +167,14 @@ export class UserController {
 
         if (employeeData) {
           // Validar se a data de contratação é válida
-          const hireDate = new Date(employeeData.hireDate + 'T04:00:00');
+          // Se a data já vem com horário, usar diretamente, senão adicionar timezone
+          let hireDate;
+          if (employeeData.hireDate.includes('T')) {
+            hireDate = new Date(employeeData.hireDate);
+          } else {
+            hireDate = new Date(employeeData.hireDate + 'T04:00:00');
+          }
+          
           if (isNaN(hireDate.getTime())) {
             throw new Error('Data de contratação inválida');
           }
@@ -181,7 +201,18 @@ export class UserController {
               costCenter: employeeData.costCenter || null,
               client: employeeData.client || null,
               dailyFoodVoucher: employeeData.dailyFoodVoucher || 33.40,
-              dailyTransportVoucher: employeeData.dailyTransportVoucher || 11.00
+              dailyTransportVoucher: employeeData.dailyTransportVoucher || 11.00,
+              // Novos campos
+              company: employeeData.company || null,
+              currentContract: employeeData.currentContract || null,
+              bank: employeeData.bank || null,
+              accountType: employeeData.accountType || null,
+              agency: employeeData.agency || null,
+              operation: employeeData.operation || null,
+              account: employeeData.account || null,
+              digit: employeeData.digit || null,
+              pixKeyType: employeeData.pixKeyType || null,
+              pixKey: employeeData.pixKey || null
             }
           });
         }

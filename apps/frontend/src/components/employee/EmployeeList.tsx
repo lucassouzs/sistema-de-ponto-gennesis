@@ -917,6 +917,112 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   </div>
                 </div>
 
+                {/* Novos campos - Dados da Empresa e Contrato */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados da Empresa</h4>
+                    <div className="space-y-2">
+                      {selectedEmployee.employee?.company && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Empresa:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.company}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.currentContract && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Contrato Atual:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.currentContract}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados Bancários</h4>
+                    <div className="space-y-2">
+                      {selectedEmployee.employee?.bank && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Banco:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.bank}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.accountType && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Tipo de Conta:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.accountType}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.agency && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Agência:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.agency}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.operation && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">OP:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.operation}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.account && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Conta:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.account}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.digit && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Dígito:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.digit}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dados PIX */}
+                {(selectedEmployee.employee?.pixKeyType || selectedEmployee.employee?.pixKey) && (
+                  <div className="mb-6">
+                    <div className="space-y-4">
+                      <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados PIX</h4>
+                      <div className="space-y-2">
+                        {selectedEmployee.employee?.pixKeyType && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Tipo de Chave:</span>
+                            <span className="text-sm font-medium">
+                              {selectedEmployee.employee.pixKeyType}
+                            </span>
+                          </div>
+                        )}
+                        {selectedEmployee.employee?.pixKey && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Chave PIX:</span>
+                            <span className="text-sm font-medium">
+                              {selectedEmployee.employee.pixKey}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Seletor de mês/ano */}
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center justify-between mb-4">
