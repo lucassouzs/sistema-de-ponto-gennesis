@@ -23,6 +23,33 @@ export interface Employee {
   workSchedule: WorkSchedule;
   isRemote: boolean;
   allowedLocations?: Location[];
+  costCenter?: string; // Centro de custo
+  client?: string; // Tomador
+  dailyFoodVoucher?: number; // Vale Alimentação diário
+  dailyTransportVoucher?: number; // Vale Transporte diário
+  
+  // Novos campos - Dados da Empresa e Contrato
+  company?: string; // EMPRESA
+  currentContract?: string; // CONTRATO ATUAL
+  
+  // Novos campos - Dados Bancários
+  bank?: string; // BANCO
+  accountType?: string; // TIPO DE CONTA
+  agency?: string; // AGÊNCIA
+  operation?: string; // OP.
+  account?: string; // CONTA
+  digit?: string; // DIGITO
+  
+  // Novos campos - Dados PIX
+  pixKeyType?: string; // TIPO DE CHAVE
+  pixKey?: string; // CHAVE PIX
+  
+  // Novos campos - Modalidade e Adicionais
+  modality?: string; // MODALIDADE (MEI, CLT, ESTAGIARIO)
+  familySalary?: number; // SALÁRIO FAMÍLIA
+  dangerPay?: number; // PERICULOSIDADE
+  unhealthyPay?: number; // INSALUBRIDADE
+  
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +86,8 @@ export interface TimeRecord {
   observation?: string;
   approvedBy?: string;
   approvedAt?: string;
+  foodVoucherAmount?: number; // Valor do VA no dia
+  transportVoucherAmount?: number; // Valor do VT no dia
   createdAt: string;
   updatedAt: string;
 }
@@ -155,7 +184,8 @@ export enum TimeRecordType {
   LUNCH_START = 'LUNCH_START',
   LUNCH_END = 'LUNCH_END',
   BREAK_START = 'BREAK_START',
-  BREAK_END = 'BREAK_END'
+  BREAK_END = 'BREAK_END',
+  ABSENCE_JUSTIFIED = 'ABSENCE_JUSTIFIED'
 }
 
 export enum VacationType {
@@ -199,6 +229,40 @@ export enum ReportStatus {
   GENERATED = 'GENERATED',
   PROCESSING = 'PROCESSING',
   ERROR = 'ERROR'
+}
+
+// Novos enums para os campos adicionados
+export enum Company {
+  ABRASIL = 'ABRASIL',
+  GENNESIS = 'GÊNNESIS',
+  METRICA = 'MÉTRICA'
+}
+
+export enum Bank {
+  BANCO_DO_BRASIL = 'BANCO DO BRASIL',
+  BRADESCO = 'BRADESCO',
+  C6 = 'C6',
+  CAIXA_ECONOMICA = 'CAIXA ECONÔMICA',
+  CEF = 'CEF',
+  INTER = 'INTER',
+  ITAU = 'ITAÚ',
+  NUBANK = 'NUBANK',
+  PICPAY = 'PICPAY',
+  SANTANDER = 'SANTANDER'
+}
+
+export enum AccountType {
+  CONTA_SALARIO = 'CONTA SALÁRIO',
+  CONTA_CORRENTE = 'CONTA CORRENTE',
+  POUPANCA = 'POUPANÇA'
+}
+
+export enum PixKeyType {
+  ALEATORIA = 'ALEATÓRIA',
+  CELULAR = 'CELULAR',
+  CNPJ = 'CNPJ',
+  CPF = 'CPF',
+  EMAIL = 'E-MAIL'
 }
 
 // Interfaces para API

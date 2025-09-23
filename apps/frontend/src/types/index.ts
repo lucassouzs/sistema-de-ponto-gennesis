@@ -56,6 +56,79 @@ export interface OvertimeFormData {
   description?: string;
 }
 
+export interface MedicalCertificateFormData {
+  type: string;
+  startDate: string;
+  endDate: string;
+  description?: string;
+  file?: File;
+}
+
+export interface MedicalCertificate {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  description?: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileKey?: string;
+  status: string;
+  reason?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    name: string;
+    email: string;
+  };
+  employee: {
+    employeeId: string;
+    department: string;
+    position: string;
+  };
+  approver?: {
+    name: string;
+    email: string;
+  };
+}
+
+export interface MedicalCertificateDetails {
+  startDate: string;
+  endDate: string;
+  days: number;
+  submittedAt: string;
+  description?: string;
+  type: string;
+}
+
+export interface TimeRecordWithDetails {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  timestamp: string;
+  latitude?: number;
+  longitude?: number;
+  photoUrl?: string;
+  observation?: string;
+  isValid: boolean;
+  createdAt: string;
+  updatedAt: string;
+  foodVoucherAmount?: number;
+  transportVoucherAmount?: number;
+  employee?: {
+    employeeId: string;
+    department: string;
+  };
+  medicalCertificateDetails?: MedicalCertificateDetails;
+}
+
 export interface UserFormData {
   email: string;
   name: string;
@@ -70,6 +143,17 @@ export interface UserFormData {
     workSchedule?: any;
     isRemote: boolean;
     allowedLocations?: any[];
+    // Novos campos
+    company?: string;
+    currentContract?: string;
+    bank?: string;
+    accountType?: string;
+    agency?: string;
+    operation?: string;
+    account?: string;
+    digit?: string;
+    pixKeyType?: string;
+    pixKey?: string;
   };
 }
 
@@ -207,4 +291,170 @@ export interface Theme {
     md: string;
     lg: string;
   };
+}
+
+// Tipos para Folha de Pagamento
+export interface PayrollEmployee {
+  id: string;
+  name: string;
+  position: string;
+  department: string;
+  employeeId: string;
+  company: string | null;
+  currentContract: string | null;
+  costCenter: string | null;
+  client: string | null;
+  cpf: string;
+  bank: string | null;
+  accountType: string | null;
+  agency: string | null;
+  operation: string | null;
+  account: string | null;
+  digit: string | null;
+  pixKeyType: string | null;
+  pixKey: string | null;
+  modality: string | null;
+  familySalary: number;
+  dangerPay: number; // Porcentagem (0, 30, 40)
+  unhealthyPay: number; // Porcentagem (0, 10, 20, 40)
+  salary: number;
+  dailyFoodVoucher: number;
+  dailyTransportVoucher: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+  totalAdjustments: number;
+  totalDiscounts: number;
+  daysWorked: number;
+  totalWorkingDays: number;
+}
+
+export interface MonthlyPayrollData {
+  employees: PayrollEmployee[];
+  period: {
+    month: number;
+    year: number;
+    monthName: string;
+  };
+  totals: {
+    totalEmployees: number;
+    totalFoodVoucher: number;
+    totalTransportVoucher: number;
+    totalAdjustments: number;
+    totalDiscounts: number;
+  };
+}
+
+export interface PayrollFilters {
+  search?: string;
+  company?: string;
+  department?: string;
+  month: number;
+  year: number;
+}
+
+export interface PayrollStats {
+  company?: string;
+  department?: string;
+  totalEmployees: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+}
+
+export interface PayrollPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+// Tipos para Acréscimos Salariais
+export type AdjustmentType = 'BONUS' | 'OVERTIME' | 'COMMISSION' | 'OTHER';
+
+export interface SalaryAdjustment {
+  id: string;
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateAdjustmentData {
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+}
+
+export interface UpdateAdjustmentData {
+  type?: AdjustmentType;
+  description?: string;
+  amount?: number;
+}
+
+export interface AdjustmentTypeOption {
+  value: AdjustmentType;
+  label: string;
+  color: string;
+}
+
+// Tipos para Descontos Salariais
+export type DiscountType = 'FINE' | 'CONSIGNED' | 'OTHER';
+
+export interface SalaryDiscount {
+  id: string;
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateDiscountData {
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+}
+
+export interface UpdateDiscountData {
+  type?: DiscountType;
+  description?: string;
+  amount?: number;
+}
+
+export interface DiscountTypeOption {
+  value: DiscountType;
+  label: string;
+  color: string;
 }

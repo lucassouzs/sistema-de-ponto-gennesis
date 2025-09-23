@@ -2,10 +2,15 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, ChevronDown, ChevronUp, Filter, Camera, FileCheck, Eye, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { AdjustmentsList } from './AdjustmentsList';
+import { AdjustmentForm } from './AdjustmentForm';
+import { DiscountsList } from './DiscountsList';
+import { DiscountForm } from './DiscountForm';
 import api from '@/lib/api';
+import { SalaryAdjustment, CreateAdjustmentData, UpdateAdjustmentData, SalaryDiscount, CreateDiscountData, UpdateDiscountData } from '@/types';
 
 interface Employee {
   id: string;
@@ -15,12 +20,28 @@ interface Employee {
   role: string;
   isActive: boolean;
   employee?: {
+    id: string;
     employeeId: string;
     department: string;
     position: string;
     hireDate: string;
     costCenter?: string;
     client?: string;
+    company?: string;
+    currentContract?: string;
+    bank?: string;
+    accountType?: string;
+    agency?: string;
+    operation?: string;
+    account?: string;
+    digit?: string;
+    pixKeyType?: string;
+    pixKey?: string;
+    // Novos campos - Modalidade e Adicionais
+    modality?: string;
+    familySalary?: number;
+    dangerPay?: number;
+    unhealthyPay?: number;
   };
 }
 
@@ -44,6 +65,15 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [editingRecord, setEditingRecord] = useState<string | null>(null);
   const [isFilterExpanded, setIsFilterExpanded] = useState(true);
+  const [viewingCertificate, setViewingCertificate] = useState<string | null>(null);
+  const [showAddAdjustmentForm, setShowAddAdjustmentForm] = useState(false);
+  const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
+  const [adjustments, setAdjustments] = useState<SalaryAdjustment[]>([]);
+  const [isAdjustmentsMinimized, setIsAdjustmentsMinimized] = useState(true);
+  const [showAddDiscountForm, setShowAddDiscountForm] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState<SalaryDiscount | null>(null);
+  const [discounts, setDiscounts] = useState<SalaryDiscount[]>([]);
+  const [isDiscountsMinimized, setIsDiscountsMinimized] = useState(true);
   const [editForm, setEditForm] = useState<{
     type: string;
     timestamp: string;
@@ -267,11 +297,11 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
 
       // Processar registros do dia
       dayRecords.forEach((record: any) => {
-        const time = new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          second: '2-digit'
-        });
+        const date = new Date(record.timestamp);
+        const hours = date.getUTCHours().toString().padStart(2, '0');
+        const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+        const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+        const time = `${hours}:${minutes}:${seconds}`;
 
         switch (record.type) {
           case 'ENTRY':
@@ -417,15 +447,131 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     }
   });
 
+  // Buscar acréscimos do funcionário
+  const { data: adjustmentsData } = useQuery({
+    queryKey: ['salary-adjustments', selectedEmployee?.employee?.id],
+    queryFn: async () => {
+      if (!selectedEmployee?.employee?.id) return { data: [] };
+      const res = await api.get(`/salary-adjustments/employee/${selectedEmployee.employee.id}`);
+      return res.data;
+    },
+    enabled: !!selectedEmployee?.employee?.id
+  });
+
+  // Atualizar lista de acréscimos quando os dados mudarem
+  React.useEffect(() => {
+    if (adjustmentsData?.data) {
+      setAdjustments(adjustmentsData.data);
+    }
+  }, [adjustmentsData]);
+
+  // Criar acréscimo
+  const createAdjustmentMutation = useMutation({
+    mutationFn: async (data: CreateAdjustmentData) => {
+      const res = await api.post('/salary-adjustments', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+      setShowAddAdjustmentForm(false);
+    }
+  });
+
+  // Atualizar acréscimo
+  const updateAdjustmentMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateAdjustmentData }) => {
+      const res = await api.put(`/salary-adjustments/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+      setEditingAdjustment(null);
+    }
+  });
+
+  // Deletar acréscimo
+  const deleteAdjustmentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/salary-adjustments/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-adjustments', selectedEmployee?.employee?.id] });
+    }
+  });
+
+  // Buscar descontos do funcionário
+  const { data: discountsData } = useQuery({
+    queryKey: ['salary-discounts', selectedEmployee?.employee?.id],
+    queryFn: async () => {
+      if (!selectedEmployee?.employee?.id) return { data: [] };
+      const res = await api.get(`/salary-discounts/employee/${selectedEmployee.employee.id}`);
+      return res.data;
+    },
+    enabled: !!selectedEmployee?.employee?.id
+  });
+
+  // Atualizar lista de descontos quando os dados mudarem
+  React.useEffect(() => {
+    if (discountsData?.data) {
+      setDiscounts(discountsData.data);
+    }
+  }, [discountsData]);
+
+  // Criar desconto
+  const createDiscountMutation = useMutation({
+    mutationFn: async (data: CreateDiscountData) => {
+      const res = await api.post('/salary-discounts', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+      setShowAddDiscountForm(false);
+    }
+  });
+
+  // Atualizar desconto
+  const updateDiscountMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateDiscountData }) => {
+      const res = await api.put(`/salary-discounts/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+      setEditingDiscount(null);
+    }
+  });
+
+  // Deletar desconto
+  const deleteDiscountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/salary-discounts/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+    }
+  });
+
   const handleDelete = (employeeId: string) => {
     deleteEmployeeMutation.mutate(employeeId);
   };
 
   const handleEditRecord = (record: any) => {
     setEditingRecord(record.id);
+    
+    // Converter timestamp para formato local sem conversão de timezone
+    const date = new Date(record.timestamp);
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+    const localTimestamp = `${year}-${month}-${day}T${hours}:${minutes}`;
+    
     setEditForm({
       type: record.type,
-      timestamp: new Date(record.timestamp).toISOString().slice(0, 16),
+      timestamp: localTimestamp,
       reason: (record.reason && !record.reason.includes('Localização registrada')) ? record.reason : '',
       observation: record.observation || ''
     });
@@ -443,6 +589,79 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const handleCancelEdit = () => {
     setEditingRecord(null);
     setEditForm({ type: '', timestamp: '', reason: '', observation: '' });
+  };
+
+  // Handlers para acréscimos salariais
+  const handleAddAdjustment = (data: CreateAdjustmentData | UpdateAdjustmentData) => {
+    if ('employeeId' in data) {
+      // É CreateAdjustmentData
+      createAdjustmentMutation.mutate(data as CreateAdjustmentData);
+    } else {
+      // É UpdateAdjustmentData
+      if (editingAdjustment) {
+        updateAdjustmentMutation.mutate({
+          id: editingAdjustment.id,
+          data: data as UpdateAdjustmentData
+        });
+      }
+    }
+  };
+
+  const handleUpdateAdjustment = (data: UpdateAdjustmentData) => {
+    if (editingAdjustment) {
+      updateAdjustmentMutation.mutate({
+        id: editingAdjustment.id,
+        data
+      });
+    }
+  };
+
+  const handleDeleteAdjustment = (id: string) => {
+    if (confirm('Tem certeza que deseja excluir este acréscimo?')) {
+      deleteAdjustmentMutation.mutate(id);
+    }
+  };
+
+  const handleEditAdjustment = (adjustment: SalaryAdjustment) => {
+    setEditingAdjustment(adjustment);
+    setIsAdjustmentsMinimized(false);
+  };
+
+  // Funções para manipular descontos
+  const handleAddDiscount = (data: CreateDiscountData | UpdateDiscountData) => {
+    if ('employeeId' in data) {
+      // É CreateDiscountData
+      createDiscountMutation.mutate(data as CreateDiscountData);
+    } else {
+      // É UpdateDiscountData
+      if (editingDiscount) {
+        updateDiscountMutation.mutate({
+          id: editingDiscount.id,
+          data: data as UpdateDiscountData
+        });
+      }
+    }
+  };
+
+  const handleUpdateDiscount = (data: UpdateDiscountData) => {
+    if (editingDiscount) {
+      updateDiscountMutation.mutate({
+        id: editingDiscount.id,
+        data
+      });
+    }
+  };
+
+  const handleEditDiscount = (discount: SalaryDiscount) => {
+    setEditingDiscount(discount);
+    setShowAddDiscountForm(false);
+    setIsDiscountsMinimized(false);
+  };
+
+  const handleDeleteDiscount = (id: string) => {
+    if (confirm('Tem certeza que deseja remover este desconto?')) {
+      deleteDiscountMutation.mutate(id);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -553,7 +772,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-                    className="px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     <option value="active">Ativos</option>
                     <option value="inactive">Inativos</option>
@@ -569,7 +788,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {departments.map((dept) => (
                       <option 
@@ -587,7 +806,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={positionFilter}
                     onChange={(e) => setPositionFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {positions.map((pos) => (
                       <option 
@@ -605,7 +824,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={costCenterFilter}
                     onChange={(e) => setCostCenterFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {costCenters.map((cc) => (
                       <option 
@@ -623,7 +842,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                   <select
                     value={clientFilter}
                     onChange={(e) => setClientFilter(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     {clients.map((client) => (
                       <option 
@@ -880,6 +1099,14 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                         <span className="text-sm text-gray-600">Cargo:</span>
                         <span className="text-sm font-medium">{selectedEmployee.employee?.position}</span>
                       </div>
+                      {selectedEmployee.employee?.modality && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Modalidade:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.modality}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Data de Admissão:</span>
                         <span className="text-sm font-medium">
@@ -902,6 +1129,254 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                           </span>
                         </div>
                       )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Novos campos - Dados da Empresa e Contrato */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados da Empresa</h4>
+                    <div className="space-y-2">
+                      {selectedEmployee.employee?.company && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Empresa:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.company}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.currentContract && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Contrato Atual:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.currentContract}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados Bancários</h4>
+                    <div className="space-y-2">
+                      {selectedEmployee.employee?.bank && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Banco:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.bank}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.accountType && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Tipo de Conta:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.accountType}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.agency && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Agência:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.agency}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.operation && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">OP:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.operation}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.account && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Conta:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.account}
+                          </span>
+                        </div>
+                      )}
+                      {selectedEmployee.employee?.digit && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Dígito:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.digit}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dados PIX */}
+                {(selectedEmployee.employee?.pixKeyType || selectedEmployee.employee?.pixKey) && (
+                  <div className="mb-6">
+                    <div className="space-y-4">
+                      <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados PIX</h4>
+                      <div className="space-y-2">
+                        {selectedEmployee.employee?.pixKeyType && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Tipo de Chave:</span>
+                            <span className="text-sm font-medium">
+                              {selectedEmployee.employee.pixKeyType}
+                            </span>
+                          </div>
+                        )}
+                        {selectedEmployee.employee?.pixKey && (
+                          <div className="flex justify-between">
+                            <span className="text-sm text-gray-600">Chave PIX:</span>
+                            <span className="text-sm font-medium">
+                              {selectedEmployee.employee.pixKey}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                
+
+                {/* Seção de Acréscimos Salariais */}
+                <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <h4 className="text-md font-semibold text-gray-900">
+                        Acréscimos
+                        {adjustments.length > 0 && (
+                          <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                            {adjustments.length}
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        onClick={() => setIsAdjustmentsMinimized(!isAdjustmentsMinimized)}
+                        className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                        title={isAdjustmentsMinimized ? "Expandir seção" : "Minimizar seção"}
+                      >
+                        {isAdjustmentsMinimized ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowAddAdjustmentForm(true);
+                        setIsAdjustmentsMinimized(false);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Adicionar Acréscimo</span>
+                    </button>
+                  </div>
+                  
+                  {/* Conteúdo da seção - só exibe se não estiver minimizada */}
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isAdjustmentsMinimized ? 'max-h-0 opacity-0' : 'max-h-screen opacity-100'
+                  }`}>
+                    <div className="space-y-4">
+                      {/* Formulário para adicionar acréscimo */}
+                      {showAddAdjustmentForm && selectedEmployee.employee && (
+                        <AdjustmentForm 
+                          employeeId={selectedEmployee.employee.id}
+                          onSave={handleAddAdjustment}
+                          onCancel={() => setShowAddAdjustmentForm(false)}
+                        />
+                      )}
+                      
+                      {/* Formulário de edição */}
+                      {editingAdjustment && selectedEmployee.employee && (
+                        <AdjustmentForm 
+                          employeeId={selectedEmployee.employee.id}
+                          adjustment={editingAdjustment}
+                          onSave={handleUpdateAdjustment}
+                          onCancel={() => setEditingAdjustment(null)}
+                        />
+                      )}
+                      
+                      {/* Lista de acréscimos existentes */}
+                      <AdjustmentsList 
+                        adjustments={adjustments}
+                        onEdit={handleEditAdjustment}
+                        onDelete={handleDeleteAdjustment}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seção de Descontos Salariais */}
+                <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <h4 className="text-md font-semibold text-gray-900">
+                        Descontos
+                        {discounts.length > 0 && (
+                          <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                            {discounts.length}
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        onClick={() => setIsDiscountsMinimized(!isDiscountsMinimized)}
+                        className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                        title={isDiscountsMinimized ? "Expandir seção" : "Minimizar seção"}
+                      >
+                        {isDiscountsMinimized ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowAddDiscountForm(true);
+                        setIsDiscountsMinimized(false);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Adicionar Desconto</span>
+                    </button>
+                  </div>
+                  
+                  {/* Conteúdo da seção - só exibe se não estiver minimizada */}
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isDiscountsMinimized ? 'max-h-0 opacity-0' : 'max-h-screen opacity-100'
+                  }`}>
+                    <div className="space-y-4">
+                      {/* Formulário para adicionar desconto */}
+                      {showAddDiscountForm && selectedEmployee.employee && (
+                        <DiscountForm 
+                          employeeId={selectedEmployee.employee.id}
+                          onSave={handleAddDiscount}
+                          onCancel={() => setShowAddDiscountForm(false)}
+                        />
+                      )}
+                      
+                      {/* Formulário de edição */}
+                      {editingDiscount && selectedEmployee.employee && (
+                        <DiscountForm 
+                          employeeId={selectedEmployee.employee.id}
+                          discount={editingDiscount}
+                          onSave={handleUpdateDiscount}
+                          onCancel={() => setEditingDiscount(null)}
+                        />
+                      )}
+                      
+                      {/* Lista de descontos existentes */}
+                      <DiscountsList 
+                        discounts={discounts}
+                        onEdit={handleEditDiscount}
+                        onDelete={handleDeleteDiscount}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1000,29 +1475,88 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                                 <div key={index} className="px-3 py-2 bg-white rounded-md border">
                                   <div className="flex items-center space-x-2">
                                     <Clock className="w-3 h-3 text-gray-500" />
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {new Date(record.timestamp).toLocaleTimeString('pt-BR', { 
-                                        hour: '2-digit', 
-                                        minute: '2-digit',
-                                        second: '2-digit'
-                                      })}
-                                    </span>
+                                    {record.type !== 'ABSENCE_JUSTIFIED' && (
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {(() => {
+                                          const date = new Date(record.timestamp);
+                                          const hours = date.getUTCHours().toString().padStart(2, '0');
+                                          const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                          const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                          return `${hours}:${minutes}:${seconds}`;
+                                        })()}
+                                      </span>
+                                    )}
                                     <span className="text-xs text-gray-600">
                                       {record.type === 'ENTRY' ? 'Entrada' :
                                        record.type === 'EXIT' ? 'Saída' :
                                        record.type === 'LUNCH_START' ? 'Almoço' :
-                                       record.type === 'LUNCH_END' ? 'Retorno' : record.type}
+                                       record.type === 'LUNCH_END' ? 'Retorno' :
+                                       record.type === 'BREAK_START' ? 'Início Pausa' :
+                                       record.type === 'BREAK_END' ? 'Fim Pausa' :
+                                       record.type === 'ABSENCE_JUSTIFIED' ? 'Ausência Justificada' : record.type}
                                     </span>
                                     {userRole === 'ADMIN' && (
-                                      <button
-                                        onClick={() => handleEditRecord(record)}
-                                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                        title="Editar registro"
-                                      >
-                                        <Edit className="w-3 h-3" />
-                                      </button>
+                                      <>
+                                        {record.type === 'ABSENCE_JUSTIFIED' && record.medicalCertificateDetails && (
+                                          <button
+                                            onClick={() => setViewingCertificate(viewingCertificate === `${date}-${index}` ? null : `${date}-${index}`)}
+                                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                            title="Ver detalhes do atestado"
+                                          >
+                                            <Eye className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        {record.photoUrl && (
+                                          <button
+                                            onClick={() => window.open(record.photoUrl, '_blank')}
+                                            className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                            title="Ver foto"
+                                          >
+                                            <Camera className="w-3 h-3" />
+                                          </button>
+                                        )}
+                                        <button
+                                          onClick={() => handleEditRecord(record)}
+                                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                          title="Editar registro"
+                                        >
+                                          <Edit className="w-3 h-3" />
+                                        </button>
+                                      </>
                                     )}
                                   </div>
+                                  
+                                  {/* Detalhes do atestado médico para ausência justificada */}
+                                  {record.type === 'ABSENCE_JUSTIFIED' && record.medicalCertificateDetails && viewingCertificate === `${date}-${index}` && (
+                                    <div className="mt-2 p-2">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <FileCheck className="w-3 h-3 text-600" />
+                                        <span className="text-xs font-medium text-800">Detalhes do Atestado</span>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-gray-700">
+                                        <div className="flex items-center space-x-2">
+                                          <Calendar className="w-3 h-3" />
+                                          <span>
+                                            {new Date(record.medicalCertificateDetails.startDate).toLocaleDateString('pt-BR')} - {new Date(record.medicalCertificateDetails.endDate).toLocaleDateString('pt-BR')}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <Clock className="w-3 h-3" />
+                                          <span>{record.medicalCertificateDetails.days} dias</span>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                          <User className="w-3 h-3" />
+                                          <span>Enviado em {new Date(record.medicalCertificateDetails.submittedAt).toLocaleDateString('pt-BR')}</span>
+                                        </div>
+                                        {record.medicalCertificateDetails.description && (
+                                          <div className="text-xs text-600 mt-1">
+                                            <strong>Obs:</strong> {record.medicalCertificateDetails.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {record.observation && (
                                     <div className="mt-1 text-xs text-gray-500 italic">
                                       <strong>Obs:</strong> {record.observation}

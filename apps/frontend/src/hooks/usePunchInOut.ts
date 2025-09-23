@@ -27,8 +27,12 @@ export const usePunchInOut = () => {
         formData.append('longitude', data.longitude.toString());
       }
       if (data.photo) {
-        const file = await dataUrlToFile(data.photo, `punch-${Date.now()}.jpg`);
-        formData.append('photo', file);
+        if (typeof data.photo === 'string') {
+          const file = await dataUrlToFile(data.photo, `punch-${Date.now()}.jpg`);
+          formData.append('photo', file);
+        } else {
+          formData.append('photo', data.photo);
+        }
       }
       formData.append('observation', data.observation || '');
 

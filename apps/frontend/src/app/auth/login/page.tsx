@@ -9,9 +9,11 @@ import { Input } from '@/components/ui/Input';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { authService } from '@/lib/auth';
 import { toast } from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function LoginPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -27,6 +29,8 @@ export default function LoginPage() {
 
     try {
       await authService.login(formData);
+      // Limpar cache do React Query
+      queryClient.clear();
       toast.success('Login realizado com sucesso!');
       router.push('/dashboard');
     } catch (error: any) {
@@ -71,20 +75,16 @@ export default function LoginPage() {
         </div>
       )}
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Sistema de Ponto
-          </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Gennesis Engenharia
-          </p>
-        </div>
-      </div>
-
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <Card>
           <CardHeader>
+            <div className="flex justify-center">
+              <img 
+                src="/logo.png" 
+                alt="Logo Gennesis Engenharia" 
+                className="h-24 w-auto object-contain"
+              />
+            </div>
             <h2 className="text-center text-2xl font-bold text-gray-900">
               Entrar na sua conta
             </h2>

@@ -75,11 +75,11 @@ export class ReportService {
     });
 
     // Calcular métricas para cada funcionário
-    const report = Array.from(employeeMap.values()).map(emp => {
+    const report = await Promise.all(Array.from(employeeMap.values()).map(async emp => {
       const days = this.calculateWorkingDays(period.startDate, period.endDate);
       const presentDays = this.calculatePresentDays(emp.records);
       const absentDays = days - presentDays;
-      const lateArrivals = this.calculateLateArrivals(emp.records);
+      const lateArrivals = await this.calculateLateArrivals(emp.records);
       const earlyDepartures = this.calculateEarlyDepartures(emp.records);
       const totalHours = this.calculateTotalHours(emp.records);
 
@@ -93,7 +93,7 @@ export class ReportService {
         totalHours,
         attendanceRate: days > 0 ? (presentDays / days) * 100 : 0
       };
-    });
+    }));
 
     return {
       period,
@@ -446,11 +446,17 @@ export class ReportService {
     return days.size;
   }
 
-  private calculateLateArrivals(records: any[]): number {
+  private async calculateLateArrivals(records: any[]): Promise<number> {
+    // Buscar configurações da empresa para horário de entrada
+    const companySettings = await prisma.companySettings.findFirst();
+    const workStartTime = companySettings?.workStartTime || '07:00';
+    const toleranceMinutes = companySettings?.toleranceMinutes || 10;
+    const [startHour, startMinute] = workStartTime.split(':').map(Number);
+    
     return records.filter(record => {
       if (record.type !== 'ENTRY') return false;
       const entryTime = moment(record.timestamp);
-      const expectedTime = moment(entryTime).hour(8).minute(10).second(0);
+      const expectedTime = moment(entryTime).hour(startHour).minute(startMinute + toleranceMinutes).second(0);
       return entryTime.isAfter(expectedTime);
     }).length;
   }

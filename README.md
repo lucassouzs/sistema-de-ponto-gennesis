@@ -64,11 +64,15 @@ cd sistema-ponto-engenharia
 npm run install:all
 
 # Configure as variáveis de ambiente
-cp apps/backend/.env.example apps/backend/.env
+copy apps\backend\env.example apps\backend\.env
 # Edite o arquivo .env com suas configurações
 
 # Execute o banco de dados
+cd apps\backend
 npm run db:migrate
+
+# Execute para criar os dados iniciais
+npm run db:seed
 
 # Inicie o desenvolvimento
 npm run dev

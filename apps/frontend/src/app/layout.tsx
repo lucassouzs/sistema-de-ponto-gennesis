@@ -7,10 +7,13 @@ import { Toaster } from 'react-hot-toast';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Sistema de Controle de Ponto - Engenharia',
+  title: 'Gennesis Engenharia',
   description: 'Sistema completo para controle de frequência de colaboradores',
   keywords: ['ponto', 'frequência', 'engenharia', 'controle', 'horas'],
   authors: [{ name: 'Sistema Ponto Engenharia' }],
+  icons: {
+    icon: '/logo3.png',
+  },
   robots: 'noindex, nofollow', // Para ambiente interno
 };
 

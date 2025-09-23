@@ -132,7 +132,8 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
         records: employeeRecords.map(record => ({
           type: record.type,
           timestamp: moment(record.timestamp).format('HH:mm:ss'),
-          location: record.location
+          latitude: record.latitude,
+          longitude: record.longitude
         }))
       };
     });

@@ -57,12 +57,26 @@ export class UserController {
           include: {
             employee: {
               select: {
+                id: true,
                 employeeId: true,
                 department: true,
                 position: true,
                 hireDate: true,
                 costCenter: true,
                 client: true,
+                // Novos campos
+                company: true,
+                currentContract: true,
+                bank: true,
+                accountType: true,
+                agency: true,
+                operation: true,
+                account: true,
+                digit: true,
+                pixKeyType: true,
+                pixKey: true,
+                dailyFoodVoucher: true,
+                dailyTransportVoucher: true,
               }
             }
           },
@@ -153,13 +167,27 @@ export class UserController {
         });
 
         if (employeeData) {
+          // Validar se a data de contratação é válida
+          // Se a data já vem com horário, usar diretamente, senão adicionar timezone
+          let hireDate;
+          if (employeeData.hireDate.includes('T')) {
+            hireDate = new Date(employeeData.hireDate);
+          } else {
+            hireDate = new Date(employeeData.hireDate + 'T04:00:00');
+          }
+          
+          if (isNaN(hireDate.getTime())) {
+            throw new Error('Data de contratação inválida');
+          }
+
           await tx.employee.create({
             data: {
               userId: user.id,
               employeeId: employeeData.employeeId,
               department: employeeData.department,
               position: employeeData.position,
-              hireDate: new Date(employeeData.hireDate),
+              hireDate: hireDate,
+              birthDate: employeeData.birthDate ? new Date(employeeData.birthDate + 'T04:00:00') : null,
               salary: employeeData.salary,
               workSchedule: employeeData.workSchedule || {
                 startTime: '08:00',
@@ -172,7 +200,25 @@ export class UserController {
               isRemote: employeeData.isRemote || false,
               allowedLocations: employeeData.allowedLocations || [],
               costCenter: employeeData.costCenter || null,
-              client: employeeData.client || null
+              client: employeeData.client || null,
+              dailyFoodVoucher: employeeData.dailyFoodVoucher || 33.40,
+              dailyTransportVoucher: employeeData.dailyTransportVoucher || 11.00,
+              // Novos campos
+              company: employeeData.company || null,
+              currentContract: employeeData.currentContract || null,
+              bank: employeeData.bank || null,
+              accountType: employeeData.accountType || null,
+              agency: employeeData.agency || null,
+              operation: employeeData.operation || null,
+              account: employeeData.account || null,
+              digit: employeeData.digit || null,
+              pixKeyType: employeeData.pixKeyType || null,
+              pixKey: employeeData.pixKey || null,
+              // Novos campos - Modalidade e Adicionais
+              modality: employeeData.modality || null,
+              familySalary: employeeData.familySalary !== undefined ? employeeData.familySalary : null,
+              dangerPay: employeeData.dangerPay !== undefined ? employeeData.dangerPay : null,
+              unhealthyPay: employeeData.unhealthyPay !== undefined ? employeeData.unhealthyPay : null
             }
           });
         }
@@ -257,7 +303,8 @@ export class UserController {
               ...(employeeData.isRemote !== undefined && { isRemote: employeeData.isRemote }),
               ...(employeeData.allowedLocations && { allowedLocations: employeeData.allowedLocations }),
               ...(employeeData.costCenter !== undefined && { costCenter: employeeData.costCenter }),
-              ...(employeeData.client !== undefined && { client: employeeData.client })
+              ...(employeeData.client !== undefined && { client: employeeData.client }),
+              ...(employeeData.birthDate && { birthDate: new Date(employeeData.birthDate + 'T04:00:00') })
             }
           });
         }

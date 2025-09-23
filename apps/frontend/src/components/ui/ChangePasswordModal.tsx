@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Eye, EyeOff, Lock, CheckCircle } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
+import api from '@/lib/api';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -72,23 +73,12 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/change-password', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          currentPassword: formData.currentPassword,
-          newPassword: formData.newPassword
-        })
+      const response = await api.put('/auth/change-password', {
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erro ao alterar senha');
-      }
+      const data = response.data;
 
       // Mostrar mensagem de sucesso
       setSuccess(true);
@@ -114,7 +104,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-md mx-4 bg-white rounded-lg shadow-xl">
         <div className="flex items-center justify-between p-6 border-b">

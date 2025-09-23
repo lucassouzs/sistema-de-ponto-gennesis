@@ -14,18 +14,20 @@ export class CompanyController {
       if (!settings) {
         settings = await prisma.companySettings.create({
           data: {
-            name: process.env.COMPANY_NAME || 'Empresa de Engenharia',
-            cnpj: process.env.COMPANY_CNPJ || '00.000.000/0001-00',
-            address: process.env.COMPANY_ADDRESS || 'Endereço da Empresa',
-            workStartTime: process.env.WORK_START_TIME || '08:00',
+            name: process.env.COMPANY_NAME || 'Gennesis Engenharia',
+            cnpj: process.env.COMPANY_CNPJ || '38.294.339/0001-10',
+            address: process.env.COMPANY_ADDRESS || '24, St. de Habitações Individuais Sul QI 11 - Lago Sul, Brasília - DF, 70297-400',
+            phone: process.env.COMPANY_PHONE || '(61) 99517-6932',
+            email: process.env.COMPANY_EMAIL || 'contato@engenharia.com.br',
+            workStartTime: process.env.WORK_START_TIME || '07:00',
             workEndTime: process.env.WORK_END_TIME || '17:00',
             lunchStartTime: process.env.LUNCH_START_TIME || '12:00',
             lunchEndTime: process.env.LUNCH_END_TIME || '13:00',
             toleranceMinutes: parseInt(process.env.TOLERANCE_MINUTES || '10'),
             maxOvertimeHours: parseInt(process.env.MAX_OVERTIME_HOURS || '2'),
             maxDistanceMeters: parseInt(process.env.MAX_DISTANCE_METERS || '1000'),
-            defaultLatitude: parseFloat(process.env.DEFAULT_LATITUDE || '-23.5505'),
-            defaultLongitude: parseFloat(process.env.DEFAULT_LONGITUDE || '-46.6333'),
+            defaultLatitude: parseFloat(process.env.DEFAULT_LATITUDE || '-15.835840'),
+            defaultLongitude: parseFloat(process.env.DEFAULT_LONGITUDE || '-47.873407'),
             vacationDaysPerYear: 30
           }
         });

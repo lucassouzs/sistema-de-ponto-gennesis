@@ -23,7 +23,8 @@ class AuthService {
   private userKey = 'user';
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const response = await fetch('/api/auth/login', {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -111,7 +112,8 @@ class AuthService {
   }
 
   async getProfile(): Promise<User> {
-    const response = await fetch('/api/auth/me', {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${API_URL}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${this.getToken()}`,
         'Accept': 'application/json',

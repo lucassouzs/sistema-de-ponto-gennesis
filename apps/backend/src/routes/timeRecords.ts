@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { TimeRecordController } from '../controllers/TimeRecordController';
 import { uploadPhoto, handleUploadError } from '../middleware/upload';
