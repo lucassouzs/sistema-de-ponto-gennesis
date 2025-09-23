@@ -345,7 +345,7 @@ export default function FolhaPagamentoPage() {
                       Nome
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Setor/Função
+                      Setor
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Empresa
