@@ -341,11 +341,11 @@ export default function FolhaPagamentoPage() {
               <table className="w-full">
                 <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-white z-10 sticky left-0">
                       Nome
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Setor
+                      Setor/Função
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Empresa
@@ -357,12 +357,9 @@ export default function FolhaPagamentoPage() {
                       Tomador
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Modalidade
-                    </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Líquido Total
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-center bg-white z-10 text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0">
                       Ações
                     </th>
                   </tr>
@@ -370,7 +367,7 @@ export default function FolhaPagamentoPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loadingPayroll ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center">
+                      <td colSpan={7} className="px-6 py-8 text-center">
                         <div className="flex items-center justify-center">
                           <div className="loading-spinner w-6 h-6 mr-2" />
                           <span className="text-gray-600">Carregando folha de pagamento...</span>
@@ -379,7 +376,7 @@ export default function FolhaPagamentoPage() {
                     </tr>
                   ) : employees.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center">
+                      <td colSpan={7} className="px-6 py-8 text-center">
                         <div className="text-gray-500">
                           <p>Nenhum funcionário encontrado.</p>
                           <p className="text-sm mt-1">Tente ajustar os filtros de busca.</p>
@@ -388,8 +385,8 @@ export default function FolhaPagamentoPage() {
                     </tr>
                   ) : (
                     employees.map((employee) => (
-                      <tr key={employee.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                      <tr key={employee.id} className="hover:transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap bg-white z-10 sticky left-0">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {employee.name}
@@ -409,6 +406,9 @@ export default function FolhaPagamentoPage() {
                             </div>
                             <div className="text-xs text-gray-500">
                               {employee.position || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {employee.modality || 'N/A'}
                             </div>
                           </div>
                         </td>
@@ -433,11 +433,6 @@ export default function FolhaPagamentoPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-center">
-                          <span className="text-sm text-gray-900">
-                            {employee.modality || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="text-sm font-bold text-green-600">
                             R$ {(() => {
                               const salarioBase = employee.salary;
@@ -453,7 +448,7 @@ export default function FolhaPagamentoPage() {
                             })()}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-6 py-4 bg-white whitespace-nowrap text-center z-10 sticky right-0">
                           <button
                             onClick={() => handleViewDetails(employee)}
                             className="p-2 text-yellow-600 hover:text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors"
