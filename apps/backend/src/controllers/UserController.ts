@@ -213,7 +213,12 @@ export class UserController {
               account: employeeData.account || null,
               digit: employeeData.digit || null,
               pixKeyType: employeeData.pixKeyType || null,
-              pixKey: employeeData.pixKey || null
+              pixKey: employeeData.pixKey || null,
+              // Novos campos - Modalidade e Adicionais
+              modality: employeeData.modality || null,
+              familySalary: employeeData.familySalary !== undefined ? employeeData.familySalary : null,
+              dangerPay: employeeData.dangerPay !== undefined ? employeeData.dangerPay : null,
+              unhealthyPay: employeeData.unhealthyPay !== undefined ? employeeData.unhealthyPay : null
             }
           });
         }

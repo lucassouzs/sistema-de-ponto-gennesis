@@ -22,13 +22,19 @@ export interface PayrollEmployee {
   digit: string | null;
   pixKeyType: string | null;
   pixKey: string | null;
+  modality: string | null;
+  familySalary: number;
+  dangerPay: number;
+  unhealthyPay: number;
   salary: number;
   dailyFoodVoucher: number;
   dailyTransportVoucher: number;
   totalFoodVoucher: number;
   totalTransportVoucher: number;
   totalAdjustments: number;
+  totalDiscounts: number;
   daysWorked: number;
+  totalWorkingDays: number;
 }
 
 export interface MonthlyPayrollData {
@@ -43,6 +49,7 @@ export interface MonthlyPayrollData {
     totalFoodVoucher: number;
     totalTransportVoucher: number;
     totalAdjustments: number;
+    totalDiscounts: number;
   };
 }
 
@@ -58,7 +65,7 @@ export class PayrollService {
   /**
    * Calcula os totais mensais de VA e VT para um funcionário
    */
-  private async calculateMonthlyTotals(employeeId: string, month: number, year: number) {
+  private async calculateMonthlyTotals(employeeId: string, month: number, year: number, hireDate?: Date) {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
     
@@ -81,10 +88,56 @@ export class PayrollService {
       sum + (record.transportVoucherAmount || 0), 0
     );
     
+    // Calcular dias trabalhados e faltas de forma mais inteligente
+    const { daysWorked, totalWorkingDays } = this.calculateWorkingDays(
+      timeRecords.length, 
+      month, 
+      year, 
+      hireDate
+    );
+    
     return { 
       totalVA, 
       totalVT, 
-      daysWorked: timeRecords.length 
+      daysWorked,
+      totalWorkingDays
+    };
+  }
+
+  /**
+   * Calcula dias trabalhados e faltas de forma inteligente
+   */
+  private calculateWorkingDays(daysWorked: number, month: number, year: number, hireDate?: Date) {
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+    
+    // Se for o mês atual, só contar até hoje
+    const endDay = (month === currentMonth && year === currentYear) 
+      ? today.getDate() 
+      : new Date(year, month, 0).getDate();
+    
+    // Data de início: data de admissão ou início do mês
+    const startDay = hireDate && hireDate.getMonth() + 1 === month && hireDate.getFullYear() === year
+      ? hireDate.getDate()
+      : 1;
+    
+    let totalWorkingDays = 0;
+    
+    // Contar apenas dias úteis (segunda a sexta) no período
+    for (let day = startDay; day <= endDay; day++) {
+      const date = new Date(year, month - 1, day);
+      const dayOfWeek = date.getDay(); // 0 = domingo, 1 = segunda, ..., 6 = sábado
+      
+      // Contar apenas dias úteis (1-5 = segunda a sexta)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        totalWorkingDays++;
+      }
+    }
+    
+    return {
+      daysWorked,
+      totalWorkingDays
     };
   }
 
@@ -107,6 +160,28 @@ export class PayrollService {
     
     return adjustments.reduce((sum, adjustment) => 
       sum + Number(adjustment.amount), 0
+    );
+  }
+
+  /**
+   * Calcula o total de descontos salariais para um funcionário no período
+   */
+  private async calculateMonthlyDiscounts(employeeId: string, month: number, year: number): Promise<number> {
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+    
+    const discounts = await prisma.salaryDiscount.findMany({
+      where: {
+        employeeId,
+        createdAt: {
+          gte: startDate,
+          lte: endDate
+        }
+      }
+    });
+    
+    return discounts.reduce((sum, discount) => 
+      sum + Number(discount.amount), 0
     );
   }
 
@@ -196,8 +271,9 @@ export class PayrollService {
           return null; // Funcionário não estava ativo no período
         }
 
-        const totals = await this.calculateMonthlyTotals(employee.id, month, year);
+        const totals = await this.calculateMonthlyTotals(employee.id, month, year, employee.hireDate);
         const totalAdjustments = await this.calculateMonthlyAdjustments(employee.id, month, year);
+        const totalDiscounts = await this.calculateMonthlyDiscounts(employee.id, month, year);
         
         return {
           id: employee.id,
@@ -218,13 +294,19 @@ export class PayrollService {
           digit: employee.digit,
           pixKeyType: employee.pixKeyType,
           pixKey: employee.pixKey,
+          modality: employee.modality,
+          familySalary: Number(employee.familySalary || 0),
+          dangerPay: Number(employee.dangerPay || 0),
+          unhealthyPay: Number(employee.unhealthyPay || 0),
           salary: Number(employee.salary),
           dailyFoodVoucher: employee.dailyFoodVoucher || 0,
           dailyTransportVoucher: employee.dailyTransportVoucher || 0,
           totalFoodVoucher: totals.totalVA,
           totalTransportVoucher: totals.totalVT,
           totalAdjustments,
-          daysWorked: totals.daysWorked
+          totalDiscounts,
+          daysWorked: totals.daysWorked,
+          totalWorkingDays: totals.totalWorkingDays
         } as PayrollEmployee;
       })
     );
@@ -245,6 +327,10 @@ export class PayrollService {
       (sum, emp) => sum + emp.totalAdjustments, 0
     );
 
+    const totalDiscounts = activeEmployees.reduce(
+      (sum, emp) => sum + emp.totalDiscounts, 0
+    );
+
     // Nome do mês em português
     const monthNames = [
       'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -262,7 +348,8 @@ export class PayrollService {
         totalEmployees: activeEmployees.length,
         totalFoodVoucher,
         totalTransportVoucher,
-        totalAdjustments
+        totalAdjustments,
+        totalDiscounts
       }
     };
   }
@@ -288,8 +375,9 @@ export class PayrollService {
       return null;
     }
 
-    const totals = await this.calculateMonthlyTotals(employee.id, month, year);
+    const totals = await this.calculateMonthlyTotals(employee.id, month, year, employee.hireDate);
     const totalAdjustments = await this.calculateMonthlyAdjustments(employee.id, month, year);
+    const totalDiscounts = await this.calculateMonthlyDiscounts(employee.id, month, year);
 
     return {
       id: employee.id,
@@ -310,13 +398,19 @@ export class PayrollService {
       digit: employee.digit,
       pixKeyType: employee.pixKeyType,
       pixKey: employee.pixKey,
+      modality: employee.modality,
+      familySalary: Number(employee.familySalary || 0),
+      dangerPay: Number(employee.dangerPay || 0),
+      unhealthyPay: Number(employee.unhealthyPay || 0),
       salary: Number(employee.salary),
       dailyFoodVoucher: employee.dailyFoodVoucher || 0,
       dailyTransportVoucher: employee.dailyTransportVoucher || 0,
       totalFoodVoucher: totals.totalVA,
       totalTransportVoucher: totals.totalVT,
       totalAdjustments,
-      daysWorked: totals.daysWorked
+      totalDiscounts,
+      daysWorked: totals.daysWorked,
+      totalWorkingDays: totals.totalWorkingDays
     };
   }
 

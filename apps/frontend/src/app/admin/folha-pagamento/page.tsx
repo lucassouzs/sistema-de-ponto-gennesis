@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { DollarSign, Search, Filter, Download, Calculator, Calendar, Clock, BadgeDollarSign, FileSpreadsheet } from 'lucide-react';
+import { DollarSign, Search, Filter, Download, Calculator, Calendar, Clock, BadgeDollarSign, FileSpreadsheet, Building2, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { PayrollDetailModal } from '@/components/payroll/PayrollDetailModal';
 import api from '@/lib/api';
 import { PayrollEmployee, PayrollFilters, MonthlyPayrollData } from '@/types';
 import * as XLSX from 'xlsx';
@@ -28,6 +29,8 @@ export default function FolhaPagamentoPage() {
     month: currentMonth,
     year: currentYear
   });
+  const [selectedEmployee, setSelectedEmployee] = useState<PayrollEmployee | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -70,6 +73,16 @@ export default function FolhaPagamentoPage() {
     setFilters(prev => ({ ...prev, company: e.target.value }));
   };
 
+  const handleViewDetails = (employee: PayrollEmployee) => {
+    setSelectedEmployee(employee);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedEmployee(null);
+  };
+
   const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFilters(prev => ({ ...prev, month: parseInt(e.target.value) }));
   };
@@ -96,30 +109,34 @@ export default function FolhaPagamentoPage() {
 
     // Preparar dados para exportação
     const exportData = payrollData.employees.map(employee => ({
-      'Nome': employee.name,
-      'Função': employee.position,
-      'Departamento': employee.department,
+      'Nome': `${employee.name} (CPF: ${employee.cpf})`,
+      'Função/Setor': `${employee.position || 'N/A'} • ${employee.department || 'N/A'}`,
       'ID Funcionário': employee.employeeId,
       'Empresa': employee.company || 'Não informado',
-      'Contrato Atual': employee.currentContract || 'Não informado',
-      'Centro de Custo': employee.costCenter || 'Não informado',
+      'Centro/Contrato': `${employee.costCenter || 'N/A'} • ${employee.currentContract || 'N/A'}`,
       'Cliente': employee.client || 'Não informado',
-      'CPF': employee.cpf,
-      'Banco': employee.bank || 'Não informado',
-      'Tipo de Conta': employee.accountType || 'Não informado',
-      'Agência': employee.agency || 'Não informado',
-      'Operação': employee.operation || 'Não informado',
-      'Conta': employee.account || 'Não informado',
-      'Dígito': employee.digit || 'Não informado',
-      'Tipo PIX': employee.pixKeyType || 'Não informado',
-      'Chave PIX': employee.pixKey || 'Não informado',
-      'Salário': employee.salary,
+      'Dados Bancários': `${employee.bank || 'N/A'} • ${employee.accountType || 'N/A'} • Ag: ${employee.agency || 'N/A'} • OP: ${employee.operation || 'N/A'} • Conta: ${employee.account || 'N/A'}-${employee.digit || 'N/A'}`,
+      'PIX': `${employee.pixKeyType || 'N/A'} - ${employee.pixKey || 'N/A'}`,
+      'Modalidade': employee.modality || 'Não informado',
+      'Salário Base': employee.salary,
+      'Salário Família': employee.familySalary,
+      'Periculosidade (R$)': employee.dangerPay ? (employee.salary * (employee.dangerPay / 100)) : 0,
+      'Insalubridade (R$)': employee.unhealthyPay ? (1518 * (employee.unhealthyPay / 100)) : 0,
       'VA Diário': employee.dailyFoodVoucher,
       'VT Diário': employee.dailyTransportVoucher,
       'Total VA': employee.totalFoodVoucher,
       'Total VT': employee.totalTransportVoucher,
+      'Total VA+VT': employee.totalFoodVoucher + employee.totalTransportVoucher,
       'Acréscimos': employee.totalAdjustments,
-      'Dias Trabalhados': employee.daysWorked
+      'Descontos': employee.totalDiscounts,
+      'Presença': `Dias: ${employee.daysWorked} • Faltas: ${employee.totalWorkingDays ? (employee.totalWorkingDays - employee.daysWorked) : 0}`,
+      'Desconto por Faltas': (() => {
+        const salario = employee.salary;
+        const periculosidade = employee.dangerPay ? (employee.salary * (employee.dangerPay / 100)) : 0;
+        const insalubridade = employee.unhealthyPay ? (1518 * (employee.unhealthyPay / 100)) : 0;
+        const faltas = employee.totalWorkingDays ? (employee.totalWorkingDays - employee.daysWorked) : 0;
+        return ((salario + periculosidade + insalubridade) / 30) * faltas;
+      })()
     }));
 
     // Criar planilha
@@ -215,29 +232,47 @@ export default function FolhaPagamentoPage() {
           <CardContent className="p-6">
             <div className="space-y-4">
               {/* Primeira linha - Busca e filtros básicos */}
-              <div className="flex flex-col sm:flex-row gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Buscar Funcionário
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="text"
-                      value={filters.search}
-                      onChange={handleSearchChange}
-                      placeholder="Digite o nome do funcionário..."
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
+            <div className="flex flex-col sm:flex-row gap-4 items-end">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Buscar Funcionário
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={handleSearchChange}
+                    placeholder="Digite o nome do funcionário..."
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
+              </div>
                 <div className="sm:w-48">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mês
+                    Empresa
                   </label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    {/* <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" /> */}
                     <select
+                      value={filters.company}
+                      onChange={handleCompanyChange}
+                      className="w-full pl-4 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                    >
+                      <option value="">Todas</option>
+                      <option value="GÊNNESIS">GÊNNESIS</option>
+                      <option value="MÉTRICA">MÉTRICA</option>
+                      <option value="ABRASIL">ABRASIL</option>
+                    </select>
+                  </div>
+                </div>
+              <div className="sm:w-48">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mês
+                </label>
+                <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <select
                       value={filters.month}
                       onChange={handleMonthChange}
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
@@ -245,19 +280,19 @@ export default function FolhaPagamentoPage() {
                       {monthOptions.map(month => (
                         <option key={month.value} value={month.value}>
                           {month.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
 
                 <div className="sm:w-32">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                     Ano
-                  </label>
-                  <div className="relative">
+                </label>
+                <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <select
+                  <select
                       value={filters.year}
                       onChange={handleYearChange}
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
@@ -267,7 +302,7 @@ export default function FolhaPagamentoPage() {
                           {year}
                         </option>
                       ))}
-                    </select>
+                  </select>
                   </div>
                 </div>
               </div>
@@ -281,11 +316,11 @@ export default function FolhaPagamentoPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0">
-                  <BadgeDollarSign className="w-6 h-6 text-blue-600" />
+                  <FileSpreadsheet className="w-6 h-6 text-blue-600" />
                 </div>
                 <div className="ml-3 sm:ml-4 min-w-0">
                   <h3 className="text-lg font-semibold text-gray-900">Folha de Pagamento</h3>
-                  <p className="text-sm text-gray-600">Dados de remuneração dos funcionários.</p>
+                  <p className="text-sm text-gray-600">Dados de remuneração dos funcionários</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -309,75 +344,33 @@ export default function FolhaPagamentoPage() {
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Função
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Setor
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Empresa
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Centro de Custo
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contrato
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Contrato Atual
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tomador
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      CPF
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Modalidade
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Banco
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Líquido Total
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tipo de Conta
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Agência
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      OP.
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Conta
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Digito
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tipo de Chave
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Chave Pix
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      VA (DIÁRIO)
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      VT (DIÁRIO)
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      TOTAL VA
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      TOTAL VT
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acréscimos
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Salário
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ações
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loadingPayroll ? (
                     <tr>
-                      <td colSpan={22} className="px-6 py-8 text-center">
+                      <td colSpan={8} className="px-6 py-8 text-center">
                         <div className="flex items-center justify-center">
                           <div className="loading-spinner w-6 h-6 mr-2" />
                           <span className="text-gray-600">Carregando folha de pagamento...</span>
@@ -386,7 +379,7 @@ export default function FolhaPagamentoPage() {
                     </tr>
                   ) : employees.length === 0 ? (
                     <tr>
-                      <td colSpan={22} className="px-6 py-8 text-center">
+                      <td colSpan={8} className="px-6 py-8 text-center">
                         <div className="text-gray-500">
                           <p>Nenhum funcionário encontrado.</p>
                           <p className="text-sm mt-1">Tente ajustar os filtros de busca.</p>
@@ -402,114 +395,72 @@ export default function FolhaPagamentoPage() {
                               {employee.name}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {employee.employeeId && `Matrícula: ${employee.employeeId}`}
+                              {employee.cpf || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              {employee.employeeId && `${employee.employeeId}`}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.position || 'N/A'}
-                          </span>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {employee.department || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {employee.position || 'N/A'}
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.department || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="text-sm text-gray-900">
                             {employee.company || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.costCenter || 'N/A'}
-                          </span>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {employee.costCenter || 'N/A'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {employee.currentContract || 'N/A'}
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.currentContract || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="text-sm text-gray-900">
                             {employee.client || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className="text-sm text-gray-900">
-                            {employee.cpf || 'N/A'}
+                            {employee.modality || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.bank || 'N/A'}
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <span className="text-sm font-bold text-green-600">
+                            R$ {(() => {
+                              const salarioBase = employee.salary;
+                              const periculosidade = employee.dangerPay ? (employee.salary * (employee.dangerPay / 100)) : 0;
+                              const insalubridade = employee.unhealthyPay ? (1518 * (employee.unhealthyPay / 100)) : 0;
+                              const salarioFamilia = employee.familySalary || 0;
+                              const faltas = employee.totalWorkingDays ? (employee.totalWorkingDays - employee.daysWorked) : 0;
+                              const descontoPorFaltas = ((salarioBase + periculosidade + insalubridade) / 30) * faltas;
+                              const totalProventos = salarioBase + periculosidade + insalubridade + salarioFamilia + employee.totalAdjustments;
+                              const totalDescontos = employee.totalDiscounts + descontoPorFaltas;
+                              const liquidoReceber = totalProventos - totalDescontos;
+                              return liquidoReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            })()}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.accountType || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.agency || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.operation || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.account || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.digit || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.pixKeyType || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            {employee.pixKey || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            R$ {employee.dailyFoodVoucher.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm text-gray-900">
-                            R$ {employee.dailyTransportVoucher.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-green-600">
-                            R$ {employee.totalFoodVoucher.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-blue-600">
-                            R$ {employee.totalTransportVoucher.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-green-600">
-                            R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-medium text-blue-600">
-                            R$ {employee.salary.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                          <button
+                            onClick={() => handleViewDetails(employee)}
+                            className="p-2 text-yellow-600 hover:text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors"
+                            title="Folha de Pagamento"
+                          >
+                            <FileText className="w-5 h-5" />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -526,13 +477,18 @@ export default function FolhaPagamentoPage() {
                     <span>
                       <strong>Período:</strong> {payrollData.period.monthName} de {payrollData.period.year}
                     </span>
-                    <span>
+                  <span>
                       <strong>Total de funcionários:</strong> {payrollData.totals.totalEmployees}
-                    </span>
+                  </span>
                   </div>
                   {filters.department && (
                     <span>
                       <strong>Setor:</strong> {filters.department}
+                    </span>
+                  )}
+                  {filters.company && (
+                    <span>
+                      <strong>Empresa:</strong> {filters.company}
                     </span>
                   )}
                 </div>
@@ -541,6 +497,17 @@ export default function FolhaPagamentoPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Modal de Detalhes */}
+      {selectedEmployee && (
+        <PayrollDetailModal
+          employee={selectedEmployee}
+          month={filters.month}
+          year={filters.year}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+        />
+      )}
     </MainLayout>
   );
 }

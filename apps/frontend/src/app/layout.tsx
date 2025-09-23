@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   keywords: ['ponto', 'frequência', 'engenharia', 'controle', 'horas'],
   authors: [{ name: 'Sistema Ponto Engenharia' }],
   icons: {
-    icon: '/logo.png',
+    icon: '/logo3.png',
   },
   robots: 'noindex, nofollow', // Para ambiente interno
 };

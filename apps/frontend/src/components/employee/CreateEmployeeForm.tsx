@@ -49,6 +49,12 @@ interface EmployeeFormData {
   // Novos campos - Dados PIX
   pixKeyType: string;
   pixKey: string;
+  
+  // Novos campos - Modalidade e Adicionais
+  modality: 'MEI' | 'CLT' | 'ESTAGIARIO' | '';
+  familySalary: string;
+  dangerPay: string; // Porcentagem de periculosidade (0-100)
+  unhealthyPay: string; // Porcentagem de insalubridade (0-100)
 }
 
 interface CreateEmployeeFormProps {
@@ -206,7 +212,12 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     account: '',
     digit: '',
     pixKeyType: '',
-    pixKey: ''
+    pixKey: '',
+    // Novos campos - Modalidade e Adicionais
+    modality: '',
+    familySalary: '0.00',
+    dangerPay: '0', // 0% por padrão
+    unhealthyPay: '0' // 0% por padrão
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -277,7 +288,12 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         account: data.account,
         digit: data.digit,
         pixKeyType: data.pixKeyType,
-        pixKey: data.pixKey
+        pixKey: data.pixKey,
+        // Novos campos - Modalidade e Adicionais
+        modality: data.modality || null,
+        familySalary: data.familySalary ? parseFloat(data.familySalary) : 0,
+        dangerPay: data.dangerPay ? parseFloat(data.dangerPay) : 0,
+        unhealthyPay: data.unhealthyPay ? parseFloat(data.unhealthyPay) : 0
       };
 
       const response = await api.post('/users', {
@@ -378,6 +394,18 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     else if (isNaN(parseFloat(formData.dailyTransportVoucher)) || parseFloat(formData.dailyTransportVoucher) < 0) {
       newErrors.dailyTransportVoucher = 'Vale Transporte deve ser um valor válido';
     }
+    
+    // Validação dos novos campos
+    if (!formData.modality.trim()) newErrors.modality = 'Modalidade é obrigatória';
+    
+    if (!formData.familySalary.trim()) newErrors.familySalary = 'Salário Família é obrigatório';
+    else if (isNaN(parseFloat(formData.familySalary)) || parseFloat(formData.familySalary) < 0) {
+      newErrors.familySalary = 'Salário Família deve ser um valor válido';
+    }
+    
+    if (!formData.dangerPay.trim()) newErrors.dangerPay = 'Periculosidade é obrigatória';
+    
+    if (!formData.unhealthyPay.trim()) newErrors.unhealthyPay = 'Insalubridade é obrigatória';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -805,10 +833,147 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
                   Trabalho Remoto
                 </label>
               </div>
+              </div>
             </div>
-          </div>
 
-          {/* Dados da Empresa e Contrato */}
+            {/* Modalidade e Adicionais Salariais */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Modalidade e Adicionais</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Modalidade *
+                  </label>
+                  <select
+                    value={formData.modality}
+                    onChange={(e) => handleInputChange('modality', e.target.value)}
+                    className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                      errors.modality ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Selecione a modalidade</option>
+                    <option value="CLT">CLT</option>
+                    <option value="MEI">MEI</option>
+                    <option value="ESTAGIARIO">ESTAGIÁRIO</option>
+                  </select>
+                  {errors.modality && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.modality}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Salário Família (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.familySalary}
+                    onChange={(e) => handleInputChange('familySalary', e.target.value)}
+                    className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      errors.familySalary ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="0.00"
+                  />
+                  {errors.familySalary && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.familySalary}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Periculosidade *
+                  </label>
+                  <select
+                    value={formData.dangerPay}
+                    onChange={(e) => handleInputChange('dangerPay', e.target.value)}
+                    className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                      errors.dangerPay ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Selecione a porcentagem</option>
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="10">10%</option>
+                    <option value="15">15%</option>
+                    <option value="20">20%</option>
+                    <option value="25">25%</option>
+                    <option value="30">30%</option>
+                    <option value="35">35%</option>
+                    <option value="40">40%</option>
+                    <option value="45">45%</option>
+                    <option value="50">50%</option>
+                    <option value="55">55%</option>
+                    <option value="60">60%</option>
+                    <option value="65">65%</option>
+                    <option value="70">70%</option>
+                    <option value="75">75%</option>
+                    <option value="80">80%</option>
+                    <option value="85">85%</option>
+                    <option value="90">90%</option>
+                    <option value="95">95%</option>
+                    <option value="100">100%</option>
+                  </select>
+                  {errors.dangerPay && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.dangerPay}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Insalubridade *
+                  </label>
+                  <select
+                    value={formData.unhealthyPay}
+                    onChange={(e) => handleInputChange('unhealthyPay', e.target.value)}
+                    className={`w-full px-3 py-2.5 pr-8 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white ${
+                      errors.unhealthyPay ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Selecione a porcentagem</option>
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="10">10%</option>
+                    <option value="15">15%</option>
+                    <option value="20">20%</option>
+                    <option value="25">25%</option>
+                    <option value="30">30%</option>
+                    <option value="35">35%</option>
+                    <option value="40">40%</option>
+                    <option value="45">45%</option>
+                    <option value="50">50%</option>
+                    <option value="55">55%</option>
+                    <option value="60">60%</option>
+                    <option value="65">65%</option>
+                    <option value="70">70%</option>
+                    <option value="75">75%</option>
+                    <option value="80">80%</option>
+                    <option value="85">85%</option>
+                    <option value="90">90%</option>
+                    <option value="95">95%</option>
+                    <option value="100">100%</option>
+                  </select>
+                  {errors.unhealthyPay && (
+                    <p className="text-red-500 text-xs mt-1 flex items-center">
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      {errors.unhealthyPay}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Dados da Empresa e Contrato */}
           <div className="space-y-4">
             <h4 className="text-md font-semibold text-gray-900 border-b pb-2">Dados da Empresa e Contrato</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

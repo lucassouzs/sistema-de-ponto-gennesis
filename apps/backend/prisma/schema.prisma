@@ -32,6 +32,7 @@ model User {
   medicalCertificates MedicalCertificate[]
   approvedCertificates MedicalCertificate[] @relation("CertificateApprover")
   salaryAdjustments SalaryAdjustment[]
+  salaryDiscounts   SalaryDiscount[]
 
   @@map("users")
 }
@@ -70,6 +71,12 @@ model Employee {
   pixKeyType        String?   // TIPO DE CHAVE
   pixKey            String?   // CHAVE PIX
   
+  // Novos campos - Modalidade e Adicionais
+  modality          String?   // MODALIDADE (MEI, CLT, ESTAGIARIO)
+  familySalary      Decimal?  @db.Decimal(10, 2) // SALÁRIO FAMÍLIA
+  dangerPay         Decimal?  @db.Decimal(10, 2) // PERICULOSIDADE
+  unhealthyPay      Decimal?  @db.Decimal(10, 2) // INSALUBRIDADE
+  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -80,6 +87,7 @@ model Employee {
   overtime    Overtime[]
   medicalCertificates MedicalCertificate[]
   salaryAdjustments SalaryAdjustment[]
+  salaryDiscounts   SalaryDiscount[]
 
   @@map("employees")
 }
@@ -381,4 +389,28 @@ enum AdjustmentType {
   OVERTIME     // Horas Extras
   COMMISSION   // Comissão
   OTHER        // Outros
+}
+
+// Modelo de Descontos Salariais
+model SalaryDiscount {
+  id          String        @id @default(cuid())
+  employeeId  String
+  type        DiscountType
+  description String
+  amount      Decimal       @db.Decimal(10, 2)
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relacionamentos
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("salary_discounts")
+}
+
+enum DiscountType {
+  FINE        // Multa
+  CONSIGNED   // Consignado
+  OTHER       // Outros
 }

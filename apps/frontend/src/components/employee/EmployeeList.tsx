@@ -7,8 +7,10 @@ import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { AdjustmentsList } from './AdjustmentsList';
 import { AdjustmentForm } from './AdjustmentForm';
+import { DiscountsList } from './DiscountsList';
+import { DiscountForm } from './DiscountForm';
 import api from '@/lib/api';
-import { SalaryAdjustment, CreateAdjustmentData, UpdateAdjustmentData } from '@/types';
+import { SalaryAdjustment, CreateAdjustmentData, UpdateAdjustmentData, SalaryDiscount, CreateDiscountData, UpdateDiscountData } from '@/types';
 
 interface Employee {
   id: string;
@@ -35,6 +37,11 @@ interface Employee {
     digit?: string;
     pixKeyType?: string;
     pixKey?: string;
+    // Novos campos - Modalidade e Adicionais
+    modality?: string;
+    familySalary?: number;
+    dangerPay?: number;
+    unhealthyPay?: number;
   };
 }
 
@@ -63,6 +70,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const [editingAdjustment, setEditingAdjustment] = useState<SalaryAdjustment | null>(null);
   const [adjustments, setAdjustments] = useState<SalaryAdjustment[]>([]);
   const [isAdjustmentsMinimized, setIsAdjustmentsMinimized] = useState(true);
+  const [showAddDiscountForm, setShowAddDiscountForm] = useState(false);
+  const [editingDiscount, setEditingDiscount] = useState<SalaryDiscount | null>(null);
+  const [discounts, setDiscounts] = useState<SalaryDiscount[]>([]);
+  const [isDiscountsMinimized, setIsDiscountsMinimized] = useState(true);
   const [editForm, setEditForm] = useState<{
     type: string;
     timestamp: string;
@@ -489,6 +500,59 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
     }
   });
 
+  // Buscar descontos do funcionário
+  const { data: discountsData } = useQuery({
+    queryKey: ['salary-discounts', selectedEmployee?.employee?.id],
+    queryFn: async () => {
+      if (!selectedEmployee?.employee?.id) return { data: [] };
+      const res = await api.get(`/salary-discounts/employee/${selectedEmployee.employee.id}`);
+      return res.data;
+    },
+    enabled: !!selectedEmployee?.employee?.id
+  });
+
+  // Atualizar lista de descontos quando os dados mudarem
+  React.useEffect(() => {
+    if (discountsData?.data) {
+      setDiscounts(discountsData.data);
+    }
+  }, [discountsData]);
+
+  // Criar desconto
+  const createDiscountMutation = useMutation({
+    mutationFn: async (data: CreateDiscountData) => {
+      const res = await api.post('/salary-discounts', data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+      setShowAddDiscountForm(false);
+    }
+  });
+
+  // Atualizar desconto
+  const updateDiscountMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: UpdateDiscountData }) => {
+      const res = await api.put(`/salary-discounts/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+      setEditingDiscount(null);
+    }
+  });
+
+  // Deletar desconto
+  const deleteDiscountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete(`/salary-discounts/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['salary-discounts', selectedEmployee?.employee?.id] });
+    }
+  });
+
   const handleDelete = (employeeId: string) => {
     deleteEmployeeMutation.mutate(employeeId);
   };
@@ -561,6 +625,43 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   const handleEditAdjustment = (adjustment: SalaryAdjustment) => {
     setEditingAdjustment(adjustment);
     setIsAdjustmentsMinimized(false);
+  };
+
+  // Funções para manipular descontos
+  const handleAddDiscount = (data: CreateDiscountData | UpdateDiscountData) => {
+    if ('employeeId' in data) {
+      // É CreateDiscountData
+      createDiscountMutation.mutate(data as CreateDiscountData);
+    } else {
+      // É UpdateDiscountData
+      if (editingDiscount) {
+        updateDiscountMutation.mutate({
+          id: editingDiscount.id,
+          data: data as UpdateDiscountData
+        });
+      }
+    }
+  };
+
+  const handleUpdateDiscount = (data: UpdateDiscountData) => {
+    if (editingDiscount) {
+      updateDiscountMutation.mutate({
+        id: editingDiscount.id,
+        data
+      });
+    }
+  };
+
+  const handleEditDiscount = (discount: SalaryDiscount) => {
+    setEditingDiscount(discount);
+    setShowAddDiscountForm(false);
+    setIsDiscountsMinimized(false);
+  };
+
+  const handleDeleteDiscount = (id: string) => {
+    if (confirm('Tem certeza que deseja remover este desconto?')) {
+      deleteDiscountMutation.mutate(id);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -998,6 +1099,14 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                         <span className="text-sm text-gray-600">Cargo:</span>
                         <span className="text-sm font-medium">{selectedEmployee.employee?.position}</span>
                       </div>
+                      {selectedEmployee.employee?.modality && (
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-600">Modalidade:</span>
+                          <span className="text-sm font-medium">
+                            {selectedEmployee.employee.modality}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">Data de Admissão:</span>
                         <span className="text-sm font-medium">
@@ -1133,11 +1242,11 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                 
 
                 {/* Seção de Acréscimos Salariais */}
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+                <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
                       <h4 className="text-md font-semibold text-gray-900">
-                        Acréscimos Salariais
+                        Acréscimos
                         {adjustments.length > 0 && (
                           <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
                             {adjustments.length}
@@ -1161,9 +1270,9 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                         setShowAddAdjustmentForm(true);
                         setIsAdjustmentsMinimized(false);
                       }}
-                      className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                     >
-                      <span>+</span>
+                      <Plus className="w-4 h-4" />
                       <span>Adicionar Acréscimo</span>
                     </button>
                   </div>
@@ -1197,6 +1306,76 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                         adjustments={adjustments}
                         onEdit={handleEditAdjustment}
                         onDelete={handleDeleteAdjustment}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seção de Descontos Salariais */}
+                <div className="mb-6 p-4 bg-white border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3">
+                      <h4 className="text-md font-semibold text-gray-900">
+                        Descontos
+                        {discounts.length > 0 && (
+                          <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">
+                            {discounts.length}
+                          </span>
+                        )}
+                      </h4>
+                      <button
+                        onClick={() => setIsDiscountsMinimized(!isDiscountsMinimized)}
+                        className="p-1 text-gray-500 hover:text-gray-700 transition-colors"
+                        title={isDiscountsMinimized ? "Expandir seção" : "Minimizar seção"}
+                      >
+                        {isDiscountsMinimized ? (
+                          <ChevronDown className="w-4 h-4" />
+                        ) : (
+                          <ChevronUp className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowAddDiscountForm(true);
+                        setIsDiscountsMinimized(false);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Adicionar Desconto</span>
+                    </button>
+                  </div>
+                  
+                  {/* Conteúdo da seção - só exibe se não estiver minimizada */}
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isDiscountsMinimized ? 'max-h-0 opacity-0' : 'max-h-screen opacity-100'
+                  }`}>
+                    <div className="space-y-4">
+                      {/* Formulário para adicionar desconto */}
+                      {showAddDiscountForm && selectedEmployee.employee && (
+                        <DiscountForm 
+                          employeeId={selectedEmployee.employee.id}
+                          onSave={handleAddDiscount}
+                          onCancel={() => setShowAddDiscountForm(false)}
+                        />
+                      )}
+                      
+                      {/* Formulário de edição */}
+                      {editingDiscount && selectedEmployee.employee && (
+                        <DiscountForm 
+                          employeeId={selectedEmployee.employee.id}
+                          discount={editingDiscount}
+                          onSave={handleUpdateDiscount}
+                          onCancel={() => setEditingDiscount(null)}
+                        />
+                      )}
+                      
+                      {/* Lista de descontos existentes */}
+                      <DiscountsList 
+                        discounts={discounts}
+                        onEdit={handleEditDiscount}
+                        onDelete={handleDeleteDiscount}
                       />
                     </div>
                   </div>

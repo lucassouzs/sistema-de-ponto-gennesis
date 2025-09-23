@@ -23,7 +23,7 @@ import {
   Timer,
   Stethoscope,
   Cake,
-  DollarSign
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -54,7 +54,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
         },
         {
           name: 'Registrar Ausência',
-          href: '/ponto/atestados',
+          href: '/admin/atestados',
           icon: Stethoscope,
           description: 'Enviar e acompanhar ausências'
         }
@@ -96,7 +96,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
         {
           name: 'Folha de Pagamento',
           href: '/admin/folha-pagamento',
-          icon: DollarSign,
+          icon: FileSpreadsheet,
           description: 'Gestão de folha de pagamento'
         }
       ];

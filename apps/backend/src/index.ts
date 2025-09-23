@@ -21,6 +21,7 @@ import bankHoursRoutes from './routes/bankHours';
 import medicalCertificateRoutes from './routes/medicalCertificates';
 import payrollRoutes from './routes/payroll';
 import salaryAdjustmentRoutes from './routes/salaryAdjustments';
+import salaryDiscountRoutes from './routes/salaryDiscounts';
 
 // Carregar variáveis de ambiente
 dotenv.config();
@@ -84,6 +85,7 @@ app.use('/api/bank-hours', bankHoursRoutes);
 app.use('/api/medical-certificates', medicalCertificateRoutes);
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/salary-adjustments', salaryAdjustmentRoutes);
+app.use('/api/salary-discounts', salaryDiscountRoutes);
 
 // Middleware de erro 404
 app.use(notFound);

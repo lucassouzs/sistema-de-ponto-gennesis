@@ -1,6 +1,6 @@
 import React from 'react';
 import { SalaryAdjustment, AdjustmentType } from '@/types';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Trash2, AlertTriangle } from 'lucide-react';
 
 interface AdjustmentsListProps {
   adjustments: SalaryAdjustment[];
@@ -10,10 +10,10 @@ interface AdjustmentsListProps {
 
 const getTypeColor = (type: AdjustmentType): string => {
   const colors = {
-    BONUS: 'bg-green-100 text-green-800',
-    OVERTIME: 'bg-blue-100 text-blue-800',
-    COMMISSION: 'bg-purple-100 text-purple-800',
-    OTHER: 'bg-gray-100 text-gray-800'
+    BONUS: 'text-green-600 bg-green-50',
+    OVERTIME: 'text-blue-600 bg-blue-50',
+    COMMISSION: 'text-purple-600 bg-purple-50',
+    OTHER: 'text-gray-600 bg-gray-50'
   };
   return colors[type] || colors.OTHER;
 };
@@ -40,57 +40,71 @@ const formatDate = (dateString: string): string => {
 };
 
 export function AdjustmentsList({ adjustments, onEdit, onDelete }: AdjustmentsListProps) {
+  if (adjustments.length === 0) {
+    return (
+      <div className="text-center py-4 text-gray-500">
+        <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+        <p>Nenhum acréscimo registrado</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      {adjustments.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p className="text-lg font-medium text-gray-900 mb-2">Nenhum acréscimo adicionado</p>
-          <p className="text-sm">Adicione acréscimos salariais para este funcionário.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {adjustments.map((adjustment) => (
-            <div key={adjustment.id} className="bg-gray-50 p-4 rounded-lg border">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTypeColor(adjustment.type)}`}>
-                      {getTypeLabel(adjustment.type)}
-                    </span>
-                    <span className="text-sm font-medium text-gray-900">{adjustment.description}</span>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    Adicionado em {formatDate(adjustment.createdAt)} por {adjustment.creator.name}
-                  </p>
-                </div>
-                
-                <div className="flex items-center space-x-4">
-                  <span className="text-lg font-semibold text-green-600">
-                    R$ {adjustment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
-                  
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => onEdit(adjustment)}
-                      className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Editar acréscimo"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onDelete(adjustment.id)}
-                      className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Excluir acréscimo"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+    <div className="space-y-3">
+      {adjustments.map((adjustment) => (
+        <div
+          key={adjustment.id}
+          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(adjustment.type)}`}>
+                  {getTypeLabel(adjustment.type)}
+                </span>
+                <span className="text-lg font-semibold text-green-600">
+                  +R$ {adjustment.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              
+              <p className="text-sm text-gray-700 mb-2">
+                {adjustment.description}
+              </p>
+              
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span>Criado por: {adjustment.creator.name}</span>
+                <span>•</span>
+                <span>
+                  {new Date(adjustment.createdAt).toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </span>
               </div>
             </div>
-          ))}
+            
+            <div className="flex items-center gap-2 ml-4">
+              <button
+                onClick={() => onEdit(adjustment)}
+                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Editar acréscimo"
+              >
+                <Edit className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onDelete(adjustment.id)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Remover acréscimo"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

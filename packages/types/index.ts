@@ -44,6 +44,12 @@ export interface Employee {
   pixKeyType?: string; // TIPO DE CHAVE
   pixKey?: string; // CHAVE PIX
   
+  // Novos campos - Modalidade e Adicionais
+  modality?: string; // MODALIDADE (MEI, CLT, ESTAGIARIO)
+  familySalary?: number; // SALÁRIO FAMÍLIA
+  dangerPay?: number; // PERICULOSIDADE
+  unhealthyPay?: number; // INSALUBRIDADE
+  
   createdAt: string;
   updatedAt: string;
 }

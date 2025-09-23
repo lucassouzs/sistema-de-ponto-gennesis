@@ -313,13 +313,19 @@ export interface PayrollEmployee {
   digit: string | null;
   pixKeyType: string | null;
   pixKey: string | null;
+  modality: string | null;
+  familySalary: number;
+  dangerPay: number; // Porcentagem (0, 30, 40)
+  unhealthyPay: number; // Porcentagem (0, 10, 20, 40)
   salary: number;
   dailyFoodVoucher: number;
   dailyTransportVoucher: number;
   totalFoodVoucher: number;
   totalTransportVoucher: number;
   totalAdjustments: number;
+  totalDiscounts: number;
   daysWorked: number;
+  totalWorkingDays: number;
 }
 
 export interface MonthlyPayrollData {
@@ -334,6 +340,7 @@ export interface MonthlyPayrollData {
     totalFoodVoucher: number;
     totalTransportVoucher: number;
     totalAdjustments: number;
+    totalDiscounts: number;
   };
 }
 
@@ -402,6 +409,52 @@ export interface UpdateAdjustmentData {
 
 export interface AdjustmentTypeOption {
   value: AdjustmentType;
+  label: string;
+  color: string;
+}
+
+// Tipos para Descontos Salariais
+export type DiscountType = 'FINE' | 'CONSIGNED' | 'OTHER';
+
+export interface SalaryDiscount {
+  id: string;
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateDiscountData {
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+}
+
+export interface UpdateDiscountData {
+  type?: DiscountType;
+  description?: string;
+  amount?: number;
+}
+
+export interface DiscountTypeOption {
+  value: DiscountType;
   label: string;
   color: string;
 }
