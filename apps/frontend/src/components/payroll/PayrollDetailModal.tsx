@@ -289,43 +289,51 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
             </div>
 
             {/* Totals */}
-            <div className="mt-6">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <div className="mt-8">
+              <h4 className="text-xl font-bold text-gray-900 mb-6 text-center">
                 Resumo Financeiro
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Total dos Vencimentos */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl border border-green-200">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-green-700 mb-2">
+              <div className="rounded-2xl">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Total dos Vencimentos */}
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Vencimentos</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 mb-1">
                       R$ {totalProventos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-sm text-green-600 font-medium">
-                      Total dos Vencimentos
+                    <div className="text-sm text-gray-600">
+                      Total dos Proventos
                     </div>
                   </div>
-                </div>
 
-                {/* Total dos Descontos */}
-                <div className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-xl border border-red-200">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-red-700 mb-2">
+                  {/* Total dos Descontos */}
+                  <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Descontos</span>
+                    </div>
+                    <div className="text-2xl font-bold text-gray-900 mb-1">
                       R$ {totalDescontos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-sm text-red-600 font-medium">
+                    <div className="text-sm text-gray-600">
                       Total dos Descontos
                     </div>
                   </div>
-                </div>
 
-                {/* Líquido a Receber */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl border border-blue-200 md:col-span-1">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-700 mb-2">
+                  {/* Líquido a Receber */}
+                  <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                      <span className="text-xs font-medium text-blue-100 uppercase tracking-wide">Líquido</span>
+                    </div>
+                    <div className="text-2xl font-bold text-white mb-1">
                       R$ {liquidoReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <div className="text-sm text-blue-600 font-medium">
-                      Líquido a Receber
+                    <div className="text-sm text-blue-100">
+                      Valor a Receber
                     </div>
                   </div>
                 </div>
@@ -335,55 +343,65 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
 
           {/* Attendance Info */}
           <div className="mt-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <h4 className="text-xl font-bold text-gray-900 mb-6 text-center">
               Informações de Presença
             </h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Total de Dias Úteis */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-xl border border-blue-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-700 mb-1">
+            <div className="rounded-2xl">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                {/* Total de Dias Úteis */}
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Úteis</span>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mb-1">
                     {employee.totalWorkingDays}
                   </div>
-                  <div className="text-sm text-blue-600 font-medium">
+                  <div className="text-sm text-gray-600">
                     Dias Úteis
                   </div>
                 </div>
-              </div>
-              
-              {/* Dias Trabalhados */}
-              <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-xl border border-green-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-700 mb-1">
+                
+                {/* Dias Trabalhados */}
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Trabalhados</span>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mb-1">
                     {employee.daysWorked}
                   </div>
-                  <div className="text-sm text-green-600 font-medium">
+                  <div className="text-sm text-gray-600">
                     Dias Trabalhados
                   </div>
                 </div>
-              </div>
 
-              {/* Faltas */}
-              <div className="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-xl border border-red-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-red-700 mb-1">
+                {/* Faltas */}
+                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Faltas</span>
+                  </div>
+                  <div className="text-2xl font-bold text-gray-900 mb-1">
                     {employee.totalWorkingDays ? (employee.totalWorkingDays - employee.daysWorked) : 0}
                   </div>
-                  <div className="text-sm text-red-600 font-medium">
-                    Faltas
+                  <div className="text-sm text-gray-600">
+                    Total de Faltas
                   </div>
                 </div>
-              </div>
 
-              {/* Percentual de Presença */}
-              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 p-4 rounded-xl border border-indigo-200">
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-indigo-700 mb-1">
+                {/* Percentual de Presença */}
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 text-white shadow-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-3 h-3 bg-white rounded-full"></div>
+                    <span className="text-xs font-medium text-indigo-100 uppercase tracking-wide">Presença</span>
+                  </div>
+                  <div className="text-2xl font-bold text-white mb-1">
                     {employee.totalWorkingDays ? 
                       ((employee.daysWorked / employee.totalWorkingDays) * 100).toFixed(1) : 0}%
                   </div>
-                  <div className="text-sm text-indigo-600 font-medium">
-                    Presença
+                  <div className="text-sm text-indigo-100">
+                    Taxa de Presença
                   </div>
                 </div>
               </div>
@@ -395,11 +413,11 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
         <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg">
           <div className="flex justify-between items-center">
             <p className="text-xs text-gray-500">
-              Documento gerado automaticamente pelo sistema
+              Gênnesis Engenharia - Folha de Pagamento
             </p>
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
             >
               Fechar
             </button>

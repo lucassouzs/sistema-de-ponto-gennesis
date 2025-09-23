@@ -341,7 +341,7 @@ export default function FolhaPagamentoPage() {
               <table className="w-full">
                 <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-white z-10 sticky left-0">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome
                     </th>
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -359,7 +359,7 @@ export default function FolhaPagamentoPage() {
                     <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Líquido Total
                     </th>
-                    <th className="px-6 py-4 text-center bg-white z-10 text-xs font-medium text-gray-500 uppercase tracking-wider sticky right-0">
+                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Ações
                     </th>
                   </tr>
@@ -386,7 +386,7 @@ export default function FolhaPagamentoPage() {
                   ) : (
                     employees.map((employee) => (
                       <tr key={employee.id} className="hover:transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap bg-white z-10 sticky left-0">
+                        <td className="px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {employee.name}
@@ -448,7 +448,7 @@ export default function FolhaPagamentoPage() {
                             })()}
                           </span>
                         </td>
-                        <td className="px-6 py-4 bg-white whitespace-nowrap text-center z-10 sticky right-0">
+                        <td className="px-6 py-4 bg-white whitespace-nowrap text-center">
                           <button
                             onClick={() => handleViewDetails(employee)}
                             className="p-2 text-yellow-600 hover:text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors"
