@@ -216,9 +216,9 @@ export default function FolhaPagamentoPage() {
         {/* Header */}
         <div className="text-center">
           <div className="flex items-center justify-center space-x-3 mb-2">
-            <h1 className="text-3xl font-bold text-gray-900">Folha de Pagamento</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Folha de Pagamento</h1>
           </div>
-          <p className="text-gray-600">Gerencie e visualize informações salariais dos funcionários</p>
+          <p className="text-sm sm:text-base text-gray-600">Gerencie e visualize informações salariais dos funcionários</p>
         </div>
 
         {/* Filtros */}
@@ -229,11 +229,11 @@ export default function FolhaPagamentoPage() {
               <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
             </div>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="space-y-4">
               {/* Primeira linha - Busca e filtros básicos */}
-            <div className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="sm:col-span-2 lg:col-span-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Buscar Funcionário
                 </label>
@@ -248,7 +248,7 @@ export default function FolhaPagamentoPage() {
                   />
                 </div>
               </div>
-                <div className="sm:w-48">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Empresa
                   </label>
@@ -266,7 +266,7 @@ export default function FolhaPagamentoPage() {
                     </select>
                   </div>
                 </div>
-              <div className="sm:w-48">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Mês
                 </label>
@@ -286,7 +286,7 @@ export default function FolhaPagamentoPage() {
                 </div>
               </div>
 
-                <div className="sm:w-32">
+                <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                     Ano
                 </label>
@@ -302,10 +302,10 @@ export default function FolhaPagamentoPage() {
                           {year}
                         </option>
                       ))}
-                  </select>
-                  </div>
+                    </select>
                 </div>
               </div>
+            </div>
             </div>
           </CardContent>
         </Card>
@@ -313,7 +313,7 @@ export default function FolhaPagamentoPage() {
         {/* Lista de Funcionários */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center">
                 <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0">
                   <FileSpreadsheet className="w-6 h-6 text-blue-600" />
@@ -327,11 +327,12 @@ export default function FolhaPagamentoPage() {
                 <button
                   onClick={exportToExcel}
                   disabled={!payrollData || payrollData.employees.length === 0}
-                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm sm:text-base"
                   title="Exportar para Excel"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Exportar XLSX</span>
+                  <span className="hidden sm:inline">Exportar XLSX</span>
+                  <span className="sm:hidden">Exportar</span>
                 </button>
               </div>
             </div>
@@ -341,25 +342,25 @@ export default function FolhaPagamentoPage() {
               <table className="w-full">
                 <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Nome
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                       Setor
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                       Empresa
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
                       Contrato
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
                       Tomador
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Líquido Total
                     </th>
-                    <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Ações
                     </th>
                   </tr>
@@ -386,20 +387,23 @@ export default function FolhaPagamentoPage() {
                   ) : (
                     employees.map((employee) => (
                       <tr key={employee.id} className="hover:transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {employee.name}
                             </div>
-                            <div className="text-sm text-gray-500">
+                            <div className="text-xs sm:text-sm text-gray-500">
                               {employee.cpf || 'N/A'}
                             </div>
+                            <div className="text-xs text-gray-400 sm:hidden">
+                              {employee.department && `${employee.department} • ${employee.company || 'N/A'}`}
+                            </div>
                             <div className="text-xs text-gray-400">
-                              {employee.employeeId && `${employee.employeeId}`}
+                              {employee.employeeId && `ID: ${employee.employeeId}`}
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center hidden sm:table-cell">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {employee.department || 'N/A'}
@@ -412,12 +416,12 @@ export default function FolhaPagamentoPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center hidden md:table-cell">
                           <span className="text-sm text-gray-900">
                             {employee.company || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center hidden lg:table-cell">
                           <div>
                             <div className="text-sm font-medium text-gray-900">
                               {employee.costCenter || 'N/A'}
@@ -427,12 +431,12 @@ export default function FolhaPagamentoPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center hidden lg:table-cell">
                           <span className="text-sm text-gray-900">
                             {employee.client || 'N/A'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
                           <span className="text-sm font-bold text-green-600">
                             R$ {(() => {
                               const salarioBase = employee.salary;
@@ -448,13 +452,13 @@ export default function FolhaPagamentoPage() {
                             })()}
                           </span>
                         </td>
-                        <td className="px-6 py-4 bg-white whitespace-nowrap text-center">
+                        <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
                           <button
                             onClick={() => handleViewDetails(employee)}
                             className="p-2 text-yellow-600 hover:text-yellow-600 hover:bg-yellow-100 rounded-lg transition-colors"
                             title="Folha de Pagamento"
                           >
-                            <FileText className="w-5 h-5" />
+                            <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                           </button>
                         </td>
                       </tr>

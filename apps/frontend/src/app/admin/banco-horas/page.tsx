@@ -291,8 +291,8 @@ export default function BankHoursPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Controle de Banco de Horas</h1>
-          <p className="mt-2 text-gray-600">Acompanhamento do banco de horas de todos os funcionários</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Controle de Banco de Horas</h1>
+          <p className="mt-2 text-sm sm:text-base text-gray-600">Acompanhamento do banco de horas de todos os funcionários</p>
         </div>
 
         {/* Filtros */}
@@ -303,8 +303,8 @@ export default function BankHoursPage() {
               <h3 className="text-lg font-semibold text-gray-900">Filtros</h3>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data Inicial</label>
                 <input
@@ -388,7 +388,7 @@ export default function BankHoursPage() {
         </Card>
 
         {/* Resumo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <Card className="w-full">
             <CardContent className="p-4">
               <div className="flex items-center">
@@ -440,7 +440,7 @@ export default function BankHoursPage() {
         {/* Tabela de Banco de Horas */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center">
                 <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0">
                   <Clock className="w-6 h-6 text-blue-600" />
@@ -452,10 +452,11 @@ export default function BankHoursPage() {
               </div>
               <button 
                 onClick={exportToExcel}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm sm:text-base"
               >
                 <Download className="w-4 h-4" />
-                <span>Exportar XLSX</span>
+                <span className="hidden sm:inline">Exportar XLSX</span>
+                <span className="sm:hidden">Exportar</span>
               </button>
             </div>
           </CardHeader>
@@ -470,47 +471,50 @@ export default function BankHoursPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 font-medium text-gray-700">Funcionário</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Setor</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Centro de Custo</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Tomador</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Trabalhadas</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Esperadas</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Banco de Horas</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Horas Extras (Multiplicadas)</th>
-                      <th className="text-center py-3 px-4 font-medium text-gray-700">Status</th>
+                      <th className="text-left py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm">Funcionário</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden sm:table-cell">Setor</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden md:table-cell">Centro de Custo</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden lg:table-cell">Tomador</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden lg:table-cell">Horas Trabalhadas</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden lg:table-cell">Horas Esperadas</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm">Banco de Horas</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm hidden xl:table-cell">Horas Extras</th>
+                      <th className="text-center py-3 px-2 sm:px-4 font-medium text-gray-700 text-xs sm:text-sm">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.map((employee: BankHoursData) => (
                       <tr key={employee.employeeId} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-2 sm:px-4">
                           <div>
-                            <p className="font-medium text-gray-900">{employee.employeeName}</p>
-                            <p className="text-sm text-gray-500">{employee.employeeCpf}</p>
+                            <p className="font-medium text-gray-900 text-sm sm:text-base">{employee.employeeName}</p>
+                            <p className="text-xs sm:text-sm text-gray-500">{employee.employeeCpf}</p>
+                            <div className="text-xs text-gray-400 sm:hidden mt-1">
+                              {employee.department && `${employee.department} • ${employee.costCenter || 'N/A'}`}
+                            </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-2 sm:px-4 text-center hidden sm:table-cell">
                           <div>
-                            <p className="font-medium text-gray-900">{employee.department}</p>
-                            <p className="text-sm text-gray-500">{employee.position}</p>
+                            <p className="font-medium text-gray-900 text-sm">{employee.department}</p>
+                            <p className="text-xs text-gray-500">{employee.position}</p>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-center text-gray-700">{employee.costCenter || '-'}</td>
-                        <td className="py-3 px-4 text-center text-gray-700">{employee.client || '-'}</td>
-                        <td className="py-3 px-4 text-center text-gray-700">{formatTime(employee.totalWorkedHours)}</td>
-                        <td className="py-3 px-4 text-center text-gray-700">{formatTime(employee.totalExpectedHours)}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className={`font-medium ${employee.bankHours >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <td className="py-3 px-2 sm:px-4 text-center text-gray-700 text-sm hidden md:table-cell">{employee.costCenter || '-'}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center text-gray-700 text-sm hidden lg:table-cell">{employee.client || '-'}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center text-gray-700 text-sm hidden lg:table-cell">{formatTime(employee.totalWorkedHours)}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center text-gray-700 text-sm hidden lg:table-cell">{formatTime(employee.totalExpectedHours)}</td>
+                        <td className="py-3 px-2 sm:px-4 text-center">
+                          <span className={`font-medium text-sm ${employee.bankHours >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {formatTime(employee.bankHours)}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="font-medium text-orange-600">
+                        <td className="py-3 px-2 sm:px-4 text-center hidden xl:table-cell">
+                          <span className="font-medium text-orange-600 text-sm">
                             {formatTime(employee.overtimeMultipliedHours)}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-center">
+                        <td className="py-3 px-2 sm:px-4 text-center">
                           <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(employee.bankHours)}`}>
                             {getStatusText(employee.bankHours)}
                           </span>

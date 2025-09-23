@@ -708,10 +708,10 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
   return (
     <Card className="w-full">
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <Users className="w-6 h-6 text-red-600" />
+            <div className="p-2 sm:p-3 bg-red-100 rounded-lg">
+              <Users className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
@@ -756,7 +756,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
             isFilterExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
           }`}>
             <div className="p-4">
-              <div className="flex items-center space-x-4 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
@@ -767,12 +767,12 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                     className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium text-gray-700">Status:</label>
+                <div className="flex items-center space-x-2 sm:w-48">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as 'active' | 'inactive' | 'all')}
-                    className="px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
+                    className="w-full px-3 pr-8 py-2.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white"
                   >
                     <option value="active">Ativos</option>
                     <option value="inactive">Inativos</option>
@@ -782,7 +782,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
               </div>
               
               {/* Filtros adicionais */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="flex items-center space-x-2">
                   <label className="text-sm font-medium text-gray-700">Setor:</label>
                   <select
@@ -873,7 +873,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
         ) : (
           <>
             {/* Informações de paginação */}
-            <div className="mb-4 flex items-center justify-between text-sm text-gray-600">
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-600">
               <span>
                 Mostrando {startItem} a {endItem} de {pagination.total} funcionários
               </span>
@@ -887,14 +887,14 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
               <div
                 key={employee.id}
                 onClick={() => setSelectedEmployee(employee)}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors gap-4"
               >
                 <div className="flex-1">
                   <div className="flex items-center space-x-4">
                     <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">{employee.name}</h4>
-                      <p className="text-sm text-gray-600">{employee.email}</p>
-                      <div className="flex items-center space-x-4 mt-1">
+                      <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{employee.name}</h4>
+                      <p className="text-xs sm:text-sm text-gray-600">{employee.email}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1">
                         <span className="text-xs text-gray-500">CPF: {employee.cpf}</span>
                         {employee.employee && (
                           <>
@@ -925,7 +925,7 @@ export function EmployeeList({ userRole, showDeleteButton = true }: EmployeeList
                 </div>
                 
                 {showDeleteButton && (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center justify-end sm:justify-start space-x-2">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

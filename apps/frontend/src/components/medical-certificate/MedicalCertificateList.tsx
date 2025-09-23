@@ -247,7 +247,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
             
             {/* Conteúdo dos Filtros */}
             <div className="p-4">
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -260,12 +260,12 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                     />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Status:</label>
+                <div className="flex items-center gap-2 sm:w-48">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</label>
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
                   >
                     <option value="all">Todos</option>
                     <option value="PENDING">Pendente</option>
@@ -301,16 +301,16 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
           filteredCertificates.map((certificate) => (
             <Card key={certificate.id}>
               <CardContent className="p-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       {getStatusIcon(certificate.status)}
                       <div>
-                        <h3 className="font-medium text-gray-900">
+                        <h3 className="font-medium text-gray-900 text-sm sm:text-base">
                           {certificateTypeLabels[certificate.type]}
                         </h3>
                         {userRole !== 'EMPLOYEE' && (
-                          <p className="text-sm text-gray-600">
+                          <p className="text-xs sm:text-sm text-gray-600">
                             <User className="w-3 h-3 inline mr-1" />
                             {certificate.user.name} ({certificate.employee.department})
                           </p>
@@ -318,7 +318,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         {formatDate(certificate.startDate)} - {formatDate(certificate.endDate)}
@@ -333,21 +333,21 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                     </div>
 
                     {certificate.description && (
-                      <p className="text-sm text-gray-600 mt-2">
+                      <p className="text-xs sm:text-sm text-gray-600 mt-2">
                         {certificate.description}
                       </p>
                     )}
 
                     {certificate.reason && certificate.status === 'REJECTED' && (
                       <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded">
-                        <p className="text-sm text-red-800">
+                        <p className="text-xs sm:text-sm text-red-800">
                           <strong>Motivo da rejeição:</strong> {certificate.reason}
                         </p>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 ml-4">
+                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:ml-4">
                     {getStatusBadge(certificate.status)}
                     
                     <div className="flex gap-1">
@@ -355,6 +355,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={() => handleViewDetails(certificate)}
+                        className="p-2"
                       >
                         <Eye className="w-3 h-3" />
                       </Button>
@@ -364,6 +365,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                           variant="outline"
                           size="sm"
                           onClick={() => handleDownload(certificate)}
+                          className="p-2"
                         >
                           <Download className="w-3 h-3" />
                         </Button>
@@ -374,6 +376,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
                           variant="outline"
                           size="sm"
                           onClick={() => handleCancel(certificate)}
+                          className="p-2"
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>

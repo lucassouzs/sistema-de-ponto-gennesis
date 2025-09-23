@@ -71,14 +71,14 @@ export default function EmployeesPage() {
       <div className="space-y-6">
         {/* Header */}
         <div className="text-center">
-                <h1 className="text-3xl font-bold text-gray-900">Gerenciar Funcionários</h1>
-          <p className="mt-2 text-gray-600">Cadastre e gerencie os funcionários da empresa</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gerenciar Funcionários</h1>
+          <p className="mt-2 text-sm sm:text-base text-gray-600">Cadastre e gerencie os funcionários da empresa</p>
         </div>
 
         {/* Card de criação de funcionários */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center">
                 <div className="p-2 sm:p-3 bg-green-100 rounded-lg flex-shrink-0">
                   <UserPlus className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
@@ -90,10 +90,11 @@ export default function EmployeesPage() {
               </div>
               <button
                 onClick={() => setIsCreateEmployeeOpen(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center space-x-2"
+                className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 flex items-center space-x-2 text-sm sm:text-base"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Novo Funcionário</span>
+                <span className="hidden sm:inline">Novo Funcionário</span>
+                <span className="sm:hidden">Novo</span>
               </button>
             </div>
           </CardContent>
