@@ -57,6 +57,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/ponto/atestados',
           icon: Stethoscope,
           description: 'Enviar e acompanhar ausências'
+        },
+        {
+          name: 'Férias',
+          href: '/ponto/ferias',
+          icon: Calendar,
+          description: 'Solicitar e acompanhar férias'
         }
       ];
     }
@@ -98,6 +104,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
           href: '/admin/folha-pagamento',
           icon: FileSpreadsheet,
           description: 'Gestão de folha de pagamento'
+        },
+        {
+          name: 'Férias',
+          href: '/admin/ferias',
+          icon: Calendar,
+          description: 'Gerenciar férias dos funcionários'
         }
       ];
     }

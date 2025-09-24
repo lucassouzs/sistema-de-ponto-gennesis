@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { PrismaClient, VacationType, VacationStatus } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { VacationService } from '../services/VacationService';
+import { VacationService, VacationRequest } from '../services/VacationService';
 
 const prisma = new PrismaClient();
 const vacationService = new VacationService();
@@ -11,46 +11,31 @@ export class VacationController {
   async requestVacation(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = req.user!.id;
-      const { startDate, endDate, type, reason } = req.body;
+      const { startDate, endDate, type, reason, fraction } = req.body;
 
-      // Validar datas
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+      // Criar objeto de solicitação
+      const vacationRequest: VacationRequest = {
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        type: type || VacationType.ANNUAL,
+        reason,
+        fraction
+      };
 
-      if (start >= end) {
-        throw createError('Data de início deve ser anterior à data de fim', 400);
-      }
-
-      if (start <= new Date()) {
-        throw createError('Data de início deve ser futura', 400);
-      }
-
-      // Verificar se já existe solicitação para o mesmo período
-      const existingVacation = await prisma.vacation.findFirst({
-        where: {
-          userId,
-          status: { in: [VacationStatus.PENDING, VacationStatus.APPROVED] },
-          OR: [
-            {
-              startDate: { lte: end },
-              endDate: { gte: start }
-            }
-          ]
-        }
-      });
-
-      if (existingVacation) {
-        throw createError('Já existe uma solicitação de férias para este período', 400);
+      // Validar solicitação conforme regras trabalhistas
+      const validation = await vacationService.validateVacationRequest(userId, vacationRequest);
+      
+      if (!validation.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Solicitação inválida',
+          errors: validation.errors,
+          warnings: validation.warnings
+        });
       }
 
       // Calcular dias de férias
-      const days = vacationService.calculateVacationDays(start, end);
-
-      // Verificar saldo de férias
-      const balance = await vacationService.getVacationBalance(userId);
-      if (balance.availableDays < days) {
-        throw createError(`Saldo insuficiente. Disponível: ${balance.availableDays} dias, solicitado: ${days} dias`, 400);
-      }
+      const days = vacationService.calculateVacationDays(vacationRequest.startDate, vacationRequest.endDate);
 
       // Buscar dados do funcionário
       const employee = await prisma.employee.findUnique({
@@ -61,17 +46,34 @@ export class VacationController {
         throw createError('Dados de funcionário não encontrados', 404);
       }
 
+      // Calcular períodos aquisitivo e concessivo
+      const balance = await vacationService.getVacationBalance(userId);
+
+      // Determinar tipo baseado no fracionamento
+      let vacationType = vacationRequest.type;
+      if (fraction) {
+        switch (fraction) {
+          case 1: vacationType = VacationType.FRACTIONED_1; break;
+          case 2: vacationType = VacationType.FRACTIONED_2; break;
+          case 3: vacationType = VacationType.FRACTIONED_3; break;
+        }
+      }
+
       // Criar solicitação de férias
       const vacation = await prisma.vacation.create({
         data: {
           userId,
           employeeId: employee.id,
-          startDate: start,
-          endDate: end,
+          startDate: vacationRequest.startDate,
+          endDate: vacationRequest.endDate,
           days,
-          type: type || VacationType.ANNUAL,
-          reason: reason || null,
-          status: VacationStatus.PENDING
+          type: vacationType,
+          status: VacationStatus.PENDING,
+          fraction: fraction || null,
+          aquisitiveStart: balance.aquisitiveStart || new Date(),
+          aquisitiveEnd: balance.aquisitiveEnd || new Date(),
+          concessiveEnd: balance.concessiveEnd || new Date(),
+          reason: vacationRequest.reason || null
         },
         include: {
           user: {
@@ -83,13 +85,14 @@ export class VacationController {
         }
       });
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: vacation,
-        message: 'Solicitação de férias criada com sucesso'
+        message: 'Solicitação de férias criada com sucesso',
+        warnings: validation.warnings
       });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 
@@ -421,6 +424,100 @@ export class VacationController {
       res.json({
         success: true,
         data: summary
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async sendVacationNotice(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+
+      await vacationService.sendVacationNotice(id);
+
+      res.json({
+        success: true,
+        message: 'Aviso de férias enviado com sucesso'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async confirmVacationNotice(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+
+      await vacationService.confirmVacationNotice(id);
+
+      res.json({
+        success: true,
+        message: 'Aviso de férias confirmado com sucesso'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getComplianceReport(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const report = await vacationService.getComplianceReport();
+
+      res.json({
+        success: true,
+        data: report
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getExpiringVacations(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { days = 30 } = req.query;
+      const expiringVacations = await vacationService.getExpiringVacations(Number(days));
+
+      res.json({
+        success: true,
+        data: expiringVacations
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async calculateVacationPayment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const payment = await vacationService.calculateVacationPayment(id);
+
+      res.json({
+        success: true,
+        data: payment
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async validateVacationRequest(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user!.id;
+      const { startDate, endDate, type, fraction } = req.body;
+
+      const vacationRequest: VacationRequest = {
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        type: type || VacationType.ANNUAL,
+        fraction
+      };
+
+      const validation = await vacationService.validateVacationRequest(userId, vacationRequest);
+
+      res.json({
+        success: true,
+        data: validation
       });
     } catch (error) {
       next(error);

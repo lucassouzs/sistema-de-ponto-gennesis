@@ -47,6 +47,81 @@ export interface VacationFormData {
   endDate: string;
   type: string;
   reason?: string;
+  fraction?: number;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+}
+
+export interface VacationBalance {
+  totalDays: number;
+  usedDays: number;
+  availableDays: number;
+  pendingDays: number;
+  nextVacationDate?: string;
+  expiresAt?: string;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+  concessiveEnd?: string;
+}
+
+export interface Vacation {
+  id: string;
+  userId: string;
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  type: string;
+  status: string;
+  fraction?: number;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+  concessiveEnd?: string;
+  noticeSentAt?: string;
+  noticeReceivedAt?: string;
+  paymentDate?: string;
+  paymentAmount?: number;
+  reason?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    name: string;
+    email: string;
+  };
+  employee: {
+    employeeId: string;
+    department: string;
+    position: string;
+  };
+}
+
+export interface ComplianceReport {
+  totalEmployees: number;
+  expiredVacations: Array<{
+    userId: string;
+    employeeName: string;
+    department: string;
+    expiresAt: string;
+    availableDays: number;
+  }>;
+  pendingApprovals: number;
+  upcomingExpirations: number;
+  complianceRate: number;
+  penalties: number;
+}
+
+export interface VacationPayment {
+  salaryAmount: number;
+  constitutionalThird: number;
+  totalAmount: number;
+}
+
+export interface VacationValidation {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface OvertimeFormData {

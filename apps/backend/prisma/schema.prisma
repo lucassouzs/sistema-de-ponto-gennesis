@@ -122,23 +122,43 @@ model TimeRecord {
 
 // Modelo de Férias
 model Vacation {
-  id          String         @id @default(cuid())
-  userId      String
-  employeeId  String
-  startDate   DateTime
-  endDate     DateTime
-  days        Int
-  type        VacationType   @default(ANNUAL)
-  status      VacationStatus @default(PENDING)
-  reason      String?
-  approvedBy  String?
-  approvedAt  DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                    String         @id @default(cuid())
+  userId               String
+  employeeId           String
+  
+  // Período das férias
+  startDate            DateTime
+  endDate              DateTime
+  days                 Int
+  
+  // Classificação
+  type                 VacationType    @default(ANNUAL)
+  status               VacationStatus  @default(PENDING)
+  fraction             Int?            // Número do fracionamento (1, 2, 3)
+  
+  // Período aquisitivo
+  aquisitiveStart      DateTime        // Início do período aquisitivo
+  aquisitiveEnd        DateTime        // Fim do período aquisitivo
+  concessiveEnd        DateTime        // Vencimento das férias
+  
+  // Documentação
+  noticeSentAt         DateTime?       // Data do aviso
+  noticeReceivedAt     DateTime?       // Data da confirmação
+  paymentDate          DateTime?       // Data do pagamento
+  paymentAmount        Decimal?        @db.Decimal(10, 2)
+  
+  // Aprovação
+  reason               String?
+  approvedBy           String?
+  approvedAt           DateTime?
+  
+  // Auditoria
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   // Relacionamentos
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee             Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("vacations")
 }
@@ -243,18 +263,27 @@ enum TimeRecordType {
 }
 
 enum VacationType {
-  ANNUAL
-  SICK
-  MATERNITY
-  PATERNITY
-  EMERGENCY
+  ANNUAL               // Férias anuais
+  FRACTIONED_1         // 1º período fracionado
+  FRACTIONED_2         // 2º período fracionado  
+  FRACTIONED_3         // 3º período fracionado
+  SICK                 // Férias por doença
+  MATERNITY            // Licença maternidade
+  PATERNITY            // Licença paternidade
+  EMERGENCY            // Férias de emergência
+  COLLECTIVE           // Férias coletivas
 }
 
 enum VacationStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
+  PENDING              // Aguardando aprovação
+  APPROVED             // Aprovado
+  NOTICE_SENT          // Aviso enviado
+  NOTICE_CONFIRMED     // Aviso confirmado
+  IN_PROGRESS          // Em andamento
+  COMPLETED            // Concluído
+  REJECTED             // Rejeitado
+  CANCELLED            // Cancelado
+  EXPIRED              // Vencido
 }
 
 enum OvertimeType {
