@@ -46,7 +46,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
                 />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Recibo de Pagamento de Salário</h2>
+                <h2 className="text-xl font-bold text-gray-900">Folha de Pagamento</h2>
                 <p className="text-sm text-gray-600">{monthName} de {year}</p>
               </div>
             </div>
@@ -175,114 +175,188 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
               Detalhamento da Folha
             </h3>
             
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300">
+            <div className="overflow-x-auto shadow-sm border border-gray-200 rounded-lg">
+              <table className="w-full">
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700 text-center">Cód.</th>
-                    <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Descrição</th>
-                    <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Referência</th>
-                    <th className="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Proventos</th>
-                    <th className="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Descontos</th>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
+                      Cód.
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
+                      Descrição
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
+                      Referência
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider border-r border-gray-200">
+                      Proventos
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      Descontos
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="bg-white divide-y divide-gray-200">
                   {/* Salário Base */}
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-center">001</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">SALÁRIO BASE</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">{employee.daysWorked} dias</td>
-                     <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
-                       R$ {salarioBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                     </td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      001
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      SALÁRIO BASE
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      {employee.daysWorked} dias
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                      R$ {salarioBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
                   </tr>
 
                   {/* Periculosidade */}
                   {periculosidade > 0 && (
-                    <tr>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-center">002</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">ADICIONAL DE PERICULOSIDADE</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">{employee.dangerPay}%</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
-                         R$ {periculosidade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                    <tr className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                        002
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        ADICIONAL DE PERICULOSIDADE
+                      </td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                        {employee.dangerPay}%
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                        R$ {periculosidade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-400">
+                        -
+                      </td>
                     </tr>
                   )}
 
                   {/* Insalubridade */}
                   {insalubridade > 0 && (
-                    <tr>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-center">003</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">ADICIONAL DE INSALUBRIDADE</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">{employee.unhealthyPay}%</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
-                         R$ {insalubridade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                    <tr className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                        003
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        ADICIONAL DE INSALUBRIDADE
+                      </td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                        {employee.unhealthyPay}%
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                        R$ {insalubridade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-400">
+                        -
+                      </td>
                     </tr>
                   )}
 
                   {/* Salário Família */}
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-center">004</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">SALÁRIO FAMÍLIA</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">-</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      004
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      SALÁRIO FAMÍLIA
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      -
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
                       R$ {salarioFamilia.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
                   </tr>
 
                   {/* Acréscimos */}
                   {employee.totalAdjustments > 0 && (
-                    <tr>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-center">005</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">ACRÉSCIMOS</td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">-</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
-                         R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                    <tr className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                        005
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        ACRÉSCIMOS
+                      </td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                        -
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                        R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-400">
+                        -
+                      </td>
                     </tr>
                   )}
 
-                   {/* Descontos */}
-                   {employee.totalDiscounts > 0 && (
-                     <tr>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-center">006</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm">DESCONTOS</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm">-</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-red-600">
-                         R$ {employee.totalDiscounts.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </td>
-                     </tr>
-                   )}
+                  {/* Descontos */}
+                  {employee.totalDiscounts > 0 && (
+                    <tr className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                        006
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        DESCONTOS
+                      </td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                        -
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
+                        -
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
+                        R$ {employee.totalDiscounts.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )}
 
-                   {/* Desconto por Faltas */}
-                   {descontoPorFaltas > 0 && (
-                     <tr>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-center">007</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm">DESCONTO POR FALTAS</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm">{faltas} faltas</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
-                       <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-red-600">
-                         R$ {descontoPorFaltas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                       </td>
-                     </tr>
-                   )}
+                  {/* Desconto por Faltas */}
+                  {descontoPorFaltas > 0 && (
+                    <tr className="hover:bg-gray-50 transition-colors duration-150">
+                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                        007
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        DESCONTO POR FALTAS
+                      </td>
+                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                        {faltas} faltas
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
+                        -
+                      </td>
+                      <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
+                        R$ {descontoPorFaltas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  )}
 
                   {/* VA/VT */}
-                  <tr>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-center">008</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">VALE ALIMENTAÇÃO + TRANSPORTE</td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm">{employee.daysWorked} dias</td>
-                     <td className="border border-gray-300 px-4 py-2 text-sm text-right font-medium text-green-600">
-                       R$ {(employee.totalFoodVoucher + employee.totalTransportVoucher).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                     </td>
-                    <td className="border border-gray-300 px-4 py-2 text-sm text-right">-</td>
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      008
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      VALE ALIMENTAÇÃO + TRANSPORTE
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      {employee.daysWorked} dias
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                      R$ {(employee.totalFoodVoucher + employee.totalTransportVoucher).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -299,7 +373,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
                   <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                     <div className="flex items-center justify-between mb-3">
                       <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Vencimentos</span>
+                      <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Proventos</span>
                     </div>
                     <div className="text-2xl font-bold text-gray-900 mb-1">
                       R$ {totalProventos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

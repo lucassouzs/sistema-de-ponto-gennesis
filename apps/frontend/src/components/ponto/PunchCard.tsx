@@ -226,7 +226,8 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess }) => {
                 {currentTime.toLocaleDateString('pt-BR', {
                   weekday: 'long',
                   month: 'long',
-                  day: 'numeric'
+                  day: 'numeric',
+                  year: 'numeric'
                 }).replace(/^\w/, c => c.toUpperCase())}
               </div>
               <div className="text-2xl font-semibold text-gray-800 tracking-wide">

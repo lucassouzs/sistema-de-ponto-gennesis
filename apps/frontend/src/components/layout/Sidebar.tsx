@@ -54,7 +54,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
         },
         {
           name: 'Registrar Ausência',
-          href: '/admin/atestados',
+          href: '/ponto/atestados',
           icon: Stethoscope,
           description: 'Enviar e acompanhar ausências'
         }
