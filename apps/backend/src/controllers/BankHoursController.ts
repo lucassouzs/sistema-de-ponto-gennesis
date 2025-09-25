@@ -167,15 +167,18 @@ export class BankHoursController {
               const entryTime = new Date(entryRecord.timestamp);
               const exitTime = new Date(exitRecord.timestamp);
               
+              // Usar moment.js para cálculos precisos (igual ao TimeRecordService)
+              const moment = require('moment');
+              
               // Calcular horas totais (entrada até saída)
-              const totalHours = (exitTime.getTime() - entryTime.getTime()) / (1000 * 60 * 60);
+              const totalHours = moment(exitTime).diff(moment(entryTime), 'hours', true);
               
               // Calcular horas de almoço
               let lunchHours = 0;
               if (lunchStartRecord && lunchEndRecord) {
-                const lunchStart = new Date(lunchStartRecord.timestamp);
-                const lunchEnd = new Date(lunchEndRecord.timestamp);
-                lunchHours = (lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60 * 60);
+                const lunchStart = moment(lunchStartRecord.timestamp);
+                const lunchEnd = moment(lunchEndRecord.timestamp);
+                lunchHours = lunchEnd.diff(lunchStart, 'hours', true);
               } else {
                 // Assumir 1 hora de almoço se não registrado
                 lunchHours = 1;
@@ -260,12 +263,12 @@ export class BankHoursController {
             client: employee.client || null,
             hireDate: employee.hireDate.toISOString().split('T')[0],
             actualStartDate: actualStartDate.toISOString().split('T')[0],
-            totalWorkedHours: Math.round(totalWorkedHours * 10) / 10,
-            totalExpectedHours: Math.round(totalExpectedHours * 10) / 10,
-            bankHours: Math.round(bankHours * 10) / 10,
-            overtimeHours: Math.round(regularOvertimeHours * 10) / 10,
-            overtimeMultipliedHours: Math.round(totalOvertimeHours * 10) / 10,
-            pendingHours: Math.round(pendingHours * 10) / 10,
+            totalWorkedHours: Math.round(totalWorkedHours * 100) / 100,
+            totalExpectedHours: Math.round(totalExpectedHours * 100) / 100,
+            bankHours: Math.round(bankHours * 100) / 100,
+            overtimeHours: Math.round(regularOvertimeHours * 100) / 100,
+            overtimeMultipliedHours: Math.round(totalOvertimeHours * 100) / 100,
+            pendingHours: Math.round(pendingHours * 100) / 100,
             lastUpdate: new Date().toISOString().split('T')[0]
           };
         })

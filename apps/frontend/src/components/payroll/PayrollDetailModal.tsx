@@ -217,46 +217,42 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
                   </tr>
 
                   {/* Periculosidade */}
-                  {periculosidade > 0 && (
-                    <tr className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                        002
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                        ADICIONAL DE PERICULOSIDADE
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
-                        {employee.dangerPay}%
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
-                        R$ {periculosidade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400">
-                        -
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      002
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      PERICULOSIDADE
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      {employee.dangerPay || 0}%
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                      R$ {periculosidade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
+                  </tr>
 
                   {/* Insalubridade */}
-                  {insalubridade > 0 && (
-                    <tr className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                        003
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                        ADICIONAL DE INSALUBRIDADE
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
-                        {employee.unhealthyPay}%
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
-                        R$ {insalubridade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400">
-                        -
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      003
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      INSALUBRIDADE
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      {employee.unhealthyPay || 0}%
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                      R$ {insalubridade.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
+                  </tr>
 
                   {/* Salário Família */}
                   <tr className="hover:bg-gray-50 transition-colors duration-150">
@@ -278,67 +274,61 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
                   </tr>
 
                   {/* Acréscimos */}
-                  {employee.totalAdjustments > 0 && (
-                    <tr className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                        005
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                        ACRÉSCIMOS
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
-                        -
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
-                        R$ {employee.totalAdjustments.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400">
-                        -
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      005
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      ACRÉSCIMOS
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      -
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-green-700 border-r border-gray-200">
+                      R$ {(employee.totalAdjustments || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400">
+                      -
+                    </td>
+                  </tr>
 
                   {/* Descontos */}
-                  {employee.totalDiscounts > 0 && (
-                    <tr className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                        006
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                        DESCONTOS
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
-                        -
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
-                        -
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
-                        R$ {employee.totalDiscounts.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      006
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      DESCONTOS
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      -
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
+                      -
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
+                      R$ {(employee.totalDiscounts || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
 
                   {/* Desconto por Faltas */}
-                  {descontoPorFaltas > 0 && (
-                    <tr className="hover:bg-gray-50 transition-colors duration-150">
-                      <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                        007
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                        DESCONTO POR FALTAS
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
-                        {faltas} faltas
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
-                        -
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
-                        R$ {descontoPorFaltas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  )}
+                  <tr className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-6 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                      007
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
+                      FALTAS
+                    </td>
+                    <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
+                      {faltas || 0} faltas
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm text-gray-400 border-r border-gray-200">
+                      -
+                    </td>
+                    <td className="px-6 py-4 text-right text-sm font-semibold text-red-700">
+                      R$ {(descontoPorFaltas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
 
                   {/* VA/VT */}
                   <tr className="hover:bg-gray-50 transition-colors duration-150">
@@ -346,7 +336,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
                       008
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 border-r border-gray-200">
-                      VALE ALIMENTAÇÃO + TRANSPORTE
+                      BENEFÍCIOS
                     </td>
                     <td className="px-6 py-4 text-center text-sm text-gray-600 border-r border-gray-200">
                       {employee.daysWorked} dias
@@ -487,7 +477,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose }: P
         <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg">
           <div className="flex justify-between items-center">
             <p className="text-xs text-gray-500">
-              Gênnesis Engenharia - Folha de Pagamento
+              Gênnesis Engenharia - Folha de Pagamento de {monthName} de {year}
             </p>
             <button
               onClick={onClose}

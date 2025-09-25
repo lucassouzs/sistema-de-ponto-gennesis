@@ -72,13 +72,16 @@ export default function PontoPage() {
   });
 
   // Banco de horas total (desde a admissão)
-  const { data: bankHoursData } = useQuery({
+  const { data: bankHoursData, error: bankHoursError, isLoading: bankHoursLoading, refetch: refetchBankHours } = useQuery({
     queryKey: ['bank-hours-total'],
     queryFn: async () => {
       const res = await api.get('/time-records/my-records/bank-hours');
       return res.data;
-    }
+    },
+    staleTime: 0, // Sempre considerar os dados como obsoletos
+    cacheTime: 0, // Não cachear os dados
   });
+
 
   // Painel "Ver mais" com filtros de data (dia/mês/ano)
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -209,29 +212,35 @@ export default function PontoPage() {
                 <div className="p-3 sm:p-4 bg-blue-50 rounded">
                   <div className="text-xs sm:text-sm text-gray-600">Horas Extras</div>
                   <div className="text-lg sm:text-2xl font-bold text-blue-700 break-all">
-                    {formatHours(bankHoursData?.data?.totalOvertimeHours || 0)}
+                    {bankHoursLoading ? 'Carregando...' : bankHoursError ? 'Erro' : formatHours(bankHoursData?.data?.totalOvertimeHours || 0)}
                   </div>
                 </div>
                 <div className="p-3 sm:p-4 bg-red-50 rounded">
                   <div className="text-xs sm:text-sm text-gray-600">Horas Devidas</div>
                   <div className="text-lg sm:text-2xl font-bold text-red-700 break-all">
-                    {formatHours(bankHoursData?.data?.totalOwedHours || 0)}
+                    {bankHoursLoading ? 'Carregando...' : bankHoursError ? 'Erro' : formatHours(bankHoursData?.data?.totalOwedHours || 0)}
                   </div>
                 </div>
                 <div className="p-3 sm:p-4 bg-gray-50 rounded">
                   <div className="text-xs sm:text-sm text-gray-600">Saldo</div>
                   <div className="text-lg sm:text-2xl font-bold text-gray-900 break-all">
-                    {formatHours(bankHoursData?.data?.balanceHours || 0)}
+                    {bankHoursLoading ? 'Carregando...' : bankHoursError ? 'Erro' : formatHours(bankHoursData?.data?.balanceHours || 0)}
                   </div>
                 </div>
               </div>
-              <div className="mt-4">
+              <div className="mt-4 space-y-2">
                 <button
                   onClick={() => setIsBankDetailsOpen(true)}
                   className="w-full h-12 flex items-center justify-center space-x-2 px-4 bg-blue-100 text-blue-700 rounded-lg shadow-sm hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <BarChart3 className="w-4 h-4" />
                   <span className="text-sm font-medium">Ver detalhamento</span>
+                </button>
+                <button
+                  onClick={() => refetchBankHours()}
+                  className="w-full h-10 flex items-center justify-center space-x-2 px-4 bg-gray-100 text-gray-700 rounded-lg shadow-sm hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                >
+                  <span className="text-xs font-medium">Atualizar dados</span>
                 </button>
               </div>
             </div>
