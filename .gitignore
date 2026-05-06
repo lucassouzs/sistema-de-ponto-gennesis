@@ -120,6 +120,3 @@ temp/
 
 # AWS
 .aws/
-
-# Prisma
-apps/backend/prisma/migrations/

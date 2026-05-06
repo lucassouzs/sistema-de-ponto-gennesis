@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 
@@ -10,6 +11,7 @@ export interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   closeOnOverlayClick?: boolean;
   showCloseButton?: boolean;
+  headerActions?: React.ReactNode;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -20,6 +22,7 @@ export const Modal: React.FC<ModalProps> = ({
   size = 'md',
   closeOnOverlayClick = true,
   showCloseButton = true,
+  headerActions,
 }) => {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -30,12 +33,12 @@ export const Modal: React.FC<ModalProps> = ({
 
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.body.classList.remove('modal-open');
     };
   }, [isOpen, onClose]);
 
@@ -49,9 +52,9 @@ export const Modal: React.FC<ModalProps> = ({
     full: 'max-w-full mx-4',
   };
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
+  const modalContent = (
+    <div className="fixed inset-0 z-[1000]">
+      <div className="flex min-h-screen items-center justify-center">
         {/* Overlay */}
         <div
           className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
@@ -61,25 +64,32 @@ export const Modal: React.FC<ModalProps> = ({
         {/* Modal */}
         <div
           className={clsx(
-            'relative bg-white rounded-lg shadow-xl w-full',
+            'relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full mx-4',
             sizeClasses[size]
           )}
         >
           {/* Header */}
-          {(title || showCloseButton) && (
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          {(title || showCloseButton || headerActions) && (
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
               {title && (
-                <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
               )}
               
-              {showCloseButton && (
-                <button
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {headerActions && (
+                  <div className="flex items-center">
+                    {headerActions}
+                  </div>
+                )}
+                {showCloseButton && (
+                  <button
+                    onClick={onClose}
+                    className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -91,4 +101,6 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 };

@@ -36,6 +36,12 @@ export class PhotoService {
     });
     
     this.bucketName = process.env.AWS_S3_BUCKET || 'sistema-ponto-fotos';
+    
+    // Log de configuração do PhotoService
+    console.log('📸 PhotoService configurado:');
+    console.log(`   💾 Modo: ${this.useLocal ? 'Local Storage' : 'AWS S3'}`);
+    console.log(`   📦 Bucket: ${this.bucketName}`);
+    console.log(`   🌍 Região: ${process.env.AWS_REGION || 'us-east-1'}`);
   }
 
   /**
@@ -133,14 +139,19 @@ export class PhotoService {
    */
   async uploadPhoto(photo: any, userId: string): Promise<PhotoUploadResult> {
     try {
+      console.log(`📸 Upload iniciado - Usuário: ${userId}`);
+      
       const validation = this.validatePhoto(photo);
       if (!validation.isValid) {
         throw new Error(validation.reason);
       }
 
       if (this.useLocal || !this.s3) {
+        console.log('💾 Salvando localmente...');
         return await this.saveLocalPhoto(photo, userId);
       }
+
+      console.log('☁️ Enviando para AWS S3...');
 
       const fileExtension = this.getFileExtension(photo.mimetype || 'image/jpeg');
       const fileName = `ponto/${userId}/${uuidv4()}.${fileExtension}`;
@@ -159,6 +170,8 @@ export class PhotoService {
       } as AWS.S3.PutObjectRequest;
 
       const result = await this.s3.upload(uploadParams).promise();
+      
+      console.log(`✅ Upload concluído - URL: ${result.Location}`);
 
       return {
         url: result.Location,

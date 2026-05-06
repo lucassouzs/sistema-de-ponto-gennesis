@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Sistema Ponto Engenharia",
+    "name": "Gennesis Attendance",
     "slug": "sistema-ponto-engenharia",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/favicon.png",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/favicon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#3b82f6"
+      "backgroundColor": "#111827"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -17,6 +17,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.engenharia.sistemaponto",
+      "statusBar": {
+        "style": "light",
+        "backgroundColor": "#111827"
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Este app precisa acessar a câmera para capturar fotos ao bater o ponto.",
         "NSLocationWhenInUseUsageDescription": "Este app precisa acessar sua localização para validar o ponto.",
@@ -24,47 +28,35 @@
       }
     },
     "android": {
+      "versionCode": 4,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#3b82f6"
+        "foregroundImage": "./assets/favicon.png",
+        "backgroundColor": "#111827"
       },
       "package": "com.engenharia.sistemaponto",
+      "navigationBar": {
+        "visible": "leanback",
+        "backgroundColor": "#374151"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.FOREGROUND_SERVICE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-camera",
-        {
-          "cameraPermission": "Permitir acesso à câmera para capturar fotos ao bater o ponto."
-        }
-      ],
-      [
-        "expo-location",
-        {
-          "locationAlwaysAndWhenInUsePermission": "Permitir acesso à localização para validar o ponto."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#3b82f6"
-        }
-      ]
-    ],
     "extra": {
       "eas": {
-        "projectId": "seu-project-id-aqui"
-      }
-    }
+        "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
+      },
+      "EXPO_PUBLIC_API_URL": "https://sistema-pontobackend-production.up.railway.app"
+    },
+    "owner": "lucassouzss"
   }
 }

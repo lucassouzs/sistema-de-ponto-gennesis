@@ -1,7 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import moment from 'moment';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
+import { getCompanySettings } from '../lib/cache';
 
 export interface ReportPeriod {
   startDate: Date;
@@ -53,7 +52,7 @@ export class ReportService {
     // Agrupar por funcionário
     const employeeMap = new Map<string, any>();
 
-    records.forEach(record => {
+    records.forEach((record: any) => {
       const empId = record.employeeId;
       if (!employeeMap.has(empId)) {
         employeeMap.set(empId, {
@@ -75,11 +74,11 @@ export class ReportService {
     });
 
     // Calcular métricas para cada funcionário
-    const report = Array.from(employeeMap.values()).map(emp => {
+    const report = await Promise.all(Array.from(employeeMap.values()).map(async emp => {
       const days = this.calculateWorkingDays(period.startDate, period.endDate);
       const presentDays = this.calculatePresentDays(emp.records);
       const absentDays = days - presentDays;
-      const lateArrivals = this.calculateLateArrivals(emp.records);
+      const lateArrivals = await this.calculateLateArrivals(emp.records);
       const earlyDepartures = this.calculateEarlyDepartures(emp.records);
       const totalHours = this.calculateTotalHours(emp.records);
 
@@ -93,7 +92,7 @@ export class ReportService {
         totalHours,
         attendanceRate: days > 0 ? (presentDays / days) * 100 : 0
       };
-    });
+    }));
 
     return {
       period,
@@ -151,7 +150,7 @@ export class ReportService {
     // Agrupar por funcionário
     const employeeMap = new Map<string, any>();
 
-    overtime.forEach(ot => {
+    overtime.forEach((ot: any) => {
       const empId = ot.employeeId;
       if (!employeeMap.has(empId)) {
         employeeMap.set(empId, {
@@ -245,7 +244,7 @@ export class ReportService {
     // Agrupar por funcionário
     const employeeMap = new Map<string, any>();
 
-    vacations.forEach(vacation => {
+    vacations.forEach((vacation: any) => {
       const empId = vacation.employeeId;
       if (!employeeMap.has(empId)) {
         employeeMap.set(empId, {
@@ -439,24 +438,30 @@ export class ReportService {
 
   private calculatePresentDays(records: any[]): number {
     const days = new Set();
-    records.forEach(record => {
+    records.forEach((record: any) => {
       const day = moment(record.timestamp).format('YYYY-MM-DD');
       days.add(day);
     });
     return days.size;
   }
 
-  private calculateLateArrivals(records: any[]): number {
-    return records.filter(record => {
+  private async calculateLateArrivals(records: any[]): Promise<number> {
+    // Buscar configurações da empresa para horário de entrada
+    const companySettings = await getCompanySettings(prisma);
+    const workStartTime = companySettings?.workStartTime || '07:00';
+    const toleranceMinutes = companySettings?.toleranceMinutes || 10;
+    const [startHour, startMinute] = workStartTime.split(':').map(Number);
+    
+    return records.filter((record: any) => {
       if (record.type !== 'ENTRY') return false;
       const entryTime = moment(record.timestamp);
-      const expectedTime = moment(entryTime).hour(8).minute(10).second(0);
+      const expectedTime = moment(entryTime).hour(startHour).minute(startMinute + toleranceMinutes).second(0);
       return entryTime.isAfter(expectedTime);
     }).length;
   }
 
   private calculateEarlyDepartures(records: any[]): number {
-    return records.filter(record => {
+    return records.filter((record: any) => {
       if (record.type !== 'EXIT') return false;
       const exitTime = moment(record.timestamp);
       const expectedTime = moment(exitTime).hour(17).minute(0).second(0);

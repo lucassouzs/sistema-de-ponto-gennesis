@@ -25,7 +25,8 @@ export const uploadPhoto = multer({
   fileFilter,
   limits: {
     fileSize: parseInt(process.env.MAX_FILE_SIZE || '5242880'), // 5MB
-    files: 1 // Apenas 1 arquivo por vez
+    files: 1, // Apenas 1 arquivo por vez
+    fieldSize: parseInt(process.env.MAX_FIELD_SIZE || String(5 * 1024 * 1024)) // tamanho máximo para campos (5MB por padrão)
   }
 });
 
@@ -55,3 +56,35 @@ export const handleUploadError = (error: any, req: Request, res: any, next: any)
 
   next(error);
 };
+
+// Configuração do multer para upload de planilhas (Excel e CSV)
+const fileFilterImport = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimeTypes = [
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'application/csv',
+    'text/plain'
+  ];
+  const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+
+  const mimetypeOk = !!file.mimetype && allowedMimeTypes.includes(file.mimetype);
+  const nameLower = (file.originalname || '').toLowerCase();
+  const extensionOk = allowedExtensions.some((ext) => nameLower.endsWith(ext));
+
+  if (mimetypeOk || extensionOk) {
+    return cb(null, true);
+  }
+
+  cb(new Error('Apenas arquivos Excel (.xlsx, .xls) ou CSV (.csv) são permitidos'));
+};
+
+export const uploadImport = multer({
+  storage,
+  fileFilter: fileFilterImport,
+  limits: {
+    fileSize: parseInt(process.env.MAX_IMPORT_FILE_SIZE || '10485760'), // 10MB
+    files: 1,
+    fieldSize: parseInt(process.env.MAX_FIELD_SIZE || String(20 * 1024 * 1024)) // permitir campos maiores (20MB por padrão) para JSON 'matrix'
+  }
+});

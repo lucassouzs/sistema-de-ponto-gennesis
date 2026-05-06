@@ -1,0 +1,22 @@
+{
+  "name": "@sistema-ponto/permission-modules",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Registro único de módulos para permissões (backend + frontend)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

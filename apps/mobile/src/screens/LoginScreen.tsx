@@ -5,24 +5,35 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { useAuth } from '../context/AuthContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+import { Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
+import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
+  const { colors, isDark } = useTheme();
+  
+  const styles = getStyles(colors);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Erro', 'Por favor, preencha todos os campos');
+      Toast.show({
+        type: 'error',
+        text1: 'Campos obrigatórios',
+        text2: 'Preencha email e senha para continuar.',
+      });
       return;
     }
 
@@ -31,7 +42,8 @@ export default function LoginScreen() {
       await login(email, password);
       Toast.show({
         type: 'success',
-        text1: 'Login realizado com sucesso!',
+        text1: 'Bem-vindo!',
+        text2: 'Login realizado com sucesso.',
       });
     } catch (error: any) {
       Toast.show({
@@ -44,192 +56,180 @@ export default function LoginScreen() {
     }
   };
 
-  const fillTestData = (type: 'admin' | 'hr' | 'employee') => {
-    const credentials = {
-      admin: { email: 'admin@engenharia.com.br', password: 'admin123' },
-      hr: { email: 'rh@engenharia.com.br', password: 'rh123' },
-      employee: { email: 'joao.silva@engenharia.com.br', password: 'func123' },
-    };
-
-    const cred = credentials[type];
-    setEmail(cred.email);
-    setPassword(cred.password);
-  };
-
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Sistema de Ponto</Text>
-          <Text style={styles.subtitle}>Empresa de Engenharia</Text>
-        </View>
-
-        <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="seu@email.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style={isDark ? "light" : "dark"} backgroundColor={colors.background} />
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View style={styles.content}>
+          <Image
+            source={isDark ? require('../../assets/logobranca.png') : require('../../assets/logo.png')}
+            style={styles.logo}
           />
 
-          <Text style={styles.label}>Senha</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Sua senha"
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+          <Text style={styles.title}>Entrar na sua conta</Text>
+          <Text style={styles.subtitle}>
+            Digite suas credenciais para acessar o sistema
+          </Text>
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Entrar</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.form}>
+            {/* Campo de Email */}
+            <View style={styles.inputContainer}>
+              <Mail size={20} color="#9ca3af" style={styles.icon} />
+              <TextInput
+                style={[styles.input, { paddingLeft: 42 }]}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="E-mail"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
+              />
+            </View>
+
+            {/* Campo de Senha */}
+            <View style={styles.inputContainer}>
+              <Lock size={20} color="#9ca3af" style={styles.icon} />
+              <TextInput
+                style={[styles.input, { paddingLeft: 42, paddingRight: 45 }]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Senha"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                placeholderTextColor="#9ca3af"
+              />
+              <TouchableOpacity
+                style={styles.eyeButton}
+                onPress={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff size={20} color="#6b7280" />
+                ) : (
+                  <Eye size={20} color="#6b7280" />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Entrar</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.testData}>
-          <Text style={styles.testDataTitle}>Dados de Teste:</Text>
-          
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => fillTestData('admin')}
-          >
-            <Text style={styles.testButtonText}>👤 Admin</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => fillTestData('hr')}
-          >
-            <Text style={styles.testButtonText}>👥 RH</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={() => fillTestData('employee')}
-          >
-            <Text style={styles.testButtonText}>👷 Funcionário</Text>
-          </TouchableOpacity>
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>© 2025 Gennesis Engenharia</Text>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    justifyContent: 'space-between',
   },
-  scrollContainer: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 28,
   },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
+  logo: {
+    width: 120,
+    height: 120,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: 15,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 32,
   },
   form: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    gap: 18,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 16,
+  inputContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  icon: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 10,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#fff',
+    color: colors.text,
+    backgroundColor: colors.card,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 2,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 14,
   },
   button: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 24,
+    shadowColor: '#ce3736',
+    shadowOpacity: 0.3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
   },
   buttonDisabled: {
-    backgroundColor: '#9ca3af',
+    backgroundColor: '#f59e9d',
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
     fontWeight: '600',
-  },
-  testData: {
-    marginTop: 32,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  testDataTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 16,
-    textAlign: 'center',
   },
-  testButton: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+  linkButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+  },
+  linkText: {
+    color: '#2563eb',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  footer: {
+    paddingBottom: 20,
     alignItems: 'center',
   },
-  testButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '500',
+  footerText: {
+    color: colors.textSecondary,
+    fontSize: 12,
   },
 });

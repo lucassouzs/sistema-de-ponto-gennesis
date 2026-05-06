@@ -20,6 +20,17 @@ export const usePunchInOut = () => {
       const formData = new FormData();
       formData.append('type', data.type);
       
+      // Enviar timestamp no formato local (sem timezone) para evitar problemas de fuso horário
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const localTimestamp = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+      formData.append('clientTimestamp', localTimestamp);
+      
       if (data.latitude) {
         formData.append('latitude', data.latitude.toString());
       }
@@ -27,8 +38,12 @@ export const usePunchInOut = () => {
         formData.append('longitude', data.longitude.toString());
       }
       if (data.photo) {
-        const file = await dataUrlToFile(data.photo, `punch-${Date.now()}.jpg`);
-        formData.append('photo', file);
+        if (typeof data.photo === 'string') {
+          const file = await dataUrlToFile(data.photo, `punch-${Date.now()}.jpg`);
+          formData.append('photo', file);
+        } else {
+          formData.append('photo', data.photo);
+        }
       }
       formData.append('observation', data.observation || '');
 

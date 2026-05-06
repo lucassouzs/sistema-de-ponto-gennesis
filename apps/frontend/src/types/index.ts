@@ -47,6 +47,82 @@ export interface VacationFormData {
   endDate: string;
   type: string;
   reason?: string;
+  fraction?: number;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+}
+
+export interface VacationBalance {
+  totalDays: number;
+  usedDays: number;
+  availableDays: number;
+  pendingDays: number;
+  expiredDays: number;
+  nextVacationDate?: string;
+  expiresAt?: string;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+  concessiveEnd?: string;
+}
+
+export interface Vacation {
+  id: string;
+  userId: string;
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  type: string;
+  status: string;
+  fraction?: number;
+  aquisitiveStart?: string;
+  aquisitiveEnd?: string;
+  concessiveEnd?: string;
+  noticeSentAt?: string;
+  noticeReceivedAt?: string;
+  paymentDate?: string;
+  paymentAmount?: number;
+  reason?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    name: string;
+    email: string;
+  };
+  employee: {
+    employeeId: string;
+    department: string;
+    position: string;
+  };
+}
+
+export interface ComplianceReport {
+  totalEmployees: number;
+  expiredVacations: Array<{
+    userId: string;
+    employeeName: string;
+    department: string;
+    expiresAt: string;
+    availableDays: number;
+  }>;
+  pendingApprovals: number;
+  upcomingExpirations: number;
+  complianceRate: number;
+  penalties: number;
+}
+
+export interface VacationPayment {
+  salaryAmount: number;
+  constitutionalThird: number;
+  totalAmount: number;
+}
+
+export interface VacationValidation {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface OvertimeFormData {
@@ -54,6 +130,79 @@ export interface OvertimeFormData {
   hours: number;
   type: string;
   description?: string;
+}
+
+export interface MedicalCertificateFormData {
+  type: string;
+  startDate: string;
+  endDate: string;
+  description?: string;
+  file?: File;
+}
+
+export interface MedicalCertificate {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  description?: string;
+  fileName?: string;
+  fileUrl?: string;
+  fileKey?: string;
+  status: string;
+  reason?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  submittedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    name: string;
+    email: string;
+  };
+  employee: {
+    employeeId: string;
+    department: string;
+    position: string;
+  };
+  approver?: {
+    name: string;
+    email: string;
+  };
+}
+
+export interface MedicalCertificateDetails {
+  startDate: string;
+  endDate: string;
+  days: number;
+  submittedAt: string;
+  description?: string;
+  type: string;
+}
+
+export interface TimeRecordWithDetails {
+  id: string;
+  userId: string;
+  employeeId: string;
+  type: string;
+  timestamp: string;
+  latitude?: number;
+  longitude?: number;
+  photoUrl?: string;
+  observation?: string;
+  isValid: boolean;
+  createdAt: string;
+  updatedAt: string;
+  foodVoucherAmount?: number;
+  transportVoucherAmount?: number;
+  employee?: {
+    employeeId: string;
+    department: string;
+  };
+  medicalCertificateDetails?: MedicalCertificateDetails;
 }
 
 export interface UserFormData {
@@ -70,6 +219,17 @@ export interface UserFormData {
     workSchedule?: any;
     isRemote: boolean;
     allowedLocations?: any[];
+    // Novos campos
+    company?: string;
+    currentContract?: string;
+    bank?: string;
+    accountType?: string;
+    agency?: string;
+    operation?: string;
+    account?: string;
+    digit?: string;
+    pixKeyType?: string;
+    pixKey?: string;
   };
 }
 
@@ -207,4 +367,288 @@ export interface Theme {
     md: string;
     lg: string;
   };
+}
+
+// Tipos para Folha de Pagamento
+export interface PayrollEmployee {
+  id: string;
+  name: string;
+  position: string;
+  department: string;
+  employeeId: string;
+  company: string | null;
+  polo: string | null;
+  categoriaFinanceira: string | null;
+  currentContract: string | null;
+  costCenter: string | null;
+  client: string | null;
+  alocacaoFinal: string | null; // Centro de custo mais frequente nos pontos
+  cpf: string;
+  bank: string | null;
+  accountType: string | null;
+  agency: string | null;
+  operation: string | null;
+  account: string | null;
+  digit: string | null;
+  pixKeyType: string | null;
+  pixKey: string | null;
+  modality: string | null;
+  admissionDate?: string | null;
+  familySalary: number;
+  dangerPay: number; // Porcentagem (0, 30, 40)
+  unhealthyPay: number; // Porcentagem (0, 10, 20, 40)
+  salary: number;
+  dailyFoodVoucher: number;
+  dailyTransportVoucher: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+  totalAdjustments: number;
+  totalDiscounts: number;
+  daysWorked: number;
+  totalWorkingDays: number;
+  nextMonthWorkingDays?: number; // Dias úteis do próximo mês (para VA/VT)
+  daysForVA?: number; // Dias usados no cálculo de VA (deve ser exatamente o que aparece na referência)
+  daysForVT?: number; // Dias usados no cálculo de VT (deve ser exatamente o que aparece na referência)
+  absences?: number; // Ausências justificadas não contam como faltas
+  // Horas Extras
+  he50Hours: number;
+  he50Value: number;
+  he100Hours: number;
+  he100Value: number;
+  hourlyRate: number;
+  // Férias
+  vacationDays: number;
+  baseInssFerias: number;
+  inssFerias: number;
+  // Valores Manuais
+  inssRescisao: number;
+  inss13: number;
+  descontoPorFaltas?: number;
+  dsrPorFalta?: number;
+  horasExtrasValue?: number;
+  dsrHEValue?: number;
+  // FGTS
+  fgts: number;
+  fgtsFerias: number;
+  fgtsTotal: number;
+  // INSS Total
+  inssTotal: number;
+  // IRRF
+  irrfMensal: number;
+  irrfFerias: number;
+  irrfTotal: number;
+}
+
+export interface MonthlyPayrollData {
+  employees: PayrollEmployee[];
+  period: {
+    month: number;
+    year: number;
+    monthName: string;
+  };
+  totals: {
+    totalEmployees: number;
+    totalFoodVoucher: number;
+    totalTransportVoucher: number;
+    totalAdjustments: number;
+    totalDiscounts: number;
+  };
+}
+
+export interface PayrollFilters {
+  search?: string;
+  company?: string;
+  department?: string;
+  position?: string;
+  costCenter?: string;
+  client?: string;
+  modality?: string;
+  bank?: string;
+  accountType?: string;
+  polo?: string;
+  month: number;
+  year: number;
+}
+
+export interface PayrollStats {
+  company?: string;
+  department?: string;
+  totalEmployees: number;
+  totalFoodVoucher: number;
+  totalTransportVoucher: number;
+}
+
+export interface PayrollPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+// Tipos para Acréscimos Salariais
+export type AdjustmentType = 'BONUS' | 'OVERTIME' | 'COMMISSION' | 'OTHER';
+
+export interface SalaryAdjustment {
+  id: string;
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+  isFixed: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateAdjustmentData {
+  employeeId: string;
+  type: AdjustmentType;
+  description: string;
+  amount: number;
+  isFixed?: boolean;
+}
+
+export interface UpdateAdjustmentData {
+  type?: AdjustmentType;
+  description?: string;
+  amount?: number;
+  isFixed?: boolean;
+}
+
+export interface AdjustmentTypeOption {
+  value: AdjustmentType;
+  label: string;
+  color: string;
+}
+
+// Tipos para Descontos Salariais
+export type DiscountType = 'FINE' | 'CONSIGNED' | 'OTHER';
+
+export interface SalaryDiscount {
+  id: string;
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  employee: {
+    id: string;
+    employeeId: string;
+    position: string;
+    department: string;
+    user: {
+      name: string;
+    };
+  };
+  creator: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface CreateDiscountData {
+  employeeId: string;
+  type: DiscountType;
+  description: string;
+  amount: number;
+}
+
+export interface UpdateDiscountData {
+  type?: DiscountType;
+  description?: string;
+  amount?: number;
+}
+
+export interface DiscountTypeOption {
+  value: DiscountType;
+  label: string;
+  color: string;
+}
+
+// Tipos para Chat/Conversas
+export enum ChatStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  CLOSED = 'CLOSED',
+}
+
+export interface MessageAttachment {
+  id: string;
+  messageId: string;
+  fileName: string;
+  fileUrl: string | null;
+  fileKey: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
+  createdAt: string;
+}
+
+export interface Message {
+  id: string;
+  chatId: string;
+  senderId: string;
+  content: string;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sender: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  attachments: MessageAttachment[];
+}
+
+export interface Chat {
+  id: string;
+  initiatorId: string;
+  recipientDepartment: string;
+  status: ChatStatus;
+  acceptedBy: string | null;
+  acceptedAt: string | null;
+  closedBy: string | null;
+  closedAt: string | null;
+  lastMessageAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  initiator?: {
+    id: string;
+    name: string;
+    email: string;
+    employee?: {
+      department: string;
+      position: string;
+    };
+  };
+  accepter?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  messages: Message[];
+}
+
+export interface CreateMessageData {
+  recipientDepartment: string;
+  subject?: string;
+  content: string;
+  isImportant?: boolean;
+  parentMessageId?: string;
+  attachments?: File[];
 }

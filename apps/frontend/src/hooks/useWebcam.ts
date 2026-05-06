@@ -41,6 +41,12 @@ export const useWebcam = () => {
 
   const startWithConstraints = async (constraints: MediaStreamConstraints): Promise<boolean> => {
     try {
+      // Verificar se o navegador suporta getUserMedia
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setError('Seu navegador não suporta acesso à câmera. Use Chrome, Firefox, Edge ou Safari.');
+        return false;
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       const videoTrack = mediaStream.getVideoTracks()[0];
       if (!videoTrack) throw new Error('Nenhuma trilha de vídeo disponível.');
@@ -62,7 +68,23 @@ export const useWebcam = () => {
       } catch {
         return false;
       }
-    } catch {
+    } catch (err: any) {
+      // Tratar diferentes tipos de erros
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError('Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador e tente novamente.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setError('Nenhuma câmera encontrada. Verifique se há uma câmera conectada ao computador.');
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        setError('A câmera está sendo usada por outro aplicativo. Feche outros programas que usam a câmera e tente novamente.');
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+        // Continuar tentando outras estratégias
+        return false;
+      } else if (err.name === 'NotSupportedError') {
+        setError('Acesso à câmera não é suportado neste navegador. Use Chrome, Firefox, Edge ou Safari.');
+      } else {
+        // Para outros erros, continuar tentando
+        return false;
+      }
       return false;
     }
   };
@@ -70,6 +92,25 @@ export const useWebcam = () => {
   const startCamera = useCallback(async (options?: { deviceId?: string; facingMode?: 'user' | 'environment' }) => {
     setError(null);
     setIsReady(false);
+
+    // Verificar se o navegador suporta mediaDevices
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Seu navegador não suporta acesso à câmera. Use Chrome, Firefox, Edge ou Safari.');
+      return;
+    }
+
+    // Verificar se há permissão antes de tentar (apenas se o navegador suportar)
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const permissionStatus = await navigator.permissions.query({ name: 'camera' as PermissionName });
+        if (permissionStatus.state === 'denied') {
+          setError('Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do navegador e recarregue a página.');
+          return;
+        }
+      }
+    } catch {
+      // Se o navegador não suporta permissions API, continuar normalmente
+    }
 
     // Estratégias em ordem: facingMode user -> genérico -> primeiro deviceId disponível -> facingMode environment (fallback final)
     const strategies: MediaStreamConstraints[] = [];
@@ -106,7 +147,13 @@ export const useWebcam = () => {
       setStream(null);
     }
 
-    setError('Não foi possível iniciar a câmera. Verifique permissões, feche apps que usam a câmera e tente novamente.');
+    // Se nenhuma estratégia funcionou e não há erro específico já definido, mostrar mensagem genérica
+    setError(prevError => {
+      if (prevError) {
+        return prevError; // Manter erro específico se já foi definido
+      }
+      return 'Não foi possível iniciar a câmera. Verifique permissões, feche apps que usam a câmera e tente novamente.';
+    });
   }, [waitForVideoReady]);
 
   const stopCamera = useCallback(() => {

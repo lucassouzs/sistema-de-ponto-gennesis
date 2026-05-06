@@ -20,7 +20,7 @@ export const Card: React.FC<CardProps> = ({
   };
 
   const classes = clsx(
-    'card rounded-lg border border-gray-200 bg-white',
+    'card rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800',
     paddingClasses[padding],
     className
   );
@@ -35,7 +35,7 @@ export interface CardHeaderProps {
 
 export const CardHeader: React.FC<CardHeaderProps> = ({ children, className }) => {
   return (
-    <div className={clsx('card-header pb-4 border-b border-gray-200', className)}>
+    <div className={clsx('card-header pb-4 border-b border-gray-200 dark:border-gray-700', className)}>
       {children}
     </div>
   );
@@ -61,7 +61,7 @@ export interface CardFooterProps {
 
 export const CardFooter: React.FC<CardFooterProps> = ({ children, className }) => {
   return (
-    <div className={clsx('card-footer pt-4 border-t border-gray-200', className)}>
+    <div className={clsx('card-footer pt-4 border-t border-gray-200 dark:border-gray-700', className)}>
       {children}
     </div>
   );

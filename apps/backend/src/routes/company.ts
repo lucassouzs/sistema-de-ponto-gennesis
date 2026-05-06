@@ -10,6 +10,6 @@ router.get('/settings', companyController.getCompanySettings);
 
 // Rotas protegidas
 router.use(authenticate);
-router.put('/settings', authorize('ADMIN'), companyController.updateCompanySettings);
+router.put('/settings', companyController.updateCompanySettings);
 
 export default router;

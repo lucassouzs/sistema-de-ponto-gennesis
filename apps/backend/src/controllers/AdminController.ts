@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import moment from 'moment';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
@@ -105,13 +103,13 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
     });
 
     // Processar dados
-    const report = employees.map(employee => {
-      const employeeRecords = timeRecords.filter(record => record.userId === employee.userId);
+    const report = employees.map((employee: any) => {
+      const employeeRecords = timeRecords.filter((record: any) => record.userId === employee.userId);
       
-      const entryRecord = employeeRecords.find(record => record.type === 'ENTRY');
-      const lunchStartRecord = employeeRecords.find(record => record.type === 'LUNCH_START');
-      const lunchEndRecord = employeeRecords.find(record => record.type === 'LUNCH_END');
-      const exitRecord = employeeRecords.find(record => record.type === 'EXIT');
+      const entryRecord = employeeRecords.find((record: any) => record.type === 'ENTRY');
+      const lunchStartRecord = employeeRecords.find((record: any) => record.type === 'LUNCH_START');
+      const lunchEndRecord = employeeRecords.find((record: any) => record.type === 'LUNCH_END');
+      const exitRecord = employeeRecords.find((record: any) => record.type === 'EXIT');
 
       const isPresent = !!entryRecord;
       const isLate = entryRecord ? moment(entryRecord.timestamp).isAfter(moment().set({ hour: 7, minute: 15, second: 0 })) : false;
@@ -129,10 +127,11 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
         lunchStartTime: lunchStartRecord ? moment(lunchStartRecord.timestamp).format('HH:mm') : null,
         lunchEndTime: lunchEndRecord ? moment(lunchEndRecord.timestamp).format('HH:mm') : null,
         exitTime: exitRecord ? moment(exitRecord.timestamp).format('HH:mm') : null,
-        records: employeeRecords.map(record => ({
+        records: employeeRecords.map((record: any) => ({
           type: record.type,
           timestamp: moment(record.timestamp).format('HH:mm:ss'),
-          location: record.location
+          latitude: record.latitude,
+          longitude: record.longitude
         }))
       };
     });
@@ -140,9 +139,9 @@ export const getAttendanceReport = async (req: Request, res: Response) => {
     return res.json({
       date: targetDate.format('YYYY-MM-DD'),
       totalEmployees: employees.length,
-      presentCount: report.filter(emp => emp.isPresent).length,
-      absentCount: report.filter(emp => !emp.isPresent).length,
-      lateCount: report.filter(emp => emp.isLate).length,
+      presentCount: report.filter((emp: any) => emp.isPresent).length,
+      absentCount: report.filter((emp: any) => !emp.isPresent).length,
+      lateCount: report.filter((emp: any) => emp.isLate).length,
       employees: report
     });
   } catch (error) {

@@ -1,15 +1,13 @@
 import express from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth';
 import { PhotoService } from '../services/PhotoService';
-import { PrismaClient } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
-import { AuthRequest } from '../middleware/auth';
 import path from 'path';
 import fs from 'fs';
+import { prisma } from '../lib/prisma';
 
 const router = express.Router();
 const photoService = new PhotoService();
-const prisma = new PrismaClient();
 
 // Middleware de autenticação para todas as rotas
 router.use(authenticate);
@@ -22,7 +20,6 @@ router.get('/:photoKey', async (req: AuthRequest, res, next) => {
   try {
     const { photoKey } = req.params;
     const userId = req.user!.id;
-    const userRole = req.user!.role;
 
     // Verificar se a foto existe no banco de dados
     const timeRecord = await prisma.timeRecord.findFirst({
@@ -43,11 +40,8 @@ router.get('/:photoKey', async (req: AuthRequest, res, next) => {
       throw createError('Foto não encontrada', 404);
     }
 
-    // Verificar permissões
-    const canAccess = 
-      userRole === 'ADMIN' || 
-      userRole === 'HR' || 
-      timeRecord.userId === userId;
+    // Verificar permissões - todos os funcionários podem acessar suas próprias fotos
+    const canAccess = timeRecord.userId === userId;
 
     if (!canAccess) {
       throw createError('Acesso negado a esta foto', 403);
@@ -82,9 +76,9 @@ router.get('/:photoKey', async (req: AuthRequest, res, next) => {
 
 /**
  * GET /api/photos/user/:userId
- * Lista fotos de um usuário específico (apenas ADMIN/HR)
+ * Lista fotos de um usuário específico (todos os funcionários)
  */
-router.get('/user/:userId', authorize('ADMIN', 'HR'), async (req: AuthRequest, res, next) => {
+router.get('/user/:userId', async (req: AuthRequest, res, next) => {
   try {
     const { userId } = req.params;
     const { limit = 50 } = req.query;
@@ -108,7 +102,6 @@ router.get('/record/:recordId', async (req: AuthRequest, res, next) => {
   try {
     const { recordId } = req.params;
     const userId = req.user!.id;
-    const userRole = req.user!.role;
 
     const timeRecord = await prisma.timeRecord.findUnique({
       where: { id: recordId },
@@ -127,11 +120,8 @@ router.get('/record/:recordId', async (req: AuthRequest, res, next) => {
       throw createError('Registro não encontrado', 404);
     }
 
-    // Verificar permissões
-    const canAccess = 
-      userRole === 'ADMIN' || 
-      userRole === 'HR' || 
-      timeRecord.userId === userId;
+    // Verificar permissões - todos os funcionários podem acessar suas próprias fotos
+    const canAccess = timeRecord.userId === userId;
 
     if (!canAccess) {
       throw createError('Acesso negado a este registro', 403);
@@ -159,9 +149,9 @@ router.get('/record/:recordId', async (req: AuthRequest, res, next) => {
 
 /**
  * DELETE /api/photos/:photoKey
- * Remove uma foto (apenas ADMIN)
+ * Remove uma foto (todos os funcionários)
  */
-router.delete('/:photoKey', authorize('ADMIN'), async (req: AuthRequest, res, next) => {
+router.delete('/:photoKey', async (req: AuthRequest, res, next) => {
   try {
     const { photoKey } = req.params;
 

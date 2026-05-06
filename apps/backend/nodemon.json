@@ -1,0 +1,8 @@
+{
+  "watch": ["src", "prisma"],
+  "ext": "ts,json,prisma",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+  "exec": "ts-node --transpile-only src/index.ts",
+  "delay": 1000
+}
+

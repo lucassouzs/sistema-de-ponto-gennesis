@@ -3,265 +3,265 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  ScrollView,
   Alert,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { User, Mail, Briefcase, Calendar, LogOut, MapPin, CreditCard } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export default function ProfileScreen() {
-  const navigation = useNavigation();
   const { user, logout } = useAuth();
+  const { colors } = useTheme();
+  
+  const styles = getStyles(colors);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Sair',
-      'Tem certeza que deseja sair?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sair', onPress: logout },
-      ]
-    );
+    Alert.alert('Sair', 'Tem certeza que deseja sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Sair', onPress: logout },
+    ]);
   };
 
-  const profileItems = [
-    {
-      title: 'Dados Pessoais',
-      subtitle: 'Nome, email, CPF',
-      icon: '👤',
-      onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento'),
-    },
-    {
-      title: 'Dados do Funcionário',
-      subtitle: 'Departamento, cargo, salário',
-      icon: '💼',
-      onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento'),
-    },
-    {
-      title: 'Alterar Senha',
-      subtitle: 'Segurança da conta',
-      icon: '🔒',
-      onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento'),
-    },
-    {
-      title: 'Configurações',
-      subtitle: 'Preferências do app',
-      icon: '⚙️',
-      onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento'),
-    },
-  ];
-
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>‹ Voltar</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Perfil</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      {/* User Info */}
-      <View style={styles.userCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.name?.charAt(0).toUpperCase()}
+    <View style={styles.safeArea}>
+      <SafeAreaView edges={['top']} style={styles.topSafeArea} />
+      <ScrollView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.avatarContainer}>
+            <User size={48} color="#fff" />
+          </View>
+          <Text style={styles.name}>{user?.name}</Text>
+          <Text style={styles.role}>
+            {user?.employee?.position || user?.role || 'Funcionário'}
           </Text>
         </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{user?.name}</Text>
-          <Text style={styles.userEmail}>{user?.email}</Text>
-          <Text style={styles.userRole}>{user?.role}</Text>
-        </View>
-      </View>
 
-      {/* Profile Items */}
-      <View style={styles.menuContainer}>
-        {profileItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuItem}
-            onPress={item.onPress}
-          >
-            <View style={styles.menuItemLeft}>
-              <Text style={styles.menuItemIcon}>{item.icon}</Text>
-              <View style={styles.menuItemText}>
-                <Text style={styles.menuItemTitle}>{item.title}</Text>
-                <Text style={styles.menuItemSubtitle}>{item.subtitle}</Text>
+        {/* Informações Pessoais */}
+        
+        {user?.employee && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Informações</Text>
+
+            <View style={styles.infoCard}>
+              <View style={styles.infoItem}>
+                <Mail size={20} color={colors.primary} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Email</Text>
+                  <Text style={styles.infoValue}>{user?.email || '-'}</Text>
+                </View>
               </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.infoItem}>
+                <User size={20} color={colors.primary} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>CPF</Text>
+                  <Text style={styles.infoValue}>{user?.cpf || '-'}</Text>
+                </View>
+              </View>
+
+              {user?.employee?.birthDate && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoItem}>
+                    <Calendar size={20} color={colors.primary} />
+                    <View style={styles.infoText}>
+                      <Text style={styles.infoLabel}>Data de Nascimento</Text>
+                      <Text style={styles.infoValue}>
+                        {new Date(user.employee.birthDate).toLocaleDateString('pt-BR')}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              <View style={styles.divider} />
+
+              <View style={styles.infoItem}>
+                <Briefcase size={20} color={colors.primary} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Setor</Text>
+                  <Text style={styles.infoValue}>{user.employee.department}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.infoItem}>
+                <CreditCard size={20} color={colors.primary} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Matrícula</Text>
+                  <Text style={styles.infoValue}>{user.employee.employeeId}</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.infoItem}>
+                <Calendar size={20} color={colors.primary} />
+                <View style={styles.infoText}>
+                  <Text style={styles.infoLabel}>Data de Admissão</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(user.employee.hireDate).toLocaleDateString('pt-BR')}
+                  </Text>
+                </View>
+              </View>
+
+              {user.employee.company && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoItem}>
+                    <Briefcase size={20} color={colors.primary} />
+                    <View style={styles.infoText}>
+                      <Text style={styles.infoLabel}>Empresa</Text>
+                      <Text style={styles.infoValue}>{user.employee.company}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {user.employee.polo && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoItem}>
+                    <MapPin size={20} color={colors.primary} />
+                    <View style={styles.infoText}>
+                      <Text style={styles.infoLabel}>Polo</Text>
+                      <Text style={styles.infoValue}>{user.employee.polo}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {user.employee.modality && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoItem}>
+                    <Briefcase size={20} color={colors.primary} />
+                    <View style={styles.infoText}>
+                      <Text style={styles.infoLabel}>Modalidade</Text>
+                      <Text style={styles.infoValue}>{user.employee.modality}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
             </View>
-            <Text style={styles.menuItemArrow}>›</Text>
+          </View>
+        )}
+
+        {/* Botão de Sair */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={20} color="#ffffff" />
+            <Text style={styles.logoutText}>Sair da conta</Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Logout Button */}
-      <View style={styles.logoutContainer}>
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Sair da Conta</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* App Info */}
-      <View style={styles.appInfo}>
-        <Text style={styles.appName}>Sistema de Ponto</Text>
-        <Text style={styles.appVersion}>Versão 1.0.0</Text>
-        <Text style={styles.appCompany}>Empresa de Engenharia</Text>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (colors: any) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.surface,
+  },
+  topSafeArea: {
+    backgroundColor: colors.headerBackground,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: colors.background,
   },
   header: {
-    backgroundColor: '#fff',
-    padding: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: colors.headerBackground,
+    paddingVertical: 40,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    marginBottom: 20,
+    elevation: 3,
   },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#3b82f6',
-    fontWeight: '500',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  placeholder: {
-    width: 60,
-  },
-  userCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    borderRadius: 12,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#3b82f6',
+  avatarContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginBottom: 16,
   },
-  avatarText: {
+  name: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
+    marginBottom: 4,
   },
-  userInfo: {
+  role: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  section: {
+    padding: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  infoCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 8,
+    elevation: 0,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  infoText: {
+    marginLeft: 16,
     flex: 1,
   },
-  userName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  userEmail: {
+  infoLabel: {
     fontSize: 14,
-    color: '#6b7280',
-    marginTop: 2,
+    color: colors.textSecondary,
+    marginBottom: 4,
   },
-  userRole: {
-    fontSize: 12,
-    color: '#3b82f6',
-    marginTop: 4,
+  infoValue: {
+    fontSize: 16,
+    color: colors.text,
     fontWeight: '500',
   },
-  menuContainer: {
-    padding: 20,
-  },
-  menuItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  menuItemIcon: {
-    fontSize: 24,
-    marginRight: 16,
-  },
-  menuItemText: {
-    flex: 1,
-  },
-  menuItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  menuItemSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  menuItemArrow: {
-    fontSize: 24,
-    color: '#9ca3af',
-  },
-  logoutContainer: {
-    padding: 20,
+  divider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginVertical: 4,
   },
   logoutButton: {
-    backgroundColor: '#ef4444',
-    borderRadius: 12,
-    padding: 16,
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ce3736',
+    padding: 16,
+    borderRadius: 12,
+    gap: 8,
+    elevation: 0,
   },
-  logoutButtonText: {
+  logoutText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  appInfo: {
-    alignItems: 'center',
-    padding: 20,
-    marginBottom: 20,
-  },
-  appName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  appVersion: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  appCompany: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
 });
+

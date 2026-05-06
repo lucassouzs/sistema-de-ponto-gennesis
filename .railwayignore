@@ -1,0 +1,19 @@
+# Arquivos e pastas para ignorar no Railway
+node_modules/
+.git/
+.gitignore
+*.log
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.DS_Store
+Thumbs.db
+*.md
+docs/
+apps/mobile/
+dist/
+.next/
+coverage/
+.nyc_output/
+.cache/

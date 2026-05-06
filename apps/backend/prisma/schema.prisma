@@ -20,6 +20,10 @@ model User {
   role         UserRole @default(EMPLOYEE)
   isActive     Boolean  @default(true)
   isFirstLogin Boolean  @default(true)
+  /// URL pública ou relativa (/uploads/...) da foto de perfil
+  profilePhotoUrl  String?
+  /// Chave no S3 (quando usar armazenamento em nuvem)
+  profilePhotoKey  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -29,6 +33,40 @@ model User {
   vacations    Vacation[]
   overtime     Overtime[]
   reports      Report[]
+  medicalCertificates MedicalCertificate[]
+  approvedCertificates MedicalCertificate[] @relation("CertificateApprover")
+  salaryAdjustments SalaryAdjustment[]
+  salaryDiscounts   SalaryDiscount[]
+  pointCorrectionRequests PointCorrectionRequest[] @relation("PointCorrectionApprover")
+  pointCorrectionComments PointCorrectionComment[]
+  sentMessages      Message[]                       @relation("MessageSender")
+  initiatedChats    Chat[]                          @relation("ChatInitiator")
+  acceptedChats     Chat[]                          @relation("ChatAccepter")
+  closedChats       Chat[]                          @relation("ChatCloser")
+  receivedChats     Chat[]                          @relation("ChatRecipient")
+  chatParticipants  ChatParticipant[]
+  finalizedPayrolls PayrollStatus[]                 @relation("PayrollFinalizer")
+  materialRequestsRequested MaterialRequest[]       @relation("MaterialRequestRequester")
+  materialRequestsApproved  MaterialRequest[]       @relation("MaterialRequestApprover")
+  materialRequestsRejected   MaterialRequest[]      @relation("MaterialRequestRejecter")
+  chatGPTConversations      ChatGPTConversation[]
+  passwordResetTokens PasswordResetToken[]
+  purchaseOrdersCreated     PurchaseOrder[]        @relation("PurchaseOrderCreator")
+  purchaseOrdersApproved    PurchaseOrder[]        @relation("PurchaseOrderApprover")
+  quoteMapsCreated          QuoteMap[]             @relation("QuoteMapCreator")
+  userPermissions           UserPermission[]       @relation("UserPermissionUser")
+  updatedPermissions        UserPermission[]       @relation("UserPermissionUpdatedBy")
+  userContractPermissions   UserContractPermission[] @relation("UserContractPermissionUser")
+  updatedContractPermissions UserContractPermission[] @relation("UserContractPermissionUpdatedBy")
+  userDpApprovalContracts   UserDpApprovalContract[] @relation("UserDpApprovalContractUser")
+  updatedDpApprovalContracts UserDpApprovalContract[] @relation("UserDpApprovalContractUpdatedBy")
+  driveFolders              DriveFolder[]            @relation("DriveFolderOwner")
+  driveFiles                DriveFile[]              @relation("DriveFileOwner")
+  driveFolderShares         DriveFolderShare[]       @relation("DriveFolderShareUser")
+  driveFolderSharesCreated  DriveFolderShare[]       @relation("DriveFolderShareCreatedBy")
+  messageFavorites         MessageFavorite[]
+  chatUserPrivacy          ChatUserPrivacy[]
+  messageHiddenForUser     MessageHiddenForUser[]
 
   @@map("users")
 }
@@ -41,12 +79,44 @@ model Employee {
   department        String
   position          String
   hireDate          DateTime
+  birthDate         DateTime? // Data de nascimento para aniversários
   salary            Decimal   @db.Decimal(10, 2)
   workSchedule      Json      // Horário de trabalho em JSON
   isRemote          Boolean   @default(false)
   allowedLocations  Json?     // Locais permitidos para bater ponto
   costCenter        String?   // Centro de custo
   client            String?   // Tomador
+  dailyFoodVoucher  Float?    @default(33.40) // Vale Alimentação diário (padrão R$ 33,40)
+  dailyTransportVoucher Float? @default(11.00) // Vale Transporte diário (padrão R$ 11,00)
+  
+  // Novos campos - Dados da Empresa
+  company           String?   // EMPRESA
+  
+  // Novos campos - Dados Bancários
+  bank              String?   // BANCO
+  accountType       String?   // TIPO DE CONTA
+  agency            String?   // AGÊNCIA
+  operation         String?   // OP.
+  account           String?   // CONTA
+  digit             String?   // DIGITO
+  
+  // Novos campos - Dados PIX
+  pixKeyType        String?   // TIPO DE CHAVE
+  pixKey            String?   // CHAVE PIX
+  
+  // Novos campos - Modalidade e Adicionais
+  modality          String?   // MODALIDADE (MEI, CLT, ESTAGIARIO)
+  familySalary      Decimal?  @db.Decimal(10, 2) // SALÁRIO FAMÍLIA
+  dangerPay         Decimal?  @db.Decimal(10, 2) // PERICULOSIDADE
+  unhealthyPay      Decimal?  @db.Decimal(10, 2) // INSALUBRIDADE
+  
+  // Novos campos - Polo e Categoria Financeira
+  polo              String?   // POLO (BRASÍLIA, GOIÁS)
+  categoriaFinanceira String?  // CATEGORIA FINANCEIRA (CUSTO, DESPESA)
+  
+  // Campo para controlar se o funcionário precisa bater ponto
+  requiresTimeClock Boolean   @default(true) // Se false, não precisa bater ponto
+  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -55,6 +125,12 @@ model Employee {
   timeRecords TimeRecord[]
   vacations   Vacation[]
   overtime    Overtime[]
+  medicalCertificates MedicalCertificate[]
+  salaryAdjustments SalaryAdjustment[]
+  salaryDiscounts   SalaryDiscount[]
+  pointCorrectionRequests PointCorrectionRequest[]
+  dpRequests DpRequest[]
+  manualInssValues   ManualInssValue[]
 
   @@map("employees")
 }
@@ -75,6 +151,9 @@ model TimeRecord {
   observation String?       // Observação do funcionário
   approvedBy  String?       // ID do aprovador
   approvedAt  DateTime?
+  foodVoucherAmount Float?  @default(0) // Valor do VA no dia
+  transportVoucherAmount Float? @default(0) // Valor do VT no dia
+  costCenter  String?       // Centro de custo do funcionário no momento do ponto
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -87,23 +166,43 @@ model TimeRecord {
 
 // Modelo de Férias
 model Vacation {
-  id          String         @id @default(cuid())
-  userId      String
-  employeeId  String
-  startDate   DateTime
-  endDate     DateTime
-  days        Int
-  type        VacationType   @default(ANNUAL)
-  status      VacationStatus @default(PENDING)
-  reason      String?
-  approvedBy  String?
-  approvedAt  DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                    String         @id @default(cuid())
+  userId               String
+  employeeId           String
+  
+  // Período das férias
+  startDate            DateTime
+  endDate              DateTime
+  days                 Int
+  
+  // Classificação
+  type                 VacationType    @default(ANNUAL)
+  status               VacationStatus  @default(PENDING)
+  fraction             Int?            // Número do fracionamento (1, 2, 3)
+  
+  // Período aquisitivo
+  aquisitiveStart      DateTime        // Início do período aquisitivo
+  aquisitiveEnd        DateTime        // Fim do período aquisitivo
+  concessiveEnd        DateTime        // Vencimento das férias
+  
+  // Documentação
+  noticeSentAt         DateTime?       // Data do aviso
+  noticeReceivedAt     DateTime?       // Data da confirmação
+  paymentDate          DateTime?       // Data do pagamento
+  paymentAmount        Decimal?        @db.Decimal(10, 2)
+  
+  // Aprovação
+  reason               String?
+  approvedBy           String?
+  approvedAt           DateTime?
+  
+  // Auditoria
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   // Relacionamentos
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee             Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@map("vacations")
 }
@@ -157,7 +256,7 @@ model CompanySettings {
   address               String
   phone                 String?
   email                 String?
-  workStartTime         String   @default("08:00")
+  workStartTime         String   @default("07:00")
   workEndTime           String   @default("17:00")
   lunchStartTime        String   @default("12:00")
   lunchEndTime          String   @default("13:00")
@@ -191,9 +290,6 @@ model AuditLog {
 
 // Enums
 enum UserRole {
-  ADMIN
-  HR
-  MANAGER
   EMPLOYEE
 }
 
@@ -204,21 +300,31 @@ enum TimeRecordType {
   LUNCH_END
   BREAK_START
   BREAK_END
+  ABSENCE_JUSTIFIED
 }
 
 enum VacationType {
-  ANNUAL
-  SICK
-  MATERNITY
-  PATERNITY
-  EMERGENCY
+  ANNUAL               // Férias anuais
+  FRACTIONED_1         // 1º período fracionado
+  FRACTIONED_2         // 2º período fracionado  
+  FRACTIONED_3         // 3º período fracionado
+  SICK                 // Férias por doença
+  MATERNITY            // Licença maternidade
+  PATERNITY            // Licença paternidade
+  EMERGENCY            // Férias de emergência
+  COLLECTIVE           // Férias coletivas
 }
 
 enum VacationStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
+  PENDING              // Aguardando aprovação
+  APPROVED             // Aprovado
+  NOTICE_SENT          // Aviso enviado
+  NOTICE_CONFIRMED     // Aviso confirmado
+  IN_PROGRESS          // Em andamento
+  COMPLETED            // Concluído
+  REJECTED             // Rejeitado
+  CANCELLED            // Cancelado
+  EXPIRED              // Vencido
 }
 
 enum OvertimeType {
@@ -247,4 +353,1566 @@ enum ReportStatus {
   GENERATED
   PROCESSING
   ERROR
+}
+
+// Modelo de Atestados Médicos
+model MedicalCertificate {
+  id              String                    @id @default(cuid())
+  userId          String
+  employeeId      String
+  type            MedicalCertificateType    @default(MEDICAL)
+  startDate       DateTime                  // Data de início (pode ser futura)
+  endDate         DateTime                  // Data de fim (pode ser futura)
+  days            Int                       // Quantidade de dias (calculado automaticamente)
+  description     String?                   // Descrição/observações do funcionário
+  fileName        String?                   // Nome do arquivo anexado
+  fileUrl         String?                   // URL do arquivo no S3
+  fileKey         String?                   // Chave do arquivo no S3
+  status          MedicalCertificateStatus  @default(PENDING)
+  reason          String?                   // Motivo da reprovação (se aplicável)
+  approvedBy      String?                   // ID do RH que aprovou/reprovou
+  approvedAt      DateTime?                 // Data da aprovação/reprovação
+  submittedAt     DateTime                  @default(now()) // Data de envio
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  // Relacionamentos
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee        Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approver        User?                     @relation("CertificateApprover", fields: [approvedBy], references: [id])
+
+  @@map("medical_certificates")
+}
+
+enum MedicalCertificateType {
+  MEDICAL        // Atestado médico
+  DENTAL         // Atestado odontológico
+  PREVENTIVE     // Atestado de exame preventivo
+  ACCIDENT       // Atestado de acidente de trabalho
+  COVID          // Atestado COVID-19
+  MATERNITY      // Atestado de maternidade
+  PATERNITY      // Atestado de paternidade
+  OTHER          // Outros
+}
+
+enum MedicalCertificateStatus {
+  PENDING        // Aguardando aprovação
+  APPROVED       // Aprovado
+  REJECTED       // Rejeitado
+  CANCELLED      // Cancelado pelo funcionário
+}
+
+// Novos enums para os campos adicionados
+enum Company {
+  ABRASIL        // ABRASIL
+  GENNESIS       // GÊNNESIS
+  METRICA        // MÉTRICA
+}
+
+enum Bank {
+  BANCO_DO_BRASIL    // BANCO DO BRASIL
+  BRADESCO          // BRADESCO
+  C6                // C6
+  CAIXA_ECONOMICA   // CAIXA ECONÔMICA
+  CEF               // CEF
+  INTER             // INTER
+  ITAU              // ITAÚ
+  NUBANK            // NUBANK
+  PICPAY            // PICPAY
+  SANTANDER         // SANTANDER
+}
+
+enum AccountType {
+  CONTA_SALARIO     // CONTA SALÁRIO
+  CONTA_CORRENTE    // CONTA CORRENTE
+  POUPANCA          // POUPANÇA
+}
+
+enum PixKeyType {
+  ALEATORIA         // ALEATÓRIA
+  CELULAR           // CELULAR
+  CNPJ              // CNPJ
+  CPF               // CPF
+  EMAIL             // E-MAIL
+}
+
+// Modelo de Acréscimos Salariais
+model SalaryAdjustment {
+  id          String           @id @default(cuid())
+  employeeId  String
+  type        AdjustmentType
+  description String
+  amount      Decimal          @db.Decimal(10, 2)
+  isFixed     Boolean          @default(false)  // Se true, será aplicado automaticamente todo mês
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  // Relacionamentos
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("salary_adjustments")
+}
+
+enum AdjustmentType {
+  BONUS        // Bônus/Prêmio
+  OVERTIME     // Horas Extras
+  COMMISSION   // Comissão
+  OTHER        // Outros
+}
+
+// Modelo de Descontos Salariais
+model SalaryDiscount {
+  id          String        @id @default(cuid())
+  employeeId  String
+  type        DiscountType
+  description String
+  amount      Decimal       @db.Decimal(10, 2)
+  createdBy   String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relacionamentos
+  employee  Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  creator   User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("salary_discounts")
+}
+
+enum DiscountType {
+  FINE        // Multa
+  CONSIGNED   // Consignado
+  OTHER       // Outros
+}
+
+// Modelo de Solicitações de Correção de Ponto
+model PointCorrectionRequest {
+  id               String            @id @default(cuid())
+  employeeId       String
+  title            String
+  description      String
+  justification    String
+  
+  // Dados originais (incorretos)
+  originalDate     DateTime
+  originalTime     String
+  originalType     TimeRecordType
+  
+  // Dados corrigidos (solicitados)
+  correctedDate    DateTime
+  correctedTime    String
+  correctedType    TimeRecordType
+  
+  // Status e aprovação
+  status           RequestStatus     @default(PENDING)
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectionReason  String?
+  
+  // Metadados
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // Relacionamentos
+  employee         Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  approver         User?             @relation("PointCorrectionApprover", fields: [approvedBy], references: [id])
+  comments         PointCorrectionComment[]
+
+  @@map("point_correction_requests")
+}
+
+// Modelo de Comentários das Solicitações
+model PointCorrectionComment {
+  id         String                 @id @default(cuid())
+  requestId  String
+  userId     String
+  comment    String
+  isInternal Boolean                @default(false)
+  createdAt  DateTime               @default(now())
+
+  // Relacionamentos
+  request    PointCorrectionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("point_correction_comments")
+}
+
+// Modelo de Valores Manuais de INSS (Rescisão e 13°)
+model ManualInssValue {
+  id         String   @id @default(cuid())
+  employeeId String
+  month      Int      // Mês (1-12)
+  year       Int      // Ano
+  inssRescisao Decimal @default(0) // INSS RESCISÃO
+  inss13     Decimal  @default(0)  // INSS 13°
+  descontoPorFaltas Decimal? // Ajuste manual do desconto por faltas
+  dsrPorFalta Decimal? // Ajuste manual do DSR por falta
+  horasExtrasValue Decimal? // Ajuste manual do valor de horas extras
+  dsrHEValue Decimal? // Ajuste manual do DSR por horas extras
+  alocacaoFinal String? // Alocação final editável manualmente
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relacionamentos
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // Índice único para evitar duplicatas
+  @@unique([employeeId, month, year])
+  @@map("manual_inss_values")
+}
+
+enum RequestStatus {
+  PENDING     // Pendente
+  IN_REVIEW   // Em Análise
+  APPROVED    // Aprovada
+  REJECTED    // Rejeitada
+  CANCELLED   // Cancelada
+}
+
+// Solicitações Departamento Pessoal (DP)
+enum DpRequestUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Fluxo: gestor -> DP tramita entre etapas (financeiro, contabilidade, etc.) -> conclusão.
+enum DpRequestStatus {
+  WAITING_MANAGER    // Aguardando aprovação (antes do DP)
+  IN_REVIEW_DP       // Em análise
+  IN_FINANCEIRO      // Em análise / fila no Financeiro
+  WAITING_RETURN     // Pendência colaborador (UI solicitante: “Sua pendência”)
+  WAITING_RETURN_ACCOUNTING // Pendência contábil
+  WAITING_RETURN_ADM_TST    // Pendência ADM/TST
+  WAITING_RETURN_ENGINEERING // Pendência engenharia
+  CONCLUDED          // Concluída
+  CANCELLED          // Cancelada
+}
+
+enum DpRequestType {
+  ADMISSAO
+  ADVERTENCIA_SUSPENSAO
+  ALTERACAO_FUNCAO_SALARIO
+  ATESTADO_MEDICO
+  BENEFICIOS_VIAGEM
+  FERIAS
+  HORA_EXTRA
+  OUTRAS_SOLICITACOES
+  RESCISAO
+  RETIFICACAO_ALOCACAO
+}
+
+// Modelo de Solicitação DP (específico do AppSheet “Solicitações Departamento Pessoal”)
+model DpRequest {
+  id String @id @default(cuid())
+  /// Número legível sequencial (1, 2, 3…) para exibição e busca.
+  displayNumber Int @unique
+
+  // Solicitante
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // Dados do formulário
+  urgency        DpRequestUrgency @default(MEDIUM)
+  requestType    DpRequestType
+  title          String
+  sectorSolicitante String
+  solicitanteNome String
+  solicitanteEmail String
+
+  prazoInicio DateTime
+  prazoFim    DateTime
+
+  /// Campos específicos por tipo (JSON validado na API).
+  details Json?
+
+  // Dados vinculados ao contrato/centro de custo (pode ser persistido para histórico mesmo que contrato mude).
+  contractId String?
+  company    String?
+  polo       String?
+
+  // Workflow
+  status DpRequestStatus @default(WAITING_MANAGER)
+  /// Linha do tempo: [{ "at": ISO-8601, "status": "IN_FINANCEIRO" }, ...] — cada mudança de etapa.
+  statusHistory Json @default("[]")
+
+  // Aprovação do gestor
+  managerApprovedBy   String?
+  managerApprovedAt   DateTime?
+  managerApprovalComment String?
+  managerRejectionReason String?
+  managerRejectionComment String?
+  // (MVP) sem relação explícita com User: mantemos só o userId em managerApprovedBy.
+
+  // Feedback do DP
+  dpFeedback   String?
+  dpFeedbackAt DateTime?
+  /// Nome ou observação do responsável pela ação (registro no fluxo).
+  dpResponsibleNote String?
+  requesterReturnComment String?
+  requesterReturnedAt DateTime?
+  dpConclusionComment String?
+  dpConcludedAt DateTime?
+  dpHandledBy   String?
+  // (MVP) sem relação explícita com User: mantemos só o userId em dpHandledBy.
+
+  // Metadados
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+
+  @@map("dp_requests")
+}
+
+// Modelo de Feriados
+model Holiday {
+  id          String      @id @default(cuid())
+  name        String      // Nome do feriado
+  date        DateTime    // Data do feriado
+  type        HolidayType @default(NATIONAL) // Tipo de feriado
+  isRecurring Boolean     @default(false) // Se é recorrente (todos os anos)
+  state       String?     // Estado (para feriados estaduais)
+  city        String?     // Cidade (para feriados municipais)
+  description String?     // Descrição adicional
+  isActive    Boolean     @default(true) // Se está ativo
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  createdBy   String?     // ID do usuário que criou
+
+  @@unique([date, name]) // Evita duplicatas
+  @@index([date])
+  @@index([type])
+  @@index([isRecurring])
+  @@map("holidays")
+}
+
+enum HolidayType {
+  NATIONAL   // Feriado nacional
+  STATE      // Feriado estadual
+  MUNICIPAL  // Feriado municipal
+  OPTIONAL   // Ponto facultativo
+  COMPANY    // Feriado da empresa
+}
+
+// Modelo de Chat/Conversa entre Setores
+model Chat {
+  id                  String          @id @default(cuid())
+  chatType            ChatType        @default(DEPARTMENT)
+  initiatorId         String          // Quem iniciou a conversa
+  groupName           String?         // Nome do grupo (para tipo GROUP)
+  groupDescription    String?         // Descrição do grupo (opcional)
+  groupAvatarUrl      String?         // Avatar do grupo (opcional)
+  recipientDepartment String?         // Setor destinatário (para tipo DEPARTMENT)
+  recipientId         String?         // Usuário destinatário (para tipo DIRECT)
+  status              ChatStatus      @default(PENDING) // PENDING, ACCEPTED, CLOSED
+  acceptedBy          String?         // Quem aceitou a conversa
+  acceptedAt          DateTime?       // Quando foi aceita
+  closedBy            String?         // Quem encerrou
+  closedAt            DateTime?       // Quando foi encerrada
+  lastMessageAt       DateTime?       // Última mensagem enviada
+  pinnedMessageId     String?         // Mensagem fixada no topo
+  
+  // Mensagens da conversa
+  messages            Message[]
+  participants        ChatParticipant[]
+  
+  // Relacionamentos
+  initiator           User            @relation("ChatInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  accepter            User?           @relation("ChatAccepter", fields: [acceptedBy], references: [id], onDelete: SetNull)
+  closer              User?           @relation("ChatCloser", fields: [closedBy], references: [id], onDelete: SetNull)
+  recipient           User?           @relation("ChatRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  pinnedMessage       Message?        @relation("ChatPinnedMessage", fields: [pinnedMessageId], references: [id], onDelete: SetNull)
+  userPrivacySettings ChatUserPrivacy[]
+  
+  @@index([initiatorId])
+  @@index([recipientDepartment])
+  @@index([recipientId])
+  @@index([chatType])
+  @@index([groupName])
+  @@index([status])
+  @@index([lastMessageAt])
+  @@map("chats")
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  chatId    String
+  userId    String
+  isAdmin   Boolean  @default(false)
+  joinedAt  DateTime @default(now())
+
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([chatId])
+  @@index([userId])
+  @@map("chat_participants")
+}
+
+// Modelo de Mensagens dentro de um Chat
+model Message {
+  id              String            @id @default(cuid())
+  chatId          String            // Chat ao qual pertence
+  senderId        String            // Quem enviou (ou quem realizou a ação, nas mensagens de sistema)
+  content         String            // Conteúdo da mensagem
+  isSystem        Boolean           @default(false) // Eventos de grupo/fixar/etc. — exibidos como texto centralizado
+  isRead          Boolean           @default(false)
+  readAt          DateTime?         // Quando foi lida
+  editedAt        DateTime?         // Última edição (texto)
+  deletedAt       DateTime?         // Soft delete: mensagem apagada pelo remetente
+  
+  // Anexos
+  attachments     MessageAttachment[]
+  
+  // Auditoria
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  /// Mensagem citada (resposta estilo WhatsApp)
+  replyToId       String?
+  replyTo         Message?          @relation("MessageReplyThread", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies         Message[]         @relation("MessageReplyThread")
+
+  // Relacionamentos
+  chat            Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender          User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  favorites       MessageFavorite[]
+  pinnedInChats   Chat[]            @relation("ChatPinnedMessage")
+  hiddenForUsers  MessageHiddenForUser[]
+  
+  @@index([chatId])
+  @@index([senderId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([replyToId])
+  @@map("messages")
+}
+
+// Favoritar mensagem (por usuário; cada um tem seus favoritos)
+model MessageFavorite {
+  id         String   @id @default(cuid())
+  userId     String
+  messageId  String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId])
+  @@index([messageId])
+  @@map("message_favorites")
+}
+
+/// Limpar conversa "só pra mim" (estilo WhatsApp): oculta mensagens com createdAt <= clearedAt
+model ChatUserPrivacy {
+  id        String    @id @default(cuid())
+  userId    String
+  chatId    String
+  clearedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chatId])
+  @@index([userId])
+  @@index([chatId])
+  @@map("chat_user_privacy")
+}
+
+/// Apagar mensagem "só pra mim" — oculta no histórico deste usuário apenas
+model MessageHiddenForUser {
+  id        String   @id @default(cuid())
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId])
+  @@index([messageId])
+  @@map("message_hidden_for_user")
+}
+
+// Modelo de Anexos de Mensagens
+model MessageAttachment {
+  id          String    @id @default(cuid())
+  messageId   String
+  fileName    String    // Nome original do arquivo
+  fileUrl     String?   // URL do arquivo no S3
+  fileKey     String?   // Chave do arquivo no S3
+  fileSize    Int?      // Tamanho em bytes
+  mimeType    String?   // Tipo MIME do arquivo
+  createdAt   DateTime  @default(now())
+  
+  // Relacionamento
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  @@index([messageId])
+  @@map("message_attachments")
+}
+
+enum ChatStatus {
+  PENDING     // Aguardando aceitação
+  ACCEPTED     // Aceito e ativo
+  CLOSED       // Encerrado
+}
+
+enum ChatType {
+  DEPARTMENT  // Chat com setor (modelo antigo)
+  DIRECT      // Chat direto entre usuários (estilo WhatsApp)
+  GROUP       // Chat em grupo
+}
+
+// Modelo de Status da Folha de Pagamento
+model PayrollStatus {
+  id          String   @id @default(cuid())
+  month       Int      // Mês (1-12)
+  year        Int      // Ano
+  isFinalized Boolean  @default(false) // Se a folha foi finalizada pelo DP
+  finalizedBy String?  // ID do usuário que finalizou
+  finalizedAt DateTime? // Data/hora da finalização
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  finalizedByUser User? @relation("PayrollFinalizer", fields: [finalizedBy], references: [id], onDelete: SetNull)
+
+  // Índice único para mês/ano
+  @@unique([month, year])
+  @@index([month, year])
+  @@index([isFinalized])
+  @@map("payroll_status")
+}
+
+// Modelo de Centro de Custo de Engenharia
+model CostCenter {
+  id          String   @id @default(cuid())
+  code        String   @unique // Código do centro de custo
+  name        String   // Nome do centro de custo
+  description String?  // Descrição adicional
+  state       String?  // Estado (DF, GO, etc.)
+  polo        String?  // Polo (BRASÍLIA, GOIÁS, etc.)
+  company     String?  // Empresa (ABRASIL, GÊNNESIS, MÉTRICA, etc.)
+  isActive    Boolean  @default(true) // Se está ativo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  engineeringMaterials EngineeringMaterial[]
+  projects             Project[]
+  materialRequests     MaterialRequest[]
+  contracts            Contract[]
+  cacambas             cacambas[]
+  contract_additives   contract_additives[]
+  monthly_goals        monthly_goals[]
+  service_orders       service_orders[]
+
+  @@index([code])
+  @@index([isActive])
+  @@map("cost_centers")
+}
+
+// Modelo de Contrato (Engenharia)
+model Contract {
+  id               String    @id @default(cuid())
+  name             String    // Nome do contrato
+  number           String    @unique // Número do contrato
+  startDate        DateTime  // Início da vigência
+  endDate          DateTime  // Fim da vigência
+  costCenterId     String    // Centro de custo associado
+  valuePlusAddenda Decimal   @db.Decimal(15, 2) // Valor mais aditivos
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relacionamentos
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  billings     ContractBilling[]
+  annualValues ContractAnnualValue[]
+  addenda      ContractAddendum[]
+  pleitos      Pleito[]
+  weeklyProductions ContractWeeklyProduction[]
+  userPermissions   UserContractPermission[]
+  dpApprovalUsers   UserDpApprovalContract[]
+
+  @@index([costCenterId])
+  @@index([number])
+  @@map("contracts")
+}
+
+// Aditivos do contrato (permite múltiplos lançamentos com data de efeito)
+model ContractAddendum {
+  id            String   @id @default(cuid())
+  contractId    String
+  effectiveDate DateTime
+  amount        Decimal  @db.Decimal(15, 2) // pode ser positivo ou negativo
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([contractId, effectiveDate])
+  @@map("contract_addenda")
+}
+
+// Valor anual customizado por ano (permite valor diferente a cada ano)
+model ContractAnnualValue {
+  id         String   @id @default(cuid())
+  contractId String
+  year       Int      // Ano (ex: 2025)
+  value      Decimal  @db.Decimal(15, 2) // Valor anual final (base + ajuste), espelho para relatórios
+  /// Soma algebrica ao valor anual calculado pelo contrato (orçamento do órgão naquele ano)
+  budgetAdjustmentDelta     Decimal?  @db.Decimal(15, 2)
+  /// Data do aditivo/orçamento: a partir deste mês civil a meta mensal usa (base + delta) ÷ 12
+  budgetAdjustmentEffectiveDate DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relacionamentos
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, year])
+  @@index([contractId])
+  @@map("contract_annual_values")
+}
+
+// Modelo de Faturamento do Contrato
+model ContractBilling {
+  id            String   @id @default(cuid())
+  contractId    String
+  issueDate     DateTime // Data de emissão
+  invoiceNumber String   // Número da nota fiscal
+  serviceOrder  String   // Ordem de serviço
+  divSe         String?  // OS / SE
+  grossValue    Decimal  @db.Decimal(15, 2) // Valor bruto
+  netValue      Decimal  @db.Decimal(15, 2) // Valor líquido
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relacionamentos
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("contract_billings")
+}
+
+// Produção Semanal do contrato
+model ContractWeeklyProduction {
+  id                    String   @id @default(cuid())
+  contractId            String
+  fillingDate           DateTime  @default(now()) // Data em que o usuário preencheu (não editável)
+  divSe                 String   // OS / SE
+  weeklyProductionValue Decimal  @db.Decimal(15, 2) // Valor da Produção Semanal
+  responsiblePerson     String   // Responsável pelo Preenchimento
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@map("contract_weekly_productions")
+}
+
+// Andamento da OS — acompanhamento de ordens de serviço (Engenharia); tabela API: pleitos
+model Pleito {
+  id                   String    @id @default(cuid())
+  serviceOrderId       String
+  mes                  Int
+  ano                  Int
+  valorPrevisto        Decimal   @db.Decimal(14, 2)
+  valorExecutado       Decimal   @default(0) @db.Decimal(14, 2)
+  dataMedicao          DateTime?
+  observacao           String?
+  creationMonth        String?   // Mês de criação (01-12)
+  creationYear         Int?      // Ano de criação
+  startDate            DateTime? // Data início
+  endDate              DateTime? // Data término
+  budgetStatus         String?   // Status orçamento
+  folderNumber         String?   // Nº pasta
+  lot                  String?   // Lote
+  divSe                String?   // Div SE
+  location             String?   // Local
+  unit                 String?   // Unidade
+  serviceDescription   String    @db.Text // Descrição do serviço
+  budget               String?   // Orçamento (referência/texto)
+  executionStatus      String?   // Status execução
+  billingStatus        String?   // Status faturamento
+  updatedContractId    String?   // ID atualizado contrato
+  accumulatedBilled    Decimal?  @db.Decimal(15, 2) // Acumulado faturado (moeda)
+  billingRequest       Decimal?  @db.Decimal(15, 2) // Pendente faturamento (moeda)
+  invoiceNumber        String?   // Nº nota
+  estimator            String?   // Orçamentista
+  budgetAmount1        Decimal?  @db.Decimal(15, 2) // Orçamento R$ 1
+  budgetAmount2        Decimal?  @db.Decimal(15, 2)
+  budgetAmount3        Decimal?  @db.Decimal(15, 2)
+  budgetAmount4        Decimal?  @db.Decimal(15, 2)
+  pv                   String?   // RVI — FEITO ou PENDENTE
+  ipi                  String?   // RVF — FEITO ou PENDENTE
+  reportsBilling       String?   // Cobrança laudos
+  engineer             String?   // Engenheiro
+  supervisor           String?   // Encarregado
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  service_orders  service_orders @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  updatedContract Contract? @relation(fields: [updatedContractId], references: [id], onDelete: SetNull)
+
+  @@unique([serviceOrderId, mes, ano])
+  @@index([ano, mes])
+  @@index([folderNumber])
+  @@index([serviceOrderId])
+  @@index([updatedContractId])
+  @@map("pleitos")
+}
+
+// Modelo de Obra/Projeto
+model Project {
+  id          String   @id @default(cuid())
+  code        String   @unique // Código da obra
+  name        String   // Nome da obra
+  description String?  // Descrição da obra
+  costCenterId String  // Centro de custo associado
+  status      ProjectStatus @default(ACTIVE) // Status da obra
+  startDate   DateTime? // Data de início
+  endDate     DateTime? // Data de término prevista
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  costCenter  CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  materialRequests MaterialRequest[]
+
+  @@index([code])
+  @@index([costCenterId])
+  @@index([status])
+  @@index([isActive])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  ACTIVE      // Em andamento
+  PLANNING    // Em planejamento
+  SUSPENDED   // Suspensa
+  COMPLETED   // Concluída
+  CANCELLED   // Cancelada
+}
+
+// Modelo de Requisição de Material
+model MaterialRequest {
+  id          String   @id @default(cuid())
+  requestNumber String @unique // Número da requisição (ex: REQ-2025-001)
+  requestedBy  String  // ID do usuário que solicitou
+  costCenterId String  // Centro de custo
+  projectId    String? // Obra/Projeto (opcional)
+  serviceOrderId String?
+  serviceOrder String? // Ordem de serviço (texto livre)
+  obra         String? // Obra (texto livre)
+  description  String? // Descrição/observações da requisição
+  status       MaterialRequestStatus @default(PENDING) // Status da requisição
+  priority     MaterialRequestPriority @default(MEDIUM) // Prioridade
+  requestedAt  DateTime @default(now()) // Data da requisição
+  approvedBy   String? // ID do aprovador (compras)
+  approvedAt   DateTime? // Data de aprovação
+  rejectedBy   String? // ID de quem rejeitou
+  rejectedAt   DateTime? // Data de rejeição
+  rejectionReason String? // Motivo da rejeição
+  completedAt  DateTime? // Data de conclusão (quando todos os itens foram atendidos)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relacionamentos
+  requester    User @relation("MaterialRequestRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approver     User? @relation("MaterialRequestApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  rejecter     User? @relation("MaterialRequestRejecter", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  costCenter   CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  service_orders service_orders? @relation(fields: [serviceOrderId], references: [id])
+  items        MaterialRequestItem[]
+  purchaseOrders PurchaseOrder[]
+  quoteMaps    QuoteMap[] @relation("QuoteMapMaterialRequest")
+
+  @@index([requestNumber])
+  @@index([requestedBy])
+  @@index([costCenterId])
+  @@index([projectId])
+  @@index([serviceOrderId])
+  @@index([serviceOrder])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("material_requests")
+}
+
+model cacambas {
+  id             String          @id
+  costCenterId   String
+  serviceOrderId String?
+  numero         String?
+  dataLocacao    DateTime?
+  dataDevolucao  DateTime?
+  valor          Decimal?        @db.Decimal(12, 2)
+  observacao     String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime
+
+  cost_centers   CostCenter      @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  service_orders service_orders? @relation(fields: [serviceOrderId], references: [id])
+
+  @@index([costCenterId])
+  @@index([serviceOrderId])
+}
+
+model contract_additives {
+  id           String     @id
+  costCenterId String
+  valor        Decimal    @db.Decimal(14, 2)
+  descricao    String?
+  dataAditivo  DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+
+  cost_centers CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+
+  @@index([costCenterId])
+}
+
+model monthly_goals {
+  id           String     @id
+  costCenterId String
+  mes          Int
+  ano          Int
+  meta         Decimal    @db.Decimal(14, 2)
+  executado    Decimal    @default(0) @db.Decimal(14, 2)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime
+
+  cost_centers CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+
+  @@unique([costCenterId, mes, ano])
+  @@index([ano, mes])
+  @@index([costCenterId])
+}
+
+model service_orders {
+  id                String             @id
+  costCenterId      String
+  numero            Int
+  ano               Int
+  dataInicio        DateTime
+  previsaoFim       DateTime
+  valor             Decimal            @db.Decimal(14, 2)
+  status            ServiceOrderStatus @default(NAO_INICIADO)
+  justificativa     String?
+  descricao         String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime
+
+  cacambas          cacambas[]
+  material_requests MaterialRequest[]
+  pleitos           Pleito[]
+  cost_centers      CostCenter         @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+
+  @@unique([costCenterId, numero, ano])
+  @@index([costCenterId])
+  @@index([status])
+}
+
+enum MaterialRequestStatus {
+  PENDING     // Pendente - Aguardando análise de compras
+  IN_REVIEW   // Correção RM - aguardando ajuste do solicitante
+  APPROVED    // Aprovada - Compras aprovou e está processando
+  PARTIALLY_FULFILLED // Parcialmente atendida - Alguns itens foram atendidos
+  FULFILLED   // Atendida - Todos os itens foram atendidos
+  REJECTED    // Rejeitada - Compras rejeitou a requisição
+  CANCELLED   // Cancelada - Engenharia cancelou a requisição
+}
+
+enum MaterialRequestPriority {
+  LOW         // Baixa
+  MEDIUM      // Média
+  HIGH        // Alta
+  URGENT      // Urgente
+}
+
+// Modelo de Item da Requisição de Material
+model MaterialRequestItem {
+  id                String   @id @default(cuid())
+  materialRequestId String   // ID da requisição
+  materialId        String   // ID do material (EngineeringMaterial)
+  quantity          Decimal  @db.Decimal(10, 2) // Quantidade solicitada
+  unit              String   // Unidade de medida
+  unitPrice         Decimal? @db.Decimal(12, 2) // Preço unitário no momento da requisição
+  totalPrice        Decimal? @db.Decimal(12, 2) // Preço total (quantity * unitPrice)
+  notes             String?  // Observações sobre o item
+  attachmentUrl     String?  // URL relativa do anexo (ex.: /uploads/material-request-items/...)
+  attachmentName    String?  // Nome original do arquivo
+  status            MaterialRequestItemStatus @default(PENDING) // Status do item
+  fulfilledQuantity Decimal? @db.Decimal(10, 2) // Quantidade já atendida
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relacionamentos
+  materialRequest   MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  material          EngineeringMaterial @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  purchaseOrderItems PurchaseOrderItem[]
+  quoteMapSupplierItems QuoteMapSupplierItem[]
+  quoteMapWinnerItems   QuoteMapWinnerItem[]
+
+  @@index([materialRequestId])
+  @@index([materialId])
+  @@index([status])
+  @@map("material_request_items")
+}
+
+enum MaterialRequestItemStatus {
+  PENDING     // Pendente
+  APPROVED    // Aprovado
+  PURCHASED   // Comprado
+  DELIVERED   // Entregue
+  CANCELLED   // Cancelado
+}
+
+// Modelo de Fornecedor (estilo TOTVS RM)
+model Supplier {
+  id          String   @id @default(cuid())
+  code        String   @unique // Código do fornecedor
+  name        String   // Razão social / Nome
+  cnpj        String?  @unique // CNPJ
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  state       String?  // UF
+  zipCode     String?
+  contactName String?  // Nome do contato
+  /// Dados para remessa CNAB400 (pagamento a fornecedores) — opcionais
+  bank         String?  // Nome ou identificação do banco (ex.: ITAÚ, 341)
+  agency       String?  // Agência do favorecido
+  account      String?  // Conta (sem dígito)
+  accountDigit String?  // Dígito da conta
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+  quoteMapSuppliers     QuoteMapSupplier[]     @relation("QuoteMapSupplierSupplier")
+  quoteMapSupplierItems QuoteMapSupplierItem[] @relation("QuoteMapSupplierItemSupplier")
+  quoteMapWinnerItems   QuoteMapWinnerItem[]   @relation("QuoteMapWinnerSupplier")
+
+  @@index([code])
+  @@index([isActive])
+  @@map("suppliers")
+}
+
+/// Condições de pagamento para OC (valores gravados em PurchaseOrder.paymentCondition)
+model PaymentCondition {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  label       String
+  paymentType String   // AVISTA | BOLETO
+  /// Quantidade de parcelas (ex.: 3 boletos)
+  parcelCount Int      @default(1)
+  /// Prazo em dias para cada parcela, na ordem — ex.: [30, 60, 90]
+  parcelDueDays Json
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([paymentType, isActive])
+  @@map("payment_conditions")
+}
+
+// Modelo de Ordem de Compra (OC - estilo TOTVS RM)
+model PurchaseOrder {
+  id                String   @id @default(cuid())
+  orderNumber       String   @unique // Número da OC (ex: OC-2025-001)
+  materialRequestId String?  // SC que originou (opcional)
+  quoteMapId        String?  // Mapa de cotação que gerou esta OC (opcional)
+  supplierId        String   // Fornecedor
+  status            PurchaseOrderStatus @default(PENDING)
+  orderDate         DateTime @default(now())
+  expectedDelivery  DateTime? // Data prevista de entrega
+  deliveryAddress   String?  // Endereço de entrega
+  /// AVISTA | BOLETO
+  paymentType       String?
+  /// AVISTA | BOLETO_30 | BOLETO_28 (rótulos: à vista, boleto 30 dias, boleto 28 dias)
+  paymentCondition  String?
+  paymentDetails    String?  @db.Text // Dados do pagamento (texto livre)
+  boletoAttachmentUrl  String? // Caminho público ex.: /uploads/purchase-orders/...
+  boletoAttachmentName String? // Nome original do arquivo
+  /// Boleto para pagamento (financeiro), após OC aprovada — distinto do anexo na criação da OC
+  paymentBoletoUrl     String?
+  paymentBoletoName    String?
+  /// Parcelas de boleto: [{ amount, dueDate, boletoUrl, boletoName }, ...] alinhado à condição de pagamento
+  paymentBoletoInstallments Json?
+  /// Após anexar boleto(s), o financeiro confirma com botão para exibir a OC na fase Pagamento (comprovante/CNAB)
+  paymentBoletoPhaseReleased Boolean @default(false)
+  /// Comprovante de pagamento anexado na fase Pagamento
+  paymentProofUrl      String?
+  paymentProofName     String?
+  /// Notas fiscais anexadas após validação do comprovante: [{ url, name, uploadedAt }]
+  nfAttachments     Json?
+  /// Frete informado na criação (ou edição em correção). Total a pagar = soma dos itens + frete.
+  freightAmount     Decimal  @default(0) @db.Decimal(15, 2)
+  amountToPay       Decimal? @db.Decimal(15, 2) // Itens + frete (recalculado ao salvar itens/frete)
+  notes             String?
+  createdBy         String   // Usuário que criou
+  approvedBy        String?  // Usuário que aprovou
+  approvedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  materialRequest   MaterialRequest? @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
+  quoteMap          QuoteMap? @relation(fields: [quoteMapId], references: [id], onDelete: SetNull)
+  supplier          Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  creator           User @relation("PurchaseOrderCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  approver          User? @relation("PurchaseOrderApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  items             PurchaseOrderItem[]
+
+  @@index([orderNumber])
+  @@index([materialRequestId])
+  @@index([quoteMapId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([orderDate])
+  @@map("purchase_orders")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT       // Rascunho
+  PENDING_COMPRAS // OC - Aprovação Compras (0ª fase)
+  PENDING     // OC - Aprovação Gestor (1ª fase)
+  PENDING_DIRETORIA // OC - Aprovação Diretoria (2ª fase)
+  IN_REVIEW   // CORREÇÃO OC - aguardando ajuste de quem criou
+  APPROVED    // Aprovada (após diretoria)
+  PENDING_PROOF_VALIDATION // Aguardando validação do comprovante de pagamento
+  PENDING_PROOF_CORRECTION // Comprovante reprovado na validação — comprador substitui e reenvia
+  PENDING_NF_ATTACHMENT // Após comprovante validado — anexar NF(s)
+  SENT        // Enviada ao fornecedor (legado; fluxo completo atual usa FINALIZED)
+  FINALIZED   // Fluxo completo concluído (NF anexada — arquivo)
+  PARTIALLY_RECEIVED  // Parcialmente recebida
+  RECEIVED    // Totalmente recebida
+  REJECTED    // Reprovada
+  CANCELLED   // Cancelada
+}
+
+// Modelo de Item da Ordem de Compra
+model PurchaseOrderItem {
+  id                    String   @id @default(cuid())
+  purchaseOrderId       String
+  materialRequestItemId String?  // Item da SC que originou (opcional)
+  materialId            String
+  quantity              Decimal  @db.Decimal(10, 2)
+  unit                  String
+  unitPrice             Decimal  @db.Decimal(12, 2)
+  totalPrice            Decimal  @db.Decimal(12, 2)
+  notes                 String?
+  receivedQuantity      Decimal? @db.Decimal(10, 2) @default(0) // Quantidade já recebida
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  purchaseOrder         PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  materialRequestItem   MaterialRequestItem? @relation(fields: [materialRequestItemId], references: [id], onDelete: SetNull)
+  material              EngineeringMaterial @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderId])
+  @@index([materialRequestItemId])
+  @@index([materialId])
+  @@map("purchase_order_items")
+}
+
+// Modelo de Mapa de Cotação (comparação de fornecedores por item)
+model QuoteMap {
+  id                String   @id @default(cuid())
+  materialRequestId String
+  createdBy         String
+  status            QuoteMapStatus @default(DRAFT)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relacionamentos
+  materialRequest   MaterialRequest @relation("QuoteMapMaterialRequest", fields: [materialRequestId], references: [id], onDelete: Cascade)
+  creator           User @relation("QuoteMapCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  purchaseOrders    PurchaseOrder[]
+  suppliers         QuoteMapSupplier[]
+  winners           QuoteMapWinnerItem[]
+  supplierItems     QuoteMapSupplierItem[]
+
+  @@index([materialRequestId])
+  @@index([createdBy])
+  @@map("quote_maps")
+}
+
+enum QuoteMapStatus {
+  DRAFT // Rascunho
+}
+
+// Frete por fornecedor dentro do mapa + campos de pagamento quando for gerar OC
+model QuoteMapSupplier {
+  id          String   @id @default(cuid())
+  quoteMapId  String
+  supplierId  String
+  freight     Decimal? @db.Decimal(12, 2)
+
+  // Campos de pagamento (usados na geração de OC) - opcionais
+  paymentType       String?
+  paymentCondition  String?
+  paymentDetails    String? @db.Text
+  observations      String?
+  amountToPay       Decimal? @db.Decimal(15, 2)
+  boletoAttachmentUrl  String?
+  boletoAttachmentName String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  quoteMap    QuoteMap @relation(fields: [quoteMapId], references: [id], onDelete: Cascade)
+  supplier    Supplier @relation("QuoteMapSupplierSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  items       QuoteMapSupplierItem[]
+
+  @@unique([quoteMapId, supplierId])
+  @@index([quoteMapId])
+  @@map("quote_map_suppliers")
+}
+
+// Preço unitário cotado por item da SC e fornecedor
+model QuoteMapSupplierItem {
+  id                   String   @id @default(cuid())
+  quoteMapId            String
+  supplierId            String
+  materialRequestItemId String
+  unitPrice            Decimal @db.Decimal(12, 2)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  quoteMap  QuoteMap @relation(fields: [quoteMapId], references: [id], onDelete: Cascade)
+  supplier  Supplier @relation("QuoteMapSupplierItemSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  materialRequestItem MaterialRequestItem @relation(fields: [materialRequestItemId], references: [id], onDelete: Cascade)
+  quoteMapSupplier QuoteMapSupplier @relation(fields: [quoteMapId, supplierId], references: [quoteMapId, supplierId], onDelete: Cascade)
+
+  @@unique([quoteMapId, supplierId, materialRequestItemId])
+  @@index([quoteMapId])
+  @@index([materialRequestItemId])
+  @@map("quote_map_supplier_items")
+}
+
+// Vencedor calculado por item (menor (unitPrice * quantidade) + frete)
+model QuoteMapWinnerItem {
+  id                   String   @id @default(cuid())
+  quoteMapId            String
+  materialRequestItemId String
+  winnerSupplierId     String
+
+  winnerScore      Decimal @db.Decimal(15, 2)
+  winnerUnitPrice  Decimal @db.Decimal(12, 2)
+  freight           Decimal @db.Decimal(12, 2)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  quoteMap    QuoteMap @relation(fields: [quoteMapId], references: [id], onDelete: Cascade)
+  materialRequestItem MaterialRequestItem @relation(fields: [materialRequestItemId], references: [id], onDelete: Cascade)
+  winnerSupplier Supplier @relation("QuoteMapWinnerSupplier", fields: [winnerSupplierId], references: [id], onDelete: Restrict)
+
+  @@unique([quoteMapId, materialRequestItemId])
+  @@index([quoteMapId])
+  @@index([winnerSupplierId])
+  @@map("quote_map_winner_items")
+}
+
+// Modelo de Categoria de Material
+model MaterialCategory {
+  id          String   @id @default(cuid())
+  code        String   @unique // Código da categoria
+  name        String   // Nome da categoria (ex: Materiais, Mão de Obra, Equipamentos, Serviços)
+  description String?  // Descrição
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relacionamentos
+  materials   EngineeringMaterial[]
+
+  @@map("material_categories")
+}
+
+// Modelo de Natureza Orçamentária
+model BudgetNature {
+  id        String   @id @default(cuid())
+  code      String?  @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+  @@map("budget_natures")
+}
+
+// Modelo de Material de Engenharia (SINAPI)
+model EngineeringMaterial {
+  id                String   @id @default(cuid())
+  sinapiCode        String   @unique // Código oficial do material no SINAPI
+  name              String?  // Nome do material
+  description       String   // Descrição completa do material
+  unit              String   // Unidade de medida (kg, m, m², un, etc.)
+  medianPrice       Decimal? @db.Decimal(12, 2) // Preço mediano atual do SINAPI
+  state             String?  // Estado (UF) referente ao material
+  referenceMonth    Int?     // Mês de referência (1-12)
+  referenceYear     Int?     // Ano de referência
+  categoryId        String?  // Categoria do material
+  costCenterId      String?  // Centro de custo associado
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relacionamentos
+  category          MaterialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  costCenter        CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  priceHistory      PriceHistory[]
+  requestItems      MaterialRequestItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+
+  @@index([sinapiCode])
+  @@index([state])
+  @@index([categoryId])
+  @@index([costCenterId])
+  @@index([isActive])
+  @@map("engineering_materials")
+}
+
+// Modelo de Composição SINAPI (CPU - Composição de Preços Unitários)
+model Composition {
+  id                String   @id @default(cuid())
+  sinapiCode        String   // Código oficial da composição no SINAPI
+  description       String   // Descrição da composição
+  unit              String   // Unidade de medida (m², m³, etc.)
+  compositePrice    Decimal? @db.Decimal(12, 2) // Custo total (materiais + mão de obra + equipamentos)
+  state             String?  // Estado (UF) referente
+  referenceMonth    Int?     // Mês de referência (1-12)
+  referenceYear     Int?     // Ano de referência
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relacionamentos
+  priceHistory      PriceHistory[]
+
+  @@index([sinapiCode])
+  @@index([state])
+  @@index([isActive])
+  @@map("compositions")
+}
+
+// Modelo de Histórico de Preços
+model PriceHistory {
+  id            String   @id @default(cuid())
+  materialId    String?  // ID do material (se aplicável)
+  compositionId String?  // ID da composição (se aplicável)
+  price         Decimal  @db.Decimal(12, 2) // Valor registrado
+  referenceDate DateTime // Data de referência (mês/ano)
+  source        String   @default("SINAPI") // Fonte (SINAPI, ou outro sistema)
+  createdAt     DateTime @default(now())
+
+  // Relacionamentos
+  material      EngineeringMaterial? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  composition   Composition? @relation(fields: [compositionId], references: [id], onDelete: Cascade)
+
+  @@index([materialId])
+  @@index([compositionId])
+  @@index([referenceDate])
+  @@map("price_history")
+}
+
+// Modelo de Material de Construção Civil
+model ConstructionMaterial {
+  id          String   @id @default(cuid())
+  name        String   // Nome do material
+  description String?  // Descrição do material
+  unit        String   // Unidade de medida (kg, m, m², un, etc.)
+  isActive    Boolean  @default(true) // Se está ativo
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([isActive])
+  @@map("construction_materials")
+}
+
+// Modelo de Conversas com ChatGPT
+model ChatGPTConversation {
+  id        String            @id @default(cuid())
+  userId    String            // Usuário que criou a conversa
+  title     String            // Título da conversa (primeira mensagem)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  // Relacionamentos
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatGPTMessage[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("chatgpt_conversations")
+}
+
+// Modelo de Mensagens do ChatGPT
+model ChatGPTMessage {
+  id             String              @id @default(cuid())
+  conversationId String              // Conversa à qual pertence
+  role           String              // 'user' ou 'assistant'
+  content        String              // Conteúdo da mensagem
+  createdAt      DateTime            @default(now())
+
+  // Relacionamento
+  conversation   ChatGPTConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("chatgpt_messages")
+}
+
+// Modelo para tokens de reset de senha
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relacionamentos
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model UserPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  module    String
+  action    String
+  allowed   Boolean  @default(true)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  updater   User?    @relation("UserPermissionUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, module, action])
+  @@index([userId])
+  @@index([module, action])
+  @@map("user_permissions")
+}
+
+/// Contratos que um usuário não-admin pode acessar (além da permissão de módulo "Contratos").
+model UserContractPermission {
+  id         String   @id @default(cuid())
+  userId     String
+  contractId String
+  /// Recursos por contrato (aba Permissões). Se false, o usuário não acessa esse bloco dentro do contrato.
+  accessOrcamento       Boolean  @default(true)
+  accessRelatorios      Boolean  @default(true)
+  accessOrdemServico    Boolean  @default(true)
+  accessProducaoSemanal Boolean  @default(true)
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation("UserContractPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  updater  User?    @relation("UserContractPermissionUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, contractId])
+  @@index([userId])
+  @@index([contractId])
+  @@map("user_contract_permissions")
+}
+
+/// Contratos em que o usuário pode aprovar solicitações ao DP (ação Controle «Aprovar solicitações…»).
+model UserDpApprovalContract {
+  id         String   @id @default(cuid())
+  userId     String
+  contractId String
+  updatedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation("UserDpApprovalContractUser", fields: [userId], references: [id], onDelete: Cascade)
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  updater  User?    @relation("UserDpApprovalContractUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, contractId])
+  @@index([userId])
+  @@index([contractId])
+  @@map("user_dp_approval_contracts")
+}
+
+/// Template de permissões por cargo (nome do campo `Employee.position`). Usado como padrão na tela Permissões.
+model PositionPermissionTemplate {
+  id                    String   @id @default(cuid())
+  position              String   @unique
+  permissions           Json
+  allowedContractIds    Json     @default("[]")
+  dpApprovalContractIds Json     @default("[]")
+  /// Map contractId -> { orcamento, relatorios, ordemServico, producaoSemanal }
+  contractModuleFlags   Json     @default("{}")
+  updatedAt             DateTime @updatedAt
+
+  @@map("position_permission_templates")
+}
+
+// Drive — pastas e arquivos armazenados no S3
+model DriveFolder {
+  id        String   @id @default(cuid())
+  name      String
+  parentId  String?
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   DriveFolder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children DriveFolder[] @relation("FolderChildren")
+  files    DriveFile[]
+  shares   DriveFolderShare[]
+  owner    User                 @relation("DriveFolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([parentId])
+  @@index([ownerId])
+  @@map("drive_folders")
+}
+
+enum DriveFolderSharePermission {
+  READ
+  READ_WRITE
+}
+
+/// Quem tem acesso a qual pasta (além do dono). Acesso a subpastas/arquivos segue a pasta compartilhada.
+model DriveFolderShare {
+  id         String                     @id @default(cuid())
+  folderId   String
+  userId     String
+  permission DriveFolderSharePermission   @default(READ)
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
+  createdBy  String?
+
+  folder  DriveFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user    User        @relation("DriveFolderShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  creator User?       @relation("DriveFolderShareCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([folderId, userId])
+  @@index([userId])
+  @@index([folderId])
+  @@map("drive_folder_shares")
+}
+
+model DriveFile {
+  id           String   @id @default(cuid())
+  name         String
+  originalName String
+  s3Key        String
+  size         Int
+  mimeType     String
+  folderId     String?
+  ownerId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folder DriveFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  owner  User         @relation("DriveFileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([folderId])
+  @@index([ownerId])
+  @@map("drive_files")
+}
+
+// Conversas do chatbot WhatsApp (Meta Cloud API)
+model WhatsAppConversation {
+  id           String    @id @default(cuid())
+  phone        String
+  status       WhatsAppConversationStatus @default(PENDING)
+  flowStatus   String    @default("MENU")
+  currentStep  String?
+  payload      Json?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  messages     WhatsAppMessage[]
+  submissions  WhatsAppSubmission[]
+
+  @@index([phone])
+  @@index([updatedAt])
+  @@map("whatsapp_conversations")
+}
+
+enum WhatsAppConversationStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum ServiceOrderStatus {
+  NAO_INICIADO
+  EM_EXECUCAO
+  EM_ANDAMENTO
+  FINALIZADO
+}
+
+model WhatsAppMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // 'user' | 'assistant'
+  content        String
+  mediaUrl       String?
+  mediaKey       String?
+  fileName       String?
+  mimeType       String?
+  createdAt      DateTime @default(now())
+
+  conversation   WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("whatsapp_messages")
+}
+
+model WhatsAppSubmission {
+  id                   String   @id @default(cuid())
+  conversationId       String
+  type                 String   // ex: 'MEDICAL_CERTIFICATE'
+  payload              Json
+  fileUrl              String?
+  fileKey              String?
+  fileName              String?
+  status               String   @default("PENDING") // PENDING, PROCESSED, REJECTED
+  medicalCertificateId String?
+  createdAt            DateTime @default(now())
+
+  conversation         WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+  @@map("whatsapp_submissions")
 }
