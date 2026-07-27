@@ -23,7 +23,7 @@ export type GastosOperacionaisTotvsQueryData = {
 
 /** Query key compartilhada entre Controle Geral e o módulo Gastos Operacionais. */
 export const GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY = [
-  'gastos-operacionais-module-totvs-v37-ses-gdf-aliases'
+  'gastos-operacionais-module-totvs-v38-jfgo-de-goias-alias'
 ] as const;
 
 /**

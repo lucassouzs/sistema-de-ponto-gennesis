@@ -78,20 +78,47 @@ export default function ControleGeralContratosPage() {
     router.push('/auth/login');
   };
 
-  const { data: userData, isLoading: loadingUser } = useQuery({
+  const { data: overviewData, isLoading: loadingOverview } = useQuery({
+    queryKey: ['contracts-overview', 'controle-geral-v2'],
+    queryFn: async () => {
+      const res = await api.get('/contracts/overview', {
+        params: { skipAvailableYears: 1 }
+      });
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000
+  });
+
+  /** Prefetch do faturamento NFS em paralelo com TOTVS/planilha (mesma key do painel). */
+  useQuery({
+    queryKey: ['controle-geral-faturamento-by-contract-v24-conta-vinculada-total', [], [], 0],
+    queryFn: async () => {
+      const res = await api.get<{
+        success: boolean;
+        data?: {
+          entries?: unknown[];
+          recebidoMensalEntries?: unknown[];
+        };
+      }>('/controle-nfs/summary/faturamento-by-gastos-contract', {
+        params: { refresh: 1 },
+        timeout: 120_000
+      });
+      return {
+        entries: res.data?.data?.entries ?? [],
+        recebidoMensal: res.data?.data?.recebidoMensalEntries ?? []
+      };
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 1
+  });
+
+  const { data: userData } = useQuery({
     queryKey: ['user'],
     queryFn: async () => {
       const res = await api.get('/auth/me');
       return res.data;
-    }
-  });
-
-  const { data: overviewData, isLoading: loadingOverview } = useQuery({
-    queryKey: ['contracts-overview'],
-    queryFn: async () => {
-      const res = await api.get('/contracts/overview');
-      return res.data;
-    }
+    },
+    staleTime: 5 * 60 * 1000
   });
 
   /** Mesma query-key/processamento do módulo Gastos Operacionais (fonte TOTVS). */
@@ -100,7 +127,6 @@ export default function ControleGeralContratosPage() {
     isLoading: loadingTotvsGastos,
     isError: totvsGastosError,
     error: totvsGastosErrorObj,
-    isFetching: fetchingTotvsGastos,
     refetch: refetchTotvsGastos
   } = useQuery({
     queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
@@ -113,8 +139,7 @@ export default function ControleGeralContratosPage() {
     data: legacySheetData,
     isLoading: loadingLegacySheet,
     isError: legacySheetError,
-    error: legacySheetErrorObj,
-    isFetching: fetchingLegacySheet
+    error: legacySheetErrorObj
   } = useQuery({
     queryKey: ['controle-geral-gastos-legacy-sheet-v19', dataRefreshNonce],
     queryFn: async () => {
@@ -151,7 +176,6 @@ export default function ControleGeralContratosPage() {
   );
 
   const loadingGastos = loadingLegacySheet || loadingTotvsGastos;
-  const fetchingGastos = fetchingLegacySheet || fetchingTotvsGastos;
   /** Só bloqueia o painel se as duas fontes falharem; aviso parcial vai na descrição. */
   const gastosError = Boolean(legacySheetError && totvsGastosError);
   const gastosFetchedAt = totvsGastosData?.fetchedAt ?? legacySheetData?.fetchedAt;
@@ -262,16 +286,6 @@ export default function ControleGeralContratosPage() {
   // Ordem fixa solicitada para este módulo:
   // CONTRATO, CENTRO DE CUSTO, FATURAMENTO ACUMULADO, FATURAMENTO ANUAL, PRODUÇÃO, VALOR ORÇADO, PENDENTE FATURAMENTO.
 
-  if (loadingUser) {
-    return (
-      <ProtectedRoute route="/ponto/contratos">
-        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-          <Loading message="Carregando..." fullScreen size="lg" />
-        </MainLayout>
-      </ProtectedRoute>
-    );
-  }
-
   return (
     <ProtectedRoute route="/ponto/contratos">
       <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
@@ -288,7 +302,7 @@ export default function ControleGeralContratosPage() {
           <ControleGeralGastosOperacionaisPanel
             detailRows={gastosDetailRows}
             naturezaDetailRows={gastosNaturezaDetailRows}
-            isLoading={loadingGastos || fetchingGastos}
+            isLoading={loadingGastos}
             fetchedAt={gastosFetchedAt}
             isError={gastosError}
             errorMessage={gastosErrorMessage}
@@ -308,6 +322,7 @@ export default function ControleGeralContratosPage() {
             }
             totalColumnLabel="Gastos"
             showFaturamentoColumn
+            showTetoOrcamentarioColumn
             showPdfExport
             showContractDetails
             contractsForDetailLookup={rawList}

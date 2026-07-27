@@ -183,6 +183,8 @@ const GASTOS_OPERACIONAIS_CONTRACT_ALIASES: Readonly<Record<string, string>> = {
   [normalizeContractOrderKey('TJGO RETROFIT - LOTE 04')]: 'TJGO RETROFIT R5 - LOTE 4',
   [normalizeContractOrderKey('TJGO RETROFIT - LOTE 05')]: 'TJGO RETROFIT R5 - LOTE 5',
   [normalizeContractOrderKey('UFGO')]: 'UFG',
+  // TOTVS/planilha usa "JUSTIÇA FEDERAL DE GOIÁS"; o catálogo usa "JUSTIÇA FEDERAL GOIAS".
+  [normalizeContractOrderKey('JUSTIÇA FEDERAL DE GOIÁS')]: 'JUSTIÇA FEDERAL GOIAS',
   // TOTVS usa "SES GDF - LOTE X"; o catálogo do Controle Geral usa "SES - LOTE X".
   [normalizeContractOrderKey('SES GDF - LOTE 10')]: 'SES - LOTE 10',
   [normalizeContractOrderKey('SES GDF - LOTE 12')]: 'SES - LOTE 12',

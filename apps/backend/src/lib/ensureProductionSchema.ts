@@ -694,6 +694,39 @@ async function ensureLicitacaoConfigTable(prisma: PrismaClient): Promise<void> {
   `);
 }
 
+async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "controle_geral_teto_orcamentario" (
+      "id" TEXT NOT NULL,
+      "contractKey" TEXT NOT NULL,
+      "contractName" TEXT NOT NULL,
+      "year" INTEGER NOT NULL,
+      "month" INTEGER NOT NULL,
+      "amount" DECIMAL(15,2) NOT NULL,
+      "createdById" TEXT,
+      "updatedById" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "controle_geral_teto_orcamentario_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "controle_geral_teto_orcamentario_contractKey_year_month_key"
+    ON "controle_geral_teto_orcamentario"("contractKey", "year", "month");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "controle_geral_teto_orcamentario_contractKey_idx"
+    ON "controle_geral_teto_orcamentario"("contractKey");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "controle_geral_teto_orcamentario_year_month_idx"
+    ON "controle_geral_teto_orcamentario"("year", "month");
+  `);
+}
+
 /**
  * Corrige drift conhecido entre Prisma schema e bancos de produção onde migrate deploy não aplicou tudo.
  * DDL idempotente (IF NOT EXISTS / duplicate_object).
@@ -716,6 +749,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoRegiaoSheetRowsTable(prisma);
     await ensureBancoCatsServicosTable(prisma);
     await ensureLicitacaoConfigTable(prisma);
+    await ensureControleGeralTetoOrcamentarioTable(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);

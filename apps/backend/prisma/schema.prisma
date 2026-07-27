@@ -1310,6 +1310,27 @@ model ContractAnnualValue {
   @@map("contract_annual_values")
 }
 
+/// Teto orçamentário mensal por contrato (Controle Geral de Contratos).
+model ControleGeralTetoOrcamentario {
+  id           String   @id @default(cuid())
+  /// Chave normalizada do contrato (mesmo critério do painel de gastos).
+  contractKey  String
+  /// Nome exibido no cadastro.
+  contractName String
+  year         Int
+  month        Int
+  amount       Decimal  @db.Decimal(15, 2)
+  createdById  String?
+  updatedById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([contractKey, year, month])
+  @@index([contractKey])
+  @@index([year, month])
+  @@map("controle_geral_teto_orcamentario")
+}
+
 // Modelo de Faturamento do Contrato
 model ContractBilling {
   id            String   @id @default(cuid())

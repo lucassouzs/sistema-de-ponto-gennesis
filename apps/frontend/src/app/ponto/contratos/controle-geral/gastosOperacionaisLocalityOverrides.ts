@@ -140,17 +140,31 @@ export function loadGastosLocalityOverridesWithCatalogSeed(): GastosOperacionais
 function migrateMergedContractLocalityOverrides(
   overrides: GastosOperacionaisLocalityOverrideMap
 ): GastosOperacionaisLocalityOverrideMap {
-  const lote02Key = normalizeContractOrderKey('TJGO MANUTENÇÃO LOTE 02');
-  const rioVerdeKey = normalizeContractOrderKey('TJ MANUTENÇÃO RIO VERDE - CORRETIVA');
+  const migrations: Array<{ from: string; to: string }> = [
+    {
+      from: normalizeContractOrderKey('TJGO MANUTENÇÃO LOTE 02'),
+      to: normalizeContractOrderKey('TJ MANUTENÇÃO RIO VERDE - CORRETIVA')
+    },
+    {
+      from: normalizeContractOrderKey('JUSTIÇA FEDERAL DE GOIÁS'),
+      to: normalizeContractOrderKey('JUSTIÇA FEDERAL GOIAS')
+    }
+  ];
 
-  if (!Object.prototype.hasOwnProperty.call(overrides, lote02Key)) {
-    return overrides;
+  let next = overrides;
+  let changed = false;
+
+  for (const { from, to } of migrations) {
+    if (!Object.prototype.hasOwnProperty.call(next, from)) continue;
+    if (!changed) {
+      next = { ...next };
+      changed = true;
+    }
+    if (!Object.prototype.hasOwnProperty.call(next, to) && next[from]) {
+      next[to] = next[from];
+    }
+    delete next[from];
   }
 
-  const next = { ...overrides };
-  if (!Object.prototype.hasOwnProperty.call(next, rioVerdeKey) && next[lote02Key]) {
-    next[rioVerdeKey] = next[lote02Key];
-  }
-  delete next[lote02Key];
   return next;
 }

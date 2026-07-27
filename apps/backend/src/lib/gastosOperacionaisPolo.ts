@@ -69,6 +69,7 @@ function buildNomeToPoloMap(): Record<string, string> {
     ['POLO GOIAS', 'GO'],
     ['GOIAS', 'GO'],
     ['JUSTICA FEDERAL GOIAS', 'GO'],
+    ['JUSTICA FEDERAL DE GOIAS', 'GO'],
     ['GO - ADM LOCAL', 'GO'],
     ['BBGO - MANUTENCAO', 'GO'],
     ['CAPITANIA FLUVIAL - GO', 'GO'],

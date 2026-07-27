@@ -29,6 +29,7 @@ export type ControleNfsTabTotals = {
   valorLiquido: number;
   totalImpostos: number;
   contaVinculada: number;
+  hasContaVinculadaColumn?: boolean;
 };
 
 export type ControleNfsCardsDateFilter = {

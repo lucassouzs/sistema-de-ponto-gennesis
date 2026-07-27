@@ -60,6 +60,8 @@ export type ControleNfsTabTotals = {
   valorLiquido: number;
   totalImpostos: number;
   contaVinculada: number;
+  /** False quando a aba não tem a coluna Conta Vinculada. */
+  hasContaVinculadaColumn: boolean;
 };
 
 export type ControleNfsCardsDateFilter = {
@@ -165,6 +167,15 @@ type SheetCacheEntry = {
 };
 const sheetCache = new Map<string, SheetCacheEntry>();
 let totalsSummaryCache: { expiresAt: number; data: ControleNfsTotalsSummary } | null = null;
+/** Invalida caches em memória após mudanças no cálculo (ex.: Conta Vinculada). */
+const NFS_TOTALS_CACHE_VERSION = 4;
+let loadedNfsTotalsCacheVersion = 0;
+
+function invalidateStaleNfsTotalsCache(): void {
+  if (loadedNfsTotalsCacheVersion === NFS_TOTALS_CACHE_VERSION) return;
+  loadedNfsTotalsCacheVersion = NFS_TOTALS_CACHE_VERSION;
+  totalsSummaryCache = null;
+}
 
 function spreadsheetId(): string {
   return (process.env.CONTROLE_NFS_SPREADSHEET_ID ?? DEFAULT_SPREADSHEET_ID).trim();
@@ -231,8 +242,49 @@ function findValorLiquidoColumnIndex(headers: string[]): number {
   });
 }
 
-function findContaVinculadaColumnIndex(headers: string[]): number {
-  return headers.findIndex((header) => normalizeHeaderKey(header).includes('conta vinculada'));
+function findContaVinculadaColumnIndex(headers: string[], rows?: string[][]): number {
+  const candidates = headers
+    .map((header, index) => ({ header, index }))
+    .filter(({ header }) => {
+      const key = normalizeHeaderKey(header);
+      return key === 'conta vinculada' || key.includes('conta vinculada') || key.includes('contavinculada');
+    });
+
+  if (candidates.length === 0) return -1;
+  if (candidates.length === 1 || !rows?.length) return candidates[0].index;
+
+  // Há abas com duas colunas "CONTA VINCULADA" (número + texto auxiliar).
+  // Preferir a que tiver mais valores monetários preenchidos.
+  let bestIndex = candidates[0].index;
+  let bestScore = -1;
+  for (const { index } of candidates) {
+    let score = 0;
+    for (const row of rows) {
+      if (parseCurrencyCell(row[index] ?? '') != null) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+function parseCurrencyCell(value: string): number | null {
+  const text = value.trim();
+  if (!text || text === '-' || text === 'R$ -' || text === 'R$-' || text === '—') return null;
+
+  // Células formatadas (R$ 1.234,56) ou número puro do gviz (1234.56 / 1234,56).
+  const withCurrency = /^R\$\s*([\d.,-]+)/i.exec(text);
+  const normalized = (withCurrency ? withCurrency[1] : text).replace(/[R$\s]/g, '').trim();
+  if (!normalized || normalized === '-') return null;
+  if (!/^-?[\d.,]+$/.test(normalized)) return null;
+
+  const parsed = normalized.includes(',')
+    ? parseFloat(normalized.replace(/\./g, '').replace(',', '.'))
+    : parseFloat(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function sumCurrencyColumn(headers: string[], rows: string[][], colIndex: number): number {
@@ -361,23 +413,14 @@ function sumImpostosColumns(headers: string[], rows: string[][]): number {
   return total;
 }
 
-function sumContaVinculadaColumn(headers: string[], rows: string[][]): number {
-  return sumCurrencyColumn(headers, rows, findContaVinculadaColumnIndex(headers));
-}
-
-function parseCurrencyCell(value: string): number | null {
-  const text = value.trim();
-  if (!text || text === '-' || text === 'R$ -' || text === 'R$-') return null;
-  if (!/^R\$\s*[\d.,-]+/i.test(text)) return null;
-
-  const normalized = text.replace(/[R$\s]/g, '').trim();
-  if (!normalized || normalized === '-') return null;
-
-  const parsed = normalized.includes(',')
-    ? parseFloat(normalized.replace(/\./g, '').replace(',', '.'))
-    : parseFloat(normalized);
-
-  return Number.isFinite(parsed) ? parsed : null;
+function sumContaVinculadaColumn(headers: string[], rows: string[][], tabKey?: string): number {
+  return sumCurrencyColumnForRows(
+    headers,
+    rows,
+    findContaVinculadaColumnIndex(headers, rows),
+    undefined,
+    tabKey
+  );
 }
 
 function hasNotaFiscalPreenchida(row: string[], notaFiscalColIndex: number): boolean {
@@ -808,7 +851,9 @@ function computeTabTotalsFromProcessed(
     valorRecebido: sumValorRecebidoColumn(headers, rowsForRecebido, tabKey),
     valorLiquido: sumValorLiquidoColumn(headers, rowsForBrutoLiquido, tabKey),
     totalImpostos: sumImpostosColumns(headers, rowsForBrutoLiquido),
-    contaVinculada: sumContaVinculadaColumn(headers, rowsForBrutoLiquido)
+    // Conta vinculada: saldo acumulado da planilha — não responde a filtros de data/apuração.
+    contaVinculada: sumContaVinculadaColumn(headers, rows, tabKey),
+    hasContaVinculadaColumn: findContaVinculadaColumnIndex(headers, rows) >= 0
   };
 }
 
@@ -1012,6 +1057,29 @@ async function getProcessedSheetForTab(tab: ControleNfsSheetTab): Promise<{
   };
 }
 
+/** Carrega todas as abas NFS uma vez (reusa cache em memória). */
+export async function loadProcessedNfsSheetsByTabKey(
+  forceRefresh = false
+): Promise<Map<string, { headers: string[]; rows: string[][] }>> {
+  if (forceRefresh) {
+    sheetCache.clear();
+  }
+
+  const processedSheets = await Promise.all(
+    CONTROLE_NFS_SHEET_TABS.map(async (tab) => {
+      try {
+        return await getProcessedSheetForTab(tab);
+      } catch {
+        return { headers: [] as string[], rows: [] as string[][] };
+      }
+    })
+  );
+
+  return new Map(
+    CONTROLE_NFS_SHEET_TABS.map((tab, index) => [tab.key, processedSheets[index]])
+  );
+}
+
 function parseOptionalDateParam(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -1063,11 +1131,15 @@ export function parseControleNfsTotalsFilters(query: {
 
 export async function fetchControleNfsTotalsSummary(
   forceRefresh = false,
-  filters?: ControleNfsTotalsFilters
+  filters?: ControleNfsTotalsFilters,
+  preloadedByTabKey?: Map<string, { headers: string[]; rows: string[][] }>
 ): Promise<ControleNfsTotalsSummary> {
-  if (forceRefresh) {
+  invalidateStaleNfsTotalsCache();
+  if (forceRefresh && !preloadedByTabKey) {
     totalsSummaryCache = null;
     sheetCache.clear();
+  } else if (forceRefresh) {
+    totalsSummaryCache = null;
   }
 
   const useFilters = hasActiveTotalsFilters(filters);
@@ -1077,59 +1149,59 @@ export async function fetchControleNfsTotalsSummary(
     !forceRefresh &&
     totalsSummaryCache &&
     totalsSummaryCache.expiresAt > Date.now() &&
-    totalsSummaryCache.data.faturamentoByLot != null
+    totalsSummaryCache.data.faturamentoByLot != null &&
+    // Cache anterior à coluna Conta Vinculada não serve — força recomputo.
+    totalsSummaryCache.data.faturamentoByLot.every(
+      (lot) => typeof lot.hasContaVinculadaColumn === 'boolean'
+    ) &&
+    totalsSummaryCache.data.byTab.every(
+      (tab) => typeof tab.hasContaVinculadaColumn === 'boolean'
+    )
   ) {
     return totalsSummaryCache.data;
   }
 
   const tabsToCompute = resolveTabsForTotals(filters?.tabKeys);
-  const processedSheets = await Promise.all(
-    CONTROLE_NFS_SHEET_TABS.map(async (tab) => {
-      try {
-        return await getProcessedSheetForTab(tab);
-      } catch {
-        return { headers: [], rows: [] };
-      }
-    })
+  const processedByTabKey =
+    preloadedByTabKey ?? (await loadProcessedNfsSheetsByTabKey(false));
+
+  const processedSheets = CONTROLE_NFS_SHEET_TABS.map(
+    (tab) => processedByTabKey.get(tab.key) ?? { headers: [], rows: [] }
   );
 
   const filterOptions = collectFilterOptions(processedSheets);
 
-  const processedByTabKey = new Map(
-    CONTROLE_NFS_SHEET_TABS.map((tab, index) => [tab.key, processedSheets[index]])
-  );
   const computeOptions = toNfsTotalsComputeOptions(filters);
   const faturamentoByLot = computeAllLotFaturamento(processedByTabKey, computeOptions);
 
-  const tabTotals = await Promise.all(
-    tabsToCompute.map(async (tab) => {
-      try {
-        const processed = await getProcessedSheetForTab(tab);
-        const totals = computeTabTotalsFromProcessed(
-          processed.headers,
-          processed.rows,
-          computeOptions,
-          tab.key
-        );
-        return {
-          tabKey: tab.key,
-          label: tab.label,
-          ...totals
-        };
-      } catch {
-        return {
-          tabKey: tab.key,
-          label: tab.label,
-          valorBruto: 0,
-          valorBrutoNaoPago: 0,
-          valorRecebido: 0,
-          valorLiquido: 0,
-          totalImpostos: 0,
-          contaVinculada: 0
-        };
-      }
-    })
-  );
+  const tabTotals = tabsToCompute.map((tab) => {
+    const processed = processedByTabKey.get(tab.key) ?? { headers: [], rows: [] };
+    try {
+      const totals = computeTabTotalsFromProcessed(
+        processed.headers,
+        processed.rows,
+        computeOptions,
+        tab.key
+      );
+      return {
+        tabKey: tab.key,
+        label: tab.label,
+        ...totals
+      };
+    } catch {
+      return {
+        tabKey: tab.key,
+        label: tab.label,
+        valorBruto: 0,
+        valorBrutoNaoPago: 0,
+        valorRecebido: 0,
+        valorLiquido: 0,
+        totalImpostos: 0,
+        contaVinculada: 0,
+        hasContaVinculadaColumn: false
+      };
+    }
+  });
 
   const data = buildTotalsSummary(tabTotals, filterOptions, faturamentoByLot);
 
@@ -1159,6 +1231,8 @@ export type ControleNfsLotFaturamento = {
   valorBruto: number;
   valorLiquido: number;
   valorRecebido: number;
+  contaVinculada: number;
+  hasContaVinculadaColumn: boolean;
 };
 
 function findLotBreakdownColumnIndex(headers: string[], lotColumn: LotBreakdownColumn): number {
@@ -1207,6 +1281,8 @@ function computeLotFaturamentoForTab(
   const brutoIdx = findValorBrutoColumnIndex(headers);
   const liquidoIdx = findValorLiquidoColumnIndex(headers);
   const recebidoIdx = findValorRecebidoColumnIndex(headers);
+  const contaVinculadaIdx = findContaVinculadaColumnIndex(headers, rows);
+  const hasContaVinculadaColumn = contaVinculadaIdx >= 0;
 
   return config.lots.map((lot) => {
     const rowFilter = (row: string[]) =>
@@ -1238,7 +1314,18 @@ function computeLotFaturamentoForTab(
         recebidoIdx,
         rowFilter,
         config.tabKey
-      )
+      ),
+      // Conta vinculada: saldo acumulado da planilha — não responde a filtros de data/apuração.
+      contaVinculada: hasContaVinculadaColumn
+        ? sumCurrencyColumnForRows(
+            headers,
+            rows,
+            contaVinculadaIdx,
+            rowFilter,
+            config.tabKey
+          )
+        : 0,
+      hasContaVinculadaColumn
     };
   });
 }
@@ -1259,7 +1346,9 @@ function computeAllLotFaturamento(
           label: lot.label,
           valorBruto: 0,
           valorLiquido: 0,
-          valorRecebido: 0
+          valorRecebido: 0,
+          contaVinculada: 0,
+          hasContaVinculadaColumn: false
         });
       }
       continue;
@@ -1449,27 +1538,14 @@ export function buildRecebidoMensalByGastosContract(
 
 export async function fetchRecebidoMensalByGastosContract(
   forceRefresh = false,
-  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter
+  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter,
+  preloadedByTabKey?: Map<string, { headers: string[]; rows: string[][] }>
 ): Promise<{
   entries: RecebidoMensalByGastosContractEntry[];
   fetchedAt: string;
 }> {
-  if (forceRefresh) {
-    sheetCache.clear();
-  }
-
-  const processedByTabKey = new Map<string, { headers: string[]; rows: string[][] }>();
-
-  await Promise.all(
-    CONTROLE_NFS_SHEET_TABS.map(async (tab) => {
-      try {
-        const processed = await getProcessedSheetForTab(tab);
-        processedByTabKey.set(tab.key, processed);
-      } catch {
-        processedByTabKey.set(tab.key, { headers: [], rows: [] });
-      }
-    })
-  );
+  const processedByTabKey =
+    preloadedByTabKey ?? (await loadProcessedNfsSheetsByTabKey(forceRefresh));
 
   return {
     entries: buildRecebidoMensalByGastosContract(

@@ -1,10 +1,22 @@
-import { normalizeContractOrderKey } from './gastosOperacionaisContractOrder';
+import {
+  normalizeContractOrderKey,
+  normalizeGastosOperacionaisContractName
+} from './gastosOperacionaisContractOrder';
 
 const STORAGE_KEY = 'controle-geral-excluded-contracts';
 const LEGACY_STORAGE_KEY = 'gastos-operacionais-excluded-contracts';
 
+/** Chave canônica (com aliases) para ocultar/restaurar um único contrato. */
 function toExcludedKey(contract: string): string {
-  return normalizeContractOrderKey(contract);
+  return normalizeContractOrderKey(normalizeGastosOperacionaisContractName(contract));
+}
+
+function migrateExcludedAliasKeys(keys: Iterable<string>): Set<string> {
+  const next = new Set<string>();
+  for (const key of keys) {
+    next.add(toExcludedKey(key));
+  }
+  return next;
 }
 
 function migrateLegacyExcludedContracts(): Set<string> {
@@ -19,7 +31,7 @@ function migrateLegacyExcludedContracts(): Set<string> {
 
     if (!Array.isArray(parsed)) return new Set();
 
-    const migrated = new Set(
+    const migrated = migrateExcludedAliasKeys(
       parsed
         .filter((item): item is string => typeof item === 'string' && item.length > 0)
         .map((item) => toExcludedKey(item))
@@ -41,11 +53,19 @@ export function loadControleGeralExcludedContracts(): Set<string> {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return new Set();
 
-    return new Set(
-      parsed
-        .filter((item): item is string => typeof item === 'string' && item.length > 0)
-        .map((item) => toExcludedKey(item))
+    const loaded = migrateExcludedAliasKeys(
+      parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
     );
+    // Persiste unificação de aliases (ex.: JUSTIÇA FEDERAL DE GOIÁS → JUSTIÇA FEDERAL GOIAS).
+    if (
+      loaded.size !== parsed.length ||
+      parsed.some(
+        (item) => typeof item === 'string' && item.length > 0 && toExcludedKey(item) !== item
+      )
+    ) {
+      saveControleGeralExcludedContracts(loaded);
+    }
+    return loaded;
   } catch {
     return new Set();
   }

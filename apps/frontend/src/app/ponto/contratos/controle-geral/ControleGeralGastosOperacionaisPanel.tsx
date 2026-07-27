@@ -13,6 +13,7 @@ import {
   EyeOff,
   Filter,
   Loader2,
+  PiggyBank,
   RefreshCw,
   RotateCcw,
   Wallet,
@@ -91,6 +92,7 @@ import {
 } from './controleGeralExcludedContracts';
 import {
   buildFaturamentoByContractLookup,
+  resolveContractContaVinculada,
   resolveContractFaturamento,
   resolveContractLiquido,
   resolveContractNfsTotals,
@@ -105,6 +107,15 @@ import {
 import { ControleGeralFluxoDetalheModal } from './ControleGeralFluxoDetalheModal';
 import { filterGastosDetailRowsForContract, filterRecebidoMensalForContract } from './controleGeralGastosFluxo';
 import type { RecebidoMensalByGastosContractEntry } from './recebidoMensalTypes';
+import {
+  ControleGeralTetoOrcamentarioModal,
+  type TetoOrcamentarioFormPrefill
+} from './ControleGeralTetoOrcamentarioModal';
+import {
+  buildTetoOrcamentarioLookup,
+  resolveContractTetoOrcamentario,
+  type ControleGeralTetoOrcamentarioEntry
+} from './tetoOrcamentario';
 
 export type GastosOperacionaisRow = {
   rowKey: string;
@@ -117,6 +128,9 @@ export type GastosOperacionaisRow = {
   faturamentoAcumulado?: number;
   liquidoAcumulado?: number;
   recebidoAcumulado?: number;
+  /** null = contrato sem coluna Conta Vinculada na planilha de NF's. */
+  contaVinculadaAcumulado?: number | null;
+  tetoOrcamentario?: number;
 };
 
 const MONTH_OPTIONS = [
@@ -158,6 +172,8 @@ type ControleGeralGastosOperacionaisPanelProps = {
   totalColumnLabel?: string;
   /** Exibe faturamento bruto (NF's) por contrato — somente Controle Geral de Contratos. */
   showFaturamentoColumn?: boolean;
+  /** Exibe teto orçamentário mensal e formulário de cadastro — Controle Geral. */
+  showTetoOrcamentarioColumn?: boolean;
   /** Incrementa para forçar atualização dos dados da planilha e das NF's. */
   dataRefreshNonce?: number;
   /** Permite abrir a página de detalhes do contrato cadastrado. */
@@ -219,8 +235,8 @@ function formatGastoFaturamentoPercent(gastos: number, faturamento: number): str
   const percent = calcGastoFaturamentoPercent(gastos, faturamento);
   if (percent == null) return '—';
   return `${new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(percent)}%`;
 }
 
@@ -240,8 +256,8 @@ function formatGastoRecebidoPercent(gastos: number, recebido: number): string {
   const percent = calcGastoRecebidoPercent(gastos, recebido);
   if (percent == null) return '—';
   return `${new Intl.NumberFormat('pt-BR', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(percent)}%`;
 }
 
@@ -250,6 +266,60 @@ function gastoRecebidoPercentClassName(gastos: number, recebido: number): string
   if (percent == null) return 'text-gray-500 dark:text-gray-400';
   if (percent >= 85) return 'text-red-600 dark:text-red-400';
   return 'text-green-600 dark:text-green-400';
+}
+
+/** Vermelho se gasto > teto; laranja se ≥ 90%; roxo se < 90%. */
+function tetoOrcamentarioClassName(gastos: number, teto: number): string {
+  if (!Number.isFinite(teto) || teto <= 0) {
+    return 'text-gray-500 dark:text-gray-400';
+  }
+  const gastoAbs = Math.abs(gastos);
+  if (gastoAbs > teto) return 'text-red-600 dark:text-red-400';
+  if (gastoAbs >= teto * 0.9) return 'text-orange-500 dark:text-orange-400';
+  return 'text-violet-700 dark:text-violet-300';
+}
+
+/** Teto − |gasto|; null quando não há teto cadastrado. */
+function calcTetoMinusGasto(teto: number, gastos: number): number | null {
+  if (!Number.isFinite(teto) || teto <= 0) return null;
+  return teto - Math.abs(gastos);
+}
+
+function formatTetoMinusGasto(teto: number, gastos: number): string {
+  const value = calcTetoMinusGasto(teto, gastos);
+  if (value == null) return '—';
+  return formatCurrency(value);
+}
+
+function tetoMinusGastoClassName(teto: number, gastos: number): string {
+  const value = calcTetoMinusGasto(teto, gastos);
+  if (value == null) return 'text-gray-500 dark:text-gray-400';
+  if (value > 0) return 'text-green-600 dark:text-green-400';
+  if (value < 0) return 'text-red-600 dark:text-red-400';
+  return 'text-gray-600 dark:text-gray-300';
+}
+
+/** (|gasto| / teto) × 100; null sem teto cadastrado. */
+function calcGastoSobreTetoPercent(teto: number, gastos: number): number | null {
+  if (!Number.isFinite(teto) || teto <= 0) return null;
+  return (Math.abs(gastos) / teto) * 100;
+}
+
+function formatGastoSobreTetoPercent(teto: number, gastos: number): string {
+  const percent = calcGastoSobreTetoPercent(teto, gastos);
+  if (percent == null) return '—';
+  return `${new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(percent)}%`;
+}
+
+/** Mesma lógica do teto: vermelho se gasto > teto; laranja ≥ 90%; roxo < 90%. */
+function gastoSobreTetoPercentClassName(teto: number, gastos: number): string {
+  if (calcGastoSobreTetoPercent(teto, gastos) == null) {
+    return 'text-gray-500 dark:text-gray-400';
+  }
+  return tetoOrcamentarioClassName(gastos, teto);
 }
 
 function calcLucroLiquido(recebido: number, gastos: number): number {
@@ -339,7 +409,9 @@ type GastosPanelFinancialSummary = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  contaVinculada: number | null;
   gastos: number;
+  tetoOrcamentario: number;
   lucroLiquido: number;
 };
 
@@ -348,12 +420,23 @@ function summarizeGastosPanelRows(rows: readonly GastosOperacionaisRow[]): Gasto
   const liquido = rows.reduce((sum, row) => sum + (row.liquidoAcumulado ?? 0), 0);
   const recebido = rows.reduce((sum, row) => sum + (row.recebidoAcumulado ?? 0), 0);
   const gastos = Math.abs(rows.reduce((sum, row) => sum + row.totalAcumulado, 0));
+  const tetoOrcamentario = rows.reduce((sum, row) => sum + (row.tetoOrcamentario ?? 0), 0);
+
+  let contaVinculadaSum = 0;
+  let hasContaVinculada = false;
+  for (const row of rows) {
+    if (row.contaVinculadaAcumulado == null) continue;
+    hasContaVinculada = true;
+    contaVinculadaSum += row.contaVinculadaAcumulado;
+  }
 
   return {
     faturamento,
     liquido,
     recebido,
+    contaVinculada: hasContaVinculada ? contaVinculadaSum : null,
     gastos,
+    tetoOrcamentario,
     lucroLiquido: calcLucroLiquido(recebido, gastos)
   };
 }
@@ -387,6 +470,7 @@ function FinancialTotalsTableRow({
   contractCount,
   summary,
   showNfsMetrics,
+  showTetoOrcamentario,
   tableLabelColSpan,
   variant = 'locality'
 }: {
@@ -394,6 +478,7 @@ function FinancialTotalsTableRow({
   contractCount: number;
   summary: GastosPanelFinancialSummary;
   showNfsMetrics: boolean;
+  showTetoOrcamentario: boolean;
   tableLabelColSpan: number;
   variant?: 'locality' | 'grand';
 }) {
@@ -430,12 +515,42 @@ function FinancialTotalsTableRow({
           {formatCurrency(summary.recebido)}
         </td>
       ) : null}
+      {showTetoOrcamentario ? (
+        <td
+          className={`${currencyCellClassName} ${tetoOrcamentarioClassName(
+            summary.gastos,
+            summary.tetoOrcamentario
+          )}`}
+        >
+          {summary.tetoOrcamentario > 0 ? formatCurrency(summary.tetoOrcamentario) : '—'}
+        </td>
+      ) : null}
       <td className={`${currencyCellClassName} text-red-600 dark:text-red-400`}>
         {formatCurrency(summary.gastos)}
       </td>
+      {showTetoOrcamentario ? (
+        <td
+          className={`${currencyCellClassName} ${tetoMinusGastoClassName(
+            summary.tetoOrcamentario,
+            summary.gastos
+          )}`}
+        >
+          {formatTetoMinusGasto(summary.tetoOrcamentario, summary.gastos)}
+        </td>
+      ) : null}
       {showNfsMetrics ? (
         <td className={`${currencyCellClassName} ${lucroLiquidoClassName(summary.lucroLiquido)}`}>
           {formatCurrency(summary.lucroLiquido)}
+        </td>
+      ) : null}
+      {showTetoOrcamentario ? (
+        <td
+          className={`${percentCellClassName} ${gastoSobreTetoPercentClassName(
+            summary.tetoOrcamentario,
+            summary.gastos
+          )}`}
+        >
+          {formatGastoSobreTetoPercent(summary.tetoOrcamentario, summary.gastos)}
         </td>
       ) : null}
       {showNfsMetrics ? (
@@ -456,6 +571,11 @@ function FinancialTotalsTableRow({
           )}`}
         >
           {formatGastoRecebidoPercent(summary.gastos, summary.recebido)}
+        </td>
+      ) : null}
+      {showNfsMetrics ? (
+        <td className={`${currencyCellClassName} text-indigo-600 dark:text-indigo-400`}>
+          {summary.contaVinculada == null ? '—' : formatCurrency(summary.contaVinculada)}
         </td>
       ) : null}
     </tr>
@@ -533,6 +653,7 @@ export function ControleGeralGastosOperacionaisPanel({
   panelDescription = 'QUERY BASE DE GASTOS — mês, ano, contrato e total (somatório por contrato)',
   totalColumnLabel = 'Total',
   showFaturamentoColumn = false,
+  showTetoOrcamentarioColumn = false,
   dataRefreshNonce = 0,
   showContractDetails = false,
   contractsForDetailLookup = [],
@@ -542,18 +663,25 @@ export function ControleGeralGastosOperacionaisPanel({
   enableContractFluxoModal = false,
   overviewForExport
 }: ControleGeralGastosOperacionaisPanelProps) {
-  const nfsMetricColumnCount = showFaturamentoColumn ? 3 : 0;
+  const nfsMetricColumnCount = showFaturamentoColumn ? 4 : 0;
   const lucroLiquidoColumnCount = showFaturamentoColumn ? 1 : 0;
   const gastoRatioColumnCount = showFaturamentoColumn ? 2 : 0;
+  /** Teto orçamentário + Saldo a gastar + GASTO / TETO (%). */
+  const tetoOrcamentarioColumnCount = showTetoOrcamentarioColumn ? 3 : 0;
   const tableColumnCount =
     4 +
     nfsMetricColumnCount +
     lucroLiquidoColumnCount +
     gastoRatioColumnCount +
+    tetoOrcamentarioColumnCount +
     (hideLocalityColumn ? 0 : 1) +
     (enableRowExclusion ? 1 : 0);
   const tableAmountColumnCount =
-    1 + nfsMetricColumnCount + lucroLiquidoColumnCount + gastoRatioColumnCount;
+    1 +
+    nfsMetricColumnCount +
+    lucroLiquidoColumnCount +
+    gastoRatioColumnCount +
+    tetoOrcamentarioColumnCount;
   const tableLabelColSpan = tableColumnCount - tableAmountColumnCount;
   const [filters, setFilters] = useState<GastosOperacionaisFilters>(
     EMPTY_GASTOS_OPERACIONAIS_FILTERS
@@ -632,6 +760,8 @@ export function ControleGeralGastosOperacionaisPanel({
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [hiddenContractsListMinimized, setHiddenContractsListMinimized] = useState(false);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
+  const [tetoModalOpen, setTetoModalOpen] = useState(false);
+  const [tetoModalPrefill, setTetoModalPrefill] = useState<TetoOrcamentarioFormPrefill | null>(null);
   const [naturezaModalContract, setNaturezaModalContract] = useState<GastosOperacionaisRow | null>(
     null
   );
@@ -693,14 +823,13 @@ export function ControleGeralGastosOperacionaisPanel({
   } = useQuery({
     enabled: showFaturamentoColumn,
     queryKey: [
-      'controle-geral-faturamento-by-contract-v19-recebido-mensal',
+      'controle-geral-faturamento-by-contract-v24-conta-vinculada-total',
       emissaoFilterMonths,
       emissaoFilterYears,
       dataRefreshNonce
     ],
     queryFn: async () => {
-      const params: Record<string, string | number> = {};
-      if (dataRefreshNonce > 0) params.refresh = 1;
+      const params: Record<string, string | number> = { refresh: 1 };
       if (emissaoFilterMonths.length > 0) {
         params.months = emissaoFilterMonths.join(',');
       }
@@ -729,11 +858,28 @@ export function ControleGeralGastosOperacionaisPanel({
     placeholderData: (previousData) => previousData
   });
 
+  const { data: tetoOrcamentarioEntries = [] } = useQuery({
+    enabled: showTetoOrcamentarioColumn,
+    queryKey: ['controle-geral-teto-orcamentario', dataRefreshNonce],
+    queryFn: async () => {
+      const res = await api.get<{
+        success: boolean;
+        data?: ControleGeralTetoOrcamentarioEntry[];
+      }>('/controle-geral/teto-orcamentario');
+      return (res.data?.data ?? []) as ControleGeralTetoOrcamentarioEntry[];
+    },
+    staleTime: 60_000
+  });
+
+  const tetoOrcamentarioLookup = useMemo(
+    () => buildTetoOrcamentarioLookup(tetoOrcamentarioEntries),
+    [tetoOrcamentarioEntries]
+  );
+
   const faturamentoByContract = faturamentoQueryData?.entries ?? [];
   const recebidoMensalByContract = faturamentoQueryData?.recebidoMensal ?? [];
 
-  const isPanelLoading =
-    isLoading || (showFaturamentoColumn && loadingFaturamento && faturamentoByContract.length === 0);
+  const isPanelLoading = isLoading;
 
   const visibleLocalityItems = useMemo(
     () => resolveVisibleLocalityItems(visibleLocalities),
@@ -806,8 +952,10 @@ export function ControleGeralGastosOperacionaisPanel({
 
   const contractLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
-    for (const row of aggregateGastosDetailRows(detailRows)) {
-      map.set(normalizeContractOrderKey(row.contract), row.contract);
+    for (const row of detailRows) {
+      const name = row.contract?.trim();
+      if (!name) continue;
+      map.set(normalizeContractOrderKey(name), name);
     }
     for (const name of GASTOS_OPERACIONAIS_CONTRACT_ORDER) {
       map.set(normalizeContractOrderKey(name), name);
@@ -894,10 +1042,40 @@ export function ControleGeralGastosOperacionaisPanel({
           : undefined,
         recebidoAcumulado: showFaturamentoColumn
           ? resolveContractRecebido(row.contract, faturamentoLookup)
+          : undefined,
+        contaVinculadaAcumulado: showFaturamentoColumn
+          ? resolveContractContaVinculada(row.contract, faturamentoLookup)
+          : undefined,
+        tetoOrcamentario: showTetoOrcamentarioColumn
+          ? resolveContractTetoOrcamentario(
+              row.contract,
+              tetoOrcamentarioLookup,
+              filters.periodFrom,
+              filters.periodTo
+            )
           : undefined
       })),
-    [visibleRows, faturamentoLookup, showFaturamentoColumn]
+    [
+      visibleRows,
+      faturamentoLookup,
+      showFaturamentoColumn,
+      showTetoOrcamentarioColumn,
+      tetoOrcamentarioLookup,
+      filters.periodFrom,
+      filters.periodTo
+    ]
   );
+
+  const tetoContractOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const row of visibleRows) {
+      if (row.contract.trim()) names.add(row.contract.trim());
+    }
+    for (const entry of tetoOrcamentarioEntries) {
+      if (entry.contractName.trim()) names.add(entry.contractName.trim());
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [visibleRows, tetoOrcamentarioEntries]);
 
   const fluxoModalGastosRows = useMemo(() => {
     if (!fluxoModalContract) return [];
@@ -1413,6 +1591,8 @@ export function ControleGeralGastosOperacionaisPanel({
           const summary = summarizeGastosPanelRows(rows);
           return {
             ...summary,
+            tetoMinusGasto: calcTetoMinusGasto(summary.tetoOrcamentario, summary.gastos),
+            gastoTetoPercent: formatGastoSobreTetoPercent(summary.tetoOrcamentario, summary.gastos),
             gastoFatPercent: formatGastoFaturamentoPercent(summary.gastos, summary.faturamento),
             gastoRecPercent: formatGastoRecebidoPercent(summary.gastos, summary.recebido)
           };
@@ -1431,6 +1611,7 @@ export function ControleGeralGastosOperacionaisPanel({
               const gastos = Math.abs(row.totalAcumulado);
               const faturamento = row.faturamentoAcumulado ?? 0;
               const recebido = row.recebidoAcumulado ?? 0;
+              const tetoOrcamentario = row.tetoOrcamentario ?? 0;
               return {
                 contract: row.contract,
                 mesesLabel: buildMesesLabel(row),
@@ -1438,7 +1619,11 @@ export function ControleGeralGastosOperacionaisPanel({
                 faturamento,
                 liquido: row.liquidoAcumulado ?? 0,
                 recebido,
+                contaVinculada: row.contaVinculadaAcumulado ?? null,
+                tetoOrcamentario,
                 gastos,
+                tetoMinusGasto: calcTetoMinusGasto(tetoOrcamentario, gastos),
+                gastoTetoPercent: formatGastoSobreTetoPercent(tetoOrcamentario, gastos),
                 lucroLiquido: calcLucroLiquido(recebido, row.totalAcumulado),
                 gastoFatPercent: formatGastoFaturamentoPercent(row.totalAcumulado, faturamento),
                 gastoRecPercent: formatGastoRecebidoPercent(row.totalAcumulado, recebido)
@@ -1551,6 +1736,26 @@ export function ControleGeralGastosOperacionaisPanel({
                 </p>
               ) : null}
               <div className="flex flex-wrap items-center justify-end gap-2">
+                {showTetoOrcamentarioColumn ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const singleMonth = getSingleCalendarMonthFromPeriod(
+                        filters.periodFrom,
+                        filters.periodTo
+                      );
+                      setTetoModalPrefill({
+                        year: singleMonth?.year,
+                        month: singleMonth?.month
+                      });
+                      setTetoModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-800 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
+                  >
+                    <PiggyBank className="h-3.5 w-3.5" aria-hidden />
+                    Cadastrar teto
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => void handleExportPdf()}
@@ -1741,15 +1946,27 @@ export function ControleGeralGastosOperacionaisPanel({
                         {showFaturamentoColumn ? (
                           <th className={amountCurrencyThClassName}>Recebido</th>
                         ) : null}
+                        {showTetoOrcamentarioColumn ? (
+                          <th className={amountCurrencyThClassName}>Teto orçamentário</th>
+                        ) : null}
                         <th className={amountCurrencyThClassName}>{totalColumnLabel}</th>
+                        {showTetoOrcamentarioColumn ? (
+                          <th className={amountCurrencyThClassName}>Saldo a gastar</th>
+                        ) : null}
                         {showFaturamentoColumn ? (
                           <th className={amountCurrencyThClassName}>Lucro líquido</th>
+                        ) : null}
+                        {showTetoOrcamentarioColumn ? (
+                          <th className={amountPercentThClassName}>GASTO / TETO (%)</th>
                         ) : null}
                         {showFaturamentoColumn ? (
                           <th className={amountPercentThClassName}>GASTO / FAT (%)</th>
                         ) : null}
                         {showFaturamentoColumn ? (
                           <th className={amountPercentThClassName}>GASTO / REC (%)</th>
+                        ) : null}
+                        {showFaturamentoColumn ? (
+                          <th className={amountCurrencyThClassName}>SALDO TOTAL - CV</th>
                         ) : null}
                       </tr>
                     </thead>
@@ -1770,39 +1987,7 @@ export function ControleGeralGastosOperacionaisPanel({
                           {group.rows.map((row) => (
                             <tr
                               key={row.rowKey}
-                              role={enableNaturezaBreakdown ? 'button' : undefined}
-                              tabIndex={enableNaturezaBreakdown ? 0 : undefined}
-                              title={
-                                enableNaturezaBreakdown
-                                  ? 'Clique para ver naturezas e valores'
-                                  : enableContractFluxoModal
-                                    ? 'Clique para ver detalhes e evolução financeira'
-                                    : undefined
-                              }
-                              onClick={
-                                enableNaturezaBreakdown
-                                  ? () => setNaturezaModalContract(row)
-                                  : enableContractFluxoModal
-                                    ? () => setFluxoModalContract(row.contract)
-                                    : undefined
-                              }
-                              onKeyDown={
-                                enableNaturezaBreakdown
-                                  ? (event) => {
-                                      if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        setNaturezaModalContract(row);
-                                      }
-                                    }
-                                  : undefined
-                              }
                               className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                                enableNaturezaBreakdown
-                                  ? 'cursor-pointer hover:bg-blue-50/40 dark:hover:bg-blue-950/20'
-                                  : enableContractFluxoModal
-                                    ? 'cursor-pointer'
-                                    : ''
-                              } ${
                                 enableRowExclusion && selectedRowKeys.has(row.rowKey)
                                   ? 'bg-blue-50/70 dark:bg-blue-950/20'
                                   : ''
@@ -1907,9 +2092,82 @@ export function ControleGeralGastosOperacionaisPanel({
                                   {formatCurrency(row.recebidoAcumulado ?? 0)}
                                 </td>
                               ) : null}
-                              <td className={`${amountCurrencyCellClassName} ${gastosNaturezaModalValueClassName(row.totalAcumulado)}`}>
+                              {showTetoOrcamentarioColumn ? (
+                                <td
+                                  className={`${amountCurrencyCellClassName} ${tetoOrcamentarioClassName(
+                                    row.totalAcumulado,
+                                    row.tetoOrcamentario ?? 0
+                                  )}`}
+                                >
+                                  <button
+                                    type="button"
+                                    title="Cadastrar / editar teto orçamentário"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      const singleMonth = getSingleCalendarMonthFromPeriod(
+                                        filters.periodFrom,
+                                        filters.periodTo
+                                      );
+                                      setTetoModalPrefill({
+                                        contractName: row.contract,
+                                        year: singleMonth?.year,
+                                        month: singleMonth?.month
+                                      });
+                                      setTetoModalOpen(true);
+                                    }}
+                                    className="mx-auto block rounded-md px-1.5 py-0.5 tabular-nums transition-colors hover:bg-gray-100 hover:underline dark:hover:bg-gray-800"
+                                  >
+                                    {(row.tetoOrcamentario ?? 0) > 0
+                                      ? formatCurrency(row.tetoOrcamentario ?? 0)
+                                      : '—'}
+                                  </button>
+                                </td>
+                              ) : null}
+                              <td
+                                className={`${amountCurrencyCellClassName} ${gastosNaturezaModalValueClassName(row.totalAcumulado)} ${
+                                  enableNaturezaBreakdown
+                                    ? 'cursor-pointer rounded-md hover:bg-blue-50/70 hover:underline dark:hover:bg-blue-950/30'
+                                    : ''
+                                }`}
+                                role={enableNaturezaBreakdown ? 'button' : undefined}
+                                tabIndex={enableNaturezaBreakdown ? 0 : undefined}
+                                title={
+                                  enableNaturezaBreakdown
+                                    ? 'Clique para ver naturezas e valores'
+                                    : undefined
+                                }
+                                onClick={
+                                  enableNaturezaBreakdown
+                                    ? (event) => {
+                                        event.stopPropagation();
+                                        setNaturezaModalContract(row);
+                                      }
+                                    : undefined
+                                }
+                                onKeyDown={
+                                  enableNaturezaBreakdown
+                                    ? (event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          setNaturezaModalContract(row);
+                                        }
+                                      }
+                                    : undefined
+                                }
+                              >
                                 {formatCurrency(row.totalAcumulado)}
                               </td>
+                              {showTetoOrcamentarioColumn ? (
+                                <td
+                                  className={`${amountCurrencyCellClassName} ${tetoMinusGastoClassName(
+                                    row.tetoOrcamentario ?? 0,
+                                    row.totalAcumulado
+                                  )}`}
+                                >
+                                  {formatTetoMinusGasto(row.tetoOrcamentario ?? 0, row.totalAcumulado)}
+                                </td>
+                              ) : null}
                               {showFaturamentoColumn ? (
                                 <td
                                   className={`${amountCurrencyCellClassName} ${lucroLiquidoClassName(
@@ -1924,6 +2182,19 @@ export function ControleGeralGastosOperacionaisPanel({
                                       row.recebidoAcumulado ?? 0,
                                       row.totalAcumulado
                                     )
+                                  )}
+                                </td>
+                              ) : null}
+                              {showTetoOrcamentarioColumn ? (
+                                <td
+                                  className={`${amountPercentCellClassName} ${gastoSobreTetoPercentClassName(
+                                    row.tetoOrcamentario ?? 0,
+                                    row.totalAcumulado
+                                  )}`}
+                                >
+                                  {formatGastoSobreTetoPercent(
+                                    row.tetoOrcamentario ?? 0,
+                                    row.totalAcumulado
                                   )}
                                 </td>
                               ) : null}
@@ -1953,6 +2224,18 @@ export function ControleGeralGastosOperacionaisPanel({
                                   )}
                                 </td>
                               ) : null}
+                              {showFaturamentoColumn ? (
+                                <td
+                                  className={`${amountCurrencyCellClassName} text-indigo-600 dark:text-indigo-400`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onKeyDown={(event) => event.stopPropagation()}
+                                  title="Soma da coluna Conta Vinculada na planilha de NF's"
+                                >
+                                  {row.contaVinculadaAcumulado == null
+                                    ? '—'
+                                    : formatCurrency(row.contaVinculadaAcumulado)}
+                                </td>
+                              ) : null}
                             </tr>
                           ))}
                           <FinancialTotalsTableRow
@@ -1960,6 +2243,7 @@ export function ControleGeralGastosOperacionaisPanel({
                             contractCount={group.rows.length}
                             summary={groupSummary}
                             showNfsMetrics={showFaturamentoColumn}
+                            showTetoOrcamentario={showTetoOrcamentarioColumn}
                             tableLabelColSpan={tableLabelColSpan}
                           />
                         </React.Fragment>
@@ -1975,6 +2259,7 @@ export function ControleGeralGastosOperacionaisPanel({
                           contractCount={visibleRowsWithFaturamento.length}
                           summary={grandSummary}
                           showNfsMetrics={showFaturamentoColumn}
+                          showTetoOrcamentario={showTetoOrcamentarioColumn}
                           tableLabelColSpan={tableLabelColSpan}
                           variant="grand"
                         />
@@ -2312,6 +2597,19 @@ export function ControleGeralGastosOperacionaisPanel({
           nfsTotals={fluxoModalNfsTotals}
           titleSuffix={fluxoModalContract ?? undefined}
           loadingRecebido={loadingFaturamento && recebidoMensalByContract.length === 0}
+        />
+      ) : null}
+
+      {showTetoOrcamentarioColumn ? (
+        <ControleGeralTetoOrcamentarioModal
+          isOpen={tetoModalOpen}
+          onClose={() => {
+            setTetoModalOpen(false);
+            setTetoModalPrefill(null);
+          }}
+          contractOptions={tetoContractOptions}
+          entries={tetoOrcamentarioEntries}
+          prefill={tetoModalPrefill}
         />
       ) : null}
     </Card>
