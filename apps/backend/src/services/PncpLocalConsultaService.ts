@@ -164,6 +164,20 @@ export async function consultarContratacoesLocais(
     where.codigoModalidade = { in: codigos };
   }
 
+  const valorMin =
+    params.valorMin != null && Number.isFinite(params.valorMin) ? Number(params.valorMin) : null;
+  const valorMax =
+    params.valorMax != null && Number.isFinite(params.valorMax) ? Number(params.valorMax) : null;
+  if (valorMin != null || valorMax != null) {
+    if (valorMin != null && valorMax != null && valorMin > valorMax) {
+      throw new Error('O valor mínimo não pode ser maior que o valor máximo.');
+    }
+    const valorFilter: Prisma.FloatFilter = {};
+    if (valorMin != null) valorFilter.gte = valorMin;
+    if (valorMax != null) valorFilter.lte = valorMax;
+    where.valorEstimado = valorFilter;
+  }
+
   if (q) {
     const needle = normalizePncpSearchText(q);
     const qDigits = q.replace(/\D/g, '');

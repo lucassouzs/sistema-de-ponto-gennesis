@@ -95,6 +95,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: '' | ReceitaStatus; label: string }>
   { value: 'RECEBIDO', label: 'Recebido' },
   { value: 'PENDENTE', label: 'Pendente' },
   { value: 'PENDENTE PARCIAL', label: 'Pendente parcial' },
+  { value: 'CANCELADA', label: 'Cancelada' },
   { value: 'MOBILIZAÇÃO', label: 'Mobilização' },
 ];
 
@@ -103,6 +104,7 @@ const STATUS_PRIORITY: Record<ReceitaStatus, number> = {
   MOBILIZAÇÃO: 1,
   'PENDENTE PARCIAL': 2,
   PENDENTE: 3,
+  CANCELADA: 4,
 };
 
 function formatCurrencyBR(value: number | null | undefined): string {
@@ -118,14 +120,17 @@ function receitaStatusLabel(row: Pick<ReceitaRow, 'status' | 'statusData'>): str
 }
 
 function receitaStatusClass(status: ReceitaStatus): string {
-  if (status === 'PENDENTE' || status === 'PENDENTE PARCIAL') {
+  if (status === 'CANCELADA') {
     return 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300';
+  }
+  if (status === 'PENDENTE' || status === 'PENDENTE PARCIAL') {
+    return 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200';
   }
   if (status === 'RECEBIDO') {
     return 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200';
   }
   if (status === 'MOBILIZAÇÃO') {
-    return 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200';
+    return 'bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200';
   }
   return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
 }
@@ -205,6 +210,12 @@ const MES_OPTIONS = [
   { value: '11', label: 'Novembro' },
   { value: '12', label: 'Dezembro' },
 ];
+
+const CURRENT_YEAR = new Date().getFullYear();
+const ANO_OPTIONS = Array.from({ length: 11 }, (_, i) => {
+  const year = CURRENT_YEAR - 5 + i;
+  return { value: String(year), label: String(year) };
+}).reverse();
 
 const STATUS_FORM_OPTIONS = STATUS_FILTER_OPTIONS.filter(
   (opt): opt is { value: ReceitaStatus; label: string } => Boolean(opt.value)
@@ -1572,16 +1583,27 @@ export default function ReceitasPage() {
                   </div>
                   <div>
                     <label className={labelClassName}>Ano</label>
-                    <input
-                      type="number"
-                      min={2000}
-                      max={2100}
+                    <StringSingleSelectDropdown
                       value={receitaForm.ano}
-                      onChange={(e) =>
-                        setReceitaForm((prev) => ({ ...prev, ano: e.target.value }))
+                      onChange={(ano) =>
+                        setReceitaForm((prev) => ({ ...prev, ano }))
                       }
-                      placeholder="2025"
-                      className={inputClassName}
+                      options={
+                        receitaForm.ano &&
+                        !ANO_OPTIONS.some((opt) => opt.value === receitaForm.ano)
+                          ? [
+                              {
+                                value: receitaForm.ano,
+                                label: receitaForm.ano,
+                              },
+                              ...ANO_OPTIONS,
+                            ]
+                          : ANO_OPTIONS
+                      }
+                      placeholder="Selecione"
+                      allowEmpty
+                      emptyOptionLabel="Selecione"
+                      disableSearch
                     />
                   </div>
                 </div>

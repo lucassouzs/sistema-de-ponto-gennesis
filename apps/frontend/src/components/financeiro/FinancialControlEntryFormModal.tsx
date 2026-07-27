@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import api from '@/lib/api';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
@@ -28,6 +30,21 @@ const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
   MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label }))
 );
 const STATUS_SELECT_OPTIONS = labeledToSelectOptions(STATUS_OPTIONS);
+
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_SELECT_OPTIONS = labeledToSelectOptions(
+  Array.from({ length: 11 }, (_, i) => {
+    const year = CURRENT_YEAR - 5 + i;
+    return { value: String(year), label: String(year) };
+  }).reverse()
+);
+
+type SupplierOption = {
+  id: string;
+  name: string;
+  code?: string | null;
+  isActive?: boolean;
+};
 
 function CurrencyInput({
   value,
@@ -147,6 +164,34 @@ export function FinancialControlEntryFormModal({
     initialForm ?? buildInitialForm(now.getMonth() + 1, now.getFullYear())
   );
   const [interestValue, setInterestValue] = useState('');
+  const showQuickLaunch = simplifiedFromOc && !editingEntry;
+
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers', 'financial-control-entry'],
+    queryFn: async () => {
+      const res = await api.get('/suppliers', { params: { limit: 2000 } });
+      return (res.data?.data || []) as SupplierOption[];
+    },
+    enabled: isOpen && !showQuickLaunch,
+    staleTime: 60_000,
+  });
+
+  const supplierOptions = useMemo(() => {
+    const active = suppliers.filter((s) => s.isActive !== false);
+    const opts = active.map((s) => {
+      const label = s.code ? `${s.code} - ${s.name}` : s.name;
+      return {
+        value: label,
+        label,
+        searchText: `${s.code ?? ''} ${s.name}`,
+      };
+    });
+    const current = form.supplierName.trim();
+    if (current && !opts.some((o) => o.value === current)) {
+      opts.unshift({ value: current, label: current, searchText: current });
+    }
+    return opts;
+  }, [suppliers, form.supplierName]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -206,18 +251,25 @@ export function FinancialControlEntryFormModal({
   });
 
   const isSaving = createMutation.isPending || updateMutation.isPending;
-  const showQuickLaunch = simplifiedFromOc && !editingEntry;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload =
-      showQuickLaunch && !editingEntry
-        ? buildQuickLaunchPayload(form, interestValue)
-        : formToPayload(form);
-    if (editingEntry) {
-      updateMutation.mutate({ id: editingEntry.id, payload });
-    } else {
-      createMutation.mutate(payload);
+    if (!editingEntry && form.consorcio !== 'brasilia' && form.consorcio !== 'hub') {
+      toast.error('Selecione o consórcio do lançamento');
+      return;
+    }
+    try {
+      const payload =
+        showQuickLaunch && !editingEntry
+          ? buildQuickLaunchPayload(form, interestValue)
+          : formToPayload(form);
+      if (editingEntry) {
+        updateMutation.mutate({ id: editingEntry.id, payload });
+      } else {
+        createMutation.mutate(payload);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Não foi possível salvar o lançamento');
     }
   };
 
@@ -230,6 +282,7 @@ export function FinancialControlEntryFormModal({
           form={form}
           interestValue={interestValue}
           onInterestChange={setInterestValue}
+          onConsorcioChange={(consorcio) => setForm((prev) => ({ ...prev, consorcio }))}
           onClose={onClose}
           onSubmit={handleSubmit}
           isSaving={isSaving}
@@ -271,15 +324,23 @@ export function FinancialControlEntryFormModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Ano <span className="text-red-500">*</span>
             </label>
-            <input
-              required
-              type="number"
-              min={2000}
-              max={2100}
-              value={form.paymentYear}
-              onChange={(e) => setForm({ ...form, paymentYear: parseInt(e.target.value, 10) })}
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
+            <StringSingleSelectDropdown
+              value={String(form.paymentYear || '')}
+              onChange={(v) => setForm({ ...form, paymentYear: parseInt(v, 10) })}
+              options={
+                form.paymentYear &&
+                !YEAR_SELECT_OPTIONS.some((opt) => opt.value === String(form.paymentYear))
+                  ? [
+                      {
+                        value: String(form.paymentYear),
+                        label: String(form.paymentYear),
+                      },
+                      ...YEAR_SELECT_OPTIONS,
+                    ]
+                  : YEAR_SELECT_OPTIONS
+              }
+              allowEmpty={false}
+              disableSearch
             />
           </div>
           <div>
@@ -300,33 +361,37 @@ export function FinancialControlEntryFormModal({
               type="text"
               value={form.osCode}
               onChange={(e) => setForm({ ...form, osCode: e.target.value })}
-              placeholder="Ex.: ADM, IMP-20/SC-01"
+              placeholder="Informe a O.S."
               autoComplete="off"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
             />
           </div>
           <div className="sm:col-span-4">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Nome do Fornecedor
+              Fornecedor
             </label>
-            <input
-              type="text"
+            <SingleSelectSearchDropdown
               value={form.supplierName}
-              onChange={(e) => setForm({ ...form, supplierName: e.target.value })}
-              placeholder="Ex.: POTENCIAL SEGURADORA"
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
+              onChange={(supplierName) => setForm({ ...form, supplierName })}
+              options={supplierOptions}
+              placeholder="Selecione o fornecedor"
+              searchPlaceholder="Pesquisar fornecedor..."
+              emptyOptionsMessage="Nenhum fornecedor cadastrado."
+              emptySearchMessage="Nenhum fornecedor encontrado."
+              allowEmpty={false}
+              noFocusRing
+              className="w-full"
             />
           </div>
           <div className="sm:col-span-2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Número da NF
+              NF
             </label>
             <input
               type="text"
               value={form.nfNumber}
               onChange={(e) => setForm({ ...form, nfNumber: e.target.value })}
-              placeholder="Ex.: 556713"
+              placeholder="Informe a NF"
               autoComplete="off"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
             />
@@ -339,7 +404,7 @@ export function FinancialControlEntryFormModal({
               type="text"
               value={form.parcelNumber}
               onChange={(e) => setForm({ ...form, parcelNumber: e.target.value })}
-              placeholder="Ex.: 2/2"
+              placeholder="Informe a parcela"
               autoComplete="off"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
             />
@@ -370,36 +435,39 @@ export function FinancialControlEntryFormModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Data de Emissão
             </label>
-            <input
-              type="date"
+            <DatePickerField
               value={form.emissionDate}
-              onChange={(e) => setForm({ ...form, emissionDate: e.target.value })}
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
+              onChange={(emissionDate) => setForm({ ...form, emissionDate })}
+              placeholder="dd/mm/aaaa"
+              noFocusRing
+              aria-label="Data de Emissão"
+              className="w-full"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Data de Vencimento
             </label>
-            <input
-              type="date"
+            <DatePickerField
               value={form.dueDate}
-              onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
+              onChange={(dueDate) => setForm({ ...form, dueDate })}
+              placeholder="dd/mm/aaaa"
+              noFocusRing
+              aria-label="Data de Vencimento"
+              className="w-full"
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Data de Pagamento
             </label>
-            <input
-              type="date"
+            <DatePickerField
               value={form.paidDate}
-              onChange={(e) => setForm({ ...form, paidDate: e.target.value })}
-              autoComplete="off"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
+              onChange={(paidDate) => setForm({ ...form, paidDate })}
+              placeholder="dd/mm/aaaa"
+              noFocusRing
+              aria-label="Data de Pagamento"
+              className="w-full"
             />
           </div>
         </div>
@@ -425,7 +493,7 @@ export function FinancialControlEntryFormModal({
           <textarea
             value={form.receivedNote}
             onChange={(e) => setForm({ ...form, receivedNote: e.target.value })}
-            placeholder="Ex.: PAGO TED, PAGO PIX, CANCELADO"
+            placeholder="Observações adicionais (opcional)"
             rows={3}
             autoComplete="off"
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white resize-y"

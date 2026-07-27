@@ -11,6 +11,7 @@ const RECEITA_STATUSES = new Set([
   'RECEBIDO',
   'PENDENTE',
   'PENDENTE PARCIAL',
+  'CANCELADA',
 ]);
 
 function normalizeConsorcio(value: unknown): ConsorcioKey {
@@ -66,6 +67,7 @@ function normalizeReceitaStatus(value: unknown): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ');
+  if (compact.includes('CANCELAD')) return 'CANCELADA';
   if (compact.includes('PENDENTE PARCIAL')) return 'PENDENTE PARCIAL';
   if (compact.includes('PENDENTE')) return 'PENDENTE';
   if (compact.includes('MOBILIZACAO')) return 'MOBILIZAÇÃO';

@@ -68,7 +68,7 @@ export const MONTHS_PT = [
 
 export interface EntryFormState {
   id?: string;
-  consorcio: FinancialControlConsorcio;
+  consorcio: FinancialControlConsorcio | '';
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -144,7 +144,7 @@ export function dateInputValue(value: string | null | undefined): string {
 export function buildInitialForm(
   month: number,
   year: number,
-  consorcio: FinancialControlConsorcio = 'brasilia'
+  consorcio: FinancialControlConsorcio | '' = ''
 ): EntryFormState {
   return {
     consorcio,
@@ -194,9 +194,12 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
 }
 
 export function buildFinancialEntryPayload(form: EntryFormState) {
+  if (form.consorcio !== 'brasilia' && form.consorcio !== 'hub') {
+    throw new Error('Selecione o consórcio do lançamento');
+  }
   const computedRemainingDays = calcRemainingDays(form.dueDate, form.paidDate);
   return {
-    consorcio: form.consorcio === 'hub' ? 'hub' : 'brasilia',
+    consorcio: form.consorcio,
     paymentMonth: form.paymentMonth,
     paymentYear: form.paymentYear,
     status: form.status,
@@ -205,7 +208,12 @@ export function buildFinancialEntryPayload(form: EntryFormState) {
     nfNumber: form.nfNumber || null,
     parcelNumber: form.parcelNumber || null,
     emissionDate: form.emissionDate || null,
-    boleto: form.boleto || null,
+    boleto: (() => {
+      const normalized = (form.boleto || '').trim().toLowerCase();
+      if (normalized === 'sim') return 'Sim';
+      if (normalized === 'não' || normalized === 'nao' || !normalized) return 'Não';
+      return form.boleto.trim();
+    })(),
     dueDate: form.dueDate || null,
     originalValue: parseCurrencyInput(form.originalValue),
     ocNumber: form.ocNumber || null,
@@ -392,7 +400,7 @@ export function buildFormFromPurchaseOrder(
   return {
     paymentMonth: now.getMonth() + 1,
     paymentYear: now.getFullYear(),
-    consorcio: 'brasilia',
+    consorcio: '',
     status: 'LANCADO',
     osCode,
     supplierName: (order.supplier?.name || '').trim(),

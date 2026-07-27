@@ -717,11 +717,11 @@ export default function ControleFinanceiroPage() {
               type="button"
               onClick={openCreateModal}
               className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-              aria-label="Novo pagamento"
-              title="Novo pagamento"
+              aria-label="Novo Lançamento"
+              title="Novo Lançamento"
             >
               <Plus className="h-4 w-4 shrink-0" />
-              <span>Novo pagamento</span>
+              <span>Novo Lançamento</span>
             </button>
           </div>
 
@@ -847,7 +847,6 @@ export default function ControleFinanceiroPage() {
           editingEntry={editingEntry}
           defaultPaymentMonth={filters.month || currentMonth}
           defaultPaymentYear={filters.year || currentYear}
-          defaultConsorcio={consorcio}
         />
 
         {/* Modal de Filtros */}

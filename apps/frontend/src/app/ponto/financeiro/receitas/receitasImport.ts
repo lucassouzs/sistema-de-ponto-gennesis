@@ -6,7 +6,8 @@ export type ReceitaStatus =
   | 'MOBILIZAÇÃO'
   | 'RECEBIDO'
   | 'PENDENTE'
-  | 'PENDENTE PARCIAL';
+  | 'PENDENTE PARCIAL'
+  | 'CANCELADA';
 
 export type ReceitaRow = {
   id: string;
@@ -84,6 +85,9 @@ function parseExcelDate(value: unknown): string {
 function parseStatus(raw: unknown): { status: ReceitaStatus; statusData?: string } {
   const text = cellText(raw);
   const norm = normalizeText(text);
+  if (norm.includes('CANCELAD')) {
+    return { status: 'CANCELADA' };
+  }
   if (norm.includes('PENDENTE PARCIAL')) {
     return { status: 'PENDENTE PARCIAL' };
   }

@@ -28,10 +28,16 @@ import {
 import { ListPagination } from '@/components/ui/ListPagination';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { Loading } from '@/components/ui/Loading';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
 import api from '@/lib/api';
+import {
+  maskCurrencyInputBrOrEmpty,
+  parseCurrencyInputBr,
+} from '@/lib/maskCurrencyBr';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 type PncpUfProgress = {
   uf: string;
@@ -108,6 +114,36 @@ const MODALIDADE_OPTIONS = [
   { codigo: '7', nome: 'Pregão Presencial' },
   { codigo: '1', nome: 'Leilão Eletrônico' },
 ] as const;
+
+type ValorFiltroModo = '' | 'gt' | 'lt' | 'between';
+
+const VALOR_FILTRO_OPTIONS = labeledToSelectOptions([
+  { value: '', label: 'Qualquer valor' },
+  { value: 'gt', label: 'Maior que' },
+  { value: 'lt', label: 'Menor que' },
+  { value: 'between', label: 'Entre' },
+]);
+
+function resolveValorFiltroBounds(
+  modo: ValorFiltroModo,
+  valor: string,
+  valorDe: string,
+  valorAte: string
+): { valorMin: number | null; valorMax: number | null } {
+  if (modo === 'gt') {
+    return { valorMin: parseCurrencyInputBr(valor), valorMax: null };
+  }
+  if (modo === 'lt') {
+    return { valorMin: null, valorMax: parseCurrencyInputBr(valor) };
+  }
+  if (modo === 'between') {
+    return {
+      valorMin: parseCurrencyInputBr(valorDe),
+      valorMax: parseCurrencyInputBr(valorAte),
+    };
+  }
+  return { valorMin: null, valorMax: null };
+}
 
 type PncpItem = {
   sequencialCompra: number | null;
@@ -396,6 +432,10 @@ function LicitacoesPncpPageContent() {
   const [modalidadeCodigos, setModalidadeCodigos] = useState<string[]>([]);
   const [dataInicial, setDataInicial] = useState(defaults.dataInicial);
   const [dataFinal, setDataFinal] = useState(defaults.dataFinal);
+  const [valorModo, setValorModo] = useState<ValorFiltroModo>('');
+  const [valorFiltro, setValorFiltro] = useState('');
+  const [valorDe, setValorDe] = useState('');
+  const [valorAte, setValorAte] = useState('');
   const [q, setQ] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<'uf' | 'modalidade' | null>(null);
@@ -410,6 +450,8 @@ function LicitacoesPncpPageContent() {
     modalidadeCodigos: [] as string[],
     dataInicial: defaults.dataInicial,
     dataFinal: defaults.dataFinal,
+    valorMin: null as number | null,
+    valorMax: null as number | null,
     q: '',
     pagina: 1,
   });
@@ -436,6 +478,8 @@ function LicitacoesPncpPageContent() {
     applied.modalidadeCodigos.length > 0 ||
     applied.dataInicial !== defaults.dataInicial ||
     applied.dataFinal !== defaults.dataFinal ||
+    applied.valorMin != null ||
+    applied.valorMax != null ||
     hasSearch;
 
   const keywordsQuery = useQuery({
@@ -608,6 +652,8 @@ function LicitacoesPncpPageContent() {
           dataFinal: dateInputToYyyymmdd(applied.dataFinal),
           pagina: applied.pagina,
           tamanhoPagina: 20,
+          ...(applied.valorMin != null ? { valorMin: applied.valorMin } : {}),
+          ...(applied.valorMax != null ? { valorMax: applied.valorMax } : {}),
           ...(hasSearch ? { q: searchTerm } : {}),
         },
         timeout: 30_000,
@@ -674,6 +720,10 @@ function LicitacoesPncpPageContent() {
     modalidadeCodigos: string[];
     dataInicial: string;
     dataFinal: string;
+    valorModo?: ValorFiltroModo;
+    valorFiltro?: string;
+    valorDe?: string;
+    valorAte?: string;
   }) => {
     if (!next.dataInicial || !next.dataFinal) {
       toast.error('Informe o período de publicação.');
@@ -683,9 +733,32 @@ function LicitacoesPncpPageContent() {
       toast.error('A data inicial não pode ser maior que a data final.');
       return;
     }
+
+    const modo = next.valorModo ?? valorModo;
+    const valor = next.valorFiltro ?? valorFiltro;
+    const de = next.valorDe ?? valorDe;
+    const ate = next.valorAte ?? valorAte;
+    const { valorMin, valorMax } = resolveValorFiltroBounds(modo, valor, de, ate);
+
+    if (modo === 'between' && valorMin != null && valorMax != null && valorMin > valorMax) {
+      toast.error('O valor inicial não pode ser maior que o final.');
+      return;
+    }
+
+    const valorCompleto =
+      modo === '' ||
+      (modo === 'gt' && valorMin != null) ||
+      (modo === 'lt' && valorMax != null) ||
+      (modo === 'between' && valorMin != null && valorMax != null);
+
     setApplied((prev) => ({
       ...prev,
-      ...next,
+      ufs: next.ufs,
+      modalidadeCodigos: next.modalidadeCodigos,
+      dataInicial: next.dataInicial,
+      dataFinal: next.dataFinal,
+      valorMin: valorCompleto ? valorMin : null,
+      valorMax: valorCompleto ? valorMax : null,
       pagina: 1,
     }));
   };
@@ -712,12 +785,18 @@ function LicitacoesPncpPageContent() {
     setModalidadeCodigos([]);
     setDataInicial(defaults.dataInicial);
     setDataFinal(defaults.dataFinal);
+    setValorModo('');
+    setValorFiltro('');
+    setValorDe('');
+    setValorAte('');
     setApplied((prev) => ({
       ...prev,
       ufs: ['DF'],
       modalidadeCodigos: [],
       dataInicial: defaults.dataInicial,
       dataFinal: defaults.dataFinal,
+      valorMin: null,
+      valorMax: null,
       pagina: 1,
     }));
   };
@@ -833,23 +912,6 @@ function LicitacoesPncpPageContent() {
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
               </button>
-
-              <button
-                type="button"
-                onClick={() => setShowSyncModal(true)}
-                disabled={syncRunning}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                aria-label="Sincronizar PNCP"
-                title={
-                  syncRunning
-                    ? 'Sincronização em andamento'
-                    : 'Sincronizar com o PNCP'
-                }
-              >
-                <DownloadCloud
-                  className={`h-4 w-4 ${syncRunning ? 'animate-pulse text-red-600' : ''}`}
-                />
-              </button>
             </div>
           </div>
         </CardHeader>
@@ -870,7 +932,7 @@ function LicitacoesPncpPageContent() {
                 hint={
                   syncRunning
                     ? 'Sincronização em andamento. Em breve os dados aparecem aqui.'
-                    : 'Ajuste os filtros ou clique em Sincronizar para puxar do PNCP.'
+                    : 'Ajuste os filtros ou aguarde o sync automático do PNCP.'
                 }
               />
               {totalPaginas > 1 ? (
@@ -1150,6 +1212,102 @@ function LicitacoesPncpPageContent() {
                 </div>
               </div>
 
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Valor estimado
+                </label>
+                <StringSingleSelectDropdown
+                  value={valorModo}
+                  onChange={(next) => {
+                    const modo = next as ValorFiltroModo;
+                    setValorModo(modo);
+                    if (!modo) {
+                      setValorFiltro('');
+                      setValorDe('');
+                      setValorAte('');
+                    }
+                    commitFilters({
+                      ufs,
+                      modalidadeCodigos,
+                      dataInicial,
+                      dataFinal,
+                      valorModo: modo,
+                      valorFiltro: modo ? valorFiltro : '',
+                      valorDe: modo === 'between' ? valorDe : '',
+                      valorAte: modo === 'between' ? valorAte : '',
+                    });
+                  }}
+                  options={VALOR_FILTRO_OPTIONS}
+                  allowEmpty={false}
+                  disableSearch
+                />
+                {valorModo === 'gt' || valorModo === 'lt' ? (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={valorFiltro}
+                    onChange={(e) => {
+                      const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                      setValorFiltro(masked);
+                      commitFilters({
+                        ufs,
+                        modalidadeCodigos,
+                        dataInicial,
+                        dataFinal,
+                        valorModo,
+                        valorFiltro: masked,
+                      });
+                    }}
+                    placeholder={valorModo === 'gt' ? 'Maior que R$ 0,00' : 'Menor que R$ 0,00'}
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  />
+                ) : null}
+                {valorModo === 'between' ? (
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={valorDe}
+                      onChange={(e) => {
+                        const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                        setValorDe(masked);
+                        commitFilters({
+                          ufs,
+                          modalidadeCodigos,
+                          dataInicial,
+                          dataFinal,
+                          valorModo: 'between',
+                          valorDe: masked,
+                          valorAte,
+                        });
+                      }}
+                      placeholder="De R$ 0,00"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={valorAte}
+                      onChange={(e) => {
+                        const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                        setValorAte(masked);
+                        commitFilters({
+                          ufs,
+                          modalidadeCodigos,
+                          dataInicial,
+                          dataFinal,
+                          valorModo: 'between',
+                          valorDe,
+                          valorAte: masked,
+                        });
+                      }}
+                      placeholder="Até R$ 0,00"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    />
+                  </div>
+                ) : null}
+              </div>
+
               <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                   Espelho por palavras-chave
@@ -1197,8 +1355,8 @@ function LicitacoesPncpPageContent() {
               </div>
 
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Sync automático a cada ~1h (Brasil, últimos 30 dias). Use o botão de nuvem para forçar
-                agora.
+                Sync automático a cada ~1h (Brasil, últimos 30 dias). Clique em “Última sync” no
+                cabeçalho para ver o progresso ou forçar agora.
               </p>
             </div>
 

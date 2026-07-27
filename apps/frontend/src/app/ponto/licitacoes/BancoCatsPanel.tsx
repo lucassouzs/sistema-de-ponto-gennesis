@@ -149,12 +149,15 @@ function isCenteredCatalogHeader(header: string): boolean {
     key === 'quantidade' ||
     key === 'qtd' ||
     key === 'qtde' ||
-    key === 'fonte'
+    key === 'fonte' ||
+    key === 'pagina referente'
   );
 }
 
-function isIndFonteHeader(header: string): boolean {
-  return normalizeHeaderKey(header) === 'ind fonte';
+/** Colunas ocultas na UI (planilha pode trazer, mas não exibimos). */
+function isHiddenCatalogHeader(header: string): boolean {
+  const key = normalizeHeaderKey(header);
+  return key === 'ind fonte' || key === 'indice';
 }
 
 function emptyFormFields(headers: string[]): Record<string, string> {
@@ -304,7 +307,7 @@ function CreateServicoModal({
 
         <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
           {headers.map((header) => {
-            if (isIndFonteHeader(header)) return null;
+            if (isHiddenCatalogHeader(header)) return null;
             const label = header.trim();
             const value = fields[header] ?? '';
             const fieldClass =
@@ -430,7 +433,7 @@ export function BancoCatsPanel() {
 
   const formHeaders = useMemo(() => {
     const headers = sheet?.headers?.length ? sheet.headers : [...CANONICAL_HEADERS];
-    return headers.filter((header) => !isIndFonteHeader(header));
+    return headers.filter((header) => !isHiddenCatalogHeader(header));
   }, [sheet?.headers]);
 
   const indexedRows = useMemo(() => {
@@ -1522,7 +1525,6 @@ export function BancoCatsPanel() {
                 itemLabelPlural="serviços"
                 currentPage={currentPage}
                 totalPages={listRange.totalPages}
-                centerPageLabel
               />
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[56rem] text-sm">
@@ -1538,7 +1540,7 @@ export function BancoCatsPanel() {
                         />
                       </th>
                       {sheet.headers.map((header) => {
-                        if (isIndFonteHeader(header)) return null;
+                        if (isHiddenCatalogHeader(header)) return null;
                         const isDescricao = isDescricaoHeader(header);
                         const isCentered = isCenteredCatalogHeader(header);
                         return (
@@ -1575,7 +1577,7 @@ export function BancoCatsPanel() {
                             />
                           </td>
                           {sheet.headers.map((header, colIndex) => {
-                            if (isIndFonteHeader(header)) return null;
+                            if (isHiddenCatalogHeader(header)) return null;
                             const isDescricao = isDescricaoHeader(header);
                             const isCentered = isCenteredCatalogHeader(header);
                             return (

@@ -30,6 +30,10 @@ export type PncpConsultaParams = {
   tamanhoPagina?: number;
   /** Filtro opcional no objeto/órgão/processo (case-insensitive, sem acento). */
   q?: string;
+  /** Valor estimado mínimo (inclusive), em reais. */
+  valorMin?: number | null;
+  /** Valor estimado máximo (inclusive), em reais. */
+  valorMax?: number | null;
   /**
    * Quando true, mantém só contratações cujo objeto casa com as palavras-chave
    * padrão (engenharia, manutenção predial, áreas verdes, etc.).

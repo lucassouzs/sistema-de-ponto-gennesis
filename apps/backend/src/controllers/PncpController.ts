@@ -84,6 +84,10 @@ export class PncpController {
       const pagina = Number(req.query.pagina || 1);
       const tamanhoPagina = Number(req.query.tamanhoPagina || 50);
       const q = req.query.q != null ? String(req.query.q) : undefined;
+      const valorMinRaw = req.query.valorMin != null ? String(req.query.valorMin) : '';
+      const valorMaxRaw = req.query.valorMax != null ? String(req.query.valorMax) : '';
+      const valorMin = valorMinRaw.trim() !== '' ? Number(valorMinRaw) : null;
+      const valorMax = valorMaxRaw.trim() !== '' ? Number(valorMaxRaw) : null;
 
       if (!dataInicial || !dataFinal) {
         throw createError('Informe dataInicial e dataFinal.', 400);
@@ -98,6 +102,8 @@ export class PncpController {
         pagina,
         tamanhoPagina,
         q,
+        valorMin: valorMin != null && Number.isFinite(valorMin) ? valorMin : null,
+        valorMax: valorMax != null && Number.isFinite(valorMax) ? valorMax : null,
       });
 
       res.json({ success: true, data: result });
