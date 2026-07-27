@@ -27,6 +27,7 @@ import {
   type PlannerTask,
   type PlannerTaskList,
 } from '@/lib/plannerTasks';
+import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 
 function TaskRow({
   task,
@@ -435,6 +436,7 @@ export function KanbanTasksView() {
   const [filter, setFilter] = useState<'all' | 'starred'>('all');
   const [creatingList, setCreatingList] = useState(false);
   const [newListTitle, setNewListTitle] = useState('');
+  const listsScrollRef = useRightClickPanScroll<HTMLDivElement>();
 
   const { data: lists = [], isLoading } = useQuery({
     queryKey: ['planner-task-lists'],
@@ -554,7 +556,10 @@ export function KanbanTasksView() {
       {isLoading ? (
         <p className="text-sm text-gray-500">Carregando listas…</p>
       ) : (
-        <div className="flex items-start gap-4 overflow-x-auto pb-2">
+        <div
+          ref={listsScrollRef}
+          className="flex items-start gap-4 overflow-x-auto pb-2"
+        >
           {lists.map((list) => (
             <ListBlock
               key={list.id}

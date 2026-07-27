@@ -23,6 +23,7 @@ import {
 } from '@/components/kanban/kanbanFormStyles';
 import api from '@/lib/api';
 import { useKanbanDragScrollAssist } from '@/hooks/useKanbanDragScrollAssist';
+import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
   type Priority,
@@ -2695,6 +2696,7 @@ function KanbanPage() {
   const cardMoveSeqRef = useRef<Record<string, number>>({});
   const isKanbanDragging = Boolean(dragState.draggingCardId || columnDrag.draggingColumnId);
   useKanbanDragScrollAssist(isKanbanDragging, boardScrollRef);
+  useRightClickPanScroll(boardScrollRef);
   useEffect(() => {
     columnDragRef.current = columnDrag;
   }, [columnDrag]);

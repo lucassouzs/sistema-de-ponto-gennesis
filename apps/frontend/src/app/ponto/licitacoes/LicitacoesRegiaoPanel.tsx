@@ -33,6 +33,7 @@ import {
   RowActionMenuPortal,
   cadastroListClasses,
 } from '@/components/ui/RowActionMenu';
+import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { currencyDigitsToFormatted } from '@/lib/fichaDemandaApproval';
 
@@ -464,6 +465,7 @@ export function LicitacoesRegiaoPanel({
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createFields, setCreateFields] = useState<Record<string, string>>({});
+  const tableScrollRef = useRightClickPanScroll<HTMLDivElement>();
 
   const { data: tabs = [] } = useQuery({
     queryKey: ['licitacoes-planilha-regioes'],
@@ -1016,7 +1018,7 @@ export function LicitacoesRegiaoPanel({
                 currentPage={currentPage}
                 totalPages={listRange.totalPages}
               />
-              <div className="overflow-x-auto">
+              <div ref={tableScrollRef} className="overflow-x-auto">
                 <table className="w-full min-w-[52rem] text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
