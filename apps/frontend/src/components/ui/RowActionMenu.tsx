@@ -13,6 +13,8 @@ export type RowActionMenuExtraItem = {
   icon?: React.ReactNode;
   disabled?: boolean;
   disabledTitle?: string;
+  /** Cor do texto do item (ícone pode seguir a mesma paleta). */
+  tone?: 'default' | 'success' | 'danger';
 };
 
 type RowActionMenuCellProps = {
@@ -144,7 +146,11 @@ export function RowActionMenuPortal({
             } ${
               item.disabled
                 ? 'cursor-not-allowed text-gray-400 dark:text-gray-500'
-                : 'text-gray-700 dark:text-gray-300'
+                : item.tone === 'success'
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : item.tone === 'danger'
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-gray-700 dark:text-gray-300'
             }`}
           >
             {item.icon}

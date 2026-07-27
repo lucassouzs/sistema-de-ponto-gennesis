@@ -4,10 +4,8 @@ import {
   getCanonicalRegiaoHeaders,
   normalizeManualRowSnapshot,
 } from './licitacaoRegiaoManualStore';
-import {
-  createPncpEnviadoAnalise,
-  getPncpEnviadoAnaliseByNumero,
-} from './pncpEnviadoAnaliseStore';
+import { getPncpEnviadoAnaliseByNumero, createPncpEnviadoAnalise } from './pncpEnviadoAnaliseStore';
+import { clearPncpRejeicaoIfAny } from './PncpRejeitarService';
 import {
   fetchLicitacaoRegiaoSheet,
   findLicitacaoRegiaoTab,
@@ -273,6 +271,8 @@ export async function enviarPncpParaAnalise(input: {
     rowKey: created.rowKey,
     enviadoBy: input.userId,
   });
+
+  await clearPncpRejeicaoIfAny(pncp.numeroControlePNCP);
 
   invalidateLicitacaoRegiaoSheetCache(regiaoKey);
 

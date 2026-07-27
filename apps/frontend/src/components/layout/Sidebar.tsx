@@ -1440,6 +1440,28 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [effectiveCollapsed, closeSidebarPanel]);
 
+  // Mobile drawer: trava scroll do body e fecha ao passar para desktop
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onViewportChange = () => {
+      if (mq.matches) setIsOpen(false);
+    };
+    onViewportChange();
+    mq.addEventListener('change', onViewportChange);
+    return () => mq.removeEventListener('change', onViewportChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    if (mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
   useLayoutEffect(() => {
     const savedModule = readSelectedModuleId();
     if (savedModule) setSelectedModuleId(savedModule);
@@ -1481,17 +1503,17 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
       <div
         ref={sidebarRef}
         data-app-sidebar
-        className={`fixed top-0 left-0 flex h-full transform overflow-visible transition-all ${SIDEBAR_TRANSITION_CLASS} z-40 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
         {/* Tier 1 — Rail de módulos */}
-        <div className="w-20 flex-shrink-0 h-full flex flex-col overflow-visible bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800">
-          <div className="relative z-0 isolate flex flex-col items-center p-5 pb-3">
+        <div className="flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <div className="relative z-0 isolate flex flex-shrink-0 flex-col items-center p-5 pb-3 [@media(max-height:820px)]:p-2.5 [@media(max-height:820px)]:pb-1.5">
             <Link
               href="/ponto/home"
               prefetch={navLinkPrefetch}
-              className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl transition-all hover:scale-105"
+              className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl transition-all hover:scale-105 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8"
               title="Ir para a página inicial"
               aria-label="Página inicial"
               aria-current={onHomeRoute ? 'page' : undefined}
@@ -1499,12 +1521,12 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
               <img
                 src={logoSrc}
                 alt={logoAlt}
-                className="h-10 w-10 object-contain"
+                className="h-full w-full object-contain"
               />
             </Link>
           </div>
 
-          <nav className="relative z-30 flex-1 overflow-x-hidden overflow-y-auto px-2 pb-4 pt-3 space-y-3">
+          <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2 [@media(max-height:820px)]:pt-1">
             {sidebarHydrated && !isLoading ? menuItems.map((category) => {
               const CategoryIcon = category.icon;
               const isRailActive = category.id === railModuleActiveId;
@@ -1524,14 +1546,14 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                     <Link
                       href={singleItem.href}
                       prefetch={navLinkPrefetch}
-                      className={`relative z-10 w-10 h-10 overflow-visible rounded-xl transition-all duration-200 flex items-center justify-center ${
+                      className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                         active
                           ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                           : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                       aria-label={singleItem.name}
                     >
-                      <SingleItemIcon className="w-5 h-5" />
+                      <SingleItemIcon className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                       <NotificationCountBadge count={singleBadge} rail />
                     </Link>
                   </SidebarRailTooltip>
@@ -1544,7 +1566,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                   <button
                     type="button"
                     onClick={() => handleSelectModule(category.id)}
-                    className={`relative z-10 w-10 h-10 overflow-visible rounded-xl transition-all duration-200 flex items-center justify-center ${
+                    className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                       isRailActive
                         ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -1552,7 +1574,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                     aria-label={category.name}
                     aria-current={isRailActive ? 'true' : undefined}
                   >
-                    <CategoryIcon className="w-5 h-5" />
+                    <CategoryIcon className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                     <NotificationCountBadge count={moduleBadge} rail />
                   </button>
                 </SidebarRailTooltip>
@@ -1567,20 +1589,20 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
           </nav>
 
           {/* Rodapé: atalhos, divisor e perfil */}
-          <div className="flex-shrink-0 relative z-20 overflow-visible px-2 pb-4 flex flex-col items-center">
-            <div className="flex flex-col items-center gap-2">
+          <div className="relative z-20 flex flex-shrink-0 flex-col items-center overflow-visible px-2 pb-4 [@media(max-height:820px)]:pb-2">
+            <div className="flex flex-col items-center gap-2 [@media(max-height:820px)]:gap-1">
               <SidebarRailTooltip label="Chat">
                 <Link
                   href="/ponto/conversas"
                   prefetch={navLinkPrefetch}
                   aria-label={`Chat${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
-                  className={`relative z-10 w-10 h-10 overflow-visible rounded-xl transition-all duration-200 flex items-center justify-center ${
+                  className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/conversas')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <MessagesSquare className="w-5 h-5" strokeWidth={2} />
+                  <MessagesSquare className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" strokeWidth={2} />
                   <NotificationCountBadge count={chatUnreadCount} rail />
                 </Link>
               </SidebarRailTooltip>
@@ -1589,13 +1611,13 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                   href="/ponto/kanban"
                   prefetch={navLinkPrefetch}
                   aria-label="Tasks"
-                  className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/kanban')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <SquareKanban className="w-5 h-5" />
+                  <SquareKanban className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Agenda">
@@ -1603,13 +1625,13 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                   href="/ponto/agenda"
                   prefetch={navLinkPrefetch}
                   aria-label="Agenda"
-                  className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/agenda')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <CalendarRange className="w-5 h-5" />
+                  <CalendarRange className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Flow">
@@ -1617,13 +1639,13 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                   href="/ponto/flow"
                   prefetch={navLinkPrefetch}
                   aria-label="Flow"
-                  className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/flow')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <Workflow className="w-5 h-5" />
+                  <Workflow className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Drive">
@@ -1631,30 +1653,30 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                   href="/ponto/drive"
                   prefetch={navLinkPrefetch}
                   aria-label="Drive"
-                  className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/drive')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <HardDrive className="w-5 h-5" />
+                  <HardDrive className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
             </div>
-            <div className="mt-2 flex flex-col items-center gap-2">
+            <div className="mt-2 flex flex-col items-center gap-2 [@media(max-height:820px)]:mt-1.5">
               <div className="h-px w-12 shrink-0 bg-gray-200 dark:bg-gray-700" />
             </div>
-            <div className="pt-4 flex justify-center w-full">
-            <div ref={profileAvatarSectionRef} className="relative size-12 shrink-0">
+            <div className="flex w-full justify-center pt-4 [@media(max-height:820px)]:pt-2">
+            <div ref={profileAvatarSectionRef} className="relative size-12 shrink-0 [@media(max-height:820px)]:size-10">
                       <button
                         type="button"
                         aria-haspopup="true"
                         aria-expanded={profileAvatarMenu}
                         aria-label="Configurações e foto de perfil"
                         onClick={() => setProfileAvatarMenu((v) => !v)}
-                        className="group relative block size-12 rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-red-500/50"
+                        className="group relative block size-12 overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-red-500/50 [@media(max-height:820px)]:size-10"
                       >
-                        <div className="size-12 rounded-full overflow-hidden bg-red-600 flex items-center justify-center relative">
+                        <div className="relative flex size-12 items-center justify-center overflow-hidden rounded-full bg-red-600 [@media(max-height:820px)]:size-10">
                           {profilePhotoHref ? (
                             <img
                               src={profilePhotoHref}
@@ -1763,7 +1785,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
 
         {/* Tier 2 — Painel de páginas do módulo */}
         <div
-          className={`h-full flex-shrink-0 flex flex-col bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 overflow-hidden ${
+          className={`flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 ${
             sidebarHydrated ? `transition-[width,opacity] ${SIDEBAR_TRANSITION_CLASS}` : 'transition-none'
           } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
         >
@@ -1808,7 +1830,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
           </div>
 
           {/* Lista de páginas */}
-          <nav className="flex-1 overflow-y-auto overflow-x-hidden p-4 pt-4 space-y-3">
+          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4 pt-4">
             {sidebarHydrated && !isLoading ? searchTerm.trim() ? (
               menuItems.map((category) => {
                 const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);

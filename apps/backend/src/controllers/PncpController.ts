@@ -4,6 +4,7 @@ import { createError } from '../middleware/errorHandler';
 import { PNCP_KEYWORDS_OBJETO_PADRAO, PNCP_MODALIDADES } from '../services/PncpConsultaService';
 import { consultarContratacoesLocais } from '../services/PncpLocalConsultaService';
 import { enviarPncpParaAnalise } from '../services/PncpEnviarAnaliseService';
+import { rejeitarPncpContratacao } from '../services/PncpRejeitarService';
 import {
   getPncpSyncStatus,
   requestPncpSyncCancel,
@@ -93,7 +94,9 @@ export class PncpController {
         .trim()
         .toLowerCase();
       const statusAnalise =
-        statusAnaliseRaw === 'disponivel' || statusAnaliseRaw === 'enviada'
+        statusAnaliseRaw === 'disponivel' ||
+        statusAnaliseRaw === 'enviada' ||
+        statusAnaliseRaw === 'rejeitada'
           ? statusAnaliseRaw
           : statusAnaliseRaw === 'all'
             ? 'all'
@@ -126,6 +129,50 @@ export class PncpController {
         message.includes('não pode')
       ) {
         next(createError(message, 400));
+        return;
+      }
+      next(createError(message, 500));
+    }
+  }
+
+  async rejeitar(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const numeroControlePNCP =
+        typeof req.body?.numeroControlePNCP === 'string'
+          ? req.body.numeroControlePNCP.trim()
+          : '';
+
+      if (!numeroControlePNCP) {
+        throw createError('Informe o número de controle PNCP.', 400);
+      }
+
+      const result = await rejeitarPncpContratacao({
+        numeroControlePNCP,
+        userId: req.user!.id,
+      });
+
+      if (result.alreadyRejected) {
+        res.status(409).json({
+          success: false,
+          data: result,
+          message: 'Esta licitação já foi rejeitada.',
+        });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: 'Licitação rejeitada.',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao rejeitar licitação';
+      if (
+        message.includes('Informe') ||
+        message.includes('não encontrada') ||
+        message.includes('já foi enviada')
+      ) {
+        next(createError(message, message.includes('já foi enviada') ? 409 : 400));
         return;
       }
       next(createError(message, 500));

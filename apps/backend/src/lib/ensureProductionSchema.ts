@@ -633,6 +633,32 @@ async function ensurePncpEnviadosAnaliseTable(prisma: PrismaClient): Promise<voi
   `);
 }
 
+async function ensurePncpRejeitadosTable(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "pncp_rejeitados" (
+      "id" TEXT NOT NULL,
+      "numeroControlePNCP" TEXT NOT NULL,
+      "rejeitadoBy" TEXT NOT NULL,
+      "rejeitadoAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "pncp_rejeitados_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pncp_rejeitados_numero_key"
+    ON "pncp_rejeitados"("numeroControlePNCP");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE "pncp_rejeitados" ADD CONSTRAINT "pncp_rejeitados_rejeitadoBy_fkey"
+        FOREIGN KEY ("rejeitadoBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+}
+
 async function ensurePncpNumeroCompraColumn(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "pncp_contratacoes"
@@ -787,6 +813,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoRegiaoAceitesTable(prisma);
     await ensureLicitacaoRegiaoManuaisTable(prisma);
     await ensurePncpEnviadosAnaliseTable(prisma);
+    await ensurePncpRejeitadosTable(prisma);
     await ensurePncpNumeroCompraColumn(prisma);
     await ensureLicitacaoRegiaoSheetRowsTable(prisma);
     await ensureBancoCatsServicosTable(prisma);

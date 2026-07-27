@@ -7,6 +7,10 @@ import {
   type PncpContratacaoListItem,
 } from './PncpConsultaService';
 import { listAllPncpEnviadoNumeros, listPncpEnviadosAnaliseByNumeros } from './pncpEnviadoAnaliseStore';
+import {
+  listAllPncpRejeitadoNumeros,
+  listPncpRejeitadosByNumeros,
+} from './pncpRejeitadoStore';
 
 function toYyyymmdd(value: string): string {
   const digits = String(value || '').replace(/\D/g, '');
@@ -110,13 +114,30 @@ function attachEnviadoAnalise(
   return items;
 }
 
+function attachRejeitadoAnalise(
+  items: PncpContratacaoListItem[],
+  rejeitados: Map<
+    string,
+    { rejeitadoAt: Date; rejeitadoByName?: string | null }
+  >
+) {
+  for (const item of items) {
+    const numero = item.numeroControlePNCP || '';
+    const rejeitado = rejeitados.get(numero);
+    item.rejeitadoAnalise = Boolean(rejeitado);
+    item.rejeitadoAnaliseAt = rejeitado?.rejeitadoAt?.toISOString() ?? null;
+    item.rejeitadoAnaliseByName = rejeitado?.rejeitadoByName?.trim() || null;
+  }
+  return items;
+}
+
 function normalizeStatusAnalise(
   value: PncpConsultaParams['statusAnalise']
-): 'disponivel' | 'enviada' | 'all' {
+): 'disponivel' | 'enviada' | 'rejeitada' | 'all' {
   const raw = String(value || '')
     .trim()
     .toLowerCase();
-  if (raw === 'disponivel' || raw === 'enviada') return raw;
+  if (raw === 'disponivel' || raw === 'enviada' || raw === 'rejeitada') return raw;
   return 'all';
 }
 
@@ -155,14 +176,20 @@ export async function consultarContratacoesLocais(
     const enviados = await listPncpEnviadosAnaliseByNumeros(
       items.map((item) => item.numeroControlePNCP || '').filter(Boolean)
     );
+    const rejeitados = await listPncpRejeitadosByNumeros(
+      items.map((item) => item.numeroControlePNCP || '').filter(Boolean)
+    );
     attachEnviadoAnalise(items, enviados);
+    attachRejeitadoAnalise(items, rejeitados);
     const statusAnalise = normalizeStatusAnalise(params.statusAnalise);
     const filtered =
       statusAnalise === 'disponivel'
-        ? items.filter((item) => !item.enviadoAnalise)
+        ? items.filter((item) => !item.enviadoAnalise && !item.rejeitadoAnalise)
         : statusAnalise === 'enviada'
           ? items.filter((item) => Boolean(item.enviadoAnalise))
-          : items;
+          : statusAnalise === 'rejeitada'
+            ? items.filter((item) => Boolean(item.rejeitadoAnalise))
+            : items;
     return {
       items: filtered,
       pagina: 1,
@@ -177,15 +204,7 @@ export async function consultarContratacoesLocais(
   const dateEnd = yyyymmddToDateEnd(dataFinal);
 
   const where: Prisma.PncpContratacaoWhereInput = {
-    OR: [
-      { dataInclusao: { gte: dateStart, lte: dateEnd } },
-      {
-        AND: [
-          { dataInclusao: null },
-          { syncedAt: { gte: dateStart, lte: dateEnd } },
-        ],
-      },
-    ],
+    dataAberturaProposta: { gte: dateStart, lte: dateEnd },
   };
 
   if (ufs.length === 1) {
@@ -244,20 +263,30 @@ export async function consultarContratacoesLocais(
   }
 
   const statusAnalise = normalizeStatusAnalise(params.statusAnalise);
-  if (statusAnalise === 'disponivel' || statusAnalise === 'enviada') {
-    const enviadosNumeros = await listAllPncpEnviadoNumeros();
+  if (statusAnalise === 'disponivel' || statusAnalise === 'enviada' || statusAnalise === 'rejeitada') {
+    const [enviadosNumeros, rejeitadosNumeros] = await Promise.all([
+      listAllPncpEnviadoNumeros(),
+      listAllPncpRejeitadoNumeros(),
+    ]);
     if (statusAnalise === 'enviada') {
       where.numeroControlePNCP = {
         in: enviadosNumeros.length > 0 ? enviadosNumeros : ['__nenhum_enviado__'],
       };
-    } else if (enviadosNumeros.length > 0) {
-      const extra: Prisma.PncpContratacaoWhereInput = {
-        numeroControlePNCP: { notIn: enviadosNumeros },
+    } else if (statusAnalise === 'rejeitada') {
+      where.numeroControlePNCP = {
+        in: rejeitadosNumeros.length > 0 ? rejeitadosNumeros : ['__nenhuma_rejeitada__'],
       };
-      where.AND = [
-        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-        extra,
-      ];
+    } else {
+      const excluded = Array.from(new Set([...enviadosNumeros, ...rejeitadosNumeros]));
+      if (excluded.length > 0) {
+        const extra: Prisma.PncpContratacaoWhereInput = {
+          numeroControlePNCP: { notIn: excluded },
+        };
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          extra,
+        ];
+      }
     }
   }
 
@@ -266,16 +295,19 @@ export async function consultarContratacoesLocais(
   const safePage = Math.min(pagina, totalPaginas);
   const rows = await prisma.pncpContratacao.findMany({
     where,
-    orderBy: [{ dataInclusao: 'desc' }, { syncedAt: 'desc' }],
+    orderBy: [{ dataAberturaProposta: 'desc' }, { dataInclusao: 'desc' }, { syncedAt: 'desc' }],
     skip: (safePage - 1) * tamanhoPagina,
     take: tamanhoPagina,
   });
 
   const items = rows.map(rowToItem);
-  const enviados = await listPncpEnviadosAnaliseByNumeros(
-    items.map((item) => item.numeroControlePNCP || '').filter(Boolean)
-  );
+  const numeros = items.map((item) => item.numeroControlePNCP || '').filter(Boolean);
+  const [enviados, rejeitados] = await Promise.all([
+    listPncpEnviadosAnaliseByNumeros(numeros),
+    listPncpRejeitadosByNumeros(numeros),
+  ]);
   attachEnviadoAnalise(items, enviados);
+  attachRejeitadoAnalise(items, rejeitados);
 
   return {
     items,

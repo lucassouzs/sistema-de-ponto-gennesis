@@ -16,6 +16,7 @@ import {
   Search,
   Send,
   Square,
+  ThumbsDown,
   X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/RowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import api from '@/lib/api';
 import {
   maskCurrencyInputBrOrEmpty,
@@ -131,11 +133,12 @@ const VALOR_FILTRO_OPTIONS = labeledToSelectOptions([
   { value: 'between', label: 'Entre' },
 ]);
 
-type StatusAnaliseFiltro = 'disponivel' | 'enviada' | 'all';
+type StatusAnaliseFiltro = 'disponivel' | 'enviada' | 'rejeitada' | 'all';
 
 const STATUS_ANALISE_OPTIONS = labeledToSelectOptions([
   { value: 'disponivel', label: 'Disponíveis' },
   { value: 'enviada', label: 'Enviadas' },
+  { value: 'rejeitada', label: 'Rejeitadas' },
   { value: 'all', label: 'Todos' },
 ]);
 
@@ -189,6 +192,9 @@ type PncpItem = {
   enviadoAnaliseRegiaoKey?: string | null;
   enviadoAnaliseAt?: string | null;
   enviadoAnaliseByName?: string | null;
+  rejeitadoAnalise?: boolean;
+  rejeitadoAnaliseAt?: string | null;
+  rejeitadoAnaliseByName?: string | null;
 };
 
 type PncpListResult = {
@@ -447,6 +453,7 @@ function formatSyncLabel(iso: string | null | undefined): string {
 
 function LicitacoesPncpPageContent() {
   const queryClient = useQueryClient();
+  const tableScrollRef = useRightClickPanScroll<HTMLDivElement>();
   const defaults = useMemo(() => defaultRange(), []);
   const [ufs, setUfs] = useState<string[]>(['DF']);
   const [modalidadeCodigos, setModalidadeCodigos] = useState<string[]>([]);
@@ -690,6 +697,7 @@ function LicitacoesPncpPageContent() {
   });
 
   const [sendingNumero, setSendingNumero] = useState<string | null>(null);
+  const [rejectingNumero, setRejectingNumero] = useState<string | null>(null);
 
   const enviarAnaliseMutation = useMutation({
     mutationFn: async (numeroControlePNCP: string) => {
@@ -722,6 +730,9 @@ function LicitacoesPncpPageContent() {
                     enviadoAnalise: true,
                     enviadoAnaliseRegiaoKey: data.regiaoKey,
                     enviadoAnaliseAt: data.enviadoAt,
+                    rejeitadoAnalise: false,
+                    rejeitadoAnaliseAt: null,
+                    rejeitadoAnaliseByName: null,
                   }
                 : item
             ),
@@ -751,6 +762,57 @@ function LicitacoesPncpPageContent() {
     },
     onSettled: () => {
       setSendingNumero(null);
+    },
+  });
+
+  const rejeitarMutation = useMutation({
+    mutationFn: async (numeroControlePNCP: string) => {
+      const res = await api.post('/pncp/rejeitar', { numeroControlePNCP });
+      return (res.data?.data ?? res.data) as {
+        alreadyRejected?: boolean;
+        rejeitadoAt: string;
+      };
+    },
+    onMutate: (numeroControlePNCP) => {
+      setRejectingNumero(numeroControlePNCP);
+    },
+    onSuccess: (data, numeroControlePNCP) => {
+      toast.success('Licitação rejeitada.');
+      void queryClient.invalidateQueries({ queryKey: ['pncp-contratacoes'] });
+      queryClient.setQueryData(
+        ['pncp-contratacoes', { ...applied, q: hasSearch ? searchTerm : '' }],
+        (prev: PncpListResult | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((item) =>
+              item.numeroControlePNCP === numeroControlePNCP
+                ? {
+                    ...item,
+                    rejeitadoAnalise: true,
+                    rejeitadoAnaliseAt: data.rejeitadoAt,
+                  }
+                : item
+            ),
+          };
+        }
+      );
+    },
+    onError: (err: {
+      response?: { status?: number; data?: { message?: string } };
+      message?: string;
+    }) => {
+      if (err?.response?.status === 409) {
+        toast.error(err.response.data?.message || 'Esta licitação já foi rejeitada.');
+        void queryClient.invalidateQueries({ queryKey: ['pncp-contratacoes'] });
+        return;
+      }
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Não foi possível rejeitar a licitação.'
+      );
+    },
+    onSettled: () => {
+      setRejectingNumero(null);
     },
   });
 
@@ -833,7 +895,7 @@ function LicitacoesPncpPageContent() {
     statusAnalise?: StatusAnaliseFiltro;
   }) => {
     if (!next.dataInicial || !next.dataFinal) {
-      toast.error('Informe o período de publicação.');
+      toast.error('Informe o período de abertura.');
       return;
     }
     if (next.dataInicial > next.dataFinal) {
@@ -1068,6 +1130,7 @@ function LicitacoesPncpPageContent() {
               />
 
               <div
+                ref={tableScrollRef}
                 className={`overflow-x-auto transition-opacity ${
                   query.isFetching && !showInitialLoading ? 'opacity-60' : ''
                 }`}
@@ -1209,6 +1272,31 @@ function LicitacoesPncpPageContent() {
                                   </span>
                                 ) : null}
                               </div>
+                            ) : row.rejeitadoAnalise ? (
+                              <div className="inline-flex min-w-[7.5rem] flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                                  Rejeitada
+                                </span>
+                                {row.rejeitadoAnaliseByName ? (
+                                  <span
+                                    className="max-w-[10rem] truncate text-[11px] text-gray-600 dark:text-gray-300"
+                                    title={row.rejeitadoAnaliseByName}
+                                  >
+                                    {row.rejeitadoAnaliseByName}
+                                  </span>
+                                ) : null}
+                                {row.rejeitadoAnaliseAt ? (
+                                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                    {(() => {
+                                      const parts = formatBrDateParts(row.rejeitadoAnaliseAt);
+                                      if (!parts) return '—';
+                                      return parts.time
+                                        ? `${parts.date} ${parts.time}`
+                                        : parts.date;
+                                    })()}
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : (
                               <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                                 Disponível
@@ -1277,37 +1365,79 @@ function LicitacoesPncpPageContent() {
                             ),
                           },
                         ]
-                      : [
-                          {
-                            label:
-                              sendingNumero === rowForActionMenu.numeroControlePNCP
-                                ? 'Enviando…'
-                                : 'Enviar',
-                            disabled:
-                              !rowForActionMenu.numeroControlePNCP ||
-                              sendingNumero === rowForActionMenu.numeroControlePNCP,
-                            onClick: () => {
-                              if (!rowForActionMenu.numeroControlePNCP) return;
-                              if (
-                                !window.confirm(
-                                  'Enviar esta licitação para a lista Por região (análise)?'
-                                )
-                              ) {
-                                return;
-                              }
-                              closeRowActionMenu();
-                              enviarAnaliseMutation.mutate(
-                                rowForActionMenu.numeroControlePNCP
-                              );
-                            },
-                            icon:
-                              sendingNumero === rowForActionMenu.numeroControlePNCP ? (
-                                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-red-600 dark:text-red-400" />
-                              ) : (
-                                <Send className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                      : rowForActionMenu.rejeitadoAnalise
+                        ? [
+                            {
+                              label: 'Já rejeitada',
+                              disabled: true,
+                              onClick: () => undefined,
+                              icon: (
+                                <ThumbsDown className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" />
                               ),
-                          },
-                        ]
+                            },
+                          ]
+                        : [
+                            {
+                              label:
+                                sendingNumero === rowForActionMenu.numeroControlePNCP
+                                  ? 'Enviando…'
+                                  : 'Enviar',
+                              tone: 'success',
+                              disabled:
+                                !rowForActionMenu.numeroControlePNCP ||
+                                sendingNumero === rowForActionMenu.numeroControlePNCP ||
+                                rejectingNumero === rowForActionMenu.numeroControlePNCP,
+                              onClick: () => {
+                                if (!rowForActionMenu.numeroControlePNCP) return;
+                                if (
+                                  !window.confirm(
+                                    'Enviar esta licitação para a lista Por região (análise)?'
+                                  )
+                                ) {
+                                  return;
+                                }
+                                closeRowActionMenu();
+                                enviarAnaliseMutation.mutate(
+                                  rowForActionMenu.numeroControlePNCP
+                                );
+                              },
+                              icon:
+                                sendingNumero === rowForActionMenu.numeroControlePNCP ? (
+                                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+                                ) : (
+                                  <Send className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                ),
+                            },
+                            {
+                              label:
+                                rejectingNumero === rowForActionMenu.numeroControlePNCP
+                                  ? 'Rejeitando…'
+                                  : 'Rejeitar',
+                              tone: 'danger',
+                              disabled:
+                                !rowForActionMenu.numeroControlePNCP ||
+                                rejectingNumero === rowForActionMenu.numeroControlePNCP ||
+                                sendingNumero === rowForActionMenu.numeroControlePNCP,
+                              onClick: () => {
+                                if (!rowForActionMenu.numeroControlePNCP) return;
+                                if (
+                                  !window.confirm(
+                                    'Rejeitar esta licitação? Ela sairá das disponíveis.'
+                                  )
+                                ) {
+                                  return;
+                                }
+                                closeRowActionMenu();
+                                rejeitarMutation.mutate(rowForActionMenu.numeroControlePNCP);
+                              },
+                              icon:
+                                rejectingNumero === rowForActionMenu.numeroControlePNCP ? (
+                                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-red-600 dark:text-red-400" />
+                                ) : (
+                                  <ThumbsDown className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                                ),
+                            },
+                          ]
                   }
                 />
               ) : null}
@@ -1382,7 +1512,7 @@ function LicitacoesPncpPageContent() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Publicação de
+                    Abertura de
                   </label>
                   <DatePickerField
                     value={dataInicial}
@@ -1395,13 +1525,13 @@ function LicitacoesPncpPageContent() {
                         dataFinal,
                       });
                     }}
-                    aria-label="Publicação de"
+                    aria-label="Abertura de"
                     className="w-full"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Publicação até
+                    Abertura até
                   </label>
                   <DatePickerField
                     value={dataFinal}
@@ -1414,7 +1544,7 @@ function LicitacoesPncpPageContent() {
                         dataFinal: next,
                       });
                     }}
-                    aria-label="Publicação até"
+                    aria-label="Abertura até"
                     className="w-full"
                   />
                 </div>
