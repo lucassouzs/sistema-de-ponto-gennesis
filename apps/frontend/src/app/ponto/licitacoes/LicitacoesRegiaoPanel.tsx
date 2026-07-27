@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Filter,
   Loader2,
   MapPin,
   Plus,
@@ -26,6 +27,7 @@ import {
   getCadastroListRange,
 } from '@/components/ui/CadastroListSummary';
 import { TableCheckbox } from '@/components/ui/Checkbox';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { Modal } from '@/components/ui/Modal';
 import {
@@ -91,6 +93,11 @@ type LicitacaoRegiaoAceiteSummary = {
   acceptedAt: string;
 };
 
+type LicitacaoRegiaoRowRecebimento = {
+  enviadoPor: string | null;
+  recebidoEm: string | null;
+};
+
 type LicitacaoRegiaoSheetData = {
   tab: LicitacaoRegiaoTab;
   spreadsheetId: string;
@@ -98,6 +105,7 @@ type LicitacaoRegiaoSheetData = {
   rows: string[][];
   rowKeys: string[];
   manualRowKeys?: string[];
+  recebimentosByRowKey?: Record<string, LicitacaoRegiaoRowRecebimento>;
   aceites: LicitacaoRegiaoAceiteSummary[];
   rowCount: number;
   sheetAvailable: boolean;
@@ -109,6 +117,8 @@ type VisibleRow = {
   rowKey: string;
   sourceIndex: number;
   isManual: boolean;
+  enviadoPor: string | null;
+  recebidoEm: string | null;
 };
 
 type LicitacoesRegiaoPanelProps = {
@@ -176,6 +186,37 @@ function formatFetchedAt(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function toDateInputValue(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatRecebidoEm(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+}
+
+function localDayKeyFromIso(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return toDateInputValue(d);
 }
 
 function buildRowSnapshot(headers: string[], row: string[]): Record<string, string> {
@@ -465,6 +506,9 @@ export function LicitacoesRegiaoPanel({
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createFields, setCreateFields] = useState<Record<string, string>>({});
+  const [showRecebidoFilter, setShowRecebidoFilter] = useState(false);
+  const [recebidoDe, setRecebidoDe] = useState('');
+  const [recebidoAte, setRecebidoAte] = useState('');
   const tableScrollRef = useRightClickPanScroll<HTMLDivElement>();
 
   const { data: tabs = [] } = useQuery({
@@ -530,11 +574,13 @@ export function LicitacoesRegiaoPanel({
   const visibleRows = useMemo((): VisibleRow[] => {
     const rows = sheet?.rows ?? [];
     const rowKeys = sheet?.rowKeys ?? [];
+    const recebimentos = sheet?.recebimentosByRowKey ?? {};
     const query = normalizeSearchText(search);
 
     return rows
       .map((cells, sourceIndex) => {
         const rowKey = rowKeys[sourceIndex] ?? '';
+        const meta = rowKey ? recebimentos[rowKey] : undefined;
         return {
           cells,
           rowKey,
@@ -542,13 +588,34 @@ export function LicitacoesRegiaoPanel({
           isManual:
             Boolean(rowKey) &&
             (rowKey.startsWith('manual:') || manualRowKeySet.has(rowKey)),
+          enviadoPor: meta?.enviadoPor?.trim() || null,
+          recebidoEm: meta?.recebidoEm || null,
         };
       })
-      .filter(({ cells }) => {
-        if (!query) return true;
-        return cells.some((cell) => normalizeSearchText(cell).includes(query));
+      .filter((row) => {
+        if (query) {
+          const textMatch =
+            row.cells.some((cell) => normalizeSearchText(cell).includes(query)) ||
+            normalizeSearchText(row.enviadoPor || '').includes(query);
+          if (!textMatch) return false;
+        }
+
+        if (!recebidoDe && !recebidoAte) return true;
+        const day = localDayKeyFromIso(row.recebidoEm);
+        if (!day) return false;
+        if (recebidoDe && day < recebidoDe) return false;
+        if (recebidoAte && day > recebidoAte) return false;
+        return true;
       });
-  }, [sheet?.rows, sheet?.rowKeys, search, manualRowKeySet]);
+  }, [
+    sheet?.rows,
+    sheet?.rowKeys,
+    sheet?.recebimentosByRowKey,
+    search,
+    manualRowKeySet,
+    recebidoDe,
+    recebidoAte,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -575,10 +642,13 @@ export function LicitacoesRegiaoPanel({
 
   useEffect(() => {
     setPage(1);
-  }, [search, regiaoKey, activeTab?.key]);
+  }, [search, regiaoKey, activeTab?.key, recebidoDe, recebidoAte]);
 
   useEffect(() => {
     setSearch('');
+    setRecebidoDe('');
+    setRecebidoAte('');
+    setShowRecebidoFilter(false);
     setSelectedRowKeys(new Set());
     setCreateModalOpen(false);
     setPage(1);
@@ -883,6 +953,20 @@ export function LicitacoesRegiaoPanel({
                   </button>
                 ) : null}
               </div>
+              <button
+                type="button"
+                onClick={() => setShowRecebidoFilter(true)}
+                aria-label="Filtrar por data recebida"
+                title="Filtrar por data recebida"
+                className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                  recebidoDe || recebidoAte
+                    ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300'
+                    : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <Filter className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="hidden sm:inline">Período</span>
+              </button>
               <a
                 href={SPREADSHEET_URL}
                 target="_blank"
@@ -1019,7 +1103,7 @@ export function LicitacoesRegiaoPanel({
                 totalPages={listRange.totalPages}
               />
               <div ref={tableScrollRef} className="overflow-x-auto">
-                <table className="w-full min-w-[52rem] text-sm">
+                <table className="w-full min-w-[64rem] text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">
                       <th scope="col" className={`${cadastroListClasses.thCenter} w-12`}>
@@ -1088,6 +1172,9 @@ export function LicitacoesRegiaoPanel({
                           </th>
                         </>
                       ) : null}
+                      <th scope="col" className={`${cadastroListClasses.thCenter} whitespace-nowrap`}>
+                        Recebido
+                      </th>
                       <th scope="col" className={cadastroListClasses.thCenter}>
                         Origem
                       </th>
@@ -1338,6 +1425,19 @@ export function LicitacoesRegiaoPanel({
                             </>
                           ) : null}
                           <td className={cadastroListClasses.tdCenter}>
+                            <div className="inline-flex min-w-[7.5rem] flex-col items-center gap-0.5">
+                              <span
+                                className="max-w-[10rem] truncate text-sm font-medium text-gray-900 dark:text-gray-100"
+                                title={row.enviadoPor || undefined}
+                              >
+                                {row.enviadoPor || '—'}
+                              </span>
+                              <span className="whitespace-nowrap text-[11px] text-gray-500 dark:text-gray-400">
+                                {formatRecebidoEm(row.recebidoEm)}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={cadastroListClasses.tdCenter}>
                             {row.isManual ? (
                               <span className="inline-flex rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
                                 Sistema
@@ -1425,6 +1525,105 @@ export function LicitacoesRegiaoPanel({
           )}
         </CardContent>
       </Card>
+
+      {showRecebidoFilter ? (
+        <div className="fixed inset-0 z-[2100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowRecebidoFilter(false)}
+          />
+          <div className="relative w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                Período recebido
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowRecebidoFilter(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-label="Fechar filtro"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Filtra pela data em que a licitação entrou nesta lista (envio PNCP, nova licitação ou
+                inclusão da planilha).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = toDateInputValue(new Date());
+                    setRecebidoDe(today);
+                    setRecebidoAte(today);
+                  }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Hoje
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const end = new Date();
+                    const start = new Date();
+                    start.setDate(end.getDate() - 6);
+                    setRecebidoDe(toDateInputValue(start));
+                    setRecebidoAte(toDateInputValue(end));
+                  }}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Últimos 7 dias
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    De
+                  </label>
+                  <DatePickerField
+                    value={recebidoDe}
+                    onChange={setRecebidoDe}
+                    aria-label="Recebida de"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Até
+                  </label>
+                  <DatePickerField
+                    value={recebidoAte}
+                    onChange={setRecebidoAte}
+                    aria-label="Recebida até"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-gray-200 px-5 py-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setRecebidoDe('');
+                  setRecebidoAte('');
+                }}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
+              >
+                Limpar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRecebidoFilter(false)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <Modal
         isOpen={createModalOpen}

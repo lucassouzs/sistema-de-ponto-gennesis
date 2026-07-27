@@ -1,7 +1,12 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
-import { PNCP_KEYWORDS_OBJETO_PADRAO, PNCP_MODALIDADES } from '../services/PncpConsultaService';
+import { PNCP_MODALIDADES } from '../services/PncpConsultaService';
+import {
+  addCustomPncpKeyword,
+  listPncpKeywordEntries,
+  removeCustomPncpKeyword,
+} from '../services/pncpKeywordsStore';
 import { consultarContratacoesLocais } from '../services/PncpLocalConsultaService';
 import { enviarPncpParaAnalise } from '../services/PncpEnviarAnaliseService';
 import { rejeitarPncpContratacao } from '../services/PncpRejeitarService';
@@ -70,11 +75,69 @@ export class PncpController {
     res.json({ success: true, data: PNCP_MODALIDADES });
   }
 
-  listKeywords(_req: AuthRequest, res: Response) {
-    const unique = Array.from(
-      new Set(PNCP_KEYWORDS_OBJETO_PADRAO.map((k) => k.trim()).filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    res.json({ success: true, data: unique });
+  async listKeywords(_req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const entries = await listPncpKeywordEntries();
+      res.json({
+        success: true,
+        data: {
+          keywords: entries.map((e) => e.keyword),
+          entries,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async addKeyword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const keyword =
+        typeof req.body?.keyword === 'string' ? req.body.keyword : '';
+      const created = await addCustomPncpKeyword({
+        keyword,
+        createdBy: req.user!.id,
+      });
+      res.status(201).json({
+        success: true,
+        data: { keyword: created, custom: true },
+        message: 'Palavra-chave adicionada.',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao adicionar palavra-chave';
+      if (
+        message.includes('pelo menos') ||
+        message.includes('já existe') ||
+        message.includes('já foi')
+      ) {
+        next(createError(message, 400));
+        return;
+      }
+      next(createError(message, 500));
+    }
+  }
+
+  async removeKeyword(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const keyword =
+        typeof req.body?.keyword === 'string' ? req.body.keyword : '';
+      const removed = await removeCustomPncpKeyword(keyword);
+      if (!removed) {
+        throw createError('Palavra-chave customizada não encontrada.', 404);
+      }
+      res.json({
+        success: true,
+        data: { keyword },
+        message: 'Palavra-chave removida.',
+      });
+    } catch (err) {
+      if ((err as { statusCode?: number })?.statusCode) {
+        next(err);
+        return;
+      }
+      const message = err instanceof Error ? err.message : 'Erro ao remover palavra-chave';
+      next(createError(message, 500));
+    }
   }
 
   async listContratacoes(req: AuthRequest, res: Response, next: NextFunction) {

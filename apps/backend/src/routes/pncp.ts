@@ -8,7 +8,9 @@ const ctrl = new PncpController();
 router.use(authenticate);
 
 router.get('/modalidades', (req, res) => ctrl.listModalidades(req, res));
-router.get('/keywords', (req, res) => ctrl.listKeywords(req, res));
+router.get('/keywords', (req, res, next) => ctrl.listKeywords(req, res, next));
+router.post('/keywords', (req, res, next) => ctrl.addKeyword(req, res, next));
+router.delete('/keywords', (req, res, next) => ctrl.removeKeyword(req, res, next));
 router.get('/contratacoes', (req, res, next) => ctrl.listContratacoes(req, res, next));
 router.post('/enviar-analise', (req, res, next) => ctrl.enviarParaAnalise(req, res, next));
 router.post('/rejeitar', (req, res, next) => ctrl.rejeitar(req, res, next));

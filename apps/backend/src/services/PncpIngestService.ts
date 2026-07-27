@@ -6,6 +6,7 @@ import {
   PNCP_MODALIDADES,
   type PncpContratacaoListItem,
 } from './PncpConsultaService';
+import { loadPncpKeywordsNormalized } from './pncpKeywordsStore';
 
 /** DF/GO/SP primeiro para a lista encher rápido; depois o restante do Brasil. */
 export const BRASIL_UFS = [
@@ -406,7 +407,8 @@ async function persistUfState(
 async function upsertItems(
   items: PncpContratacaoListItem[],
   codigoModalidade: number,
-  ufFallback: string
+  ufFallback: string,
+  keywordsNormalized: string[]
 ): Promise<number> {
   const now = new Date();
   let count = 0;
@@ -414,7 +416,7 @@ async function upsertItems(
   for (const item of items) {
     const numero = item.numeroControlePNCP?.trim();
     if (!numero) continue;
-    if (!objetoMatchesPncpKeywords(item.objeto)) continue;
+    if (!objetoMatchesPncpKeywords(item.objeto, keywordsNormalized)) continue;
 
     const uf = (item.uf || ufFallback).toUpperCase();
     const data = {
@@ -699,8 +701,18 @@ async function syncOneUf(params: {
   incremental: boolean;
   pageDelayMs: number;
   counters: SyncRunCounters;
+  keywordsNormalized: string[];
 }): Promise<SyncOneUfResult> {
-  const { uf, runId, ufState, lookbackDays, incremental, pageDelayMs, counters } = params;
+  const {
+    uf,
+    runId,
+    ufState,
+    lookbackDays,
+    incremental,
+    pageDelayMs,
+    counters,
+    keywordsNormalized,
+  } = params;
 
   if (isSyncCancelRequested()) {
     return { cancelled: true, hadError: false, errorMessage: null };
@@ -747,7 +759,12 @@ async function syncOneUf(params: {
         counters.pagesFetched += 1;
         livePagesFetched = counters.pagesFetched;
         totalPages = Math.max(1, result.totalPaginas || 1);
-        const added = await upsertItems(result.items, modalidade.codigo, uf);
+        const added = await upsertItems(
+          result.items,
+          modalidade.codigo,
+          uf,
+          keywordsNormalized
+        );
         counters.upserted += added;
         liveUpserted = counters.upserted;
         addUfUpserted(uf, added);
@@ -846,6 +863,7 @@ export async function runPncpIngest(
   cancelRequested = false;
   const lookbackDays = envInt('PNCP_SYNC_LOOKBACK_DAYS', DEFAULT_LOOKBACK_DAYS);
   const pageDelayMs = envInt('PNCP_SYNC_PAGE_DELAY_MS', DEFAULT_PAGE_DELAY_MS);
+  const keywordsNormalized = await loadPncpKeywordsNormalized();
   liveSyncOptions = {
     ufs: ufsToSync,
     retryErrorsOnly: options.retryErrorsOnly,
@@ -890,6 +908,7 @@ export async function runPncpIngest(
         incremental: options.incremental,
         pageDelayMs,
         counters,
+        keywordsNormalized,
       });
       if (result.cancelled) {
         wasCancelled = true;
@@ -939,6 +958,7 @@ export async function runPncpIngest(
             incremental: options.incremental,
             pageDelayMs,
             counters,
+            keywordsNormalized,
           });
           if (result.cancelled) {
             wasCancelled = true;
@@ -989,7 +1009,7 @@ export async function runPncpIngest(
         select: { id: true, objeto: true },
       });
       const staleIds = stale
-        .filter((row) => !objetoMatchesPncpKeywords(row.objeto))
+        .filter((row) => !objetoMatchesPncpKeywords(row.objeto, keywordsNormalized))
         .map((row) => row.id);
       if (staleIds.length > 0) {
         const deletedKw = await prisma.pncpContratacao.deleteMany({

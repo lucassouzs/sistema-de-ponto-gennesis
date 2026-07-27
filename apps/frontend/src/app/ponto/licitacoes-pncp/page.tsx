@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Filter,
   Loader2,
+  Plus,
   RotateCcw,
   Search,
   Send,
@@ -468,6 +469,7 @@ function LicitacoesPncpPageContent() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<'uf' | 'modalidade' | null>(null);
   const [showKeywordsList, setShowKeywordsList] = useState(false);
+  const [newKeyword, setNewKeyword] = useState('');
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncRetryErrorsOnly, setSyncRetryErrorsOnly] = useState(false);
   const [syncFullResync, setSyncFullResync] = useState(false);
@@ -513,15 +515,68 @@ function LicitacoesPncpPageContent() {
     hasSearch;
 
   const keywordsQuery = useQuery({
-    queryKey: ['pncp-keywords'],
+    queryKey: ['pncp-keywords', 'v3'],
     queryFn: async () => {
       const res = await api.get('/pncp/keywords');
-      return (res.data?.data ?? res.data) as string[];
+      const raw = res.data?.data ?? res.data;
+      if (Array.isArray(raw)) {
+        const keywords = raw.filter((item): item is string => typeof item === 'string');
+        return {
+          keywords,
+          entries: keywords.map((keyword) => ({ keyword, custom: false })),
+        };
+      }
+      const keywords = Array.isArray(raw?.keywords)
+        ? raw.keywords.filter((item: unknown): item is string => typeof item === 'string')
+        : [];
+      const entries = Array.isArray(raw?.entries)
+        ? raw.entries.filter(
+            (item: unknown): item is { keyword: string; custom: boolean } =>
+              Boolean(item) &&
+              typeof item === 'object' &&
+              typeof (item as { keyword?: unknown }).keyword === 'string'
+          )
+        : keywords.map((keyword: string) => ({ keyword, custom: false }));
+      return { keywords, entries };
     },
     staleTime: 60 * 60_000,
   });
 
-  const keywords = keywordsQuery.data ?? [];
+  const keywords = Array.isArray(keywordsQuery.data?.keywords)
+    ? keywordsQuery.data.keywords
+    : [];
+  const keywordEntries = Array.isArray(keywordsQuery.data?.entries)
+    ? keywordsQuery.data.entries
+    : [];
+
+  const addKeywordMutation = useMutation({
+    mutationFn: async (keyword: string) => {
+      const res = await api.post('/pncp/keywords', { keyword });
+      return (res.data?.data ?? res.data) as { keyword: string };
+    },
+    onSuccess: () => {
+      toast.success('Palavra-chave adicionada.');
+      setNewKeyword('');
+      void queryClient.invalidateQueries({ queryKey: ['pncp-keywords'] });
+    },
+    onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Não foi possível adicionar.');
+    },
+  });
+
+  const removeKeywordMutation = useMutation({
+    mutationFn: async (keyword: string) => {
+      await api.delete('/pncp/keywords', { data: { keyword } });
+      return keyword;
+    },
+    onSuccess: () => {
+      toast.success('Palavra-chave removida.');
+      void queryClient.invalidateQueries({ queryKey: ['pncp-keywords'] });
+    },
+    onError: (err: { response?: { data?: { message?: string } }; message?: string }) => {
+      toast.error(err?.response?.data?.message || err?.message || 'Não foi possível remover.');
+    },
+  });
 
   const syncStatusQuery = useQuery({
     queryKey: ['pncp-sync-status'],
@@ -1697,21 +1752,72 @@ function LicitacoesPncpPageContent() {
                   {showKeywordsList ? 'Ocultar palavras-chave' : 'Ver palavras-chave'}
                 </button>
                 {showKeywordsList ? (
-                  <div className="mt-2 max-h-36 overflow-y-auto">
-                    {keywordsQuery.isLoading ? (
-                      <p className="text-xs text-gray-500">Carregando...</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-1.5">
-                        {(keywordsQuery.data ?? []).slice(0, 80).map((kw) => (
-                          <span
-                            key={kw}
-                            className="rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700 dark:bg-gray-700 dark:text-gray-200"
-                          >
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                  <div className="mt-2 space-y-2">
+                    <form
+                      className="flex gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const value = newKeyword.trim();
+                        if (value.length < 3 || addKeywordMutation.isPending) return;
+                        addKeywordMutation.mutate(value);
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={newKeyword}
+                        onChange={(e) => setNewKeyword(e.target.value)}
+                        placeholder="Digite uma palavra-chave…"
+                        maxLength={120}
+                        className="min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                      />
+                      <button
+                        type="submit"
+                        disabled={newKeyword.trim().length < 3 || addKeywordMutation.isPending}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {addKeywordMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        Adicionar
+                      </button>
+                    </form>
+                    <div className="max-h-36 overflow-y-auto">
+                      {keywordsQuery.isLoading ? (
+                        <p className="text-xs text-gray-500">Carregando...</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {keywordEntries.map((entry) => (
+                            <span
+                              key={`${entry.custom ? 'c' : 'p'}:${entry.keyword}`}
+                              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${
+                                entry.custom
+                                  ? 'bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+                              }`}
+                            >
+                              {entry.keyword}
+                              {entry.custom ? (
+                                <button
+                                  type="button"
+                                  aria-label={`Remover ${entry.keyword}`}
+                                  disabled={removeKeywordMutation.isPending}
+                                  onClick={() => removeKeywordMutation.mutate(entry.keyword)}
+                                  className="rounded p-0.5 hover:bg-red-100 dark:hover:bg-red-900/50"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              ) : null}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                      As palavras que você adicionar entram no próximo sync. As padrão não podem ser
+                      removidas.
+                    </p>
                   </div>
                 ) : null}
               </div>

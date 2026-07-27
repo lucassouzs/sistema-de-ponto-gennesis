@@ -1,4 +1,5 @@
 import { PNCP_KEYWORDS_OBJETO_PADRAO } from './pncpKeywords';
+import { loadPncpKeywordsNormalized } from './pncpKeywordsStore';
 
 export { PNCP_KEYWORDS_OBJETO_PADRAO };
 
@@ -283,21 +284,27 @@ function applyTextFilter(items: PncpContratacaoListItem[], qRaw: string): PncpCo
   });
 }
 
-const KEYWORDS_NORMALIZED = PNCP_KEYWORDS_OBJETO_PADRAO.map((k) => normalizeSearchText(k)).filter(
-  (k, i, arr) => k.length >= 3 && arr.indexOf(k) === i
-);
+const KEYWORDS_PADRAO_NORMALIZED = PNCP_KEYWORDS_OBJETO_PADRAO.map((k) =>
+  normalizeSearchText(k)
+).filter((k, i, arr) => k.length >= 3 && arr.indexOf(k) === i);
 
-export function objetoMatchesPncpKeywords(objeto: string | null | undefined): boolean {
-  if (KEYWORDS_NORMALIZED.length === 0) return true;
+export function objetoMatchesPncpKeywords(
+  objeto: string | null | undefined,
+  keywordsNormalized: string[] = KEYWORDS_PADRAO_NORMALIZED
+): boolean {
+  if (keywordsNormalized.length === 0) return true;
   const texto = normalizeSearchText(objeto || '');
   if (!texto) return false;
-  return KEYWORDS_NORMALIZED.some((kw) => texto.includes(kw));
+  return keywordsNormalized.some((kw) => texto.includes(kw));
 }
 
-/** Filtra pelo objeto: basta casar com qualquer palavra-chave padrão. */
-function applyKeywordsObjetoFilter(items: PncpContratacaoListItem[]): PncpContratacaoListItem[] {
-  if (KEYWORDS_NORMALIZED.length === 0) return items;
-  return items.filter((item) => objetoMatchesPncpKeywords(item.objeto));
+/** Filtra pelo objeto: basta casar com qualquer palavra-chave (padrão + custom). */
+async function applyKeywordsObjetoFilter(
+  items: PncpContratacaoListItem[]
+): Promise<PncpContratacaoListItem[]> {
+  const keywordsNormalized = await loadPncpKeywordsNormalized();
+  if (keywordsNormalized.length === 0) return items;
+  return items.filter((item) => objetoMatchesPncpKeywords(item.objeto, keywordsNormalized));
 }
 
 function paginateItems(
@@ -379,7 +386,7 @@ async function fetchModalidadeComBusca(params: {
   }
 
   if (params.filtroKeywords) {
-    unique = applyKeywordsObjetoFilter(unique);
+    unique = await applyKeywordsObjetoFilter(unique);
   }
   if (params.q?.trim()) {
     unique = applyTextFilter(unique, params.q);
@@ -630,7 +637,7 @@ export async function consultarContratacoesPublicacao(
     const byId = await fetchPorNumeroControle(q, tamanhoPagina);
     if (byId) {
       if (!filtroKeywords) return byId;
-      const items = applyKeywordsObjetoFilter(byId.items);
+      const items = await applyKeywordsObjetoFilter(byId.items);
       return { ...byId, items, empty: items.length === 0, totalRegistros: items.length };
     }
   }
@@ -658,7 +665,7 @@ export async function consultarContratacoesPublicacao(
       tamanhoPagina,
     });
     if (!filtroKeywords) return page;
-    const items = applyKeywordsObjetoFilter(page.items);
+    const items = await applyKeywordsObjetoFilter(page.items);
     return {
       ...page,
       items,
@@ -731,7 +738,7 @@ export async function consultarContratacoesPublicacao(
   }
 
   if (!precisaVarrer && filtroKeywords) {
-    items = applyKeywordsObjetoFilter(items);
+    items = await applyKeywordsObjetoFilter(items);
   }
 
   items.sort((a, b) => {

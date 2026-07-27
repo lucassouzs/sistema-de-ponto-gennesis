@@ -31,6 +31,11 @@ export type LicitacaoRegiaoAceiteSummary = {
   acceptedAt: string;
 };
 
+export type LicitacaoRegiaoRowRecebimento = {
+  enviadoPor: string | null;
+  recebidoEm: string | null;
+};
+
 export type LicitacaoRegiaoSheetData = {
   tab: LicitacaoRegiaoTab;
   spreadsheetId: string;
@@ -39,6 +44,8 @@ export type LicitacaoRegiaoSheetData = {
   rowKeys: string[];
   /** rowKeys criados manualmente no sistema (não vêm da planilha). */
   manualRowKeys: string[];
+  /** Quem enviou / quando entrou na lista (manual PNCP/nova ou 1ª vez na planilha). */
+  recebimentosByRowKey: Record<string, LicitacaoRegiaoRowRecebimento>;
   aceites: LicitacaoRegiaoAceiteSummary[];
   rowCount: number;
   sheetAvailable: boolean;
@@ -155,6 +162,7 @@ function buildEmptySheetData(tab: LicitacaoRegiaoTab): LicitacaoRegiaoSheetData 
     rows: [],
     rowKeys: [],
     manualRowKeys: [],
+    recebimentosByRowKey: {},
     aceites: [],
     rowCount: 0,
     sheetAvailable: false,
@@ -333,6 +341,15 @@ async function mergeManualRowsIntoSheet(
     })
   );
   const manualRowKeys = manuais.map((manual) => manual.rowKey);
+  const recebimentosByRowKey: Record<string, LicitacaoRegiaoRowRecebimento> = {
+    ...(data.recebimentosByRowKey ?? {}),
+  };
+  for (const manual of manuais) {
+    recebimentosByRowKey[manual.rowKey] = {
+      enviadoPor: manual.createdByName?.trim() || null,
+      recebidoEm: manual.createdAt?.toISOString?.() ?? null,
+    };
+  }
 
   return {
     ...data,
@@ -340,6 +357,7 @@ async function mergeManualRowsIntoSheet(
     rows: [...manualRows, ...data.rows.map(padSheetRow)],
     rowKeys: [...manualRowKeys, ...data.rowKeys],
     manualRowKeys,
+    recebimentosByRowKey,
     rowCount: manualRows.length + data.rows.length,
     // Com manuais, a lista deve ser exibível mesmo sem aba na planilha.
     sheetAvailable: data.sheetAvailable || manuais.length > 0,
@@ -374,7 +392,11 @@ async function mergeRetainedSheetRows(
     spreadsheetId: data.spreadsheetId,
   });
   if (stored.length === 0) {
-    return { ...data, headers };
+    return {
+      ...data,
+      headers,
+      recebimentosByRowKey: data.recebimentosByRowKey ?? {},
+    };
   }
 
   const liveRowKeys = new Set(data.rowKeys);
@@ -392,7 +414,28 @@ async function mergeRetainedSheetRows(
   });
 
   if (retained.rows.length === 0) {
-    return { ...data, headers };
+    const recebimentosByRowKey: Record<string, LicitacaoRegiaoRowRecebimento> = {
+      ...(data.recebimentosByRowKey ?? {}),
+    };
+    for (const row of stored) {
+      if (recebimentosByRowKey[row.rowKey]) continue;
+      recebimentosByRowKey[row.rowKey] = {
+        enviadoPor: null,
+        recebidoEm: row.firstSeenAt?.toISOString?.() ?? null,
+      };
+    }
+    return { ...data, headers, recebimentosByRowKey };
+  }
+
+  const recebimentosByRowKey: Record<string, LicitacaoRegiaoRowRecebimento> = {
+    ...(data.recebimentosByRowKey ?? {}),
+  };
+  for (const row of stored) {
+    if (recebimentosByRowKey[row.rowKey]) continue;
+    recebimentosByRowKey[row.rowKey] = {
+      enviadoPor: null,
+      recebidoEm: row.firstSeenAt?.toISOString?.() ?? null,
+    };
   }
 
   return {
@@ -402,6 +445,7 @@ async function mergeRetainedSheetRows(
     rowKeys: [...data.rowKeys, ...retained.rowKeys],
     rowCount: data.rows.length + retained.rows.length,
     sheetAvailable: true,
+    recebimentosByRowKey,
   };
 }
 
@@ -859,6 +903,7 @@ export async function fetchLicitacaoRegiaoSheet(
     rows: processed.rows,
     rowKeys,
     manualRowKeys: [],
+    recebimentosByRowKey: {},
     aceites,
     rowCount: processed.rows.length,
     sheetAvailable: true,

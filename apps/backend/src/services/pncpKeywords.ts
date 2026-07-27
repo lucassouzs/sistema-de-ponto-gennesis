@@ -104,6 +104,14 @@ export const PNCP_KEYWORDS_OBJETO_PADRAO = [
   'manutencao de plantas',
   'manutenção de plantas',
 
+  // Facilities
+  'facilities',
+  'facility',
+  'gestao de facilities',
+  'gestão de facilities',
+  'servicos de facilities',
+  'serviços de facilities',
+
   // Sob demanda / execução
   'especializadas para execucao, sob demanda',
   'especializadas para execução, sob demanda',
