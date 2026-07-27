@@ -677,6 +677,144 @@ export class PncpSyncNothingToDoError extends Error {
   }
 }
 
+type SyncRunCounters = {
+  pagesFetched: number;
+  upserted: number;
+  rateLimitHits: number;
+};
+
+type SyncOneUfResult = {
+  cancelled: boolean;
+  hadError: boolean;
+  errorMessage: string | null;
+};
+
+/** Sincroniza uma UF (todas as modalidades) e atualiza progresso/estado persistido. */
+async function syncOneUf(params: {
+  uf: string;
+  runId: string;
+  ufState: UfStateRow | undefined;
+  lookbackDays: number;
+  incremental: boolean;
+  pageDelayMs: number;
+  counters: SyncRunCounters;
+}): Promise<SyncOneUfResult> {
+  const { uf, runId, ufState, lookbackDays, incremental, pageDelayMs, counters } = params;
+
+  if (isSyncCancelRequested()) {
+    return { cancelled: true, hadError: false, errorMessage: null };
+  }
+
+  currentUf = uf;
+  setUfStatus(uf, 'running');
+
+  const window = getDateWindowForUf(ufState, lookbackDays, incremental);
+  console.log(
+    `[pncp-sync] UF ${uf} (${window.mode} ${window.dataInicial}→${window.dataFinal})… upserted=${counters.upserted}, pages=${counters.pagesFetched}`
+  );
+
+  let ufHadError = false;
+  let ufErrorMessage: string | null = null;
+
+  modalidadeLoop: for (const modalidade of PNCP_MODALIDADES) {
+    if (isSyncCancelRequested()) {
+      setUfStatus(uf, 'pending');
+      return { cancelled: true, hadError: false, errorMessage: null };
+    }
+
+    currentModalidade = modalidade.nome;
+    let page = 1;
+    let totalPages = 1;
+
+    while (page <= totalPages && page <= MAX_PAGES_PER_COMBO) {
+      if (isSyncCancelRequested()) {
+        setUfStatus(uf, 'pending');
+        return { cancelled: true, hadError: false, errorMessage: null };
+      }
+
+      try {
+        const { result, rateHits } = await fetchComboWithBackoff({
+          dataInicial: window.dataInicial,
+          dataFinal: window.dataFinal,
+          uf,
+          codigo: modalidade.codigo,
+          pagina: page,
+          tamanhoPagina: 50,
+        });
+        counters.rateLimitHits += rateHits;
+        liveRateLimitHits = counters.rateLimitHits;
+        counters.pagesFetched += 1;
+        livePagesFetched = counters.pagesFetched;
+        totalPages = Math.max(1, result.totalPaginas || 1);
+        const added = await upsertItems(result.items, modalidade.codigo, uf);
+        counters.upserted += added;
+        liveUpserted = counters.upserted;
+        addUfUpserted(uf, added);
+
+        // Incremental: sem registros na 1ª página → pula restante desta modalidade.
+        if (
+          incremental &&
+          page === 1 &&
+          (result.items?.length ?? 0) === 0 &&
+          (result.totalRegistros ?? 0) === 0
+        ) {
+          break;
+        }
+
+        if (counters.pagesFetched % PROGRESS_EVERY_PAGES === 0) {
+          await persistProgress(runId, {
+            pagesFetched: counters.pagesFetched,
+            upserted: counters.upserted,
+            rateLimitHits: counters.rateLimitHits,
+          });
+        }
+      } catch (err) {
+        ufHadError = true;
+        ufErrorMessage = err instanceof Error ? err.message : String(err);
+        if (isRateLimitError(err)) {
+          counters.rateLimitHits += 1;
+          liveRateLimitHits = counters.rateLimitHits;
+          break;
+        }
+        console.warn(`[pncp-sync] falha ${uf}/${modalidade.codigo} p${page}:`, ufErrorMessage);
+        break;
+      }
+
+      page += 1;
+      if (page <= totalPages && page <= MAX_PAGES_PER_COMBO) {
+        await sleep(pageDelayMs);
+      }
+    }
+
+    if (ufHadError) break modalidadeLoop;
+    await sleep(Math.min(pageDelayMs, 400));
+  }
+
+  if (isSyncCancelRequested()) {
+    setUfStatus(uf, 'pending');
+    return { cancelled: true, hadError: false, errorMessage: null };
+  }
+
+  const ufStatus = ufHadError ? 'error' : 'success';
+  setUfStatus(uf, ufHadError ? 'error' : 'done');
+  await persistUfState(uf, ufStatus, runId, window.dataFinal, ufErrorMessage);
+
+  const row = liveUfProgress.find((u) => u.uf === uf);
+  if (row && ufStatus === 'success') {
+    const nowIso = new Date().toISOString();
+    row.lastSuccessAt = nowIso;
+    row.lastAttemptAt = nowIso;
+    row.lastStatus = 'success';
+    row.lastErrorMessage = null;
+  } else if (row) {
+    row.lastAttemptAt = new Date().toISOString();
+    row.lastStatus = 'error';
+    row.lastErrorMessage = ufErrorMessage;
+  }
+
+  return { cancelled: false, hadError: ufHadError, errorMessage: ufErrorMessage };
+}
+
 /**
  * Ingestão por UF × modalidades. Suporta seleção de UFs, retry de erros e sync incremental.
  * Não roda em paralelo — lock em memória.
@@ -727,128 +865,94 @@ export async function runPncpIngest(
   });
   currentRunId = run.id;
 
-  let pagesFetched = 0;
-  let upserted = 0;
   let pruned = 0;
-  let rateLimitHits = 0;
   let hadPartialFailure = false;
   let wasCancelled = false;
+  const counters: SyncRunCounters = {
+    pagesFetched: 0,
+    upserted: 0,
+    rateLimitHits: 0,
+  };
 
   try {
-    ufLoop: for (const uf of ufsToSync) {
+    for (const uf of ufsToSync) {
       if (isSyncCancelRequested()) {
         wasCancelled = true;
         break;
       }
 
-      currentUf = uf;
-      setUfStatus(uf, 'running');
-
-      const window = getDateWindowForUf(ufStateMap.get(uf), lookbackDays, options.incremental);
-      console.log(
-        `[pncp-sync] UF ${uf} (${window.mode} ${window.dataInicial}→${window.dataFinal})… upserted=${upserted}, pages=${pagesFetched}`
-      );
-
-      let ufHadError = false;
-      let ufErrorMessage: string | null = null;
-
-      for (const modalidade of PNCP_MODALIDADES) {
-        if (isSyncCancelRequested()) {
-          wasCancelled = true;
-          setUfStatus(uf, 'pending');
-          break ufLoop;
-        }
-
-        currentModalidade = modalidade.nome;
-        let page = 1;
-        let totalPages = 1;
-
-        while (page <= totalPages && page <= MAX_PAGES_PER_COMBO) {
-          if (isSyncCancelRequested()) {
-            wasCancelled = true;
-            setUfStatus(uf, 'pending');
-            break ufLoop;
-          }
-
-          try {
-            const { result, rateHits } = await fetchComboWithBackoff({
-              dataInicial: window.dataInicial,
-              dataFinal: window.dataFinal,
-              uf,
-              codigo: modalidade.codigo,
-              pagina: page,
-              tamanhoPagina: 50,
-            });
-            rateLimitHits += rateHits;
-            liveRateLimitHits = rateLimitHits;
-            pagesFetched += 1;
-            livePagesFetched = pagesFetched;
-            totalPages = Math.max(1, result.totalPaginas || 1);
-            const added = await upsertItems(result.items, modalidade.codigo, uf);
-            upserted += added;
-            liveUpserted = upserted;
-            addUfUpserted(uf, added);
-
-            // Incremental: sem registros na 1ª página → pula restante desta modalidade.
-            if (
-              options.incremental &&
-              page === 1 &&
-              (result.items?.length ?? 0) === 0 &&
-              (result.totalRegistros ?? 0) === 0
-            ) {
-              break;
-            }
-
-            if (pagesFetched % PROGRESS_EVERY_PAGES === 0) {
-              await persistProgress(run.id, { pagesFetched, upserted, rateLimitHits });
-            }
-          } catch (err) {
-            ufHadError = true;
-            ufErrorMessage = err instanceof Error ? err.message : String(err);
-            if (isRateLimitError(err)) {
-              rateLimitHits += 1;
-              liveRateLimitHits = rateLimitHits;
-              hadPartialFailure = true;
-              break;
-            }
-            hadPartialFailure = true;
-            console.warn(
-              `[pncp-sync] falha ${uf}/${modalidade.codigo} p${page}:`,
-              ufErrorMessage
-            );
-            break;
-          }
-
-          page += 1;
-          if (page <= totalPages && page <= MAX_PAGES_PER_COMBO) {
-            await sleep(pageDelayMs);
-          }
-        }
-
-        await sleep(Math.min(pageDelayMs, 400));
+      const result = await syncOneUf({
+        uf,
+        runId: run.id,
+        ufState: ufStateMap.get(uf),
+        lookbackDays,
+        incremental: options.incremental,
+        pageDelayMs,
+        counters,
+      });
+      if (result.cancelled) {
+        wasCancelled = true;
+        break;
       }
-
-      if (wasCancelled) break;
-
-      const ufStatus = ufHadError ? 'error' : 'success';
-      setUfStatus(uf, ufHadError ? 'error' : 'done');
-      await persistUfState(uf, ufStatus, run.id, window.dataFinal, ufErrorMessage);
-
-      const row = liveUfProgress.find((u) => u.uf === uf);
-      if (row && ufStatus === 'success') {
-        const nowIso = new Date().toISOString();
-        row.lastSuccessAt = nowIso;
-        row.lastAttemptAt = nowIso;
-        row.lastStatus = 'success';
-        row.lastErrorMessage = null;
-      } else if (row) {
-        row.lastAttemptAt = new Date().toISOString();
-        row.lastStatus = 'error';
-        row.lastErrorMessage = ufErrorMessage;
-      }
+      if (result.hadError) hadPartialFailure = true;
     }
 
     currentModalidade = null;
+
+    // Auto-retry: UFs com erro (ex.: PNCP indisponível) são repetidas sozinhas.
+    if (!wasCancelled && hadPartialFailure) {
+      const autoRetryRounds = envInt('PNCP_SYNC_AUTO_RETRY_ROUNDS', 2);
+      const autoRetryDelayMs = envInt('PNCP_SYNC_AUTO_RETRY_DELAY_MS', 15_000);
+
+      for (let round = 1; round <= autoRetryRounds; round++) {
+        const failedUfs = liveUfProgress
+          .filter((u) => u.status === 'error')
+          .map((u) => u.uf);
+        if (failedUfs.length === 0) break;
+
+        console.log(
+          `[pncp-sync] auto-retry ${round}/${autoRetryRounds} em ${Math.round(autoRetryDelayMs / 1000)}s: ${failedUfs.join(', ')}`
+        );
+        for (const uf of failedUfs) {
+          setUfStatus(uf, 'pending');
+        }
+        currentUf = null;
+        currentModalidade = null;
+        await sleep(autoRetryDelayMs);
+
+        if (isSyncCancelRequested()) {
+          wasCancelled = true;
+          break;
+        }
+
+        for (const uf of failedUfs) {
+          if (isSyncCancelRequested()) {
+            wasCancelled = true;
+            break;
+          }
+          const result = await syncOneUf({
+            uf,
+            runId: run.id,
+            ufState: ufStateMap.get(uf),
+            lookbackDays,
+            incremental: options.incremental,
+            pageDelayMs,
+            counters,
+          });
+          if (result.cancelled) {
+            wasCancelled = true;
+            break;
+          }
+        }
+
+        if (wasCancelled) break;
+      }
+
+      hadPartialFailure = liveUfProgress.some((u) => u.status === 'error');
+      currentModalidade = null;
+    }
+
+    const { pagesFetched, upserted, rateLimitHits } = counters;
 
     if (wasCancelled) {
       await prisma.pncpSyncRun.update({
@@ -916,6 +1020,7 @@ export async function runPncpIngest(
     console.log(`[pncp-sync] fim status=${status} upserted=${upserted} pages=${pagesFetched} ufs=${ufsToSync.length}`);
     }
   } catch (err) {
+    const { pagesFetched, upserted, rateLimitHits } = counters;
     const fatalError = err instanceof Error ? err.message : 'Erro desconhecido no sync PNCP';
     await prisma.pncpSyncRun.update({
       where: { id: run.id },
