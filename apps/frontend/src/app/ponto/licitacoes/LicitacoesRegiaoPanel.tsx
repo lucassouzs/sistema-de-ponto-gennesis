@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Loader2,
   MapPin,
@@ -78,6 +80,7 @@ type LicitacaoRegiaoTab = {
   key: string;
   label: string;
   sheetName: string;
+  count?: number;
 };
 
 type LicitacaoRegiaoAceiteSummary = {
@@ -105,6 +108,10 @@ type VisibleRow = {
   rowKey: string;
   sourceIndex: number;
   isManual: boolean;
+};
+
+type LicitacoesRegiaoPanelProps = {
+  regiaoKey: string;
 };
 
 const DEFAULT_REGIAO_KEY = 'centro-oeste';
@@ -250,6 +257,10 @@ function isFaseHeader(header: string): boolean {
   return normalizeHeaderKey(header).includes('FASE');
 }
 
+function isModalidadeHeader(header: string): boolean {
+  return normalizeHeaderKey(header) === 'MODALIDADE';
+}
+
 function isQualificacaoHeader(header: string): boolean {
   const key = normalizeHeaderKey(header);
   return key.includes('QUALIFICACAO') || key.includes('HABILITACAO');
@@ -269,7 +280,8 @@ function isNestedListColumn(header: string): boolean {
     isCodigoHeader(header) ||
     isDescontoHeader(header) ||
     isEmpresaHeader(header) ||
-    isFaseHeader(header)
+    isFaseHeader(header) ||
+    isModalidadeHeader(header)
   );
 }
 
@@ -378,18 +390,82 @@ function CellContent({
   );
 }
 
+/** Objeto expansível no mesmo padrão da lista PNCP. */
+function ObjetoExpandable({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [needsToggle, setNeedsToggle] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+  const value = text.trim();
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [value]);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el || !value) {
+      setNeedsToggle(false);
+      return;
+    }
+    if (expanded) return;
+    setNeedsToggle(el.scrollHeight > el.clientHeight + 2);
+  }, [value, expanded]);
+
+  if (!value || value === '?' || value === '-') {
+    return <p className="text-sm text-gray-800 dark:text-gray-200">—</p>;
+  }
+
+  return (
+    <div>
+      <p
+        ref={textRef}
+        className={`text-sm leading-relaxed text-gray-800 dark:text-gray-200 ${
+          expanded ? '' : 'line-clamp-3'
+        }`}
+      >
+        {value}
+      </p>
+      {needsToggle || expanded ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-red-600 transition-colors hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+        >
+          {expanded ? (
+            <>
+              Ver menos
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+            </>
+          ) : (
+            <>
+              Ver mais
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            </>
+          )}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function isPncpOrgaoSubtitle(empresa: string): boolean {
+  return /^\d+\s*[-–—]\s*.+/.test(empresa.trim());
+}
+
 const SHEET_POLL_INTERVAL_MS = 15_000;
 
-export function LicitacoesRegiaoPanel() {
+export function LicitacoesRegiaoPanel({
+  regiaoKey: regiaoKeyProp,
+}: LicitacoesRegiaoPanelProps) {
   const queryClient = useQueryClient();
-  const [regiaoKey, setRegiaoKey] = useState(DEFAULT_REGIAO_KEY);
+  const regiaoKey = regiaoKeyProp || DEFAULT_REGIAO_KEY;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createFields, setCreateFields] = useState<Record<string, string>>({});
 
-  const { data: tabs = [], isLoading: loadingTabs } = useQuery({
+  const { data: tabs = [] } = useQuery({
     queryKey: ['licitacoes-planilha-regioes'],
     queryFn: async () => {
       const res = await api.get('/licitacoes/planilha-regioes');
@@ -397,7 +473,11 @@ export function LicitacoesRegiaoPanel() {
     },
   });
 
-  const activeTab = tabs.find((tab) => tab.key === regiaoKey) ?? tabs[0];
+  const activeTab = tabs.find((tab) => tab.key === regiaoKey) ?? tabs[0] ?? {
+    key: regiaoKey,
+    label: regiaoKey,
+    sheetName: regiaoKey,
+  };
 
   const {
     data: sheet,
@@ -494,6 +574,28 @@ export function LicitacoesRegiaoPanel() {
   useEffect(() => {
     setPage(1);
   }, [search, regiaoKey, activeTab?.key]);
+
+  useEffect(() => {
+    setSearch('');
+    setSelectedRowKeys(new Set());
+    setCreateModalOpen(false);
+    setPage(1);
+  }, [regiaoKey]);
+
+  useEffect(() => {
+    if (!sheet?.rowCount && sheet?.rowCount !== 0) return;
+    queryClient.setQueryData(
+      ['licitacoes-planilha-regioes'],
+      (prev: LicitacaoRegiaoTab[] | undefined) => {
+        if (!Array.isArray(prev)) return prev;
+        return prev.map((tab) =>
+          tab.key === (activeTab?.key ?? regiaoKey)
+            ? { ...tab, count: sheet.rowCount }
+            : tab
+        );
+      }
+    );
+  }, [sheet?.rowCount, activeTab?.key, regiaoKey, queryClient]);
 
   const selectableVisibleRowKeys = useMemo(
     () => pageRows.filter((row) => row.rowKey && !aceitesByRowKey.has(row.rowKey)).map((r) => r.rowKey),
@@ -720,10 +822,17 @@ export function LicitacoesRegiaoPanel() {
     desconto: findHeaderIndex(tableHeaders, isDescontoHeader),
     empresa: findHeaderIndex(tableHeaders, isEmpresaHeader),
     fase: findHeaderIndex(tableHeaders, isFaseHeader),
+    modalidade: findHeaderIndex(tableHeaders, isModalidadeHeader),
   };
   const visibleTableColumns = tableHeaders
     .map((header, colIndex) => ({ header, colIndex }))
     .filter(({ header }) => !isNestedListColumn(header));
+  const valorColumn = visibleTableColumns.find(({ header }) =>
+    isValorEstimadoHeader(header)
+  );
+  const tableColumnsWithoutValor = visibleTableColumns.filter(
+    ({ header }) => !isValorEstimadoHeader(header)
+  );
 
   return (
     <div className="space-y-5">
@@ -867,43 +976,6 @@ export function LicitacoesRegiaoPanel() {
         </CardHeader>
 
         <CardContent className={`${cadastroListClasses.cardContent} space-y-4`}>
-          {loadingTabs ? (
-            <CadastroListLoading message="Carregando regiões..." />
-          ) : (
-            <div className="border-b border-gray-200 dark:border-gray-700">
-              <nav
-                className="-mb-px flex flex-wrap gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
-                role="tablist"
-                aria-label="Regiões"
-              >
-                {tabs.map((tab) => {
-                  const active = tab.key === (activeTab?.key ?? regiaoKey);
-                  return (
-                    <button
-                      key={tab.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => {
-                        setRegiaoKey(tab.key);
-                        setSearch('');
-                        setSelectedRowKeys(new Set());
-                        setCreateModalOpen(false);
-                      }}
-                      className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                        active
-                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
-          )}
-
           {error ? (
             <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
               <p className="max-w-md font-medium text-red-600 dark:text-red-400">{errorMessage}</p>
@@ -957,34 +1029,63 @@ export function LicitacoesRegiaoPanel() {
                           ariaLabel="Selecionar todas as licitações da página"
                         />
                       </th>
-                      <th scope="col" className={cadastroListClasses.thCenter}>
-                        Status
-                      </th>
-                      {visibleTableColumns.map(({ header, colIndex }) => {
+                      {tableColumnsWithoutValor.map(({ header, colIndex }) => {
                         const key = normalizeHeaderKey(header);
                         const isWide =
                           isObjetoHeader(header) ||
                           isQualificacaoHeader(header) ||
                           isOrgaoHeader(header);
                         const isCenter =
-                          isValorEstimadoHeader(header) ||
                           isAberturaHeader(header) ||
                           isEditalHeader(header) ||
                           isPregaoHeader(header);
                         return (
-                          <th
-                            key={`${header}-${colIndex}`}
-                            scope="col"
-                            className={`${
-                              isCenter ? cadastroListClasses.thCenter : cadastroListClasses.th
-                            } ${isWide ? 'min-w-[14rem]' : 'whitespace-nowrap'}`}
-                          >
-                            {key === 'QUALIFICACAO TECNICA'
-                              ? 'Qualificação técnica'
-                              : header.trim()}
-                          </th>
+                          <Fragment key={`${header}-${colIndex}`}>
+                            <th
+                              scope="col"
+                              className={`${
+                                isCenter ? cadastroListClasses.thCenter : cadastroListClasses.th
+                              } ${isWide ? 'min-w-[14rem]' : 'whitespace-nowrap'}`}
+                            >
+                              {key === 'QUALIFICACAO TECNICA'
+                                ? 'Qualificação técnica'
+                                : header.trim()}
+                            </th>
+                            {isAberturaHeader(header) ? (
+                              <>
+                                {valorColumn ? (
+                                  <th
+                                    scope="col"
+                                    className={`${cadastroListClasses.thNumeric} whitespace-nowrap`}
+                                  >
+                                    {valorColumn.header.trim()}
+                                  </th>
+                                ) : null}
+                                <th scope="col" className={cadastroListClasses.thCenter}>
+                                  Status
+                                </th>
+                              </>
+                            ) : null}
+                          </Fragment>
                         );
                       })}
+                      {!tableColumnsWithoutValor.some(({ header }) =>
+                        isAberturaHeader(header)
+                      ) ? (
+                        <>
+                          {valorColumn ? (
+                            <th
+                              scope="col"
+                              className={`${cadastroListClasses.thNumeric} whitespace-nowrap`}
+                            >
+                              {valorColumn.header.trim()}
+                            </th>
+                          ) : null}
+                          <th scope="col" className={cadastroListClasses.thCenter}>
+                            Status
+                          </th>
+                        </>
+                      ) : null}
                       <th scope="col" className={cadastroListClasses.thCenter}>
                         Origem
                       </th>
@@ -1005,6 +1106,8 @@ export function LicitacoesRegiaoPanel() {
                       const desconto = cellAt(row.cells, col.desconto);
                       const empresa = cellAt(row.cells, col.empresa);
                       const fase = cellAt(row.cells, col.fase);
+                      const modalidade = cellAt(row.cells, col.modalidade);
+                      const fromPncp = row.isManual && isPncpOrgaoSubtitle(empresa);
 
                       return (
                         <tr
@@ -1025,30 +1128,14 @@ export function LicitacoesRegiaoPanel() {
                               ariaLabel="Selecionar licitação"
                             />
                           </td>
-                          <td className={cadastroListClasses.tdCenter}>
-                            <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
-                              {isAccepted ? (
-                                <>
-                                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                    Aceite
-                                  </span>
-                                  {aceite?.acceptedByName ? (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {aceite.acceptedByName}
-                                    </p>
-                                  ) : null}
-                                </>
-                              ) : (
-                                <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                                  Pendente
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          {visibleTableColumns.map(({ header, colIndex }) => {
+                          {tableColumnsWithoutValor.map(({ header, colIndex }) => {
                             const value = cellAt(row.cells, colIndex);
 
                             if (isOrgaoHeader(header)) {
+                              const empresaTrim = empresa.trim();
+                              const orgaoSubtitle = /^\d+\s*[-–—]\s*.+/.test(empresaTrim)
+                                ? empresaTrim
+                                : [estado, empresa].filter(Boolean).join(' · ') || '—';
                               return (
                                 <td
                                   key={`${row.rowKey}-${colIndex}`}
@@ -1059,7 +1146,7 @@ export function LicitacoesRegiaoPanel() {
                                       <CellContent value={value} clamp />
                                     </p>
                                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                      {[estado, empresa].filter(Boolean).join(' · ') || '—'}
+                                      {orgaoSubtitle}
                                     </p>
                                   </div>
                                 </td>
@@ -1070,13 +1157,11 @@ export function LicitacoesRegiaoPanel() {
                               return (
                                 <td
                                   key={`${row.rowKey}-${colIndex}`}
-                                  className={`${cadastroListClasses.td} max-w-sm`}
+                                  className={`${cadastroListClasses.td} min-w-[16rem] max-w-[28rem]`}
                                 >
                                   <div className="min-w-0">
-                                    <p className="text-gray-900 dark:text-gray-100">
-                                      <CellContent value={value} clamp />
-                                    </p>
-                                    {site ? (
+                                    <ObjetoExpandable text={value} />
+                                    {!fromPncp && site ? (
                                       <div className="mt-0.5 text-xs">
                                         <CellContent value={site} />
                                       </div>
@@ -1098,6 +1183,9 @@ export function LicitacoesRegiaoPanel() {
                             }
 
                             if (isPregaoHeader(header)) {
+                              const pregaoSubtitle = fromPncp
+                                ? modalidade || '—'
+                                : [codigo, fase].filter(Boolean).join(' · ') || '—';
                               return (
                                 <td
                                   key={`${row.rowKey}-${colIndex}`}
@@ -1108,7 +1196,7 @@ export function LicitacoesRegiaoPanel() {
                                       <CellContent value={value} clamp />
                                     </p>
                                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                      {[codigo, fase].filter(Boolean).join(' · ') || '—'}
+                                      {pregaoSubtitle}
                                     </p>
                                   </div>
                                 </td>
@@ -1116,40 +1204,56 @@ export function LicitacoesRegiaoPanel() {
                             }
 
                             if (isAberturaHeader(header)) {
+                              const valorValue = valorColumn
+                                ? cellAt(row.cells, valorColumn.colIndex)
+                                : '';
                               return (
-                                <td
-                                  key={`${row.rowKey}-${colIndex}`}
-                                  className={cadastroListClasses.tdCenter}
-                                >
-                                  <div>
-                                    <p className="whitespace-nowrap text-gray-900 dark:text-gray-100">
-                                      {value || '—'}
-                                    </p>
-                                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                      {hora || '—'}
-                                    </p>
-                                  </div>
-                                </td>
-                              );
-                            }
-
-                            if (isValorEstimadoHeader(header)) {
-                              return (
-                                <td
-                                  key={`${row.rowKey}-${colIndex}`}
-                                  className={cadastroListClasses.tdCenter}
-                                >
-                                  <div>
-                                    <p className="whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">
-                                      {value || '—'}
-                                    </p>
-                                    {desconto ? (
-                                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                        Desc. {desconto}
+                                <Fragment key={`${row.rowKey}-${colIndex}-abertura-valor-status`}>
+                                  <td className={cadastroListClasses.tdCenter}>
+                                    <div>
+                                      <p className="whitespace-nowrap text-gray-900 dark:text-gray-100">
+                                        {value || '—'}
                                       </p>
-                                    ) : null}
-                                  </div>
-                                </td>
+                                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        {hora || '—'}
+                                      </p>
+                                    </div>
+                                  </td>
+                                  {valorColumn ? (
+                                    <td className={cadastroListClasses.tdNumeric}>
+                                      <div>
+                                        <p className="whitespace-nowrap">
+                                          {valorValue || '—'}
+                                        </p>
+                                        {desconto ? (
+                                          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Desc. {desconto}
+                                          </p>
+                                        ) : null}
+                                      </div>
+                                    </td>
+                                  ) : null}
+                                  <td className={cadastroListClasses.tdCenter}>
+                                    <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+                                      {isAccepted ? (
+                                        <>
+                                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                            Aceite
+                                          </span>
+                                          {aceite?.acceptedByName ? (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                              {aceite.acceptedByName}
+                                            </p>
+                                          ) : null}
+                                        </>
+                                      ) : (
+                                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                          Pendente
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </Fragment>
                               );
                             }
 
@@ -1191,6 +1295,46 @@ export function LicitacoesRegiaoPanel() {
                               </td>
                             );
                           })}
+                          {!tableColumnsWithoutValor.some(({ header }) =>
+                            isAberturaHeader(header)
+                          ) ? (
+                            <>
+                              {valorColumn ? (
+                                <td className={cadastroListClasses.tdNumeric}>
+                                  <div>
+                                    <p className="whitespace-nowrap">
+                                      {cellAt(row.cells, valorColumn.colIndex) || '—'}
+                                    </p>
+                                    {desconto ? (
+                                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        Desc. {desconto}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              ) : null}
+                              <td className={cadastroListClasses.tdCenter}>
+                                <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+                                  {isAccepted ? (
+                                    <>
+                                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                        Aceite
+                                      </span>
+                                      {aceite?.acceptedByName ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                          {aceite.acceptedByName}
+                                        </p>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                      Pendente
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            </>
+                          ) : null}
                           <td className={cadastroListClasses.tdCenter}>
                             {row.isManual ? (
                               <span className="inline-flex rounded-full bg-sky-100 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">

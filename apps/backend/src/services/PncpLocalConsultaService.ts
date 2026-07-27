@@ -6,6 +6,7 @@ import {
   type PncpConsultaResult,
   type PncpContratacaoListItem,
 } from './PncpConsultaService';
+import { listAllPncpEnviadoNumeros, listPncpEnviadosAnaliseByNumeros } from './pncpEnviadoAnaliseStore';
 
 function toYyyymmdd(value: string): string {
   const digits = String(value || '').replace(/\D/g, '');
@@ -41,6 +42,7 @@ function rowToItem(row: {
   sequencialCompra: number | null;
   numeroControlePNCP: string;
   processo: string | null;
+  numeroCompra?: string | null;
   objeto: string | null;
   orgao: string | null;
   cnpjOrgao: string | null;
@@ -66,6 +68,7 @@ function rowToItem(row: {
     sequencialCompra: row.sequencialCompra,
     numeroControlePNCP: row.numeroControlePNCP,
     processo: row.processo,
+    numeroCompra: row.numeroCompra ?? null,
     objeto: row.objeto,
     orgao: row.orgao,
     cnpjOrgao: row.cnpjOrgao,
@@ -87,6 +90,34 @@ function rowToItem(row: {
     linkSistemaOrigem: row.linkSistemaOrigem,
     linkPncp: row.linkPncp,
   };
+}
+
+function attachEnviadoAnalise(
+  items: PncpContratacaoListItem[],
+  enviados: Map<
+    string,
+    { regiaoKey: string; enviadoAt: Date; enviadoByName?: string | null }
+  >
+) {
+  for (const item of items) {
+    const numero = item.numeroControlePNCP || '';
+    const enviado = enviados.get(numero);
+    item.enviadoAnalise = Boolean(enviado);
+    item.enviadoAnaliseRegiaoKey = enviado?.regiaoKey ?? null;
+    item.enviadoAnaliseAt = enviado?.enviadoAt?.toISOString() ?? null;
+    item.enviadoAnaliseByName = enviado?.enviadoByName?.trim() || null;
+  }
+  return items;
+}
+
+function normalizeStatusAnalise(
+  value: PncpConsultaParams['statusAnalise']
+): 'disponivel' | 'enviada' | 'all' {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase();
+  if (raw === 'disponivel' || raw === 'enviada') return raw;
+  return 'all';
 }
 
 /** Consulta o espelho local (sem chamar a API PNCP). */
@@ -121,13 +152,24 @@ export async function consultarContratacoesLocais(
       where: { numeroControlePNCP: idPncp },
     });
     const items = row ? [rowToItem(row)] : [];
+    const enviados = await listPncpEnviadosAnaliseByNumeros(
+      items.map((item) => item.numeroControlePNCP || '').filter(Boolean)
+    );
+    attachEnviadoAnalise(items, enviados);
+    const statusAnalise = normalizeStatusAnalise(params.statusAnalise);
+    const filtered =
+      statusAnalise === 'disponivel'
+        ? items.filter((item) => !item.enviadoAnalise)
+        : statusAnalise === 'enviada'
+          ? items.filter((item) => Boolean(item.enviadoAnalise))
+          : items;
     return {
-      items,
+      items: filtered,
       pagina: 1,
       tamanhoPagina,
-      totalRegistros: items.length,
+      totalRegistros: filtered.length,
       totalPaginas: 1,
-      empty: items.length === 0,
+      empty: filtered.length === 0,
     };
   }
 
@@ -201,6 +243,24 @@ export async function consultarContratacoesLocais(
     where.AND = [{ OR: orFilters }];
   }
 
+  const statusAnalise = normalizeStatusAnalise(params.statusAnalise);
+  if (statusAnalise === 'disponivel' || statusAnalise === 'enviada') {
+    const enviadosNumeros = await listAllPncpEnviadoNumeros();
+    if (statusAnalise === 'enviada') {
+      where.numeroControlePNCP = {
+        in: enviadosNumeros.length > 0 ? enviadosNumeros : ['__nenhum_enviado__'],
+      };
+    } else if (enviadosNumeros.length > 0) {
+      const extra: Prisma.PncpContratacaoWhereInput = {
+        numeroControlePNCP: { notIn: enviadosNumeros },
+      };
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        extra,
+      ];
+    }
+  }
+
   const totalRegistros = await prisma.pncpContratacao.count({ where });
   const totalPaginas = Math.max(1, Math.ceil(totalRegistros / tamanhoPagina) || 1);
   const safePage = Math.min(pagina, totalPaginas);
@@ -212,6 +272,11 @@ export async function consultarContratacoesLocais(
   });
 
   const items = rows.map(rowToItem);
+  const enviados = await listPncpEnviadosAnaliseByNumeros(
+    items.map((item) => item.numeroControlePNCP || '').filter(Boolean)
+  );
+  attachEnviadoAnalise(items, enviados);
+
   return {
     items,
     pagina: safePage,

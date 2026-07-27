@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { PNCP_KEYWORDS_OBJETO_PADRAO, PNCP_MODALIDADES } from '../services/PncpConsultaService';
 import { consultarContratacoesLocais } from '../services/PncpLocalConsultaService';
+import { enviarPncpParaAnalise } from '../services/PncpEnviarAnaliseService';
 import {
   getPncpSyncStatus,
   requestPncpSyncCancel,
@@ -88,6 +89,15 @@ export class PncpController {
       const valorMaxRaw = req.query.valorMax != null ? String(req.query.valorMax) : '';
       const valorMin = valorMinRaw.trim() !== '' ? Number(valorMinRaw) : null;
       const valorMax = valorMaxRaw.trim() !== '' ? Number(valorMaxRaw) : null;
+      const statusAnaliseRaw = String(req.query.statusAnalise || '')
+        .trim()
+        .toLowerCase();
+      const statusAnalise =
+        statusAnaliseRaw === 'disponivel' || statusAnaliseRaw === 'enviada'
+          ? statusAnaliseRaw
+          : statusAnaliseRaw === 'all'
+            ? 'all'
+            : null;
 
       if (!dataInicial || !dataFinal) {
         throw createError('Informe dataInicial e dataFinal.', 400);
@@ -104,6 +114,7 @@ export class PncpController {
         q,
         valorMin: valorMin != null && Number.isFinite(valorMin) ? valorMin : null,
         valorMax: valorMax != null && Number.isFinite(valorMax) ? valorMax : null,
+        statusAnalise,
       });
 
       res.json({ success: true, data: result });
@@ -113,6 +124,55 @@ export class PncpController {
         message.includes('inválida') ||
         message.includes('Informe') ||
         message.includes('não pode')
+      ) {
+        next(createError(message, 400));
+        return;
+      }
+      next(createError(message, 500));
+    }
+  }
+
+  async enviarParaAnalise(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const numeroControlePNCP =
+        typeof req.body?.numeroControlePNCP === 'string'
+          ? req.body.numeroControlePNCP.trim()
+          : '';
+      const regiaoKey =
+        typeof req.body?.regiaoKey === 'string' ? req.body.regiaoKey.trim() : undefined;
+
+      if (!numeroControlePNCP) {
+        throw createError('Informe o número de controle PNCP.', 400);
+      }
+
+      const result = await enviarPncpParaAnalise({
+        numeroControlePNCP,
+        userId: req.user!.id,
+        regiaoKeyOverride: regiaoKey || null,
+      });
+
+      if (result.alreadySent) {
+        res.status(409).json({
+          success: false,
+          data: result,
+          message: `Esta licitação já foi enviada para ${result.regiaoLabel}.`,
+        });
+        return;
+      }
+
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: `Licitação enviada para ${result.regiaoLabel}.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao enviar para análise';
+      if (
+        message.includes('Informe') ||
+        message.includes('não encontrada') ||
+        message.includes('mapear') ||
+        message.includes('inválida') ||
+        message.includes('montar')
       ) {
         next(createError(message, 400));
         return;

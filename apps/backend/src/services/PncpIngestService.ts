@@ -420,6 +420,7 @@ async function upsertItems(
     const data = {
       sequencialCompra: item.sequencialCompra,
       processo: item.processo,
+      numeroCompra: item.numeroCompra,
       objeto: item.objeto,
       objetoNorm: normalizePncpSearchText(item.objeto || ''),
       orgao: item.orgao,

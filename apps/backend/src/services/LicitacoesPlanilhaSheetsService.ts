@@ -4,7 +4,9 @@ import {
   getCanonicalRegiaoHeaders,
   listLicitacaoRegiaoManuais,
   snapshotToCells,
+  updateLicitacaoRegiaoManualSnapshot,
 } from './licitacaoRegiaoManualStore';
+import { getPrisma } from '../lib/prisma';
 import {
   buildSheetRowBusinessKey,
   cellsToSnapshot,
@@ -161,6 +163,134 @@ function buildEmptySheetData(tab: LicitacaoRegiaoTab): LicitacaoRegiaoSheetData 
   };
 }
 
+function normalizeHeaderKeyLoose(header: string): string {
+  return header
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function findSnapshotKey(
+  snapshot: Record<string, string>,
+  candidates: string[]
+): string | null {
+  const wanted = candidates.map(normalizeHeaderKeyLoose);
+  for (const key of Object.keys(snapshot)) {
+    if (wanted.includes(normalizeHeaderKeyLoose(key))) return key;
+  }
+  return null;
+}
+
+/** Corrige subtítulo de ÓRGÃO e Nº DO PREGÃO em manuais vindos do PNCP. */
+async function repairPncpManualSnapshot(
+  snapshot: Record<string, string>
+): Promise<{ snapshot: Record<string, string>; changed: boolean }> {
+  const numero = String(snapshot.numeroControlePNCP || '').trim();
+  if (!numero) return { snapshot, changed: false };
+
+  const pncp = await getPrisma().pncpContratacao.findUnique({
+    where: { numeroControlePNCP: numero },
+    select: {
+      codigoUnidadeCompradora: true,
+      unidadeCompradora: true,
+      numeroCompra: true,
+      sequencialCompra: true,
+      numeroControlePNCP: true,
+      processo: true,
+      modalidade: true,
+    },
+  });
+  if (!pncp) return { snapshot, changed: false };
+
+  let changed = false;
+  const next = { ...snapshot };
+
+  // Remove resíduos da geração por IA (recurso desativado).
+  if (next.qualificacaoTecnicaStatus || next.qualificacaoTecnicaError) {
+    delete next.qualificacaoTecnicaStatus;
+    delete next.qualificacaoTecnicaError;
+    changed = true;
+  }
+  const qualificacaoKey = findSnapshotKey(next, [
+    'QUALIFICAÇÃO TÉCNICA',
+    'QUALIFICACAO TECNICA',
+    'QUALIFICAÇÃO TECNICA',
+  ]);
+  if (qualificacaoKey) {
+    const q = next[qualificacaoKey].trim();
+    if (
+      /^gerando com ia/i.test(q) ||
+      /não foi possível extrair a qualificação técnica/i.test(q) ||
+      /documentos do edital não disponíveis no pncp/i.test(q) ||
+      /ia não configurada no servidor/i.test(q) ||
+      /falha ao gerar qualificação técnica/i.test(q)
+    ) {
+      delete next[qualificacaoKey];
+      changed = true;
+    }
+  }
+
+  const modalidadeDesired = String(pncp.modalidade || '').trim();
+  const modalidadeKey = findSnapshotKey(next, ['MODALIDADE']);
+  const currentModalidade = modalidadeKey
+    ? next[modalidadeKey].trim()
+    : String(next.MODALIDADE || next.modalidade || '').trim();
+  if (modalidadeDesired && currentModalidade !== modalidadeDesired) {
+    if (modalidadeKey) next[modalidadeKey] = modalidadeDesired;
+    else next.MODALIDADE = modalidadeDesired;
+    changed = true;
+  }
+
+  const empresaKey = findSnapshotKey(next, ['EMPRESA', 'EMPRESA ']);
+  const currentEmpresa = empresaKey ? next[empresaKey].trim() : '';
+  if (!/^\d+\s*[-–—]\s*.+/.test(currentEmpresa)) {
+    const subtitle = [pncp.codigoUnidadeCompradora, pncp.unidadeCompradora]
+      .map((v) => String(v || '').trim())
+      .filter(Boolean)
+      .join(' - ');
+    if (subtitle) {
+      if (empresaKey) next[empresaKey] = subtitle;
+      else next['EMPRESA '] = subtitle;
+      changed = true;
+    }
+  }
+
+  const pregaoKey = findSnapshotKey(next, [
+    'Nº DO PREGÃO',
+    'N DO PREGAO',
+    'NUMERO DO PREGAO',
+    'Nº DO PREGAO',
+  ]);
+  const currentPregao = pregaoKey ? next[pregaoKey].trim() : '';
+  const desiredPregao = (() => {
+    const controle = String(pncp.numeroControlePNCP || '').trim();
+    const anoFromControle = controle.match(/\/(\d{4})$/)?.[1] || '';
+    const compraRaw = String(pncp.numeroCompra || '').trim();
+    if (compraRaw) {
+      if (/\d\s*\/\s*\d{4}/.test(compraRaw)) return compraRaw.replace(/\s/g, '');
+      if (anoFromControle) return `${compraRaw}/${anoFromControle}`;
+      return compraRaw;
+    }
+    const m = controle.match(/-(\d+)\s*\/\s*(\d{4})$/);
+    if (m) return `${Number(m[1])}/${m[2]}`;
+    if (pncp.sequencialCompra != null) {
+      const seq = String(pncp.sequencialCompra);
+      return anoFromControle ? `${seq}/${anoFromControle}` : seq;
+    }
+    return '';
+  })();
+
+  if (desiredPregao && currentPregao !== desiredPregao) {
+    if (pregaoKey) next[pregaoKey] = desiredPregao;
+    else next['Nº DO PREGÃO'] = desiredPregao;
+    changed = true;
+  }
+
+  return { snapshot: next, changed };
+}
+
 async function mergeManualRowsIntoSheet(
   tab: LicitacaoRegiaoTab,
   data: LicitacaoRegiaoSheetData
@@ -175,13 +305,39 @@ async function mergeManualRowsIntoSheet(
 
   const headers =
     data.headers.length > 0 ? data.headers : getCanonicalRegiaoHeaders(tab.key);
-  const manualRows = manuais.map((manual) => snapshotToCells(headers, manual.rowSnapshot));
+
+  const repairedSnapshots = await Promise.all(
+    manuais.map(async (manual) => {
+      const repaired = await repairPncpManualSnapshot(manual.rowSnapshot);
+      if (repaired.changed) {
+        void updateLicitacaoRegiaoManualSnapshot({
+          regiaoKey: manual.regiaoKey,
+          rowKey: manual.rowKey,
+          rowSnapshot: repaired.snapshot,
+        }).catch(() => undefined);
+      }
+      return repaired.snapshot;
+    })
+  );
+
+  const hasModalidadeHeader = headers.some(
+    (header) => normalizeHeaderKeyLoose(header) === 'modalidade'
+  );
+  const effectiveHeaders = hasModalidadeHeader ? headers : [...headers, 'MODALIDADE'];
+  const padSheetRow = (row: string[]) => (hasModalidadeHeader ? row : [...row, '']);
+
+  const manualRows = repairedSnapshots.map((snapshot) =>
+    snapshotToCells(effectiveHeaders, {
+      ...snapshot,
+      MODALIDADE: String(snapshot.MODALIDADE || snapshot.modalidade || '').trim(),
+    })
+  );
   const manualRowKeys = manuais.map((manual) => manual.rowKey);
 
   return {
     ...data,
-    headers,
-    rows: [...manualRows, ...data.rows],
+    headers: effectiveHeaders,
+    rows: [...manualRows, ...data.rows.map(padSheetRow)],
     rowKeys: [...manualRowKeys, ...data.rowKeys],
     manualRowKeys,
     rowCount: manualRows.length + data.rows.length,

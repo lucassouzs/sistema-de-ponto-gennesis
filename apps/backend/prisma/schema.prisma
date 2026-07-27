@@ -3464,6 +3464,8 @@ model PncpContratacao {
   numeroControlePNCP       String    @unique
   sequencialCompra         Int?
   processo                 String?
+  // Numero da contratacao/pregao no sistema de origem (API PNCP: numeroCompra).
+  numeroCompra             String?
   objeto                   String?   @db.Text
   objetoNorm               String?   @db.Text
   orgao                    String?

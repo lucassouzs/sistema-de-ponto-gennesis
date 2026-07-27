@@ -152,6 +152,20 @@ export async function getLicitacaoRegiaoManualByRowKey(
   return rows[0] ? mapManual(rows[0]) : null;
 }
 
+export async function updateLicitacaoRegiaoManualSnapshot(input: {
+  regiaoKey: string;
+  rowKey: string;
+  rowSnapshot: Record<string, string>;
+}): Promise<void> {
+  const snapshotJson = JSON.stringify(input.rowSnapshot);
+  await getPrisma().$executeRaw`
+    UPDATE licitacao_regiao_manuais
+    SET "rowSnapshot" = ${snapshotJson}::jsonb
+    WHERE "regiaoKey" = ${input.regiaoKey}
+      AND "rowKey" = ${input.rowKey}
+  `;
+}
+
 /** Headers canônicos por região (espelham a planilha). */
 export function getCanonicalRegiaoHeaders(regiaoKey: string): string[] {
   const base = [

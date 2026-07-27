@@ -35,6 +35,13 @@ export type PncpConsultaParams = {
   /** Valor estimado máximo (inclusive), em reais. */
   valorMax?: number | null;
   /**
+   * Filtro de status de envio para análise/região.
+   * - disponivel: ainda não enviadas
+   * - enviada: já enviadas
+   * - all / omitido: todas
+   */
+  statusAnalise?: 'disponivel' | 'enviada' | 'all' | null;
+  /**
    * Quando true, mantém só contratações cujo objeto casa com as palavras-chave
    * padrão (engenharia, manutenção predial, áreas verdes, etc.).
    */
@@ -45,6 +52,8 @@ export type PncpContratacaoListItem = {
   sequencialCompra: number | null;
   numeroControlePNCP: string | null;
   processo: string | null;
+  /** Número do pregão/contratação no sistema de origem. */
+  numeroCompra: string | null;
   objeto: string | null;
   orgao: string | null;
   cnpjOrgao: string | null;
@@ -65,6 +74,11 @@ export type PncpContratacaoListItem = {
   amparoLegal: string | null;
   linkSistemaOrigem: string | null;
   linkPncp: string | null;
+  /** true se já foi enviada para Licitações por região. */
+  enviadoAnalise?: boolean;
+  enviadoAnaliseRegiaoKey?: string | null;
+  enviadoAnaliseAt?: string | null;
+  enviadoAnaliseByName?: string | null;
 };
 
 export type PncpConsultaResult = {
@@ -145,6 +159,7 @@ function mapContratacao(raw: unknown): PncpContratacaoListItem {
     sequencialCompra: asNumber(item.sequencialCompra),
     numeroControlePNCP: asString(item.numeroControlePNCP),
     processo: asString(item.processo),
+    numeroCompra: asString(item.numeroCompra),
     objeto: asString(item.objetoCompra),
     orgao: asString(orgao.razaoSocial),
     cnpjOrgao: asString(orgao.cnpj),

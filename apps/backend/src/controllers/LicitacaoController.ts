@@ -83,7 +83,22 @@ export class LicitacaoController {
 
   async listRegiaoTabs(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      res.json({ success: true, data: listLicitacoesRegiaoTabs() });
+      const tabs = listLicitacoesRegiaoTabs();
+      const withCounts = await Promise.all(
+        tabs.map(async (tab) => {
+          try {
+            const sheet = await fetchLicitacaoRegiaoSheet(tab.key, false);
+            return {
+              ...tab,
+              count: Number.isFinite(sheet.rowCount) ? sheet.rowCount : 0,
+            };
+          } catch {
+            return { ...tab, count: 0 };
+          }
+        })
+      );
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.json({ success: true, data: withCounts });
     } catch (error) {
       next(error);
     }

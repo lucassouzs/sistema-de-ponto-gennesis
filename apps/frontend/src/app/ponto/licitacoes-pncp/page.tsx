@@ -11,8 +11,10 @@ import {
   DownloadCloud,
   ExternalLink,
   Filter,
+  Loader2,
   RotateCcw,
   Search,
+  Send,
   Square,
   X,
 } from 'lucide-react';
@@ -30,8 +32,13 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { Loading } from '@/components/ui/Loading';
-import { cadastroListClasses } from '@/components/ui/RowActionMenu';
+import {
+  cadastroListClasses,
+  RowActionMenuCell,
+  RowActionMenuPortal,
+} from '@/components/ui/RowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
+import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import api from '@/lib/api';
 import {
   maskCurrencyInputBrOrEmpty,
@@ -124,6 +131,14 @@ const VALOR_FILTRO_OPTIONS = labeledToSelectOptions([
   { value: 'between', label: 'Entre' },
 ]);
 
+type StatusAnaliseFiltro = 'disponivel' | 'enviada' | 'all';
+
+const STATUS_ANALISE_OPTIONS = labeledToSelectOptions([
+  { value: 'disponivel', label: 'Disponíveis' },
+  { value: 'enviada', label: 'Enviadas' },
+  { value: 'all', label: 'Todos' },
+]);
+
 function resolveValorFiltroBounds(
   modo: ValorFiltroModo,
   valor: string,
@@ -149,6 +164,7 @@ type PncpItem = {
   sequencialCompra: number | null;
   numeroControlePNCP: string | null;
   processo: string | null;
+  numeroCompra?: string | null;
   objeto: string | null;
   orgao: string | null;
   cnpjOrgao: string | null;
@@ -169,6 +185,10 @@ type PncpItem = {
   amparoLegal: string | null;
   linkSistemaOrigem: string | null;
   linkPncp: string | null;
+  enviadoAnalise?: boolean;
+  enviadoAnaliseRegiaoKey?: string | null;
+  enviadoAnaliseAt?: string | null;
+  enviadoAnaliseByName?: string | null;
 };
 
 type PncpListResult = {
@@ -436,6 +456,7 @@ function LicitacoesPncpPageContent() {
   const [valorFiltro, setValorFiltro] = useState('');
   const [valorDe, setValorDe] = useState('');
   const [valorAte, setValorAte] = useState('');
+  const [statusAnalise, setStatusAnalise] = useState<StatusAnaliseFiltro>('disponivel');
   const [q, setQ] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState<'uf' | 'modalidade' | null>(null);
@@ -452,6 +473,7 @@ function LicitacoesPncpPageContent() {
     dataFinal: defaults.dataFinal,
     valorMin: null as number | null,
     valorMax: null as number | null,
+    statusAnalise: 'disponivel' as StatusAnaliseFiltro,
     q: '',
     pagina: 1,
   });
@@ -480,6 +502,7 @@ function LicitacoesPncpPageContent() {
     applied.dataFinal !== defaults.dataFinal ||
     applied.valorMin != null ||
     applied.valorMax != null ||
+    applied.statusAnalise !== 'disponivel' ||
     hasSearch;
 
   const keywordsQuery = useQuery({
@@ -654,6 +677,7 @@ function LicitacoesPncpPageContent() {
           tamanhoPagina: 20,
           ...(applied.valorMin != null ? { valorMin: applied.valorMin } : {}),
           ...(applied.valorMax != null ? { valorMax: applied.valorMax } : {}),
+          statusAnalise: applied.statusAnalise,
           ...(hasSearch ? { q: searchTerm } : {}),
         },
         timeout: 30_000,
@@ -663,6 +687,71 @@ function LicitacoesPncpPageContent() {
     staleTime: 30_000,
     placeholderData: (previousData) => previousData,
     retry: false,
+  });
+
+  const [sendingNumero, setSendingNumero] = useState<string | null>(null);
+
+  const enviarAnaliseMutation = useMutation({
+    mutationFn: async (numeroControlePNCP: string) => {
+      const res = await api.post('/pncp/enviar-analise', { numeroControlePNCP });
+      return (res.data?.data ?? res.data) as {
+        alreadySent?: boolean;
+        regiaoKey: string;
+        regiaoLabel: string;
+        enviadoAt: string;
+      };
+    },
+    onMutate: (numeroControlePNCP) => {
+      setSendingNumero(numeroControlePNCP);
+    },
+    onSuccess: (data, numeroControlePNCP) => {
+      toast.success(`Enviada para ${data.regiaoLabel}.`);
+      void queryClient.invalidateQueries({ queryKey: ['pncp-contratacoes'] });
+      void queryClient.invalidateQueries({ queryKey: ['licitacoes-planilha-regiao'] });
+      void queryClient.invalidateQueries({ queryKey: ['licitacoes-planilha-regioes'] });
+      queryClient.setQueryData(
+        ['pncp-contratacoes', { ...applied, q: hasSearch ? searchTerm : '' }],
+        (prev: PncpListResult | undefined) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((item) =>
+              item.numeroControlePNCP === numeroControlePNCP
+                ? {
+                    ...item,
+                    enviadoAnalise: true,
+                    enviadoAnaliseRegiaoKey: data.regiaoKey,
+                    enviadoAnaliseAt: data.enviadoAt,
+                  }
+                : item
+            ),
+          };
+        }
+      );
+    },
+    onError: (err: {
+      response?: { status?: number; data?: { message?: string; data?: { regiaoLabel?: string } } };
+      message?: string;
+    }) => {
+      if (err?.response?.status === 409) {
+        toast.error(
+          err.response.data?.message ||
+            `Já enviada${
+              err.response.data?.data?.regiaoLabel
+                ? ` para ${err.response.data.data.regiaoLabel}`
+                : ''
+            }.`
+        );
+        void queryClient.invalidateQueries({ queryKey: ['pncp-contratacoes'] });
+        return;
+      }
+      toast.error(
+        err?.response?.data?.message || err?.message || 'Não foi possível enviar para análise.'
+      );
+    },
+    onSettled: () => {
+      setSendingNumero(null);
+    },
   });
 
   // Enquanto sincroniza, atualiza a lista (dados vão entrando) e ao terminar avisa.
@@ -693,6 +782,23 @@ function LicitacoesPncpPageContent() {
   ]);
 
   const items = query.data?.items ?? [];
+  const actionRows = useMemo(
+    () =>
+      items.map((row, idx) => ({
+        ...row,
+        id:
+          row.numeroControlePNCP ||
+          `${row.processo || 'p'}-${row.sequencialCompra || idx}`,
+      })),
+    [items]
+  );
+  const {
+    rowActionMenu,
+    rowForActionMenu,
+    toggleRowActionMenu,
+    closeRowActionMenu,
+    isRowMenuOpen,
+  } = useRowActionMenu(actionRows);
   const totalPaginas = Math.max(1, query.data?.totalPaginas ?? 1);
   const currentPage = applied.pagina;
   const pageSize = query.data?.tamanhoPagina ?? 20;
@@ -724,6 +830,7 @@ function LicitacoesPncpPageContent() {
     valorFiltro?: string;
     valorDe?: string;
     valorAte?: string;
+    statusAnalise?: StatusAnaliseFiltro;
   }) => {
     if (!next.dataInicial || !next.dataFinal) {
       toast.error('Informe o período de publicação.');
@@ -759,6 +866,7 @@ function LicitacoesPncpPageContent() {
       dataFinal: next.dataFinal,
       valorMin: valorCompleto ? valorMin : null,
       valorMax: valorCompleto ? valorMax : null,
+      statusAnalise: next.statusAnalise ?? statusAnalise,
       pagina: 1,
     }));
   };
@@ -789,6 +897,7 @@ function LicitacoesPncpPageContent() {
     setValorFiltro('');
     setValorDe('');
     setValorAte('');
+    setStatusAnalise('disponivel');
     setApplied((prev) => ({
       ...prev,
       ufs: ['DF'],
@@ -797,6 +906,7 @@ function LicitacoesPncpPageContent() {
       dataFinal: defaults.dataFinal,
       valorMin: null,
       valorMax: null,
+      statusAnalise: 'disponivel',
       pagina: 1,
     }));
   };
@@ -962,7 +1072,7 @@ function LicitacoesPncpPageContent() {
                   query.isFetching && !showInitialLoading ? 'opacity-60' : ''
                 }`}
               >
-                <table className="w-full min-w-[72rem] text-sm">
+                <table className="w-full min-w-[84rem] text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
                       <th scope="col" className={cadastroListClasses.th}>
@@ -990,7 +1100,13 @@ function LicitacoesPncpPageContent() {
                         Valor estimado
                       </th>
                       <th scope="col" className={cadastroListClasses.thCenter}>
+                        Status
+                      </th>
+                      <th scope="col" className={cadastroListClasses.thCenter}>
                         Origem
+                      </th>
+                      <th scope="col" className={`${cadastroListClasses.thCenter} w-14`}>
+                        Ações
                       </th>
                     </tr>
                   </thead>
@@ -1068,6 +1184,38 @@ function LicitacoesPncpPageContent() {
                             {formatCurrency(row.valorEstimado)}
                           </td>
                           <td className={cadastroListClasses.tdCenter}>
+                            {row.enviadoAnalise ? (
+                              <div className="inline-flex min-w-[7.5rem] flex-col items-center gap-0.5">
+                                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                  Enviada
+                                </span>
+                                {row.enviadoAnaliseByName ? (
+                                  <span
+                                    className="max-w-[10rem] truncate text-[11px] text-gray-600 dark:text-gray-300"
+                                    title={row.enviadoAnaliseByName}
+                                  >
+                                    {row.enviadoAnaliseByName}
+                                  </span>
+                                ) : null}
+                                {row.enviadoAnaliseAt ? (
+                                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                    {(() => {
+                                      const parts = formatBrDateParts(row.enviadoAnaliseAt);
+                                      if (!parts) return '—';
+                                      return parts.time
+                                        ? `${parts.date} ${parts.time}`
+                                        : parts.date;
+                                    })()}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                                Disponível
+                              </span>
+                            )}
+                          </td>
+                          <td className={cadastroListClasses.tdCenter}>
                             {(() => {
                               const href =
                                 buildPncpEditalUrl(row.numeroControlePNCP) ||
@@ -1089,6 +1237,13 @@ function LicitacoesPncpPageContent() {
                               );
                             })()}
                           </td>
+                          <RowActionMenuCell
+                            align="center"
+                            isOpen={isRowMenuOpen(key)}
+                            onToggle={(e) =>
+                              toggleRowActionMenu(key, e.currentTarget as HTMLButtonElement)
+                            }
+                          />
                         </tr>
                       );
                     })}
@@ -1103,6 +1258,59 @@ function LicitacoesPncpPageContent() {
                   onPageChange={goToPage}
                 />
               </div>
+
+              {rowActionMenu && rowForActionMenu ? (
+                <RowActionMenuPortal
+                  menu={rowActionMenu}
+                  onClose={closeRowActionMenu}
+                  onEdit={() => undefined}
+                  hideDefaultActions
+                  extraItems={
+                    rowForActionMenu.enviadoAnalise
+                      ? [
+                          {
+                            label: 'Já enviada',
+                            disabled: true,
+                            onClick: () => undefined,
+                            icon: (
+                              <Send className="h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" />
+                            ),
+                          },
+                        ]
+                      : [
+                          {
+                            label:
+                              sendingNumero === rowForActionMenu.numeroControlePNCP
+                                ? 'Enviando…'
+                                : 'Enviar',
+                            disabled:
+                              !rowForActionMenu.numeroControlePNCP ||
+                              sendingNumero === rowForActionMenu.numeroControlePNCP,
+                            onClick: () => {
+                              if (!rowForActionMenu.numeroControlePNCP) return;
+                              if (
+                                !window.confirm(
+                                  'Enviar esta licitação para a lista Por região (análise)?'
+                                )
+                              ) {
+                                return;
+                              }
+                              closeRowActionMenu();
+                              enviarAnaliseMutation.mutate(
+                                rowForActionMenu.numeroControlePNCP
+                              );
+                            },
+                            icon:
+                              sendingNumero === rowForActionMenu.numeroControlePNCP ? (
+                                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-red-600 dark:text-red-400" />
+                              ) : (
+                                <Send className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                              ),
+                          },
+                        ]
+                  }
+                />
+              ) : null}
             </>
           )}
         </CardContent>
@@ -1210,6 +1418,30 @@ function LicitacoesPncpPageContent() {
                     className="w-full"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status
+                </label>
+                <StringSingleSelectDropdown
+                  value={statusAnalise}
+                  onChange={(next) => {
+                    const value = (next as StatusAnaliseFiltro) || 'disponivel';
+                    setStatusAnalise(value);
+                    commitFilters({
+                      ufs,
+                      modalidadeCodigos,
+                      dataInicial,
+                      dataFinal,
+                      statusAnalise: value,
+                    });
+                  }}
+                  options={STATUS_ANALISE_OPTIONS}
+                  placeholder="Selecionar…"
+                  allowEmpty={false}
+                  disableSearch
+                />
               </div>
 
               <div>

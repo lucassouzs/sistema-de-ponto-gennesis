@@ -185,6 +185,7 @@ type LicitacaoRegiaoTab = {
   key: string;
   label: string;
   sheetName: string;
+  count?: number;
 };
 
 type LicitacaoDocumento = {
@@ -375,6 +376,7 @@ export default function LicitacoesPage() {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [regiaoKey, setRegiaoKey] = useState('');
+  const [planilhaRegiaoKey, setPlanilhaRegiaoKey] = useState('centro-oeste');
   const [estado, setEstado] = useState('');
   const [arquivadaMotivoFilter, setArquivadaMotivoFilter] = useState<LicitacaoArquivadaMotivo | ''>(
     ''
@@ -492,13 +494,14 @@ export default function LicitacoesPage() {
     [checklistSections, checklistState]
   );
 
-  const { data: regiaoTabs = [] } = useQuery({
+  const { data: regiaoTabs = [], isLoading: loadingRegiaoTabs } = useQuery({
     queryKey: ['licitacoes-planilha-regioes'],
     queryFn: async () => {
       const res = await api.get('/licitacoes/planilha-regioes');
       return (res.data?.data ?? []) as LicitacaoRegiaoTab[];
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30_000,
+    refetchInterval: viewMode === 'regioes' ? 30_000 : false,
   });
 
   const { data: listRaw = [], isLoading: loadingList } = useQuery({
@@ -1319,7 +1322,61 @@ export default function LicitacoesPage() {
           </div>
 
           {viewMode === 'regioes' ? (
-            <LicitacoesRegiaoPanel />
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <nav
+                className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
+                role="tablist"
+                aria-label="Regiões"
+              >
+                {(loadingRegiaoTabs && regiaoTabs.length === 0
+                  ? [
+                      { key: 'centro-oeste', label: 'Região Centro-Oeste' },
+                      { key: 'sudeste', label: 'Região Sudeste' },
+                      { key: 'nordeste', label: 'Região Nordeste' },
+                      { key: 'sul', label: 'Região Sul' },
+                      { key: 'norte', label: 'Região Norte' },
+                    ]
+                  : regiaoTabs
+                ).map((tab) => {
+                  const active = tab.key === planilhaRegiaoKey;
+                  const count =
+                    typeof (tab as LicitacaoRegiaoTab).count === 'number'
+                      ? (tab as LicitacaoRegiaoTab).count
+                      : null;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setPlanilhaRegiaoKey(tab.key)}
+                      className={`inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                        active
+                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      <span>{tab.label.replace(/^Região\s+/i, '')}</span>
+                      {count != null ? (
+                        <span
+                          className={`inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+                            active
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700/60 dark:text-gray-300'
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+          ) : null}
+
+          {viewMode === 'regioes' ? (
+            <LicitacoesRegiaoPanel regiaoKey={planilhaRegiaoKey} />
           ) : viewMode === 'banco-cats' ? (
             <BancoCatsPanel />
           ) : (

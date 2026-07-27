@@ -600,6 +600,46 @@ async function ensureLicitacaoRegiaoManuaisTable(prisma: PrismaClient): Promise<
   `);
 }
 
+async function ensurePncpEnviadosAnaliseTable(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "pncp_enviados_analise" (
+      "id" TEXT NOT NULL,
+      "numeroControlePNCP" TEXT NOT NULL,
+      "regiaoKey" TEXT NOT NULL,
+      "rowKey" TEXT NOT NULL,
+      "enviadoBy" TEXT NOT NULL,
+      "enviadoAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "pncp_enviados_analise_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pncp_enviados_analise_numero_key"
+    ON "pncp_enviados_analise"("numeroControlePNCP");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_enviados_analise_regiaoKey_idx"
+    ON "pncp_enviados_analise"("regiaoKey");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE "pncp_enviados_analise" ADD CONSTRAINT "pncp_enviados_analise_enviadoBy_fkey"
+        FOREIGN KEY ("enviadoBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+}
+
+async function ensurePncpNumeroCompraColumn(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "pncp_contratacoes"
+      ADD COLUMN IF NOT EXISTS "numeroCompra" TEXT;
+  `);
+}
+
 async function ensureBancoCatsServicosTable(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "banco_cats_servicos" (
@@ -746,6 +786,8 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoColumns(prisma);
     await ensureLicitacaoRegiaoAceitesTable(prisma);
     await ensureLicitacaoRegiaoManuaisTable(prisma);
+    await ensurePncpEnviadosAnaliseTable(prisma);
+    await ensurePncpNumeroCompraColumn(prisma);
     await ensureLicitacaoRegiaoSheetRowsTable(prisma);
     await ensureBancoCatsServicosTable(prisma);
     await ensureLicitacaoConfigTable(prisma);
