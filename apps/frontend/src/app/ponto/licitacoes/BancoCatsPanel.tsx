@@ -38,6 +38,7 @@ import api from '@/lib/api';
 import { exportBancoCatsSelecaoPdf } from '@/lib/exportBancoCatsSelecaoPdf';
 import {
   buildSearchIndexText,
+  containsKeyword,
   extractKeywords,
   matchByKeywords,
   normalizeMatchText,
@@ -505,7 +506,7 @@ export function BancoCatsPanel() {
       if (empresa && row.empresa !== empresa) return false;
       if (unidade && row.und !== unidade) return false;
       if (fonte && row.fonte !== fonte) return false;
-      if (tokens.length > 0 && !tokens.every((token) => row.searchText.includes(token))) {
+      if (tokens.length > 0 && !tokens.every((token) => containsKeyword(row.searchText, token))) {
         return false;
       }
       return true;
@@ -586,7 +587,7 @@ export function BancoCatsPanel() {
             match.item.und,
           ].join(' ')
         );
-        if (!keywordTokens.every((token) => haystack.includes(token))) return false;
+        if (!keywordTokens.every((token) => containsKeyword(haystack, token))) return false;
       }
       return true;
     });

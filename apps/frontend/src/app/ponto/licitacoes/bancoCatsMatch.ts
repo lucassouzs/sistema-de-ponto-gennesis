@@ -283,15 +283,94 @@ function keywordWeight(keyword: string): number {
   return 1;
 }
 
-function containsKeyword(searchText: string, keyword: string): boolean {
+/** Pluraliza forma comum em português (texto já normalizado, sem acento). */
+function toPortuguesePlural(word: string): string | null {
+  if (word.length < 3 || word.endsWith('s')) return null;
+
+  if (word.endsWith('ao') && word.length >= 3) return `${word.slice(0, -2)}oes`;
+  if (word.endsWith('m')) return `${word.slice(0, -1)}ns`;
+  if (word.endsWith('al') && word.length > 3) return `${word.slice(0, -2)}ais`;
+  if (word.endsWith('el') && word.length > 3) return `${word.slice(0, -2)}eis`;
+  if (word.endsWith('ol') && word.length > 3) return `${word.slice(0, -2)}ois`;
+  if (word.endsWith('ul') && word.length > 3) return `${word.slice(0, -2)}uis`;
+  if (word.endsWith('il') && word.length > 3) return `${word.slice(0, -2)}is`;
+  if (/[rzn]$/.test(word)) return `${word}es`;
+
+  const last = word[word.length - 1];
+  if ('aeiou'.includes(last)) return `${word}s`;
+  return null;
+}
+
+/** Singulariza forma comum em português (texto já normalizado, sem acento). */
+function toPortugueseSingular(word: string): string | null {
+  if (word.length < 4 || !word.endsWith('s')) return null;
+
+  if (word.endsWith('oes') && word.length > 4) return `${word.slice(0, -3)}ao`;
+  if (word.endsWith('aes') && word.length > 4) return `${word.slice(0, -3)}ao`;
+  if (word.endsWith('aos') && word.length > 4) return `${word.slice(0, -3)}ao`;
+  if (word.endsWith('ais') && word.length > 4) return `${word.slice(0, -3)}al`;
+  if (word.endsWith('eis') && word.length > 4) return `${word.slice(0, -3)}el`;
+  if (word.endsWith('ois') && word.length > 4) return `${word.slice(0, -3)}ol`;
+  if (word.endsWith('uis') && word.length > 4) return `${word.slice(0, -3)}ul`;
+  if (word.endsWith('ns') && word.length > 3) return `${word.slice(0, -2)}m`;
+
+  if (word.endsWith('es') && word.length > 4) {
+    const stem = word.slice(0, -2);
+    if (/[rzn]$/.test(stem)) return stem;
+  }
+
+  // telhas → telha, metalicas → metalica (exige ≥4 letras no singular)
+  if (word.length > 4) {
+    const withoutS = word.slice(0, -1);
+    const last = withoutS[withoutS.length - 1];
+    if ('aeiou'.includes(last) && withoutS.length >= 4) return withoutS;
+  }
+
+  return null;
+}
+
+/**
+ * Expande um token textual para singular e plural em português,
+ * para que "telha" e "telhas" (ou "metalica"/"metalicas") casem entre si.
+ */
+export function expandPortugueseNumberVariants(token: string): string[] {
+  if (!token || UNIT_WORDS.has(token) || isNumericToken(token)) return [token];
+  if (token.length < 3 || !/^[a-z]+(-[a-z]+)*$/.test(token)) return [token];
+
+  const forms = new Set<string>([token]);
+  const singular = toPortugueseSingular(token);
+  if (singular) forms.add(singular);
+
+  const pluralFromToken = toPortuguesePlural(token);
+  if (pluralFromToken) forms.add(pluralFromToken);
+
+  if (singular) {
+    const pluralFromSingular = toPortuguesePlural(singular);
+    if (pluralFromSingular) forms.add(pluralFromSingular);
+  }
+
+  return Array.from(forms);
+}
+
+function tokenMatchesInSearchText(searchText: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`);
+  return pattern.test(searchText);
+}
+
+/** Verifica se a chave aparece no texto indexado (números/unidades exatos; texto com plural PT). */
+export function containsKeyword(searchText: string, keyword: string): boolean {
   // Busca por token delimitado sempre que possível, para evitar falso positivo
   // (ex.: "1.5" não deve casar dentro de "11.5" sem contexto).
   if (isNumericToken(keyword) || UNIT_WORDS.has(keyword)) {
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`);
-    return pattern.test(searchText);
+    return tokenMatchesInSearchText(searchText, keyword);
   }
-  return searchText.includes(keyword);
+
+  // Singular/plural: "telha" ↔ "telhas", "metalica" ↔ "metalicas"
+  for (const variant of expandPortugueseNumberVariants(keyword)) {
+    if (tokenMatchesInSearchText(searchText, variant)) return true;
+  }
+  return false;
 }
 
 /**
