@@ -729,7 +729,10 @@ function SolicitarMateriaisPage() {
 
   const lockedUnbCostCenterId = useMemo(() => {
     if (!isUnbUser) return null;
-    return resolveLockedUnbCostCenterId(costCenters, unbCostCenterIds);
+    const costCentersWithId = costCenters.filter(
+      (cc): cc is typeof cc & { id: string } => !!cc.id
+    );
+    return resolveLockedUnbCostCenterId(costCentersWithId, unbCostCenterIds);
   }, [isUnbUser, costCenters, unbCostCenterIds]);
 
   const { data: contractOptionsData, isLoading: loadingContracts } = useQuery({
