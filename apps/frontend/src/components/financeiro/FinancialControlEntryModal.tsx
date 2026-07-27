@@ -9,9 +9,11 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import api from '@/lib/api';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
+  FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
   MONTHS_PT,
   STATUS_OPTIONS,
   type EntryFormState,
+  type FinancialControlConsorcio,
   type FinancialControlEntry,
   type FinancialControlStatus,
   buildFinancialEntryPayload,
@@ -20,6 +22,7 @@ import {
   entryToForm,
 } from '@/components/financeiro/financialControlEntry';
 import { FinancialControlOcQuickLaunch } from '@/components/financeiro/FinancialControlOcQuickLaunch';
+import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 
 const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
   MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label }))
@@ -34,6 +37,8 @@ export type FinancialControlEntryModalProps = {
   initialValues?: Partial<EntryFormState>;
   defaultPaymentMonth?: number;
   defaultPaymentYear?: number;
+  /** Consórcio pré-selecionado ao criar (ex.: aba ativa). */
+  defaultConsorcio?: FinancialControlConsorcio;
   /** Resumo automático sem campos editáveis (lançamento a partir da OC). */
   simplifiedFromOc?: boolean;
 };
@@ -139,12 +144,17 @@ export function FinancialControlEntryModal({
   initialValues,
   defaultPaymentMonth,
   defaultPaymentYear,
+  defaultConsorcio = 'brasilia',
   simplifiedFromOc = false,
 }: FinancialControlEntryModalProps) {
   const queryClient = useQueryClient();
   const now = new Date();
   const [form, setForm] = useState<EntryFormState>(() =>
-    buildInitialForm(defaultPaymentMonth ?? now.getMonth() + 1, defaultPaymentYear ?? now.getFullYear())
+    buildInitialForm(
+      defaultPaymentMonth ?? now.getMonth() + 1,
+      defaultPaymentYear ?? now.getFullYear(),
+      defaultConsorcio
+    )
   );
   const [interestValue, setInterestValue] = useState('');
 
@@ -158,10 +168,11 @@ export function FinancialControlEntryModal({
     const month = defaultPaymentMonth ?? now.getMonth() + 1;
     const year = defaultPaymentYear ?? now.getFullYear();
     setForm({
-      ...buildInitialForm(month, year),
+      ...buildInitialForm(month, year, defaultConsorcio),
       ...initialValues,
+      consorcio: initialValues?.consorcio ?? defaultConsorcio,
     });
-  }, [isOpen, editingEntry, initialValues, defaultPaymentMonth, defaultPaymentYear]);
+  }, [isOpen, editingEntry, initialValues, defaultPaymentMonth, defaultPaymentYear, defaultConsorcio]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof buildFinancialEntryPayload>) => {
@@ -248,6 +259,22 @@ export function FinancialControlEntryModal({
       ) : (
       <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
         <input type="text" name="prevent-autofill" autoComplete="off" className="hidden" tabIndex={-1} />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Consórcio <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((opt) => (
+              <ButtonSeg
+                key={opt.value}
+                active={form.consorcio === opt.value}
+                onClick={() => setForm({ ...form, consorcio: opt.value })}
+                label={opt.label}
+              />
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>

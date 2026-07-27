@@ -3,8 +3,11 @@ export { FINANCIAL_CONTROL_STATUS_OPTIONS as STATUS_OPTIONS } from '@/lib/financ
 
 import type { FinancialControlStatus } from '@/lib/financialControlStatus';
 
+export type FinancialControlConsorcio = 'brasilia' | 'hub';
+
 export interface FinancialControlEntry {
   id: string;
+  consorcio?: FinancialControlConsorcio;
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -43,6 +46,7 @@ export const MONTHS_PT = [
 
 export interface EntryFormState {
   id?: string;
+  consorcio: FinancialControlConsorcio;
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -108,8 +112,13 @@ function dateInputValue(value: string | null | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
-export function buildInitialForm(month: number, year: number): EntryFormState {
+export function buildInitialForm(
+  month: number,
+  year: number,
+  consorcio: FinancialControlConsorcio = 'brasilia'
+): EntryFormState {
   return {
+    consorcio,
     paymentMonth: month,
     paymentYear: year,
     status: 'AGUARDAR_PAGAMENTO',
@@ -133,6 +142,7 @@ export function buildInitialForm(month: number, year: number): EntryFormState {
 export function entryToForm(entry: FinancialControlEntry): EntryFormState {
   return {
     id: entry.id,
+    consorcio: entry.consorcio === 'hub' ? 'hub' : 'brasilia',
     paymentMonth: entry.paymentMonth,
     paymentYear: entry.paymentYear,
     status: entry.status,
@@ -167,6 +177,7 @@ export function buildInitialFormFromPurchaseOrder(order: {
   const amount = Number(order.amountToPay);
   const amountStr = Number.isFinite(amount) && amount > 0 ? formatCurrencyValue(amount) : '';
   return {
+    consorcio: 'brasilia',
     paymentMonth: Number.isNaN(orderD.getTime()) ? now.getMonth() + 1 : orderD.getMonth() + 1,
     paymentYear: Number.isNaN(orderD.getTime()) ? now.getFullYear() : orderD.getFullYear(),
     status: 'LANCADO',
@@ -190,6 +201,7 @@ export function buildInitialFormFromPurchaseOrder(order: {
 export function formToPayload(form: EntryFormState) {
   const computedRemainingDays = calcRemainingDays(form.dueDate, form.paidDate);
   return {
+    consorcio: form.consorcio === 'hub' ? 'hub' : 'brasilia',
     paymentMonth: form.paymentMonth,
     paymentYear: form.paymentYear,
     status: form.status,

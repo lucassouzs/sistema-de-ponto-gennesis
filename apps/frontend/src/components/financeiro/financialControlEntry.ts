@@ -12,8 +12,24 @@ export {
 
 import type { FinancialControlStatus } from '@/lib/financialControlStatus';
 
+export type FinancialControlConsorcio = 'brasilia' | 'hub';
+
+export const FINANCIAL_CONTROL_CONSORCIO_OPTIONS: Array<{
+  value: FinancialControlConsorcio;
+  label: string;
+}> = [
+  { value: 'brasilia', label: 'Consórcio Predial Brasília' },
+  { value: 'hub', label: 'Consórcio Predial HUB' },
+];
+
+export const FINANCIAL_CONTROL_CONSORCIO_LABELS: Record<FinancialControlConsorcio, string> = {
+  brasilia: 'Consórcio Predial Brasília',
+  hub: 'Consórcio Predial HUB',
+};
+
 export interface FinancialControlEntry {
   id: string;
+  consorcio: FinancialControlConsorcio;
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -52,6 +68,7 @@ export const MONTHS_PT = [
 
 export interface EntryFormState {
   id?: string;
+  consorcio: FinancialControlConsorcio;
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -124,8 +141,13 @@ export function dateInputValue(value: string | null | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
-export function buildInitialForm(month: number, year: number): EntryFormState {
+export function buildInitialForm(
+  month: number,
+  year: number,
+  consorcio: FinancialControlConsorcio = 'brasilia'
+): EntryFormState {
   return {
+    consorcio,
     paymentMonth: month,
     paymentYear: year,
     status: 'AGUARDAR_PAGAMENTO',
@@ -149,6 +171,7 @@ export function buildInitialForm(month: number, year: number): EntryFormState {
 export function entryToForm(entry: FinancialControlEntry): EntryFormState {
   return {
     id: entry.id,
+    consorcio: entry.consorcio === 'hub' ? 'hub' : 'brasilia',
     paymentMonth: entry.paymentMonth,
     paymentYear: entry.paymentYear,
     status: entry.status,
@@ -173,6 +196,7 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
 export function buildFinancialEntryPayload(form: EntryFormState) {
   const computedRemainingDays = calcRemainingDays(form.dueDate, form.paidDate);
   return {
+    consorcio: form.consorcio === 'hub' ? 'hub' : 'brasilia',
     paymentMonth: form.paymentMonth,
     paymentYear: form.paymentYear,
     status: form.status,
@@ -368,6 +392,7 @@ export function buildFormFromPurchaseOrder(
   return {
     paymentMonth: now.getMonth() + 1,
     paymentYear: now.getFullYear(),
+    consorcio: 'brasilia',
     status: 'LANCADO',
     osCode,
     supplierName: (order.supplier?.name || '').trim(),

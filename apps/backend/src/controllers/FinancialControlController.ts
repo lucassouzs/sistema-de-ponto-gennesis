@@ -15,11 +15,23 @@ const ALLOWED_STATUSES: FinancialControlStatus[] = [
   'CANCELADO',
 ];
 
+const ALLOWED_CONSORCIOS = ['brasilia', 'hub'] as const;
+type FinancialControlConsorcio = (typeof ALLOWED_CONSORCIOS)[number];
+
 function parseStatus(value: unknown): FinancialControlStatus | null {
   if (typeof value !== 'string') return null;
   const upper = value.toUpperCase().trim();
   if (ALLOWED_STATUSES.includes(upper as FinancialControlStatus)) {
     return upper as FinancialControlStatus;
+  }
+  return null;
+}
+
+function parseConsorcio(value: unknown): FinancialControlConsorcio | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (ALLOWED_CONSORCIOS.includes(normalized as FinancialControlConsorcio)) {
+    return normalized as FinancialControlConsorcio;
   }
   return null;
 }
@@ -115,6 +127,13 @@ function buildEntryData(body: any, userId?: string | null, isUpdate = false) {
     if (!s) throw createError('Status inválido', 400);
     (data as any).status = s;
   }
+  if (body.consorcio !== undefined) {
+    const c = parseConsorcio(body.consorcio);
+    if (!c) throw createError('Consórcio inválido (brasilia | hub)', 400);
+    (data as any).consorcio = c;
+  } else if (!isUpdate) {
+    (data as any).consorcio = 'brasilia';
+  }
   if (body.osCode !== undefined) (data as any).osCode = body.osCode || null;
   if (body.supplierName !== undefined) (data as any).supplierName = body.supplierName || null;
   if (body.nfNumber !== undefined) (data as any).nfNumber = body.nfNumber || null;
@@ -143,9 +162,13 @@ function buildEntryData(body: any, userId?: string | null, isUpdate = false) {
 export class FinancialControlController {
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { month, year, status, search } = req.query;
+      const { month, year, status, search, consorcio } = req.query;
       const where: Prisma.FinancialControlEntryWhereInput = {};
 
+      if (consorcio) {
+        const c = parseConsorcio(consorcio);
+        if (c) where.consorcio = c;
+      }
       if (month) {
         const m = parseInt(String(month), 10);
         if (!isNaN(m)) where.paymentMonth = m;
@@ -325,6 +348,7 @@ export class FinancialControlController {
       if (!req.file) throw createError('Arquivo não enviado', 400);
 
       const mode = (req.body?.mode as string) || 'append'; // append | replace
+      const consorcio = parseConsorcio(req.body?.consorcio) || 'brasilia';
       const userId = req.user?.id || null;
 
       const parsed = await parseControleFinanceiroSpreadsheet(req.file.buffer);
@@ -341,7 +365,7 @@ export class FinancialControlController {
               new Set(parsed.entries.map((e) => `${e.paymentYear}-${e.paymentMonth}`)),
             ).map((s) => {
               const [y, m] = s.split('-').map(Number);
-              return { paymentYear: y, paymentMonth: m };
+              return { paymentYear: y, paymentMonth: m, consorcio };
             });
 
             if (monthYearPairs.length) {
@@ -357,6 +381,7 @@ export class FinancialControlController {
             const batch = parsed.entries.slice(i, i + IMPORT_BATCH_SIZE);
             const insert = await tx.financialControlEntry.createMany({
               data: batch.map((entry) => ({
+                consorcio,
                 paymentMonth: entry.paymentMonth,
                 paymentYear: entry.paymentYear,
                 status: entry.status,

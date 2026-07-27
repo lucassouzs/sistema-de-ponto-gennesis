@@ -17,8 +17,12 @@ import {
   type EntryFormState,
   type FinancialControlEntry,
 } from '@/lib/financialControlEntry';
-import { buildQuickLaunchPayload } from '@/components/financeiro/financialControlEntry';
+import {
+  FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  buildQuickLaunchPayload,
+} from '@/components/financeiro/financialControlEntry';
 import { FinancialControlOcQuickLaunch } from '@/components/financeiro/FinancialControlOcQuickLaunch';
+import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 
 const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
   MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label }))
@@ -234,6 +238,22 @@ export function FinancialControlEntryFormModal({
       ) : (
       <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
         <input type="text" name="prevent-autofill" autoComplete="off" className="hidden" tabIndex={-1} />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Consórcio <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((opt) => (
+              <ButtonSeg
+                key={opt.value}
+                active={form.consorcio === opt.value}
+                onClick={() => setForm({ ...form, consorcio: opt.value })}
+                label={opt.label}
+              />
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>

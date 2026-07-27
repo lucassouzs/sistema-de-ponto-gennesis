@@ -7,8 +7,6 @@ import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ClipboardCheck,
   ClipboardList,
   Clock,
@@ -28,13 +26,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { CadastroListEmpty } from '@/components/ui/CadastroListSummary';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { FinancialControlEntryModal } from '@/components/financeiro/FinancialControlEntryModal';
-import { resolveNfAndParcelForDisplay } from '@/components/financeiro/financialControlEntry';
+import {
+  FINANCIAL_CONTROL_CONSORCIO_LABELS,
+  FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  resolveNfAndParcelForDisplay,
+  type FinancialControlConsorcio,
+} from '@/components/financeiro/financialControlEntry';
+import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import api from '@/lib/api';
 import { formatDateBr, parseDateSafe } from '@/lib/dateTimeBr';
@@ -56,6 +62,7 @@ const MONTH_GROUP_PAGE_SIZE = 25;
 
 type FinancialControlEntry = {
   id: string;
+  consorcio?: FinancialControlConsorcio;
   paymentMonth: number;
   paymentYear: number;
   status: FinancialControlStatus;
@@ -76,6 +83,80 @@ type FinancialControlEntry = {
   createdAt: string;
   updatedAt: string;
 };
+
+function ConsorcioTabNav({
+  active,
+  onChange,
+}: {
+  active: FinancialControlConsorcio;
+  onChange: (key: FinancialControlConsorcio) => void;
+}) {
+  return (
+    <div className="border-b border-gray-200 dark:border-gray-700">
+      <nav
+        className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
+        role="tablist"
+        aria-label="Consórcios do controle financeiro"
+      >
+        {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((tab) => {
+          const isActive = active === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onChange(tab.value)}
+              className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                isActive
+                  ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+function computeDashboardStats(entries: FinancialControlEntry[]) {
+  let totalFinalSum = 0;
+  const byStatus: Record<FinancialControlStatus, { count: number; sum: number }> = {
+    PROCESSO_COMPLETO: { count: 0, sum: 0 },
+    PAGO: { count: 0, sum: 0 },
+    AGUARDAR_NOTA: { count: 0, sum: 0 },
+    AGUARDAR_PAGAMENTO: { count: 0, sum: 0 },
+    LANCADO: { count: 0, sum: 0 },
+    CANCELADO: { count: 0, sum: 0 },
+  };
+
+  for (const entry of entries) {
+    const final = Number(entry.finalValue ?? 0) || 0;
+    const isCancelado = entry.status === 'CANCELADO';
+
+    if (!isCancelado) {
+      totalFinalSum += final;
+    }
+
+    byStatus[entry.status].count += 1;
+    if (!isCancelado) {
+      byStatus[entry.status].sum += final;
+    }
+  }
+
+  return {
+    total: entries.length,
+    totalFinalSum,
+    byStatus,
+    pagoAguardarNota: {
+      count: byStatus.PAGO.count + byStatus.AGUARDAR_NOTA.count,
+      sum: byStatus.PAGO.sum + byStatus.AGUARDAR_NOTA.sum,
+    },
+  };
+}
 
 const STATUS_STYLES = FINANCIAL_CONTROL_STATUS_STYLES;
 const STATUS_FILTER_OPTIONS = FINANCIAL_CONTROL_STATUS_FILTER_OPTIONS;
@@ -266,29 +347,37 @@ export default function ControleFinanceiroPage() {
 
   const now = new Date();
   const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
 
   const [filters, setFilters] = useState({
     year: currentYear,
-    month: 0, // 0 = todos os meses
+    month: currentMonth,
     status: '' as '' | FinancialControlStatus,
     search: '',
     overdueOnly: false,
   });
+  const [consorcio, setConsorcio] = useState<FinancialControlConsorcio>('brasilia');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<FinancialControlEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchExpanded = searchOpen || filters.search.trim().length > 0;
 
   useEffect(() => {
-    const id = requestAnimationFrame(() => searchInputRef.current?.blur());
-    return () => cancelAnimationFrame(id);
-  }, []);
+    if (!searchExpanded) return;
+    const id = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [searchExpanded]);
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
+  const [importConsorcio, setImportConsorcio] = useState<FinancialControlConsorcio>('brasilia');
   const [importResult, setImportResult] = useState<
     | null
     | {
@@ -299,21 +388,22 @@ export default function ControleFinanceiroPage() {
       }
   >(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const importConsorcioLabel = FINANCIAL_CONTROL_CONSORCIO_LABELS[importConsorcio];
 
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
+    params.append('consorcio', consorcio);
     if (filters.year > 0) params.append('year', String(filters.year));
-    if (filters.month) params.append('month', String(filters.month));
-    // "Aguardar nota" inclui PAGO no cliente; não filtra só AGUARDAR_NOTA na API.
+    if (filters.month > 0) params.append('month', String(filters.month));
     if (filters.status && filters.status !== 'AGUARDAR_NOTA') {
       params.append('status', filters.status);
     }
     if (filters.search.trim()) params.append('search', filters.search.trim());
     return params.toString();
-  }, [filters]);
+  }, [consorcio, filters]);
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['financial-control', queryParams],
+    queryKey: ['financial-control', consorcio, queryParams],
     queryFn: async () => {
       const res = await api.get(`/financial-control${queryParams ? `?${queryParams}` : ''}`);
       return (res.data?.data as FinancialControlEntry[]) || [];
@@ -343,79 +433,22 @@ export default function ControleFinanceiroPage() {
     });
   }, [rawEntries, filters.status, filters.overdueOnly]);
 
-  const groupedByMonth = useMemo(() => {
-    const groups = new Map<string, { year: number; month: number; items: FinancialControlEntry[] }>();
-    for (const entry of entries) {
-      const key = `${entry.paymentYear}-${String(entry.paymentMonth).padStart(2, '0')}`;
-      if (!groups.has(key)) {
-        groups.set(key, { year: entry.paymentYear, month: entry.paymentMonth, items: [] });
-      }
-      groups.get(key)!.items.push(entry);
-    }
-    const grouped = Array.from(groups.values());
-    grouped.forEach((group) => {
-      group.items.sort((a, b) => {
-        const dueA = a.dueDate ? (parseDateSafe(a.dueDate)?.getTime() ?? Number.NEGATIVE_INFINITY) : Number.NEGATIVE_INFINITY;
-        const dueB = b.dueDate ? (parseDateSafe(b.dueDate)?.getTime() ?? Number.NEGATIVE_INFINITY) : Number.NEGATIVE_INFINITY;
-        if (dueA !== dueB) return dueB - dueA;
-        return (a.supplierName || '').localeCompare(b.supplierName || '', 'pt-BR');
-      });
-    });
-    return grouped.sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.month - b.month;
+  const listEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      if (a.paymentYear !== b.paymentYear) return b.paymentYear - a.paymentYear;
+      if (a.paymentMonth !== b.paymentMonth) return b.paymentMonth - a.paymentMonth;
+      const dueA = a.dueDate
+        ? (parseDateSafe(a.dueDate)?.getTime() ?? Number.NEGATIVE_INFINITY)
+        : Number.NEGATIVE_INFINITY;
+      const dueB = b.dueDate
+        ? (parseDateSafe(b.dueDate)?.getTime() ?? Number.NEGATIVE_INFINITY)
+        : Number.NEGATIVE_INFINITY;
+      if (dueA !== dueB) return dueB - dueA;
+      return (a.supplierName || '').localeCompare(b.supplierName || '', 'pt-BR');
     });
   }, [entries]);
 
-  /**
-   * Métricas exibidas nos cards do topo. Calculadas sobre o `finalValue`
-   * (valor real a pagar/pago). Reflete os filtros vigentes (ano/mês/status/
-   * busca/atraso) para dar uma visão do recorte atual.
-   */
-  const stats = useMemo(() => {
-    let totalFinalSum = 0;
-    let totalPagoSum = 0;
-    const byStatus: Record<
-      FinancialControlStatus,
-      { count: number; sum: number }
-    > = {
-      PROCESSO_COMPLETO: { count: 0, sum: 0 },
-      PAGO: { count: 0, sum: 0 },
-      AGUARDAR_NOTA: { count: 0, sum: 0 },
-      AGUARDAR_PAGAMENTO: { count: 0, sum: 0 },
-      LANCADO: { count: 0, sum: 0 },
-      CANCELADO: { count: 0, sum: 0 },
-    };
-
-    for (const entry of entries) {
-      const final = Number(entry.finalValue ?? 0) || 0;
-      const isCancelado = entry.status === 'CANCELADO';
-
-      if (!isCancelado) {
-        totalFinalSum += final;
-      }
-
-      byStatus[entry.status].count += 1;
-      if (!isCancelado) {
-        byStatus[entry.status].sum += final;
-      }
-
-      if (isFinancialControlPaidStatus(entry.status)) {
-        totalPagoSum += final;
-      }
-    }
-
-    return {
-      total: entries.length,
-      totalFinalSum,
-      totalPagoSum,
-      byStatus,
-      pagoAguardarNota: {
-        count: byStatus.PAGO.count + byStatus.AGUARDAR_NOTA.count,
-        sum: byStatus.PAGO.sum + byStatus.AGUARDAR_NOTA.sum,
-      },
-    };
-  }, [entries]);
+  const stats = useMemo(() => computeDashboardStats(listEntries), [listEntries]);
 
   function dashboardCardStats(
     key: 'PROCESSO_COMPLETO' | 'PAGO_AGUARDAR_NOTA' | 'AGUARDAR_PAGAMENTO',
@@ -426,15 +459,17 @@ export default function ControleFinanceiroPage() {
 
   const availableYears = useMemo(() => {
     const setYears = new Set<number>();
-    // Garante anos de 2023 até o ano atual (ou maior, se houver dados futuros)
     const minYear = 2023;
-    const maxYear = Math.max(currentYear, ...entries.map((e) => e.paymentYear));
+    const maxYear = Math.max(
+      currentYear,
+      ...rawEntries.map((e) => e.paymentYear),
+      ...listEntries.map((e) => e.paymentYear),
+    );
     for (let y = minYear; y <= maxYear; y++) {
       setYears.add(y);
     }
-    entries.forEach((e) => setYears.add(e.paymentYear));
     return Array.from(setYears).sort((a, b) => b - a);
-  }, [entries, currentYear]);
+  }, [listEntries, rawEntries, currentYear]);
 
   const yearFilterOptions = useMemo(
     () =>
@@ -467,6 +502,12 @@ export default function ControleFinanceiroPage() {
     ]);
   }, [rawEntries]);
 
+  const hasActivePeriodFilter =
+    filters.year !== currentYear ||
+    filters.month !== currentMonth ||
+    filters.status !== '' ||
+    filters.overdueOnly;
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await api.delete(`/financial-control/${id}`);
@@ -484,10 +525,19 @@ export default function ControleFinanceiroPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: async ({ file, mode }: { file: File; mode: 'append' | 'replace' }) => {
+    mutationFn: async ({
+      file,
+      mode,
+      consorcio: importConsorcio,
+    }: {
+      file: File;
+      mode: 'append' | 'replace';
+      consorcio: FinancialControlConsorcio;
+    }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('mode', mode);
+      formData.append('consorcio', importConsorcio);
       const res = await api.post('/financial-control/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
@@ -509,6 +559,7 @@ export default function ControleFinanceiroPage() {
   const openImportModal = () => {
     setImportFile(null);
     setImportMode('append');
+    setImportConsorcio(consorcio);
     setImportResult(null);
     setIsImportOpen(true);
   };
@@ -526,7 +577,7 @@ export default function ControleFinanceiroPage() {
       toast.error('Selecione um arquivo .xlsx, .xls ou .csv para importar');
       return;
     }
-    importMutation.mutate({ file: importFile, mode: importMode });
+    importMutation.mutate({ file: importFile, mode: importMode, consorcio: importConsorcio });
   };
 
   const openCreateModal = () => {
@@ -551,20 +602,18 @@ export default function ControleFinanceiroPage() {
   };
 
   const handleExport = () => {
-    if (entries.length === 0) {
+    if (listEntries.length === 0) {
       toast.error('Nenhum lançamento para exportar com os filtros atuais.');
       return;
     }
     try {
       const yearPart = filters.year > 0 ? String(filters.year) : 'todos-anos';
       const monthPart =
-        filters.month > 0
-          ? `-${String(filters.month).padStart(2, '0')}`
-          : '';
+        filters.month > 0 ? `-${String(filters.month).padStart(2, '0')}` : '';
       const statusPart = filters.status ? `-${filters.status.toLowerCase()}` : '';
-      const suffix = `${yearPart}${monthPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
-      exportFinancialControlEntries(entries, suffix);
-      toast.success(`${entries.length} lançamento(s) exportado(s).`);
+      const suffix = `${consorcio}-${yearPart}${monthPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
+      exportFinancialControlEntries(listEntries, suffix);
+      toast.success(`${listEntries.length} lançamento(s) exportado(s).`);
     } catch {
       toast.error('Erro ao exportar planilha.');
     }
@@ -586,69 +635,120 @@ export default function ControleFinanceiroPage() {
 
           {/* Barra de ações */}
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                placeholder="Pesquisar lançamento..."
-                className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-              {filters.search && (
-                <button
-                  type="button"
-                  onClick={() => setFilters({ ...filters, search: '' })}
-                  aria-label="Limpar busca"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            <div
+              className={`relative h-10 shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-600 dark:bg-gray-800 ${
+                searchExpanded ? 'w-[min(100%,280px)] sm:w-[280px]' : 'w-10'
+              }`}
+            >
+              <button
+                type="button"
+                tabIndex={searchExpanded ? -1 : 0}
+                aria-hidden={searchExpanded}
+                onClick={() => setSearchOpen(true)}
+                className={`absolute inset-0 z-10 inline-flex items-center justify-center text-gray-700 outline-none transition-opacity duration-200 hover:bg-gray-50 focus:ring-0 dark:text-gray-200 dark:hover:bg-gray-700 ${
+                  searchExpanded ? 'pointer-events-none opacity-0' : 'opacity-100'
+                }`}
+                title="Pesquisar lançamento"
+                aria-label="Pesquisar lançamento"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+
+              <div
+                className={`absolute inset-0 transition-opacity duration-200 ${
+                  searchExpanded
+                    ? 'opacity-100 delay-75'
+                    : 'pointer-events-none opacity-0'
+                }`}
+              >
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  onBlur={() => {
+                    if (!filters.search.trim()) setSearchOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      if (filters.search) {
+                        setFilters({ ...filters, search: '' });
+                      } else {
+                        setSearchOpen(false);
+                      }
+                    }
+                  }}
+                  placeholder="Pesquisar lançamento..."
+                  tabIndex={searchExpanded ? 0 : -1}
+                  className="h-full w-full bg-transparent py-2 pl-9 pr-9 text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-100"
+                  aria-label="Pesquisar lançamento"
+                />
+                {filters.search ? (
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setFilters({ ...filters, search: '' });
+                      searchInputRef.current?.focus();
+                    }}
+                    aria-label="Limpar busca"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-gray-600 focus:ring-0 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
             </div>
+
             <button
               type="button"
               onClick={() => setIsFiltersModalOpen(true)}
               className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                filters.overdueOnly
+                hasActivePeriodFilter
                   ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
                   : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
               }`}
               aria-label="Abrir filtro"
-              title={filters.overdueOnly ? 'Filtro (em atraso ativo)' : 'Filtro'}
+              title={hasActivePeriodFilter ? 'Filtro ativo' : 'Filtro'}
             >
               <Filter className="h-4 w-4" />
-              {filters.overdueOnly && (
+              {hasActivePeriodFilter && (
                 <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
               )}
             </button>
             <button
               type="button"
               onClick={handleExport}
-              disabled={isLoading || entries.length === 0}
-              className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+              disabled={isLoading || listEntries.length === 0}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              aria-label="Exportar"
+              title="Exportar"
             >
-              <Download className="h-4 w-4 shrink-0" />
-              <span>Exportar</span>
+              <Download className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={openImportModal}
-              className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              aria-label="Importar"
+              title="Importar"
             >
-              <Upload className="h-4 w-4 shrink-0" />
-              <span>Importar</span>
+              <Upload className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={openCreateModal}
-              className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+              aria-label="Novo pagamento"
+              title="Novo pagamento"
             >
               <Plus className="h-4 w-4 shrink-0" />
-              <span>Novo Lançamento</span>
+              <span>Novo pagamento</span>
             </button>
           </div>
+
+          <ConsorcioTabNav active={consorcio} onChange={setConsorcio} />
 
           {/* Dashboards — valor total (sem cancelados) + status da planilha */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
@@ -699,45 +799,6 @@ export default function ControleFinanceiroPage() {
             })}
           </div>
 
-          {/* Taxa de pagamento — barra de progresso */}
-          {stats.total > 0 && (
-            <Card>
-              <CardContent className="p-4 sm:p-6">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Taxa de pagamento
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                      {stats.totalFinalSum > 0
-                        ? `${Math.round(
-                            (stats.totalPagoSum / stats.totalFinalSum) * 100
-                          )}%`
-                        : '0%'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-green-500 dark:bg-green-500 h-2 rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          stats.totalFinalSum > 0
-                            ? (stats.totalPagoSum / stats.totalFinalSum) * 100
-                            : 0
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {formatCurrency(stats.totalPagoSum)} pagos de{' '}
-                    {formatCurrency(stats.totalFinalSum)} ao todo
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Conteúdo */}
           {isLoading ? (
             <Card>
@@ -772,31 +833,34 @@ export default function ControleFinanceiroPage() {
                 </div>
               </CardContent>
             </Card>
-          ) : groupedByMonth.length === 0 ? (
+          ) : listEntries.length === 0 ? (
             <Card>
-              <CardContent className="p-8">
-                <div className="text-center">
-                  <ClipboardList className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Nenhum lançamento encontrado para os filtros selecionados.
-                  </p>
-                </div>
+              <CardContent className={cadastroListClasses.cardContent}>
+                <CadastroListEmpty
+                  icon={ClipboardList}
+                  title={
+                    filters.search.trim() || hasActivePeriodFilter
+                      ? 'Nenhum resultado encontrado'
+                      : 'Nenhum lançamento encontrado'
+                  }
+                  hint={
+                    filters.search.trim() || hasActivePeriodFilter
+                      ? 'Ajuste a busca ou os filtros e tente novamente.'
+                      : 'Use Novo Lançamento ou Importar para adicionar os primeiros registros.'
+                  }
+                />
               </CardContent>
             </Card>
           ) : (
-            <div className="flex flex-col gap-4 sm:gap-6">
-              {groupedByMonth.map((group) => (
-                <MonthGroup
-                  key={`${group.year}-${group.month}`}
-                  year={group.year}
-                  month={group.month}
-                  items={group.items}
-                  onEdit={openEditModal}
-                  onDelete={handleDelete}
-                  deletingId={deletingId}
-                />
-              ))}
-            </div>
+            <MonthGroup
+              key={`${consorcio}-${filters.year}-${filters.month}`}
+              year={filters.year}
+              month={filters.month}
+              items={listEntries}
+              onEdit={openEditModal}
+              onDelete={handleDelete}
+              deletingId={deletingId}
+            />
           )}
         </div>
 
@@ -804,8 +868,9 @@ export default function ControleFinanceiroPage() {
           isOpen={isModalOpen}
           onClose={closeModal}
           editingEntry={editingEntry}
-          defaultPaymentMonth={filters.month || now.getMonth() + 1}
+          defaultPaymentMonth={filters.month || currentMonth}
           defaultPaymentYear={filters.year || currentYear}
+          defaultConsorcio={consorcio}
         />
 
         {/* Modal de Filtros */}
@@ -908,7 +973,7 @@ export default function ControleFinanceiroPage() {
                 onClick={() => {
                   setFilters({
                     year: currentYear,
-                    month: 0,
+                    month: currentMonth,
                     status: '',
                     search: filters.search,
                     overdueOnly: false,
@@ -937,6 +1002,21 @@ export default function ControleFinanceiroPage() {
           size="lg"
         >
           <form onSubmit={handleImportSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Consórcio <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-2">
+                {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((opt) => (
+                  <ButtonSeg
+                    key={opt.value}
+                    active={importConsorcio === opt.value}
+                    onClick={() => setImportConsorcio(opt.value)}
+                    label={opt.label}
+                  />
+                ))}
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Arquivo da planilha <span className="text-red-500">*</span>
@@ -986,9 +1066,10 @@ export default function ControleFinanceiroPage() {
                   title="Substituir meses importados"
                   description={
                     <>
-                      Para cada mês/ano detectado na planilha, todos os lançamentos existentes serão
-                      <span className="font-semibold"> apagados </span>e substituídos pelos da planilha. Recomendado para
-                      reimportações.
+                      Para cada mês/ano detectado na planilha, os lançamentos existentes do{' '}
+                      <span className="font-semibold">{importConsorcioLabel}</span> serão
+                      <span className="font-semibold"> apagados </span>e substituídos pelos da planilha. O outro
+                      consórcio não é afetado.
                     </>
                   }
                 />
@@ -1175,20 +1256,19 @@ function getEntryRemainingDays(entry: FinancialControlEntry): number | null {
 }
 
 function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthGroupProps) {
-  const monthLabel = MONTHS_PT[month - 1] || '';
-  const totalFinal = items.reduce((sum, it) => {
-    const v = it.finalValue === null || it.finalValue === undefined ? 0 : parseFloat(String(it.finalValue));
-    return sum + (isNaN(v) ? 0 : v);
-  }, 0);
-  const totalOriginal = items.reduce((sum, it) => {
-    const v =
-      it.originalValue === null || it.originalValue === undefined ? 0 : parseFloat(String(it.originalValue));
-    return sum + (isNaN(v) ? 0 : v);
-  }, 0);
+  const monthLabel = month > 0 ? MONTHS_PT[month - 1] || '' : '';
+  const titleMonth = monthLabel
+    ? monthLabel.charAt(0) + monthLabel.slice(1).toLowerCase()
+    : '';
+  const listTitle =
+    year > 0 && month > 0
+      ? `Pagamentos de ${titleMonth} de ${year}`
+      : year > 0
+        ? `Pagamentos de ${year}`
+        : month > 0
+          ? `Pagamentos de ${titleMonth}`
+          : 'Pagamentos';
 
-  const titleMonth = monthLabel.charAt(0) + monthLabel.slice(1).toLowerCase();
-
-  const [listExpanded, setListExpanded] = useState(false);
   const [page, setPage] = useState(1);
   const [detailEntry, setDetailEntry] = useState<FinancialControlEntry | null>(null);
   const [actionMenu, setActionMenu] = useState<{
@@ -1234,13 +1314,6 @@ function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthG
     }
   }, [actionMenu, paginatedItems]);
 
-  useEffect(() => {
-    if (!listExpanded) {
-      setActionMenu(null);
-      setDetailEntry(null);
-    }
-  }, [listExpanded]);
-
   const detailStatusStyle = detailEntry
     ? STATUS_STYLES[detailEntry.status] ?? STATUS_STYLES.AGUARDAR_PAGAMENTO
     : null;
@@ -1259,48 +1332,16 @@ function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthG
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Pagamentos de {titleMonth} de {year}
+                {listTitle}
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {items.length} {items.length === 1 ? 'lançamento' : 'lançamentos'}
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 border-t border-gray-100 dark:border-gray-700/80 pt-3 sm:border-t-0 sm:pt-0">
-            <dl className="flex items-baseline gap-4 sm:gap-5 text-sm">
-              <div>
-                <dt className="text-xs text-gray-500 dark:text-gray-400 font-medium">Original</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                  {formatCurrency(totalOriginal)}
-                </dd>
-              </div>
-              <div className="hidden sm:block w-px h-9 self-center bg-gray-200 dark:bg-gray-600" aria-hidden />
-              <div>
-                <dt className="text-xs text-red-600/90 dark:text-red-400 font-medium">Final</dt>
-                <dd className="mt-0.5 font-semibold tabular-nums text-red-700 dark:text-red-300">
-                  {formatCurrency(totalFinal)}
-                </dd>
-              </div>
-            </dl>
-            <button
-              type="button"
-              onClick={() => setListExpanded((v) => !v)}
-              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/80 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-              aria-expanded={listExpanded}
-              aria-controls={`month-list-${year}-${month}`}
-              title={listExpanded ? 'Recolher lista' : 'Expandir lista'}
-            >
-              {listExpanded ? (
-                <ChevronUp className="w-5 h-5" aria-hidden />
-              ) : (
-                <ChevronDown className="w-5 h-5" aria-hidden />
-              )}
-              <span className="sr-only">{listExpanded ? 'Recolher lista' : 'Expandir lista'}</span>
-            </button>
-          </div>
         </div>
       </CardHeader>
-      <div id={`month-list-${year}-${month}`} className={listExpanded ? '' : 'hidden'}>
+      <div id={`month-list-${year}-${month}`}>
         <CardContent className="px-0 !pt-0 pb-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

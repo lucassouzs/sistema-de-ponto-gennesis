@@ -2492,6 +2492,8 @@ enum FinancialControlStatus {
 /// Cada linha representa uma OS e suas informações de pagamento.
 model FinancialControlEntry {
   id              String                  @id @default(cuid())
+  /// Consórcio Predial: brasilia | hub
+  consorcio       String                  @default("brasilia")
   /// Mês e ano de referência do pagamento (para agrupamento na UI: JANEIRO/2025, FEVEREIRO/2025...).
   paymentMonth    Int // 1-12
   paymentYear     Int
@@ -2530,6 +2532,8 @@ model FinancialControlEntry {
   createdBy       String?
   updatedBy       String?
 
+  @@index([consorcio])
+  @@index([consorcio, paymentYear, paymentMonth])
   @@index([paymentYear, paymentMonth])
   @@index([status])
   @@index([dueDate])
