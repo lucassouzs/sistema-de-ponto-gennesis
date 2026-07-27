@@ -1363,8 +1363,6 @@ function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthG
                 const isDeleting = deletingId === entry.id;
                 const { nfNumber, parcelNumber } = resolveNfAndParcelForDisplay(entry);
                 const computed = getEntryRemainingDays(entry);
-                const isOverdue =
-                  computed !== null && computed !== undefined && computed < 0;
 
                 return (
                   <tr
@@ -1395,20 +1393,8 @@ function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthG
                     <td className="px-3 sm:px-6 py-3 text-sm text-center font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                       {formatCurrency(entry.finalValue)}
                     </td>
-                    <td className="px-3 sm:px-6 py-3 text-sm text-center">
-                      {computed === null || computed === undefined ? (
-                        <span className="text-gray-400 dark:text-gray-500">—</span>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-xs font-medium ${
-                            isOverdue
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          {computed}
-                        </span>
-                      )}
+                    <td className="px-3 sm:px-6 py-3 text-sm text-center tabular-nums text-gray-900 dark:text-gray-100">
+                      {computed === null || computed === undefined ? '—' : computed}
                     </td>
                     <td className="px-3 sm:px-6 py-3 text-center">
                       <span
