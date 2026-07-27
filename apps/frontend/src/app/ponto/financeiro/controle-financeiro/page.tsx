@@ -39,6 +39,7 @@ import {
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
   resolveNfAndParcelForDisplay,
   type FinancialControlConsorcio,
+  type FinancialControlEntry,
 } from '@/components/financeiro/financialControlEntry';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -59,30 +60,6 @@ import {
 import { ListPagination } from '@/components/ui/ListPagination';
 
 const MONTH_GROUP_PAGE_SIZE = 25;
-
-type FinancialControlEntry = {
-  id: string;
-  consorcio?: FinancialControlConsorcio;
-  paymentMonth: number;
-  paymentYear: number;
-  status: FinancialControlStatus;
-  osCode: string | null;
-  supplierName: string | null;
-  nfNumber: string | null;
-  parcelNumber: string | null;
-  emissionDate: string | null;
-  boleto: string | null;
-  dueDate: string | null;
-  originalValue: string | number | null;
-  ocNumber: string | null;
-  finalValue: string | number | null;
-  paidDate: string | null;
-  remainingDays: number | null;
-  receivedNote: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
 
 function ConsorcioTabNav({
   active,
