@@ -61,6 +61,7 @@ import financialAnalysisRoutes from './routes/financialAnalysis';
 import financialControlRoutes from './routes/financialControl';
 import extratoCaixaRoutes from './routes/extratoCaixa';
 import controleNfsRoutes from './routes/controleNfs';
+import controleGeralRoutes from './routes/controleGeral';
 import supplierRoutes from './routes/suppliers';
 import responsaveisTecnicosRoutes from './routes/responsaveisTecnicos';
 import controleAnuidadeRoutes from './routes/controleAnuidade';
@@ -338,6 +339,8 @@ app.use('/api/financial-analysis', financialAnalysisRoutes);
 app.use('/api/financial-control', financialControlRoutes);
 app.use('/api/extrato-caixa', extratoCaixaRoutes);
 app.use('/api/controle-nfs', controleNfsRoutes);
+/** Teto orçamentário mensal (Controle Geral de Contratos). */
+app.use('/api/controle-geral', controleGeralRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes);
 app.use('/api/controle-anuidade', controleAnuidadeRoutes);

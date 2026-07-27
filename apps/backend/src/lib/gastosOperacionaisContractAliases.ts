@@ -2,7 +2,8 @@ import { normalizeCostCenterKey } from './controleGeralGastosMapping';
 
 /** Variações da planilha → nome canônico (espelha o frontend). */
 const GASTOS_OPERACIONAIS_CONTRACT_ALIASES: Readonly<Record<string, string>> = {
-  [normalizeCostCenterKey('TJGO MANUTENÇÃO LOTE 02')]: 'TJ MANUTENÇÃO RIO VERDE - CORRETIVA'
+  [normalizeCostCenterKey('TJGO MANUTENÇÃO LOTE 02')]: 'TJ MANUTENÇÃO RIO VERDE - CORRETIVA',
+  [normalizeCostCenterKey('JUSTIÇA FEDERAL DE GOIÁS')]: 'JUSTIÇA FEDERAL GOIAS'
 };
 
 export function normalizeGastosOperacionaisContractName(contract: string): string {

@@ -8,7 +8,12 @@ export type ControleGeralPdfContractRow = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  contaVinculada: number | null;
+  tetoOrcamentario: number;
   gastos: number;
+  /** null quando não há teto cadastrado. */
+  tetoMinusGasto: number | null;
+  gastoTetoPercent: string;
   lucroLiquido: number;
   gastoFatPercent: string;
   gastoRecPercent: string;
@@ -18,7 +23,11 @@ export type ControleGeralPdfFinancialSummary = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  contaVinculada: number | null;
+  tetoOrcamentario: number;
   gastos: number;
+  tetoMinusGasto: number | null;
+  gastoTetoPercent: string;
   lucroLiquido: number;
   gastoFatPercent: string;
   gastoRecPercent: string;
@@ -80,6 +89,9 @@ const TEXT_GREEN: [number, number, number] = [22, 101, 52];
 const TEXT_RED: [number, number, number] = [185, 28, 28];
 const TEXT_BLUE: [number, number, number] = [29, 78, 216];
 const TEXT_SKY: [number, number, number] = [3, 105, 161];
+const TEXT_INDIGO: [number, number, number] = [79, 70, 229];
+const TEXT_ORANGE: [number, number, number] = [234, 88, 12];
+const TEXT_VIOLET: [number, number, number] = [109, 40, 217];
 const TEXT_BLACK: [number, number, number] = [0, 0, 0];
 const TEXT_MUTED: [number, number, number] = [75, 85, 99];
 
@@ -136,6 +148,22 @@ function pdfGastoRecebidoPercentColor(gastos: number, recebido: number): [number
   if (percent == null) return TEXT_MUTED;
   if (percent >= 85) return TEXT_RED;
   return TEXT_GREEN;
+}
+
+/** Espelha a tela: vermelho se gasto > teto; laranja ≥ 90%; roxo < 90%. */
+function pdfTetoOrcamentarioColor(gastos: number, teto: number): [number, number, number] {
+  if (!Number.isFinite(teto) || teto <= 0) return TEXT_MUTED;
+  const gastoAbs = Math.abs(gastos);
+  if (gastoAbs > teto) return TEXT_RED;
+  if (gastoAbs >= teto * 0.9) return TEXT_ORANGE;
+  return TEXT_VIOLET;
+}
+
+function pdfTetoMinusGastoColor(value: number | null): [number, number, number] {
+  if (value == null) return TEXT_MUTED;
+  if (value > 0) return TEXT_GREEN;
+  if (value < 0) return TEXT_RED;
+  return TEXT_BLACK;
 }
 
 const SECTION_TITLE_BLOCK = 12;
@@ -287,23 +315,30 @@ function drawFilterBox(
 }
 
 function buildColumns(contentW: number): PdfColumn[] {
+  // Colunas numéricas mais largas; Contrato absorve o restante (menor).
   const fixed = [
-    { key: 'mes', label: 'Mês', width: 16, align: 'left' as const },
-    { key: 'ano', label: 'Ano', width: 12, align: 'left' as const },
-    { key: 'fat', label: 'Faturamento', width: 24, align: 'right' as const },
-    { key: 'liq', label: 'Líquido', width: 24, align: 'right' as const },
-    { key: 'rec', label: 'Recebido', width: 24, align: 'right' as const },
-    { key: 'gastos', label: 'Gastos', width: 24, align: 'right' as const },
-    { key: 'lucro', label: 'Lucro líq.', width: 24, align: 'right' as const },
-    { key: 'gfat', label: 'G/FAT %', width: 16, align: 'right' as const },
-    { key: 'grec', label: 'G/REC %', width: 16, align: 'right' as const }
+    { key: 'mes', label: 'Mês', width: 10, align: 'left' as const },
+    { key: 'ano', label: 'Ano', width: 7, align: 'left' as const },
+    { key: 'fat', label: 'Faturamento', width: 22, align: 'right' as const },
+    { key: 'liq', label: 'Líquido', width: 19, align: 'right' as const },
+    { key: 'rec', label: 'Recebido', width: 19, align: 'right' as const },
+    { key: 'teto', label: 'Teto orç.', width: 18, align: 'right' as const },
+    { key: 'gastos', label: 'Gastos', width: 18, align: 'right' as const },
+    { key: 'tetoDiff', label: 'Saldo a gastar', width: 19, align: 'right' as const },
+    { key: 'lucro', label: 'Lucro líq.', width: 19, align: 'right' as const },
+    { key: 'tetoPct', label: 'G/TETO %', width: 14, align: 'right' as const },
+    { key: 'gfat', label: 'G/FAT %', width: 13, align: 'right' as const },
+    { key: 'grec', label: 'G/REC %', width: 13, align: 'right' as const },
+    { key: 'cvinc', label: 'SALDO TOTAL - CV', width: 27, align: 'right' as const }
   ];
 
   const fixedWidth = fixed.reduce((sum, col) => sum + col.width, 0);
-  const contractWidth = Math.max(48, contentW - fixedWidth);
+  const contractWidth = Math.max(32, contentW - fixedWidth);
 
   return [{ key: 'contract', label: 'Contrato', width: contractWidth, align: 'left' }, ...fixed];
 }
+
+const PDF_CELL_PAD_X = 3.2;
 
 function getColumnXs(margin: number, columns: PdfColumn[]): number[] {
   const xs: number[] = [];
@@ -361,7 +396,8 @@ function drawTableHeader(
 
   for (let i = 0; i < columns.length; i++) {
     const col = columns[i];
-    const x = col.align === 'right' ? colX[i] + col.width - 2 : colX[i] + 2;
+    const x =
+      col.align === 'right' ? colX[i] + col.width - PDF_CELL_PAD_X : colX[i] + PDF_CELL_PAD_X;
     doc.text(col.label, x, y + 5.5, col.align === 'right' ? { align: 'right' } : undefined);
   }
 
@@ -391,16 +427,20 @@ function drawDataRow(
   doc.setFontSize(6.2);
 
   const values: Record<string, string> = {
-    contract: truncateText(doc, row.contract, columns[0].width - 4),
+    contract: truncateText(doc, row.contract, columns[0].width - PDF_CELL_PAD_X * 2),
     mes: row.mesesLabel,
     ano: row.anoLabel,
     fat: formatCurrencyCell(row.faturamento),
     liq: formatCurrencyCell(row.liquido),
     rec: formatCurrencyCell(row.recebido),
-    gastos: formatCurrencyCell(row.gastos),
     lucro: formatCurrencyCell(row.lucroLiquido),
+    teto: formatCurrencyCell(row.tetoOrcamentario),
+    gastos: formatCurrencyCell(row.gastos),
+    tetoDiff: row.tetoMinusGasto == null ? '—' : formatCurrency(row.tetoMinusGasto),
+    tetoPct: row.gastoTetoPercent,
     gfat: row.gastoFatPercent,
-    grec: row.gastoRecPercent
+    grec: row.gastoRecPercent,
+    cvinc: row.contaVinculada == null ? '—' : formatCurrency(row.contaVinculada)
   };
 
   const colors: Record<string, [number, number, number]> = {
@@ -410,16 +450,21 @@ function drawDataRow(
     fat: TEXT_GREEN,
     liq: TEXT_BLUE,
     rec: TEXT_SKY,
-    gastos: TEXT_RED,
     lucro: pdfLucroLiquidoColor(row.lucroLiquido),
+    teto: pdfTetoOrcamentarioColor(row.gastos, row.tetoOrcamentario),
+    gastos: TEXT_RED,
+    tetoDiff: pdfTetoMinusGastoColor(row.tetoMinusGasto),
+    tetoPct: pdfTetoOrcamentarioColor(row.gastos, row.tetoOrcamentario),
     gfat: pdfGastoFaturamentoPercentColor(row.gastos, row.faturamento),
-    grec: pdfGastoRecebidoPercentColor(row.gastos, row.recebido)
+    grec: pdfGastoRecebidoPercentColor(row.gastos, row.recebido),
+    cvinc: row.contaVinculada == null ? TEXT_MUTED : TEXT_INDIGO
   };
 
   for (let i = 0; i < columns.length; i++) {
     const col = columns[i];
     doc.setTextColor(...colors[col.key]);
-    const x = col.align === 'right' ? colX[i] + col.width - 2 : colX[i] + 2;
+    const x =
+      col.align === 'right' ? colX[i] + col.width - PDF_CELL_PAD_X : colX[i] + PDF_CELL_PAD_X;
     doc.text(values[col.key] ?? '—', x, y + 5, col.align === 'right' ? { align: 'right' } : undefined);
   }
 
@@ -449,7 +494,7 @@ function drawSummaryRow(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.5);
   doc.setTextColor(...TEXT_BLACK);
-  doc.text(truncateText(doc, label, columns[0].width - 4), colX[0] + 2, y + 5);
+  doc.text(truncateText(doc, label, columns[0].width - PDF_CELL_PAD_X * 2), colX[0] + PDF_CELL_PAD_X, y + 5);
 
   const summaryValues: Record<string, { text: string; color: [number, number, number] }> = {
     mes: { text: '', color: TEXT_BLACK },
@@ -457,10 +502,22 @@ function drawSummaryRow(
     fat: { text: formatCurrency(summary.faturamento), color: TEXT_GREEN },
     liq: { text: formatCurrency(summary.liquido), color: TEXT_BLUE },
     rec: { text: formatCurrency(summary.recebido), color: TEXT_SKY },
-    gastos: { text: formatCurrency(summary.gastos), color: TEXT_RED },
     lucro: {
       text: formatCurrency(summary.lucroLiquido),
       color: pdfLucroLiquidoColor(summary.lucroLiquido)
+    },
+    teto: {
+      text: summary.tetoOrcamentario > 0 ? formatCurrency(summary.tetoOrcamentario) : '—',
+      color: pdfTetoOrcamentarioColor(summary.gastos, summary.tetoOrcamentario)
+    },
+    gastos: { text: formatCurrency(summary.gastos), color: TEXT_RED },
+    tetoDiff: {
+      text: summary.tetoMinusGasto == null ? '—' : formatCurrency(summary.tetoMinusGasto),
+      color: pdfTetoMinusGastoColor(summary.tetoMinusGasto)
+    },
+    tetoPct: {
+      text: summary.gastoTetoPercent,
+      color: pdfTetoOrcamentarioColor(summary.gastos, summary.tetoOrcamentario)
     },
     gfat: {
       text: summary.gastoFatPercent,
@@ -469,6 +526,10 @@ function drawSummaryRow(
     grec: {
       text: summary.gastoRecPercent,
       color: pdfGastoRecebidoPercentColor(summary.gastos, summary.recebido)
+    },
+    cvinc: {
+      text: summary.contaVinculada == null ? '—' : formatCurrency(summary.contaVinculada),
+      color: summary.contaVinculada == null ? TEXT_MUTED : TEXT_INDIGO
     }
   };
 
@@ -477,7 +538,8 @@ function drawSummaryRow(
     const item = summaryValues[col.key];
     if (!item?.text) continue;
     doc.setTextColor(...item.color);
-    const x = col.align === 'right' ? colX[i] + col.width - 2 : colX[i] + 2;
+    const x =
+      col.align === 'right' ? colX[i] + col.width - PDF_CELL_PAD_X : colX[i] + PDF_CELL_PAD_X;
     doc.text(item.text, x, y + 5, col.align === 'right' ? { align: 'right' } : undefined);
   }
 

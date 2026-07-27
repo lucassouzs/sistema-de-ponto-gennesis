@@ -8,18 +8,22 @@ export type FaturamentoByGastosContractEntry = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  /** null = aba/contrato sem coluna Conta Vinculada. */
+  contaVinculada: number | null;
 };
 
 export type NfsContractTotals = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  contaVinculada: number | null;
 };
 
 const EMPTY_NFS_TOTALS: NfsContractTotals = {
   faturamento: 0,
   liquido: 0,
-  recebido: 0
+  recebido: 0,
+  contaVinculada: null
 };
 
 export function buildFaturamentoByContractLookup(
@@ -34,7 +38,8 @@ export function buildFaturamentoByContractLookup(
     map.set(key, {
       faturamento: entry.faturamento,
       liquido: entry.liquido,
-      recebido: entry.recebido
+      recebido: entry.recebido,
+      contaVinculada: entry.contaVinculada ?? null
     });
   }
 
@@ -54,6 +59,13 @@ export function resolveContractLiquido(contract: string, lookup: Map<string, Nfs
 
 export function resolveContractRecebido(contract: string, lookup: Map<string, NfsContractTotals>): number {
   return resolveContractNfsTotals(contract, lookup).recebido;
+}
+
+export function resolveContractContaVinculada(
+  contract: string,
+  lookup: Map<string, NfsContractTotals>
+): number | null {
+  return resolveContractNfsTotals(contract, lookup).contaVinculada;
 }
 
 export function resolveContractNfsTotals(

@@ -7,6 +7,7 @@ import {
   fetchControleNfsValorBrutoTotal,
   fetchNfsLotFaturamento,
   fetchRecebidoMensalByGastosContract,
+  loadProcessedNfsSheetsByTabKey,
   listControleNfsTabs,
   parseControleNfsTotalsFilters,
   parseEmissaoApuracaoFilters,
@@ -192,15 +193,19 @@ export class ControleNfsController {
             recebimentoApuracaoFilter: apuracaoFilter
           }
         : undefined;
+
+      // Totals (com cache) + recebido mensal compartilham o mesmo Map de abas processadas.
       const summary = await fetchControleNfsTotalsSummary(forceRefresh, filters);
+      const processedByTabKey = await loadProcessedNfsSheetsByTabKey(false);
       const nfsLotFaturamento =
         summary.faturamentoByLot ??
-        (await fetchNfsLotFaturamento(toNfsTotalsComputeOptions(filters)));
+        (await fetchNfsLotFaturamento(toNfsTotalsComputeOptions(filters), processedByTabKey));
 
       const entries = buildFaturamentoByGastosContract(summary.byTab, nfsLotFaturamento);
       const recebidoMensal = await fetchRecebidoMensalByGastosContract(
-        forceRefresh,
-        apuracaoFilter
+        false,
+        apuracaoFilter,
+        processedByTabKey
       );
 
       res.json({

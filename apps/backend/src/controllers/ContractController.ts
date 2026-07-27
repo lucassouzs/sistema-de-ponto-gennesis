@@ -390,6 +390,8 @@ export class ContractController {
 
       const { year } = req.query;
       const filterYear = year ? Number(year) : new Date().getFullYear();
+      const skipAvailableYears =
+        req.query.skipAvailableYears === '1' || req.query.skipAvailableYears === 'true';
 
       const overviewWhere =
         access.filter === 'ids' ? { id: { in: access.ids } } : {};
@@ -430,8 +432,12 @@ export class ContractController {
           }
         }
       }),
-        prisma.contractBilling.findMany({ select: { issueDate: true } }),
-        prisma.contractWeeklyProduction.findMany({ select: { fillingDate: true } })
+        skipAvailableYears
+          ? Promise.resolve([] as Array<{ issueDate: Date }>)
+          : prisma.contractBilling.findMany({ select: { issueDate: true } }),
+        skipAvailableYears
+          ? Promise.resolve([] as Array<{ fillingDate: Date }>)
+          : prisma.contractWeeklyProduction.findMany({ select: { fillingDate: true } })
       ]);
 
       const yearParam = year != null && String(year).trim() !== '' ? Number(year) : null;
@@ -487,16 +493,20 @@ export class ContractController {
         };
       });
 
-      const availableYears = Array.from(
-        new Set<number>([
-          ...allBillingsDates.map((b) => new Date(b.issueDate).getFullYear()),
-          ...allProductionsDates.map((p) => new Date(p.fillingDate).getFullYear()),
-          new Date().getFullYear(),
-          ...(yearValid ? [yearParam] : [])
-        ])
-      )
-        .filter((y) => Number.isFinite(y))
-        .sort((a, b) => b - a);
+      const availableYears = skipAvailableYears
+        ? [new Date().getFullYear(), ...(yearValid ? [yearParam as number] : [])].filter(
+            (y, index, arr) => Number.isFinite(y) && arr.indexOf(y) === index
+          )
+        : Array.from(
+            new Set<number>([
+              ...allBillingsDates.map((b) => new Date(b.issueDate).getFullYear()),
+              ...allProductionsDates.map((p) => new Date(p.fillingDate).getFullYear()),
+              new Date().getFullYear(),
+              ...(yearValid ? [yearParam as number] : [])
+            ])
+          )
+            .filter((y) => Number.isFinite(y))
+            .sort((a, b) => b - a);
 
       const includeGastosOperacionais =
         req.query.includeGastosOperacionais === '1' ||

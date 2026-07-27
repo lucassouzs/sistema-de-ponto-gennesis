@@ -12,7 +12,7 @@ export const NFS_TAB_GASTOS_COST_CENTERS: Record<string, readonly string[]> = {
   'fhe-df': ['FHE - DF'],
   hfa: ['HFA - MÃO DE OBRA', 'HFA - SERVIÇOS EVENTUAIS'],
   itamaraty: ['ITAMARATY - MÃO DE OBRA', 'ITAMARATY - SERVIÇOS EVENTUAIS'],
-  jfgo: ['JUSTIÇA FEDERAL GOIAS'],
+  jfgo: ['JUSTIÇA FEDERAL GOIAS', 'JUSTIÇA FEDERAL DE GOIÁS'],
   'ministerio-da-cultura': ['MINISTERIO DA CULTURA - DF'],
   pgr: ['PGR'],
   sedes: ['SEDES', 'SEDES NORTE'],

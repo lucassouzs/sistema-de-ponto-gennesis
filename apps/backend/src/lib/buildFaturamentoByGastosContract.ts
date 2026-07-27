@@ -12,12 +12,15 @@ export type FaturamentoByGastosContractEntry = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  /** null = aba/contrato sem coluna Conta Vinculada. */
+  contaVinculada: number | null;
 };
 
 type NfsContractTotals = {
   faturamento: number;
   liquido: number;
   recebido: number;
+  contaVinculada: number | null;
 };
 
 type NfsTabTotal = {
@@ -25,6 +28,8 @@ type NfsTabTotal = {
   valorBruto: number;
   valorLiquido: number;
   valorRecebido: number;
+  contaVinculada: number;
+  hasContaVinculadaColumn?: boolean;
 };
 
 const LOT_BREAKDOWN_CONTRACT_KEYS = new Set(
@@ -34,6 +39,16 @@ const LOT_BREAKDOWN_CONTRACT_KEYS = new Set(
     )
   )
 );
+
+function mergeContaVinculada(
+  a: number | null | undefined,
+  b: number | null | undefined
+): number | null {
+  if (a == null && b == null) return null;
+  if (a == null) return b ?? null;
+  if (b == null) return a;
+  return Math.max(a, b);
+}
 
 function assignContractTotals(
   map: Map<string, FaturamentoByGastosContractEntry>,
@@ -46,7 +61,8 @@ function assignContractTotals(
     contract: canonical,
     faturamento: totals.faturamento,
     liquido: totals.liquido,
-    recebido: totals.recebido
+    recebido: totals.recebido,
+    contaVinculada: totals.contaVinculada
   });
 }
 
@@ -68,7 +84,8 @@ function mergeContractTotals(
     contract: canonical,
     faturamento: Math.max(existing.faturamento, totals.faturamento),
     liquido: Math.max(existing.liquido, totals.liquido),
-    recebido: Math.max(existing.recebido, totals.recebido)
+    recebido: Math.max(existing.recebido, totals.recebido),
+    contaVinculada: mergeContaVinculada(existing.contaVinculada, totals.contaVinculada)
   });
 }
 
@@ -76,8 +93,26 @@ function isLotBreakdownContract(contract: string): boolean {
   return LOT_BREAKDOWN_CONTRACT_KEYS.has(gastosContractLookupKey(contract));
 }
 
+function toContractTotals(input: {
+  faturamento: number;
+  liquido: number;
+  recebido: number;
+  contaVinculada: number;
+  hasContaVinculadaColumn: boolean;
+}): NfsContractTotals {
+  const hasColumn = input.hasContaVinculadaColumn || input.contaVinculada > 0;
+  return {
+    faturamento: input.faturamento,
+    liquido: input.liquido,
+    recebido: input.recebido,
+    // null = aba sem a coluna; 0 = coluna existe sem valores no filtro
+    contaVinculada: hasColumn ? input.contaVinculada : null
+  };
+}
+
 /**
- * Soma valor bruto, líquido e recebido das NF's por contrato da QUERY BASE DE GASTOS.
+ * Soma valor bruto, líquido, recebido e conta vinculada das NF's por contrato
+ * da QUERY BASE DE GASTOS.
  * Contratos com lote/serviço usam a coluna correspondente na planilha de NF's.
  */
 export function buildFaturamentoByGastosContract(
@@ -88,21 +123,25 @@ export function buildFaturamentoByGastosContract(
   const totalsByLot = new Map(
     nfsLotFaturamento.map((lot) => [
       `${lot.tabKey}:${lot.lotKey}`,
-      {
+      toContractTotals({
         faturamento: lot.valorBruto,
         liquido: lot.valorLiquido,
-        recebido: lot.valorRecebido
-      }
+        recebido: lot.valorRecebido,
+        contaVinculada: lot.contaVinculada,
+        hasContaVinculadaColumn: lot.hasContaVinculadaColumn
+      })
     ])
   );
   const nfsByTabKey = new Map(
     nfsByTab.map((tab) => [
       tab.tabKey,
-      {
+      toContractTotals({
         faturamento: tab.valorBruto,
         liquido: tab.valorLiquido,
-        recebido: tab.valorRecebido
-      }
+        recebido: tab.valorRecebido,
+        contaVinculada: tab.contaVinculada,
+        hasContaVinculadaColumn: tab.hasContaVinculadaColumn === true
+      })
     ])
   );
 
@@ -111,7 +150,8 @@ export function buildFaturamentoByGastosContract(
       const totals = totalsByLot.get(`${config.tabKey}:${lot.lotKey}`) ?? {
         faturamento: 0,
         liquido: 0,
-        recebido: 0
+        recebido: 0,
+        contaVinculada: null
       };
       for (const contract of lot.gastosCostCenters) {
         assignContractTotals(map, contract, totals);
@@ -125,7 +165,8 @@ export function buildFaturamentoByGastosContract(
     const totals = nfsByTabKey.get(tab.key) ?? {
       faturamento: 0,
       liquido: 0,
-      recebido: 0
+      recebido: 0,
+      contaVinculada: null
     };
     const centers = NFS_TAB_GASTOS_COST_CENTERS[tab.key] ?? [];
 
