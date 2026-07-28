@@ -542,9 +542,13 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe CPF
-        const existingCpf = await prisma.user.findUnique({
-          where: { cpf: cleanCpf }
+        // Verificar se já existe CPF (com ou sem formatação, como no check-cpf)
+        const cpfFormatted = `${cleanCpf.slice(0, 3)}.${cleanCpf.slice(3, 6)}.${cleanCpf.slice(6, 9)}-${cleanCpf.slice(9, 11)}`;
+        const existingCpf = await prisma.user.findFirst({
+          where: {
+            OR: [{ cpf: cleanCpf }, { cpf: cpfFormatted }, { cpf: String(emp.CPF || '').trim() }]
+          },
+          select: { id: true }
         });
 
         if (existingCpf) {
@@ -556,22 +560,30 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Usar matrícula gerada ou gerar nova
-        let employeeId = emp.matriculaGerada;
-        if (!employeeId) {
-          employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
-        }
+        // Sempre gerar matrícula no servidor (ignora matriculaGerada do client)
+        let employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
         nextSequence++;
 
-        const existingEmployee = await prisma.employee.findUnique({
-          where: { employeeId: employeeId }
-        });
+        // Se colidir (ex.: import concorrente), tenta as próximas sequências
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const existingEmployee = await prisma.employee.findUnique({
+            where: { employeeId },
+            select: { id: true }
+          });
+          if (!existingEmployee) break;
+          employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
+          nextSequence++;
+        }
 
-        if (existingEmployee) {
+        const stillTaken = await prisma.employee.findUnique({
+          where: { employeeId },
+          select: { id: true }
+        });
+        if (stillTaken) {
           errors.push({
             linha: lineNumber,
             nome: emp.Nome,
-            erro: `Matrícula ${employeeId} já cadastrada`
+            erro: `Não foi possível gerar matrícula livre (última tentativa: ${employeeId})`
           });
           continue;
         }
