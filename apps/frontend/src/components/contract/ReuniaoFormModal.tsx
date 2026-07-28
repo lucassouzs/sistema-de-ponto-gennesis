@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FileText,
@@ -9,9 +9,10 @@ import {
   Download,
   Trash2,
   Loader2,
-  ClipboardList,
   Settings2,
   Check,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
@@ -100,9 +101,9 @@ const EMPTY_DATA: ReuniaoData = {
 };
 
 const inputClasse =
-  'w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition ' +
-  'placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 ' +
-  'dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500';
+  'w-full rounded-lg border border-gray-200 bg-gray-50/80 px-3.5 py-2.5 text-sm text-gray-900 transition ' +
+  'placeholder:text-gray-400 focus:border-red-500/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-red-500/15 ' +
+  'dark:border-gray-600 dark:bg-gray-900/50 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-900';
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 KB';
@@ -132,9 +133,9 @@ function matchContratoOption(contractName?: string): string {
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="mb-1.5 block text-sm font-medium text-gray-800 dark:text-gray-200">
+    <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
       {children}
-      {required && <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>}
+      {required && <span className="ml-0.5 normal-case tracking-normal text-red-500">*</span>}
     </label>
   );
 }
@@ -148,6 +149,38 @@ function PillGroup({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const normalize = (s: string) =>
+    s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const isBinary =
+    options.length === 2 && options.every((o) => ['SIM', 'NAO'].includes(normalize(o)));
+
+  if (isBinary) {
+    return (
+      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100/80 p-1 dark:border-gray-600 dark:bg-gray-900/60">
+        {options.map((opt) => {
+          const active = value === opt;
+          const isSim = normalize(opt) === 'SIM';
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onChange(active ? '' : opt)}
+              className={`min-w-[4.5rem] rounded-md px-4 py-2 text-sm font-semibold transition-all ${
+                active
+                  ? isSim
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-red-600 text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              }`}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((opt) => {
@@ -157,10 +190,10 @@ function PillGroup({
             key={opt}
             type="button"
             onClick={() => onChange(active ? '' : opt)}
-            className={`inline-flex h-9 items-center rounded-lg border px-4 text-sm font-medium transition-colors ${
+            className={`inline-flex h-9 items-center rounded-lg border px-3.5 text-sm font-medium transition-all ${
               active
-                ? 'border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                ? 'border-red-500/80 bg-red-50 text-red-700 shadow-sm dark:border-red-400/50 dark:bg-red-950/40 dark:text-red-300'
+                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
             }`}
           >
             {opt}
@@ -187,17 +220,17 @@ function RatingPills({
             key={n}
             type="button"
             onClick={() => onChange(active ? null : n)}
-            className={`inline-flex h-10 w-10 items-center justify-center rounded-full border text-sm font-semibold transition-colors ${
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-sm font-semibold transition-all ${
               active
-                ? 'border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
-                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                ? 'border-red-500 bg-red-600 text-white shadow-sm'
+                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400'
             }`}
           >
             {n}
           </button>
         );
       })}
-      <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">1 = nunca · 5 = sempre</span>
+      <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">1 = nunca · 5 = sempre</span>
     </div>
   );
 }
@@ -230,63 +263,70 @@ function QuestionField({
     !!question.followUp && String(value ?? '') === question.followUp.whenValue;
 
   return (
-    <div className="space-y-2.5 border-t border-gray-100 pt-4 first:border-t-0 first:pt-0 dark:border-gray-700/70">
-      <p className="text-sm font-semibold leading-snug text-gray-800 dark:text-gray-100">
-        {index}. {question.title}
-        {question.required && <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>}
-      </p>
+    <div className="rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/40">
+      <div className="flex gap-3">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[11px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+          {index}
+        </span>
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-sm font-medium leading-snug text-gray-800 dark:text-gray-100">
+            {question.title}
+            {question.required && <span className="ml-0.5 text-red-500">*</span>}
+          </p>
 
-      {(question.type === 'sim_nao' || question.type === 'pills') && (
-        <PillGroup options={options} value={String(value ?? '')} onChange={setValue} />
-      )}
-      {question.type === 'rating' && (
-        <RatingPills value={typeof value === 'number' ? value : null} onChange={setValue} />
-      )}
-      {question.type === 'text' && (
-        <input
-          type="text"
-          value={String(value ?? '')}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={question.placeholder}
-          className={inputClasse}
-        />
-      )}
-      {question.type === 'textarea' && (
-        <textarea
-          value={String(value ?? '')}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={question.placeholder}
-          rows={3}
-          className={inputClasse + ' resize-none'}
-        />
-      )}
-      {showFollowUp && question.followUp && (
-        <div className="pl-1">
-          {question.followUp.type === 'pills' ? (
-            <PillGroup
-              options={question.followUp.options || []}
-              value={followUpValue}
-              onChange={(v) => onChange({ value: answer?.value ?? '', followUp: v })}
-            />
-          ) : question.followUp.type === 'text' ? (
+          {(question.type === 'sim_nao' || question.type === 'pills') && (
+            <PillGroup options={options} value={String(value ?? '')} onChange={setValue} />
+          )}
+          {question.type === 'rating' && (
+            <RatingPills value={typeof value === 'number' ? value : null} onChange={setValue} />
+          )}
+          {question.type === 'text' && (
             <input
               type="text"
-              value={followUpValue}
-              onChange={(e) => onChange({ value: answer?.value ?? '', followUp: e.target.value })}
-              placeholder={question.followUp.placeholder}
+              value={String(value ?? '')}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={question.placeholder || 'Digite aqui...'}
               className={inputClasse}
             />
-          ) : (
+          )}
+          {question.type === 'textarea' && (
             <textarea
-              value={followUpValue}
-              onChange={(e) => onChange({ value: answer?.value ?? '', followUp: e.target.value })}
-              placeholder={question.followUp.placeholder}
+              value={String(value ?? '')}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={question.placeholder || 'Digite aqui...'}
               rows={2}
-              className={inputClasse + ' resize-none'}
+              className={inputClasse + ' min-h-[4.5rem] resize-y'}
             />
           )}
+          {showFollowUp && question.followUp && (
+            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-3 dark:border-gray-600 dark:bg-gray-900/40">
+              {question.followUp.type === 'pills' ? (
+                <PillGroup
+                  options={question.followUp.options || []}
+                  value={followUpValue}
+                  onChange={(v) => onChange({ value: answer?.value ?? '', followUp: v })}
+                />
+              ) : question.followUp.type === 'text' ? (
+                <input
+                  type="text"
+                  value={followUpValue}
+                  onChange={(e) => onChange({ value: answer?.value ?? '', followUp: e.target.value })}
+                  placeholder={question.followUp.placeholder}
+                  className={inputClasse}
+                />
+              ) : (
+                <textarea
+                  value={followUpValue}
+                  onChange={(e) => onChange({ value: answer?.value ?? '', followUp: e.target.value })}
+                  placeholder={question.followUp.placeholder}
+                  rows={2}
+                  className={inputClasse + ' min-h-[3.5rem] resize-y'}
+                />
+              )}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -412,6 +452,7 @@ export function ReuniaoFormModal({
   const [uploadingTipo, setUploadingTipo] = useState<'ata' | 'video' | null>(null);
   const [deletingTipo, setDeletingTipo] = useState<'ata' | 'video' | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [step, setStep] = useState(1);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef(form);
   formRef.current = form;
@@ -423,6 +464,33 @@ export function ReuniaoFormModal({
     enabled: isOpen,
   });
   const template = templateRes?.data as Template | undefined;
+
+  const { data: employeesData } = useQuery({
+    queryKey: ['reuniao-employee-options'],
+    queryFn: async () => {
+      const res = await api.get('/users', {
+        params: { page: 1, limit: 10000, status: 'all' },
+      });
+      return res.data;
+    },
+    enabled: isOpen,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
+  const employeeNameOptions = useMemo(() => {
+    const list = Array.isArray(employeesData?.data) ? employeesData.data : [];
+    return list
+      .map((u: { name?: string; employee?: { id?: string; position?: string } }) => {
+        const name = String(u.name || '').trim();
+        if (!name || !u.employee?.id) return '';
+        if (u.employee.position === 'Administrador') return '';
+        if (name.localeCompare('Administrador', 'pt-BR', { sensitivity: 'accent' }) === 0) return '';
+        return name;
+      })
+      .filter(Boolean)
+      .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR'));
+  }, [employeesData]);
 
   const { data: reuniaoResponse, isLoading: loadingReuniao } = useQuery({
     queryKey: ['reuniao', contractId, reuniaoId],
@@ -436,6 +504,7 @@ export function ReuniaoFormModal({
       seededRef.current = false;
       setForm(EMPTY_DATA);
       setSaveStatus('idle');
+      setStep(1);
       if (saveTimer.current) clearTimeout(saveTimer.current);
       return;
     }
@@ -577,6 +646,23 @@ export function ReuniaoFormModal({
 
   const loading = loadingTemplate || loadingReuniao || !hydrated;
 
+  const allSections = template?.sections || [];
+  const stepSections = useMemo(() => {
+    // Distribui seções dinâmicas em 3 etapas:
+    // 1ª etapa: identificação + 1ª seção
+    // 2ª etapa: seções do meio
+    // 3ª etapa: seções restantes + anexos
+    if (allSections.length === 0) return [[], [], []] as Section[][];
+    if (allSections.length === 1) return [[allSections[0]], [], []] as Section[][];
+    if (allSections.length === 2) return [[allSections[0]], [allSections[1]], []] as Section[][];
+    const first = [allSections[0]];
+    const middle = allSections.slice(1, -1);
+    const last = [allSections[allSections.length - 1]];
+    return [first, middle, last] as Section[][];
+  }, [allSections]);
+
+  const STEP_LABELS = ['Identificação', 'Gestão', 'Finalização'] as const;
+
   const statusLabel =
     saveStatus === 'saving'
       ? 'Salvando…'
@@ -584,7 +670,95 @@ export function ReuniaoFormModal({
         ? 'Salvo'
         : saveStatus === 'error'
           ? 'Erro ao salvar'
-          : 'Preencha o formulário';
+          : `Etapa ${step} de 3`;
+
+  const validateStep = (current: number): string | null => {
+    if (current === 1 && !form.identificacao.responsavelPreenchimento.trim()) {
+      return 'Selecione o responsável pelo preenchimento.';
+    }
+    const sections = stepSections[current - 1] || [];
+    for (const section of sections) {
+      for (const q of section.questions) {
+        if (!q.required) continue;
+        const ans = form.answers[q.id];
+        const empty =
+          ans == null ||
+          ans.value === null ||
+          ans.value === undefined ||
+          String(ans.value).trim() === '';
+        if (empty) return `Preencha: ${q.title}`;
+      }
+    }
+    return null;
+  };
+
+  const goNext = () => {
+    const error = validateStep(step);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    setStep((s) => Math.min(3, s + 1));
+  };
+
+  const goBack = () => setStep((s) => Math.max(1, s - 1));
+
+  const handleFinish = () => {
+    const error = validateStep(3);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      void persist(formRef.current);
+    }
+    toast.success('Reunião finalizada!');
+    onClose();
+  };
+
+  const renderSection = (section: Section) => (
+    <section key={section.id} className="space-y-3">
+      <div className="flex items-center gap-2.5">
+        <span className="h-4 w-1 rounded-full bg-red-500/80" aria-hidden />
+        <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-400">
+          {section.title}
+        </h4>
+      </div>
+      {section.description ? (
+        <blockquote className="relative overflow-hidden rounded-xl border border-amber-200/70 bg-gradient-to-br from-amber-50 to-orange-50/50 px-4 py-3 dark:border-amber-800/40 dark:from-amber-950/30 dark:to-orange-950/20">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute -left-1 -top-3 select-none text-5xl font-serif leading-none text-amber-300/60 dark:text-amber-600/40"
+          >
+            “
+          </span>
+          <p className="relative pl-3 text-sm italic leading-relaxed text-amber-900/90 dark:text-amber-200/90">
+            {section.description}
+          </p>
+        </blockquote>
+      ) : null}
+      <div className="space-y-2.5">
+        {section.questions.map((q, idx) => (
+          <QuestionField
+            key={q.id}
+            question={q}
+            index={idx + 1}
+            answer={form.answers[q.id]}
+            onChange={(ans) =>
+              updateForm((prev) => ({
+                ...prev,
+                answers: { ...prev.answers, [q.id]: ans },
+              }))
+            }
+          />
+        ))}
+        {section.questions.length === 0 && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma pergunta nesta seção.</p>
+        )}
+      </div>
+    </section>
+  );
 
   return (
     <Modal
@@ -625,129 +799,228 @@ export function ReuniaoFormModal({
         </div>
       ) : (
         <div className="space-y-6 pb-2">
-          {/* Identificação */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
-                Identificação
-              </h4>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <FieldLabel>Data</FieldLabel>
-                <DatePickerField
-                  value={form.identificacao.data}
-                  onChange={(v) =>
-                    updateForm((prev) => ({
-                      ...prev,
-                      identificacao: { ...prev.identificacao, data: v },
-                    }))
-                  }
-                  size="form"
-                />
-              </div>
-              <div>
-                <FieldLabel required>Responsável pelo preenchimento</FieldLabel>
-                <input
-                  type="text"
-                  value={form.identificacao.responsavelPreenchimento}
-                  onChange={(e) =>
-                    updateForm((prev) => ({
-                      ...prev,
-                      identificacao: {
-                        ...prev.identificacao,
-                        responsavelPreenchimento: e.target.value,
-                      },
-                    }))
-                  }
-                  placeholder="Nome do responsável"
-                  className={inputClasse}
-                />
-              </div>
-            </div>
-            <div>
-              <FieldLabel>Contrato</FieldLabel>
-              <StringSingleSelectDropdown
-                value={form.identificacao.contrato}
-                onChange={(v) =>
-                  updateForm((prev) => ({
-                    ...prev,
-                    identificacao: { ...prev.identificacao, contrato: v },
-                  }))
-                }
-                options={CONTRATO_OPTIONS}
-                placeholder="Selecionar contrato..."
-                searchPlaceholder="Pesquisar contrato..."
-                allowEmpty
-                emptyOptionLabel="Nenhum"
+          {/* Indicador de etapas */}
+          <nav aria-label="Etapas do formulário" className="px-1 pt-1">
+            <ol className="relative flex items-start justify-between">
+              {/* Linha de fundo */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-[16.66%] right-[16.66%] top-4 h-[2px] rounded-full bg-gray-200 dark:bg-gray-700"
               />
-            </div>
-          </section>
+              {/* Linha de progresso */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute left-[16.66%] top-4 h-[2px] rounded-full bg-red-500 transition-all duration-300 ease-out dark:bg-red-400"
+                style={{ width: `${((step - 1) / 2) * (100 - 33.32)}%` }}
+              />
 
-          {(template?.sections || []).map((section) => (
-            <section key={section.id} className="space-y-4 border-t border-gray-100 pt-5 dark:border-gray-700">
-              <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
-                {section.title}
-              </h4>
-              {section.description ? (
-                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm italic text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/15 dark:text-amber-300">
-                  “{section.description}”
-                </p>
-              ) : null}
-              {section.questions.map((q, idx) => (
-                <QuestionField
-                  key={q.id}
-                  question={q}
-                  index={idx + 1}
-                  answer={form.answers[q.id]}
-                  onChange={(ans) =>
-                    updateForm((prev) => ({
-                      ...prev,
-                      answers: { ...prev.answers, [q.id]: ans },
-                    }))
-                  }
-                />
-              ))}
-              {section.questions.length === 0 && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Nenhuma pergunta nesta seção.
+              {[1, 2, 3].map((n) => {
+                const active = step === n;
+                const done = step > n;
+                return (
+                  <li key={n} className="relative z-[1] flex w-1/3 flex-col items-center gap-2">
+                    <button
+                      type="button"
+                      aria-current={active ? 'step' : undefined}
+                      aria-label={`Etapa ${n}: ${STEP_LABELS[n - 1]}`}
+                      onClick={() => {
+                        if (n < step) setStep(n);
+                        else if (n > step) {
+                          for (let s = step; s < n; s++) {
+                            const err = validateStep(s);
+                            if (err) {
+                              toast.error(err);
+                              return;
+                            }
+                          }
+                          setStep(n);
+                        }
+                      }}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all duration-200 ${
+                        active
+                          ? 'scale-110 bg-red-600 text-white shadow-md shadow-red-600/30 ring-4 ring-red-500/20 dark:bg-red-500 dark:shadow-red-500/25 dark:ring-red-400/20'
+                          : done
+                            ? 'bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400'
+                            : 'border-2 border-gray-300 bg-white text-gray-400 hover:border-gray-400 hover:text-gray-600 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500 dark:hover:border-gray-500 dark:hover:text-gray-300'
+                      }`}
+                    >
+                      {done ? <Check className="h-4 w-4" strokeWidth={2.5} /> : n}
+                    </button>
+                    <span
+                      className={`text-center text-[11px] font-medium leading-tight tracking-wide transition-colors sm:text-xs ${
+                        active
+                          ? 'text-red-600 dark:text-red-400'
+                          : done
+                            ? 'text-gray-700 dark:text-gray-300'
+                            : 'text-gray-400 dark:text-gray-500'
+                      }`}
+                    >
+                      {STEP_LABELS[n - 1]}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+
+          {step === 1 && (
+            <>
+              <section className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-4 w-1 rounded-full bg-red-500/80" aria-hidden />
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-400">
+                    Identificação
+                  </h4>
+                </div>
+                <div className="rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/40">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <FieldLabel>Data</FieldLabel>
+                      <DatePickerField
+                        value={form.identificacao.data}
+                        onChange={(v) =>
+                          updateForm((prev) => ({
+                            ...prev,
+                            identificacao: { ...prev.identificacao, data: v },
+                          }))
+                        }
+                        size="form"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel required>Responsável pelo preenchimento</FieldLabel>
+                      <StringSingleSelectDropdown
+                        value={form.identificacao.responsavelPreenchimento}
+                        onChange={(v) =>
+                          updateForm((prev) => ({
+                            ...prev,
+                            identificacao: {
+                              ...prev.identificacao,
+                              responsavelPreenchimento: v,
+                            },
+                          }))
+                        }
+                        options={
+                          form.identificacao.responsavelPreenchimento &&
+                          !employeeNameOptions.includes(form.identificacao.responsavelPreenchimento)
+                            ? [form.identificacao.responsavelPreenchimento, ...employeeNameOptions]
+                            : employeeNameOptions
+                        }
+                        placeholder="Selecionar funcionário..."
+                        searchPlaceholder="Pesquisar funcionário..."
+                        emptyOptionsMessage="Nenhum funcionário encontrado."
+                        emptySearchMessage="Nenhum funcionário para esta pesquisa."
+                        allowEmpty
+                        emptyOptionLabel="Nenhum"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <FieldLabel>Contrato</FieldLabel>
+                      <StringSingleSelectDropdown
+                        value={form.identificacao.contrato}
+                        onChange={(v) =>
+                          updateForm((prev) => ({
+                            ...prev,
+                            identificacao: { ...prev.identificacao, contrato: v },
+                          }))
+                        }
+                        options={CONTRATO_OPTIONS}
+                        placeholder="Selecionar contrato..."
+                        searchPlaceholder="Pesquisar contrato..."
+                        allowEmpty
+                        emptyOptionLabel="Nenhum"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+              {stepSections[0].map(renderSection)}
+            </>
+          )}
+
+          {step === 2 && (
+            <>
+              {stepSections[1].length > 0 ? (
+                stepSections[1].map(renderSection)
+              ) : (
+                <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Nenhuma pergunta nesta etapa.
                 </p>
               )}
-            </section>
-          ))}
+            </>
+          )}
 
-          <section className="space-y-4 border-t border-gray-100 pt-5 dark:border-gray-700">
-            <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-900 dark:text-gray-100">
-              Anexos da reunião
-            </h4>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <AnexoUploadCard
-                tipo="ata"
-                titulo="Ata da reunião"
-                descricao="PDF ou Word."
-                icon={<FileText className="h-5 w-5 text-gray-600 dark:text-gray-300" />}
-                accept=".pdf,.doc,.docx"
-                anexo={form.ata}
-                isUploading={uploadingTipo === 'ata'}
-                isDeleting={deletingTipo === 'ata'}
-                onSelectFile={(f) => uploadAnexo('ata', f)}
-                onRemove={() => removeAnexo('ata')}
-              />
-              <AnexoUploadCard
-                tipo="video"
-                titulo="Vídeo da reunião"
-                descricao="MP4, MOV ou WEBM."
-                icon={<VideoIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />}
-                accept="video/*"
-                anexo={form.video}
-                isUploading={uploadingTipo === 'video'}
-                isDeleting={deletingTipo === 'video'}
-                onSelectFile={(f) => uploadAnexo('video', f)}
-                onRemove={() => removeAnexo('video')}
-              />
-            </div>
-          </section>
+          {step === 3 && (
+            <>
+              {stepSections[2].map(renderSection)}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-4 w-1 rounded-full bg-red-500/80" aria-hidden />
+                  <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500 dark:text-gray-400">
+                    Anexos da reunião
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <AnexoUploadCard
+                    tipo="ata"
+                    titulo="Ata da reunião"
+                    descricao="PDF ou Word."
+                    icon={<FileText className="h-5 w-5 text-gray-600 dark:text-gray-300" />}
+                    accept=".pdf,.doc,.docx"
+                    anexo={form.ata}
+                    isUploading={uploadingTipo === 'ata'}
+                    isDeleting={deletingTipo === 'ata'}
+                    onSelectFile={(f) => uploadAnexo('ata', f)}
+                    onRemove={() => removeAnexo('ata')}
+                  />
+                  <AnexoUploadCard
+                    tipo="video"
+                    titulo="Vídeo da reunião"
+                    descricao="MP4, MOV ou WEBM."
+                    icon={<VideoIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />}
+                    accept="video/*"
+                    anexo={form.video}
+                    isUploading={uploadingTipo === 'video'}
+                    isDeleting={deletingTipo === 'video'}
+                    onSelectFile={(f) => uploadAnexo('video', f)}
+                    onRemove={() => removeAnexo('video')}
+                  />
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* Navegação das etapas */}
+          <div className="flex items-center justify-between gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={step === 1}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:pointer-events-none disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Voltar
+            </button>
+            {step < 3 ? (
+              <button
+                type="button"
+                onClick={goNext}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-red-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Avançar
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700"
+              >
+                <Check className="h-4 w-4" />
+                Finalizar
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Modal>
