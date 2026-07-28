@@ -10,6 +10,7 @@ import {
   Clock,
   ExternalLink,
   Filter,
+  Flag,
   FolderKanban,
   Loader2,
   Plus,
@@ -43,7 +44,7 @@ import {
 import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
-import { currencyDigitsToFormatted } from '@/lib/fichaDemandaApproval';
+import { currencyDigitsToFormatted, parseCurrencyToNumber } from '@/lib/fichaDemandaApproval';
 
 const SPREADSHEET_URL =
   'https://docs.google.com/spreadsheets/d/1a91oJtIVYdydilp9hrmtVXnPwnXQ5Pf0/edit';
@@ -271,6 +272,21 @@ function normalizeHeaderKey(header: string): string {
 function isValorEstimadoHeader(header: string): boolean {
   const key = normalizeHeaderKey(header);
   return key === 'VALOR ESTIMADO' || key === 'VALOR';
+}
+
+/** Chave comparável do valor estimado; null = vazio / texto (ex.: sigiloso) / ignorar. */
+function normalizeValorEstimadoKey(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === '-' || trimmed === '—' || trimmed === '–') return null;
+
+  // Só números: textos como "sigiloso", "a definir", etc. não entram na comparação.
+  const digits = trimmed.replace(/\D/g, '');
+  if (!digits || /^0+$/.test(digits)) return null;
+
+  const amount = parseCurrencyToNumber(trimmed);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  return `n:${Math.round(amount * 100)}`;
 }
 
 function isEstadoHeader(header: string): boolean {
@@ -898,6 +914,30 @@ export function LicitacoesRegiaoPanel({
     statusCards.find((card) => card.id === statusFilter) ?? statusCards[0];
   const ListStatusIcon = activeStatusCard.Icon;
 
+  const duplicatedValorEstimadoSourceIndexes = useMemo(() => {
+    const headers = sheet?.headers ?? [];
+    const rows = sheet?.rows ?? [];
+    const valorCol = findHeaderIndex(headers, isValorEstimadoHeader);
+    if (valorCol < 0 || rows.length === 0) return new Set<number>();
+
+    const counts = new Map<string, number>();
+    const keysByIndex: Array<string | null> = rows.map((cells) =>
+      normalizeValorEstimadoKey(cellAt(cells, valorCol))
+    );
+    for (const key of keysByIndex) {
+      if (!key) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    const duplicated = new Set<number>();
+    keysByIndex.forEach((key, index) => {
+      if (key && (counts.get(key) ?? 0) > 1) duplicated.add(index);
+    });
+    return duplicated;
+  }, [sheet?.headers, sheet?.rows]);
+
+  const duplicatedValorEstimadoCount = duplicatedValorEstimadoSourceIndexes.size;
+
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageRows = useMemo(() => {
@@ -1364,6 +1404,11 @@ export function LicitacoesRegiaoPanel({
                     : `${visibleRows.length} ${
                         visibleRows.length === 1 ? 'licitação' : 'licitações'
                       }`}
+                  {sheet?.aceites?.length ? ` · ${sheet.aceites.length} com aceite` : ''}
+                  {manualRowKeySet.size ? ` · ${manualRowKeySet.size} no sistema` : ''}
+                  {duplicatedValorEstimadoCount
+                    ? ` · ${duplicatedValorEstimadoCount} com valor estimado repetido`
+                    : ''}
                   {sheet?.fetchedAt ? ` · Atualizado em ${formatFetchedAt(sheet.fetchedAt)}` : ''}
                 </p>
               </div>
@@ -1650,6 +1695,9 @@ export function LicitacoesRegiaoPanel({
                       const aceite = row.rowKey ? aceitesByRowKey.get(row.rowKey) : undefined;
                       const rejeite = row.rowKey ? rejeitesByRowKey.get(row.rowKey) : undefined;
                       const isSelected = row.rowKey ? selectedRowKeys.has(row.rowKey) : false;
+                      const hasValorEstimadoDuplicado = duplicatedValorEstimadoSourceIndexes.has(
+                        row.sourceIndex
+                      );
                       const estado = cellAt(row.cells, col.estado);
                       const site = cellAt(row.cells, col.site);
                       const hora = cellAt(row.cells, col.hora);
@@ -1779,13 +1827,31 @@ export function LicitacoesRegiaoPanel({
                                   </td>
                                   {valorColumn ? (
                                     <td className={cadastroListClasses.tdNumeric}>
-                                      <div>
-                                        <p className="whitespace-nowrap">
-                                          {valorValue || '—'}
-                                        </p>
+                                      <div className="inline-flex flex-col items-end">
+                                        <div className="inline-flex items-center justify-end gap-1.5">
+                                          {hasValorEstimadoDuplicado ? (
+                                            <span
+                                              className="inline-flex items-center"
+                                              title="Valor estimado repetido nesta região"
+                                            >
+                                              <Flag
+                                                className="h-3.5 w-3.5 fill-amber-400 text-amber-500 dark:fill-amber-500 dark:text-amber-400"
+                                                aria-label="Valor estimado repetido"
+                                              />
+                                            </span>
+                                          ) : null}
+                                          <p className="whitespace-nowrap">
+                                            {valorValue || '—'}
+                                          </p>
+                                        </div>
                                         {desconto ? (
                                           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                             Desc. {desconto}
+                                          </p>
+                                        ) : null}
+                                        {hasValorEstimadoDuplicado ? (
+                                          <p className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                            Valor repetido
                                           </p>
                                         ) : null}
                                       </div>
@@ -1846,13 +1912,31 @@ export function LicitacoesRegiaoPanel({
                             <>
                               {valorColumn ? (
                                 <td className={cadastroListClasses.tdNumeric}>
-                                  <div>
-                                    <p className="whitespace-nowrap">
-                                      {cellAt(row.cells, valorColumn.colIndex) || '—'}
-                                    </p>
+                                  <div className="inline-flex flex-col items-end">
+                                    <div className="inline-flex items-center justify-end gap-1.5">
+                                      {hasValorEstimadoDuplicado ? (
+                                        <span
+                                          className="inline-flex items-center"
+                                          title="Valor estimado repetido nesta região"
+                                        >
+                                          <Flag
+                                            className="h-3.5 w-3.5 fill-amber-400 text-amber-500 dark:fill-amber-500 dark:text-amber-400"
+                                            aria-label="Valor estimado repetido"
+                                          />
+                                        </span>
+                                      ) : null}
+                                      <p className="whitespace-nowrap">
+                                        {cellAt(row.cells, valorColumn.colIndex) || '—'}
+                                      </p>
+                                    </div>
                                     {desconto ? (
                                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                         Desc. {desconto}
+                                      </p>
+                                    ) : null}
+                                    {hasValorEstimadoDuplicado ? (
+                                      <p className="mt-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                                        Valor repetido
                                       </p>
                                     ) : null}
                                   </div>

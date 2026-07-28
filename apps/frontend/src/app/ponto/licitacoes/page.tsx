@@ -4,13 +4,17 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
+  Archive,
+  Calculator,
   ChevronDown,
   ClipboardList,
+  Database,
   Download,
   ExternalLink,
   FileText,
   Hand,
   Loader2,
+  MapPin,
   Maximize2,
   Minimize2,
   Info,
@@ -36,6 +40,7 @@ import {
 } from './LicitacaoNaoSeHabilitaPanel';
 import { LicitacoesRegiaoPanel } from './LicitacoesRegiaoPanel';
 import { BancoCatsPanel } from './BancoCatsPanel';
+import { LicitacaoOrcamentoPanel } from './LicitacaoOrcamentoPanel';
 import { buildLicitacaoTituloDisplay } from './licitacaoDisplay';
 import {
   emptyChecklistState,
@@ -62,7 +67,7 @@ const BRASIL_UFS = [
   'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
 ] as const;
 
-type LicitacaoViewMode = 'analise' | 'arquivadas' | 'regioes' | 'banco-cats';
+type LicitacaoViewMode = 'analise' | 'arquivadas' | 'orcamento' | 'regioes' | 'banco-cats';
 
 type LicitacaoArquivadaMotivo =
   | 'suspensa'
@@ -70,7 +75,8 @@ type LicitacaoArquivadaMotivo =
   | 'encerrada'
   | 'em_andamento'
   | 'vencidas'
-  | 'aguardando_aprovacao';
+  | 'aguardando_aprovacao'
+  | 'orcamento';
 
 const ARQUIVADA_MOTIVO_OPTIONS: Array<{
   value: LicitacaoArquivadaMotivo;
@@ -79,12 +85,18 @@ const ARQUIVADA_MOTIVO_OPTIONS: Array<{
   confirm: string;
 }> = [
   { value: 'aguardando_aprovacao', label: 'Aguardando aprovação', singular: 'Aguardando aprovação', confirm: 'aguardando aprovação' },
+  { value: 'orcamento', label: 'Orçamento', singular: 'Orçamento', confirm: 'orçamento' },
   { value: 'suspensa', label: 'Suspensas', singular: 'Suspensa', confirm: 'suspensa' },
   { value: 'declinada', label: 'Declinadas', singular: 'Declinada', confirm: 'declinada' },
   { value: 'encerrada', label: 'Encerradas', singular: 'Encerrada', confirm: 'encerrada' },
   { value: 'em_andamento', label: 'Em andamento', singular: 'Em andamento', confirm: 'em andamento' },
   { value: 'vencidas', label: 'Vencidas', singular: 'Vencida', confirm: 'vencida' },
 ];
+
+/** Status que permanecem na lista de Análise final (Orçamento tem aba própria). */
+const ANALISE_FINAL_MOTIVO_OPTIONS = ARQUIVADA_MOTIVO_OPTIONS.filter(
+  (item) => item.value !== 'orcamento'
+);
 
 function isArquivadaMotivoValue(value: unknown): value is LicitacaoArquivadaMotivo {
   return ARQUIVADA_MOTIVO_OPTIONS.some((item) => item.value === value);
@@ -320,6 +332,8 @@ function licitacaoStatusBadgeClass(
         return 'bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-300';
       case 'aguardando_aprovacao':
         return 'bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300';
+      case 'orcamento':
+        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300';
       default:
         return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400';
     }
@@ -404,7 +418,7 @@ export default function LicitacoesPage() {
   const [viewMode, setViewModeState] = useState<LicitacaoViewMode>(() => {
     if (typeof window === 'undefined') return 'analise';
     const saved = sessionStorage.getItem(LICITACAO_VIEW_MODE_KEY);
-    if (saved === 'regioes' || saved === 'arquivadas' || saved === 'banco-cats') return saved;
+    if (saved === 'regioes' || saved === 'arquivadas' || saved === 'banco-cats' || saved === 'orcamento') return saved;
     return 'analise';
   });
 
@@ -535,12 +549,13 @@ export default function LicitacoesPage() {
     enabled: showAnaliseLayout,
   });
 
-  // Somente arquivadas de fato (ação do usuário) entram na aba Arquivadas.
+  // Análise final: arquivadas, exceto as enviadas para a aba Orçamento.
   const list = useMemo(
     () =>
       listRaw.filter((item) => {
         if (isArquivadasView) {
           if (item.arquivada !== true) return false;
+          if (resolveArquivadaMotivo(item) === 'orcamento') return false;
           if (arquivadaMotivoFilter && resolveArquivadaMotivo(item) !== arquivadaMotivoFilter) {
             return false;
           }
@@ -556,6 +571,12 @@ export default function LicitacoesPage() {
       }),
     [arquivadaMotivoFilter, decisaoAnaliseFinalFilter, isArquivadasView, listRaw]
   );
+
+  useEffect(() => {
+    if (!isArquivadasView || !selectedId || loadingList) return;
+    if (list.length === 0 || list.some((item) => item.id === selectedId)) return;
+    setSelectedId(null);
+  }, [isArquivadasView, list, loadingList, selectedId]);
 
   const hasActiveFilters = Boolean(
     dataInicio ||
@@ -1136,9 +1157,13 @@ export default function LicitacoesPage() {
         message: (res.data?.message as string | undefined) ?? 'Análise arquivada.',
       };
     },
-    onSuccess: ({ licitacao, message }) => {
-      toast.success(message);
-      if (!isArquivadasView && selectedId === licitacao.id) {
+    onSuccess: ({ licitacao, message }, variables) => {
+      toast.success(
+        variables.motivo === 'orcamento'
+          ? 'Enviada para a aba Orçamento.'
+          : message
+      );
+      if (selectedId === licitacao.id && (!isArquivadasView || variables.motivo === 'orcamento')) {
         setSelectedId(null);
       }
       queryClient.removeQueries({ queryKey: ['licitacao', licitacao.id] });
@@ -1170,9 +1195,12 @@ export default function LicitacoesPage() {
       if (!selectedId || arquivarMutation.isPending) return;
       const atual = display ? resolveArquivadaMotivo(display) : null;
       if (atual === motivo) return;
-      const confirmMessage = isArquivadasView
-        ? `Alterar status para ${arquivadaMotivoConfirmLabel(motivo)}?`
-        : `Definir status como ${arquivadaMotivoConfirmLabel(motivo)}? A análise sairá da lista de processos e ficará disponível em Análise final.`;
+      const confirmMessage =
+        motivo === 'orcamento'
+          ? 'Enviar para Orçamento? A análise sairá da Análise final e ficará disponível na aba Orçamento.'
+          : isArquivadasView
+            ? `Alterar status para ${arquivadaMotivoConfirmLabel(motivo)}?`
+            : `Definir status como ${arquivadaMotivoConfirmLabel(motivo)}? A análise sairá da lista de processos e ficará disponível em Análise final.`;
       if (!window.confirm(confirmMessage)) return;
       arquivarMutation.mutate({ id: selectedId, motivo });
     },
@@ -1279,6 +1307,40 @@ export default function LicitacoesPage() {
                 </a>
               </div>
             </div>
+
+            {viewMode === 'banco-cats' ? (
+              <div
+                role="note"
+                className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex min-w-0 gap-2.5">
+                  <Info
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                    aria-hidden
+                  />
+                  <div className="min-w-0 space-y-1.5">
+                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
+                      A consulta de habilitação técnica é baseada no banco de dados das CAT&apos;s.
+                      Caso sua busca não retorne o resultado desejado, complemente sua pesquisa nos
+                      PDFs disponíveis no drive do setor de contratos.
+                    </p>
+                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
+                      Atente-se para grafia de sua pesquisa, teste diferentes combinações de
+                      palavras-chave.
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={DRIVE_CATS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-950/80"
+                >
+                  <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+                  Abrir drive das CATs
+                </a>
+              </div>
+            ) : null}
           </header>
 
           <div className="border-b border-gray-200 dark:border-gray-700">
@@ -1289,10 +1351,11 @@ export default function LicitacoesPage() {
             >
               {(
                 [
-                  { id: 'analise' as const, label: 'Em Análise' },
-                  { id: 'arquivadas' as const, label: 'Análise Final' },
-                  { id: 'regioes' as const, label: 'Por Região' },
-                  { id: 'banco-cats' as const, label: 'Banco CATs' },
+                  { id: 'orcamento' as const, label: 'Orçamento', Icon: Calculator },
+                  { id: 'analise' as const, label: 'Em Análise', Icon: ClipboardList },
+                  { id: 'arquivadas' as const, label: 'Análise Final', Icon: Archive },
+                  { id: 'regioes' as const, label: 'Por Região', Icon: MapPin },
+                  { id: 'banco-cats' as const, label: 'Banco CATs', Icon: Database },
                 ] as const
               ).map((tab) => {
                 const active = viewMode === tab.id;
@@ -1306,12 +1369,13 @@ export default function LicitacoesPage() {
                       if (tab.id === 'arquivadas') setSelectedId(null);
                       setViewMode(tab.id);
                     }}
-                    className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                    className={`inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                       active
                         ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                     }`}
                   >
+                    <tab.Icon className="h-4 w-4 shrink-0" aria-hidden />
                     {tab.label}
                   </button>
                 );
@@ -1411,6 +1475,8 @@ export default function LicitacoesPage() {
             <LicitacoesRegiaoPanel regiaoKey={planilhaRegiaoKey} />
           ) : viewMode === 'banco-cats' ? (
             <BancoCatsPanel />
+          ) : viewMode === 'orcamento' ? (
+            <LicitacaoOrcamentoPanel />
           ) : (
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
             {/* Sidebar */}
@@ -1556,7 +1622,7 @@ export default function LicitacoesPage() {
                         className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
                       >
                         <option value="">Todas as categorias</option>
-                        {ARQUIVADA_MOTIVO_OPTIONS.map((option) => (
+                        {ANALISE_FINAL_MOTIVO_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>

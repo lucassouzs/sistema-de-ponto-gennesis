@@ -1,3 +1,9 @@
+import {
+  getOrCreateLicitacaoOrcamentoView,
+  getOrcamentoLineTemplate,
+  putOrcamentoLineTemplate,
+  saveLicitacaoOrcamentoForLicitacao,
+} from '../services/LicitacaoOrcamentoService';
 import { Response, NextFunction } from 'express';
 import multer from 'multer';
 import { createError } from '../middleware/errorHandler';
@@ -854,6 +860,7 @@ export class LicitacaoController {
         em_andamento: 'Status definido como em andamento.',
         vencidas: 'Status definido como vencida.',
         aguardando_aprovacao: 'Status definido como aguardando aprovação.',
+        orcamento: 'Status definido como orçamento.',
       };
       res.json({ success: true, data, message: messageByMotivo[motivo] });
     } catch (error) {
@@ -947,6 +954,51 @@ export class LicitacaoController {
     try {
       const pergunta = typeof req.body?.pergunta === 'string' ? req.body.pergunta : '';
       const data = await licitacaoService.perguntar(req.params.id, pergunta);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error instanceof Error ? createError(error.message, 400) : error);
+    }
+  }
+
+  async getOrcamento(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await getOrCreateLicitacaoOrcamentoView(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao carregar orçamento';
+      const status = message.includes('não encontrad') ? 404 : 400;
+      next(error instanceof Error ? createError(message, status) : error);
+    }
+  }
+
+  async saveOrcamento(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await saveLicitacaoOrcamentoForLicitacao({
+        licitacaoId: req.params.id,
+        inputs: req.body?.inputs ?? req.body,
+        userId: req.user!.id,
+      });
+      res.json({ success: true, data });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao salvar orçamento';
+      const status =
+        message.includes('não encontrad') ? 404 : message.includes('status Orçamento') ? 400 : 400;
+      next(error instanceof Error ? createError(message, status) : error);
+    }
+  }
+
+  async getOrcamentoLineTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await getOrcamentoLineTemplate();
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error instanceof Error ? createError(error.message, 400) : error);
+    }
+  }
+
+  async updateOrcamentoLineTemplate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await putOrcamentoLineTemplate(req.body?.lines ?? req.body);
       res.json({ success: true, data });
     } catch (error) {
       next(error instanceof Error ? createError(error.message, 400) : error);

@@ -400,6 +400,12 @@ app.patch('/api/licitacoes/:id/arquivar', authenticate, (req, res, next) =>
 app.patch('/api/licitacoes/:id/desarquivar', authenticate, (req, res, next) =>
   licitacaoExtraCtrl.desarquivarAnalise(req as AuthRequest, res, next)
 );
+app.get('/api/licitacoes/:id/orcamento', authenticate, (req, res, next) =>
+  licitacaoExtraCtrl.getOrcamento(req as AuthRequest, res, next)
+);
+app.put('/api/licitacoes/:id/orcamento', authenticate, (req, res, next) =>
+  licitacaoExtraCtrl.saveOrcamento(req as AuthRequest, res, next)
+);
 app.get('/api/licitacoes/planilha-regioes', authenticate, (req, res, next) =>
   licitacaoExtraCtrl.listRegiaoTabs(req as AuthRequest, res, next)
 );
@@ -426,6 +432,12 @@ app.post('/api/licitacoes/banco-cats', authenticate, (req, res, next) =>
 );
 app.delete('/api/licitacoes/banco-cats', authenticate, (req, res, next) =>
   licitacaoExtraCtrl.deleteBancoCatsServico(req as AuthRequest, res, next)
+);
+app.get('/api/licitacoes/orcamento-line-template', authenticate, (req, res, next) =>
+  licitacaoExtraCtrl.getOrcamentoLineTemplate(req as AuthRequest, res, next)
+);
+app.put('/api/licitacoes/orcamento-line-template', authenticate, (req, res, next) =>
+  licitacaoExtraCtrl.updateOrcamentoLineTemplate(req as AuthRequest, res, next)
 );
 app.use('/api/licitacoes', licitacoesRoutes);
 app.use('/api/pncp', pncpRoutes);
