@@ -11,10 +11,10 @@ import {
   ShoppingCart,
   BookPlus,
   ImagePlus,
-  FolderClock,
   Car,
   CalendarClock,
   ListTodo,
+  Gavel,
   type LucideIcon,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -197,6 +197,22 @@ export default function HomePage() {
   const canSeeApprovals =
     canAccessDpApproverPages || canApproveEspelhoNf || canApproveFuel || canApproveOc || canApproveMaterialRequests;
 
+  const canSeePncp =
+    isAdministrator ||
+    can(pathToModuleKey('/ponto/licitacoes-pncp')) ||
+    can(pathToModuleKey('/ponto/licitacoes'));
+
+  const { data: pncpEnviosData } = useQuery({
+    queryKey: ['pncp-meus-envios-count'],
+    queryFn: async () => {
+      const res = await api.get('/pncp/meus-envios-count');
+      return res.data?.data as { total?: number } | undefined;
+    },
+    enabled: canSeePncp,
+    staleTime: 60_000,
+  });
+  const pncpEnviadosCount = Number(pncpEnviosData?.total || 0);
+
   const allStatCards: StatCard[] = [
     {
       id: 'aprovacoes',
@@ -225,17 +241,19 @@ export default function HomePage() {
       accent: 'yellow',
       visible: true,
     },
+    {
+      id: 'pncp-enviados',
+      label: 'Licitações captadas',
+      value: pncpEnviadosCount,
+      href: '/ponto/licitacoes-pncp',
+      icon: Gavel,
+      accent: 'green',
+      visible: canSeePncp,
+    },
   ];
   const statCards = allStatCards.filter((card) => card.visible);
 
   const quickActions: QuickAction[] = [
-    {
-      id: 'ponto',
-      label: 'Bater ponto',
-      href: '/ponto',
-      icon: FolderClock,
-      visible: permissions.canRegisterTime,
-    },
     {
       id: 'materiais',
       label: 'Solicitar materiais',
@@ -327,7 +345,7 @@ export default function HomePage() {
 
           {/* Cards de status */}
           {statCards.length > 0 && (
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
               {statCards.map((card) => {
                 const Icon = card.icon;
                 const colors = STAT_CARD_ACCENT_CLASSES[card.accent];

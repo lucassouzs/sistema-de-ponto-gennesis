@@ -91,6 +91,19 @@ export async function listAllPncpEnviadoNumeros(): Promise<string[]> {
   return rows.map((row) => row.numeroControlePNCP).filter(Boolean);
 }
 
+/** Quantidade de licitações PNCP que o usuário enviou para a área de Licitações. */
+export async function countPncpEnviadosByUser(userId: string): Promise<number> {
+  const id = String(userId || '').trim();
+  if (!id) return 0;
+  const rows = await getPrisma().$queryRaw<Array<{ total: bigint | number }>>`
+    SELECT COUNT(*)::int AS total
+    FROM pncp_enviados_analise e
+    WHERE e."enviadoBy" = ${id}
+  `;
+  const total = rows[0]?.total;
+  return typeof total === 'bigint' ? Number(total) : Number(total || 0);
+}
+
 export async function createPncpEnviadoAnalise(input: {
   numeroControlePNCP: string;
   regiaoKey: string;

@@ -10,6 +10,7 @@ import {
 import { consultarContratacoesLocais } from '../services/PncpLocalConsultaService';
 import { enviarPncpParaAnalise } from '../services/PncpEnviarAnaliseService';
 import { rejeitarPncpContratacao } from '../services/PncpRejeitarService';
+import { countPncpEnviadosByUser } from '../services/pncpEnviadoAnaliseStore';
 import {
   getPncpSyncStatus,
   requestPncpSyncCancel,
@@ -289,6 +290,15 @@ export class PncpController {
         return;
       }
       next(createError(message, 500));
+    }
+  }
+
+  async meusEnviosCount(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const total = await countPncpEnviadosByUser(req.user!.id);
+      res.json({ success: true, data: { total } });
+    } catch (err) {
+      next(err);
     }
   }
 
