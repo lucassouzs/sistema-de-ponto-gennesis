@@ -18,9 +18,10 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
-import { resolveBreadcrumbs } from '@/lib/pageTitle';
+import { resolveBreadcrumbs, appendBreadcrumbEntity } from '@/lib/pageTitle';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTheme } from '@/context/ThemeContext';
+import { usePageTitleOverride } from '@/context/PageTitleContext';
 import { CircularPhotoCropModal } from '@/components/conversas/CircularPhotoCropModal';
 import { NotificationsDropdown } from '@/components/layout/NotificationsDropdown';
 import { NavSearch } from '@/components/layout/NavSearch';
@@ -119,6 +120,7 @@ export function TopNavbar({
   const pathname = usePathname();
   const { user, userDepartment, userPosition } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
+  const { breadcrumbEntity } = usePageTitleOverride();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const profileTriggerRef = useRef<HTMLButtonElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -130,7 +132,10 @@ export function TopNavbar({
   const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const breadcrumbs = resolveBreadcrumbs(pathname ?? '/');
+  const breadcrumbs = appendBreadcrumbEntity(
+    resolveBreadcrumbs(pathname ?? '/'),
+    breadcrumbEntity,
+  );
   const displayName = user?.name || userName || 'Usuário';
   const cargoLabel = userPosition || userDepartment || 'Conta';
   const profilePhotoHref = resolveApiMediaUrl(user?.profilePhotoUrl ?? null);
@@ -294,17 +299,17 @@ export function TopNavbar({
             aria-expanded={profileMenuOpen}
             aria-label="Conta e configurações"
             onClick={() => setProfileMenuOpen((v) => !v)}
-            className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            className="profile-avatar-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
           >
             {profilePhotoHref ? (
               <img
                 src={profilePhotoHref}
                 alt=""
-                className="h-full w-full object-cover"
+                className="profile-avatar-btn__media h-full w-full object-cover"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span className="text-sm font-semibold text-white">
+              <span className="profile-avatar-btn__media text-sm font-semibold text-white">
                 {getInitials(displayName)}
               </span>
             )}

@@ -145,3 +145,25 @@ export function buildDocumentTitle(pageTitle: string | null | undefined): string
   if (!pageTitle) return APP_TITLE;
   return `${pageTitle} | ${APP_TITLE}`;
 }
+
+/**
+ * Insere a entidade dinâmica após o crumb do módulo (ex.: após Contratos).
+ * Ex.: Engenharia > Contratos + SEDES → Engenharia > Contratos > SEDES
+ */
+export function appendBreadcrumbEntity(
+  crumbs: BreadcrumbItem[],
+  entity: BreadcrumbItem | null | undefined,
+): BreadcrumbItem[] {
+  const label = entity?.label?.trim();
+  if (!label || crumbs.length === 0) return crumbs;
+  if (crumbs.some((c) => c.label === label)) return crumbs;
+
+  const moduleIdx = crumbs.findIndex((c) => Boolean(c.href));
+  if (moduleIdx < 0) {
+    return [...crumbs, { label, href: entity?.href }];
+  }
+
+  const next = [...crumbs];
+  next.splice(moduleIdx + 1, 0, { label, href: entity?.href });
+  return next;
+}

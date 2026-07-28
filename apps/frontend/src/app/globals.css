@@ -596,6 +596,124 @@
   }
 }
 
+/* Logo do rail */
+@keyframes sidebar-logo-float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.03);
+  }
+}
+
+@keyframes sidebar-logo-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  40% {
+    transform: rotate(-12deg) scale(1.12);
+  }
+  70% {
+    transform: rotate(8deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(0deg) scale(1.1);
+  }
+}
+
+.sidebar-logo-btn {
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.sidebar-logo-btn__img {
+  animation: sidebar-logo-float 3.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.sidebar-logo-btn:hover {
+  transform: scale(1.06);
+}
+
+.sidebar-logo-btn:hover .sidebar-logo-btn__img {
+  animation: sidebar-logo-spin 0.55s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
+}
+
+.sidebar-logo-btn:active {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-logo-btn__img {
+    animation: none;
+  }
+
+  .sidebar-logo-btn,
+  .sidebar-logo-btn:hover,
+  .sidebar-logo-btn:active {
+    transition-duration: 0.01ms !important;
+    transform: none;
+  }
+
+  .sidebar-logo-btn:hover .sidebar-logo-btn__img {
+    animation: none;
+  }
+}
+
+/* Avatar do perfil (navbar) */
+@keyframes profile-avatar-pop {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1.06);
+  }
+}
+
+.profile-avatar-btn {
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.profile-avatar-btn__media {
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.profile-avatar-btn:hover {
+  transform: scale(1.08);
+}
+
+.profile-avatar-btn:hover .profile-avatar-btn__media {
+  animation: profile-avatar-pop 0.4s cubic-bezier(0.34, 1.45, 0.64, 1) forwards;
+}
+
+.profile-avatar-btn:active {
+  transform: scale(0.94);
+}
+
+.profile-avatar-btn[aria-expanded='true'] {
+  transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-avatar-btn,
+  .profile-avatar-btn__media {
+    transition-duration: 0.01ms !important;
+  }
+
+  .profile-avatar-btn:hover,
+  .profile-avatar-btn:active,
+  .profile-avatar-btn[aria-expanded='true'] {
+    transform: none;
+  }
+
+  .profile-avatar-btn:hover .profile-avatar-btn__media {
+    animation: none;
+  }
+}
+
 /* Sino de notificações */
 @keyframes notif-bell-ring {
   0%,

@@ -1459,7 +1459,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             <Link
               href="/ponto/home"
               prefetch={navLinkPrefetch}
-              className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl transition-all hover:scale-105 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8"
+              className="sidebar-logo-btn flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8"
               title="Ir para a página inicial"
               aria-label="Página inicial"
               aria-current={onHomeRoute ? 'page' : undefined}
@@ -1467,7 +1467,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               <img
                 src={logoSrc}
                 alt={logoAlt}
-                className="h-full w-full object-contain"
+                className="sidebar-logo-btn__img h-full w-full object-contain"
               />
             </Link>
           </div>
