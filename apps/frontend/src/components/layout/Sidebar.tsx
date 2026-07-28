@@ -210,6 +210,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
   const searchInputRef = useRef<HTMLInputElement>(null);
   const profileAvatarInputRef = useRef<HTMLInputElement>(null);
   const profileAvatarSectionRef = useRef<HTMLDivElement>(null);
+  const profileAvatarMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -285,6 +286,10 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     canAccessFluigApproversRoute,
   ]);
   const [profileAvatarMenu, setProfileAvatarMenu] = useState(false);
+  const [profileAvatarMenuPos, setProfileAvatarMenuPos] = useState<{
+    left: number;
+    bottom: number;
+  } | null>(null);
   const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
 
   const { data: chatUnreadCount = 0 } = useQuery({
@@ -508,22 +513,44 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
 
   const profilePhotoHref = resolveApiMediaUrl(user?.profilePhotoUrl ?? null);
 
-  // Fechar menu quando clicar fora dele
+  const updateProfileAvatarMenuPos = useCallback(() => {
+    const el = profileAvatarSectionRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setProfileAvatarMenuPos({
+      left: Math.round(rect.right + 8),
+      bottom: Math.round(window.innerHeight - rect.bottom),
+    });
+  }, []);
+
+  // Posiciona o menu do avatar e fecha ao clicar fora (portal no body)
   useEffect(() => {
+    if (!profileAvatarMenu) {
+      setProfileAvatarMenuPos(null);
+      return;
+    }
+
+    updateProfileAvatarMenuPos();
+
     const handleClickOutside = (event: MouseEvent) => {
       const t = event.target as Node;
       if (profileAvatarSectionRef.current?.contains(t)) return;
+      if (profileAvatarMenuRef.current?.contains(t)) return;
       setProfileAvatarMenu(false);
     };
 
-    if (profileAvatarMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    const handleReposition = () => updateProfileAvatarMenuPos();
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
     };
-  }, [profileAvatarMenu]);
+  }, [profileAvatarMenu, updateProfileAvatarMenuPos]);
 
   const isEmployee = userRole === 'EMPLOYEE';
 
@@ -1693,69 +1720,80 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                         }}
                       />
 
-                      {profileAvatarMenu && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-[100]"
-                            aria-hidden="true"
-                            onClick={() => setProfileAvatarMenu(false)}
-                          />
-                          <div
-                            role="menu"
-                            className="absolute z-[120] min-w-[200px] rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1 left-full ml-2 bottom-0"
-                          >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setProfileAvatarMenu(false);
-                                profileAvatarInputRef.current?.click();
+                      {profileAvatarMenu &&
+                        profileAvatarMenuPos &&
+                        typeof document !== 'undefined' &&
+                        createPortal(
+                          <>
+                            <div
+                              className="fixed inset-0 z-[9998]"
+                              aria-hidden="true"
+                              onClick={() => setProfileAvatarMenu(false)}
+                            />
+                            <div
+                              ref={profileAvatarMenuRef}
+                              role="menu"
+                              style={{
+                                position: 'fixed',
+                                left: profileAvatarMenuPos.left,
+                                bottom: profileAvatarMenuPos.bottom,
+                                zIndex: 9999,
                               }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                              className="min-w-[200px] rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1"
                             >
-                              <Camera size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                              <span className="font-medium">Carregar foto</span>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                toggleTheme();
-                                setProfileAvatarMenu(false);
-                              }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              {isDark ? (
-                                <Sun size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                              ) : (
-                                <Moon size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                              )}
-                              <span className="font-medium">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setProfileAvatarMenu(false);
-                                onOpenChangePassword?.();
-                              }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              <Lock size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                              <span className="font-medium">Alterar Senha</span>
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={handleLogout}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-red-900/20 transition-colors group"
-                            >
-                              <LogOut size={15} className="text-gray-500 dark:text-gray-400 shrink-0 group-hover:text-red-600 dark:group-hover:text-red-400" />
-                              <span className="font-medium group-hover:text-red-600 dark:group-hover:text-red-400">Sair</span>
-                            </button>
-                          </div>
-                        </>
-                      )}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setProfileAvatarMenu(false);
+                                  profileAvatarInputRef.current?.click();
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                              >
+                                <Camera size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                                <span className="font-medium">Carregar foto</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  toggleTheme();
+                                  setProfileAvatarMenu(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                              >
+                                {isDark ? (
+                                  <Sun size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                                ) : (
+                                  <Moon size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                                )}
+                                <span className="font-medium">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setProfileAvatarMenu(false);
+                                  onOpenChangePassword?.();
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                              >
+                                <Lock size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
+                                <span className="font-medium">Alterar Senha</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={handleLogout}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-red-900/20 transition-colors group"
+                              >
+                                <LogOut size={15} className="text-gray-500 dark:text-gray-400 shrink-0 group-hover:text-red-600 dark:group-hover:text-red-400" />
+                                <span className="font-medium group-hover:text-red-600 dark:group-hover:text-red-400">Sair</span>
+                              </button>
+                            </div>
+                          </>,
+                          document.body
+                        )}
             </div>
             </div>
           </div>

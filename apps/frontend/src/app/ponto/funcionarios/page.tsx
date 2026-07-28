@@ -360,11 +360,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         return;
       }
 
-      // Buscar última matrícula do ano atual (será gerada no backend, aqui só para preview)
-      const currentYear = new Date().getFullYear().toString().slice(-2);
-      let nextSequence = 1;
-
-      // Processar cada linha
+      // Matrícula real é gerada no backend a partir da última do banco
       const processedRows: EmployeeRow[] = rows.map((row, index) => {
         const linha = index + 2; // +2 porque linha 1 é cabeçalho e arrays começam em 0
         const erros: string[] = [];
@@ -391,10 +387,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         if (emailStr && !emailRegex.test(emailStr)) {
           erros.push('Email inválido');
         }
-
-        // Gerar matrícula
-        const matriculaGerada = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
-        nextSequence++;
 
         return {
           linha,
@@ -431,7 +423,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
           },
           erros,
           isValid: erros.length === 0,
-          matriculaGerada
+          matriculaGerada: undefined
         };
       });
 
@@ -651,7 +643,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
             'Salário Família': parseCurrency(r.dados['Salário Família'] || ''),
             Periculosidade: parseCurrency(r.dados['Periculosidade'] || '0'),
             Insalubridade: parseCurrency(r.dados['Insalubridade'] || '0'),
-            matriculaGerada: r.matriculaGerada
           };
         })
       });
@@ -664,7 +655,21 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         toast.success(`✅ ${data.data.sucessos} funcionário(s) importado(s) com sucesso!`);
         onSuccess();
       } else {
-        toast.error(`⚠️ ${data.data.sucessos} importado(s), ${data.data.erros} erro(s)`);
+        const detalhesErros: Array<{ linha?: number; nome?: string; erro?: string }> =
+          data.data.detalhes?.erros || [];
+        const preview = detalhesErros
+          .slice(0, 3)
+          .map((e) => {
+            const quem = e.nome ? ` (${e.nome})` : '';
+            return `Linha ${e.linha ?? '?'}${quem}: ${e.erro || 'Erro'}`;
+          })
+          .join('\n');
+        const extra =
+          detalhesErros.length > 3 ? `\n… e mais ${detalhesErros.length - 3} erro(s)` : '';
+        toast.error(
+          `${data.data.sucessos} importado(s), ${data.data.erros} erro(s)${preview ? `\n${preview}${extra}` : ''}`,
+          { duration: 10000 }
+        );
       }
     },
     onError: (error: any) => {
@@ -1161,8 +1166,8 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                               </div>
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap">
-                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                {row.matriculaGerada}
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Automática
                               </span>
                             </td>
                             <td className={`px-3 py-3 whitespace-nowrap text-center sticky right-0 z-20 ${!row.isValid ? 'bg-red-50/30 dark:bg-red-950/20' : 'bg-white dark:bg-gray-900'}`}>
@@ -1181,7 +1186,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                   </table>
                 </div>
                 
-                {/* Resumo de erros melhorado */}
+                {/* Resumo de erros do preview */}
                 {parsedRows.some(r => !r.isValid) && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 rounded-lg border-2 border-red-300 dark:border-red-700 shadow-sm">
                     <div className="flex items-center space-x-2 mb-3">
@@ -1204,6 +1209,39 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Erros retornados pelo servidor após importar */}
+                {result && result.erros > 0 && Array.isArray(result.detalhes?.erros) && (
+                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 rounded-lg border-2 border-red-300 dark:border-red-700 shadow-sm">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                      <p className="text-sm font-bold text-red-800 dark:text-red-200">
+                        {result.sucessos} importado(s), {result.erros} erro(s) na importação
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-xs text-red-700 dark:text-red-300 max-h-40 overflow-y-auto">
+                      {result.detalhes.erros.map(
+                        (
+                          err: { linha?: number; nome?: string; erro?: string },
+                          idx: number
+                        ) => (
+                          <div
+                            key={idx}
+                            className="flex items-start space-x-2 p-2 bg-red-100 dark:bg-red-900/50 rounded border border-red-200 dark:border-red-800"
+                          >
+                            <span className="font-bold text-red-800 dark:text-red-300 min-w-[50px]">
+                              Linha {err.linha ?? '?'}:
+                            </span>
+                            <div className="flex-1">
+                              {err.nome ? <span className="font-medium">{err.nome} — </span> : null}
+                              <span>{err.erro || 'Erro desconhecido'}</span>
+                            </div>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
                 )}

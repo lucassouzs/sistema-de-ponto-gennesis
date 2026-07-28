@@ -1100,7 +1100,7 @@ export function KanbanPlannerView({
                         if (clampedEnd <= clampedStart) return null;
                         const top = ((clampedStart - gridStart) / 60) * ROW_HEIGHT;
                         const height = Math.max(
-                          22,
+                          36,
                           ((clampedEnd - clampedStart) / 60) * ROW_HEIGHT - 2
                         );
                         return (
