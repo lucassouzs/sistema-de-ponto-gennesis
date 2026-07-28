@@ -145,7 +145,7 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
               transform: 'translateY(-50%)',
               zIndex: 9999,
             }}
-            className="pointer-events-none max-w-[14rem] whitespace-nowrap rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+            className="pointer-events-none max-w-[14rem] whitespace-nowrap rounded-md bg-slate-800/90 px-2.5 py-1.5 text-xs font-medium text-white shadow-md backdrop-blur-sm"
           >
             {label}
           </div>,
