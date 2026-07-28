@@ -690,18 +690,44 @@ export function FluigSolicitacoesPage({
 
   const ccCodeToName = useMemo(() => {
     const map = new Map<string, string>();
+    const normalize = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+
     (dbCostCenters || []).forEach((cc: { code?: string; name?: string }) => {
       const code = String(cc.code ?? '').trim();
       const name = String(cc.name ?? '').trim();
-      if (code) map.set(code, name || code);
-      if (code) map.set(code.replace(/\s+/g, ''), name || code);
+      const full = name || code;
+      if (!full) return;
+      if (code) {
+        map.set(code, full);
+        map.set(code.replace(/\s+/g, ''), full);
+      }
+      map.set(normalize(full), full);
+      const dashParts = full.split(/\s*[-–—]\s*/);
+      if (dashParts.length >= 2) {
+        const short = normalize(dashParts.slice(1).join(' - '));
+        if (short && !map.has(short)) map.set(short, full);
+      }
     });
     return map;
   }, [dbCostCenters]);
 
-  const getCCDisplayLabel = (code: string): string => {
+  const getCCDisplayLabel = (code: string, hintText?: string): string => {
     const c = String(code).trim();
     if (!c) return '';
+
+    const normalize = (s: string) =>
+      s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
 
     const fromSplit = formatFluigBudgetFieldDisplay(c);
     const looksLikeCodeOnly = (s: string) => /^[\d.\s]+$/.test(s.trim());
@@ -713,23 +739,42 @@ export function FluigSolicitacoesPage({
 
     const candidates = Array.from(
       new Set(
-        [c, codeOnly, codeOnly.replace(/\s+/g, ''), c.replace(/\s+/g, '')]
+        [c, codeOnly, codeOnly.replace(/\s+/g, ''), c.replace(/\s+/g, ''), normalize(c), normalize(nameFromValue || c)]
           .map((x) => x.trim())
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     );
 
+    const resolvedFromMap: string[] = [];
     for (const key of candidates) {
-      let name = ccCodeToName.get(key);
+      const name = ccCodeToName.get(key) || ccCodeToName.get(normalize(key));
       if (!name) continue;
-      if (/^[\d.]+\s*[-–—]\s*/.test(name)) {
-        name = name.replace(/^[\d.]+\s*[-–—]\s*/, '').trim();
+      let cleaned = name;
+      if (/^[\d.]+\s*[-–—]\s*/.test(cleaned)) {
+        cleaned = cleaned.replace(/^[\d.]+\s*[-–—]\s*/, '').trim();
       }
-      const displayName = formatFluigBudgetFieldDisplay(name) ?? name;
-      if (displayName) return displayName;
+      const displayName = formatFluigBudgetFieldDisplay(cleaned) ?? cleaned;
+      if (displayName) resolvedFromMap.push(displayName);
     }
 
-    if (nameFromValue && !looksLikeCodeOnly(nameFromValue)) return nameFromValue;
+    if (resolvedFromMap.length === 1) return resolvedFromMap[0]!;
+    if (resolvedFromMap.length > 1) {
+      const hint = normalize(hintText || '');
+      if (hint) {
+        const byHint = resolvedFromMap.find((n) => {
+          const nn = normalize(n);
+          if (hint.includes(nn)) return true;
+          const prefix = n.split(/\s*[-–—]\s*/)[0]?.trim();
+          return Boolean(prefix && hint.includes(normalize(prefix)));
+        });
+        if (byHint) return byHint;
+      }
+      return resolvedFromMap.sort((a, b) => b.length - a.length)[0]!;
+    }
+
+    if (nameFromValue && !looksLikeCodeOnly(nameFromValue)) {
+      return formatFluigBudgetFieldDisplay(c) ?? nameFromValue;
+    }
     if (fromSplit && !looksLikeCodeOnly(fromSplit)) return fromSplit;
     return c;
   };
@@ -1827,7 +1872,7 @@ export function FluigSolicitacoesPage({
                                     const openDetail = () => setDetail({ row, columns: currentColumns, datasetId });
                                     if (useEmployeeListLayout) {
                                       const ccRaw = getCCValue(row);
-                                      const ccNome = getCCDisplayLabel(ccRaw);
+                                      const ccNome = getCCDisplayLabel(ccRaw, getHistText(row));
                                       const processId = getFluigProcessInstanceId(row, currentColumns, idCol);
                                       return (
                                         <tr

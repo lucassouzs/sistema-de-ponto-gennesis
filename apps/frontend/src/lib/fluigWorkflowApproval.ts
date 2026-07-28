@@ -1537,14 +1537,16 @@ export function isWorkflowApprovalDateInRange(
   return true;
 }
 
-/** Remove código quando o Fluig envia "código - descrição" ou "código-descrição". */
+/** Remove código quando o Fluig envia "código - descrição" (ex.: "01.02 - Nome"). */
 export function formatFluigBudgetFieldDisplay(raw: string | null | undefined): string | null {
   const value = raw?.trim();
   if (!value) return null;
   const parts = value.split(/\s*[-–—]\s*/);
   if (parts.length >= 2) {
+    const head = parts[0].trim();
     const label = parts.slice(1).join(' - ').trim();
-    if (label) return label;
+    // Só remove o prefixo se for código numérico — mantém "DF - ADM LOCAL", "CONFEA - 516 NORTE"
+    if (label && /^[\d.]+$/.test(head)) return label;
   }
   return value;
 }
