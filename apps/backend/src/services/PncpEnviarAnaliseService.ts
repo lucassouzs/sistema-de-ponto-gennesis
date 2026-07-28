@@ -230,6 +230,7 @@ export async function enviarPncpParaAnalise(input: {
     ['SITE/LOCAL', 'SITE', 'LOCAL'],
     pncp.linkSistemaOrigem || pncp.linkPncp || buildPncpEditalUrl(pncp.numeroControlePNCP)
   );
+  // Abertura na coluna da planilha; encerramento fica no snapshot (UI "Período").
   setField(fields, headers, ['ABERTURA'], formatDateBr(pncp.dataAberturaProposta));
   setField(fields, headers, ['HORA'], formatTimeBr(pncp.dataAberturaProposta));
   setField(fields, headers, ['FASE DA LICITAÇÃO', 'FASE DA LICITACAO'], pncp.situacao || '');
@@ -248,10 +249,17 @@ export async function enviarPncpParaAnalise(input: {
   );
 
   const modalidade = String(pncp.modalidade || '').trim();
+  const encerramentoEm = pncp.dataEncerramentoProposta;
   const rowSnapshot = {
     ...normalizeManualRowSnapshot(headers, fields),
     numeroControlePNCP: pncp.numeroControlePNCP,
     ...(modalidade ? { MODALIDADE: modalidade } : {}),
+    ...(encerramentoEm
+      ? {
+          ENCERRAMENTO: formatDateBr(encerramentoEm),
+          ENCERRAMENTO_HORA: formatTimeBr(encerramentoEm),
+        }
+      : {}),
   };
 
   if (Object.keys(normalizeManualRowSnapshot(headers, fields)).length === 0) {

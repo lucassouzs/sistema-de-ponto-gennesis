@@ -159,7 +159,8 @@ export class PncpController {
       const statusAnalise =
         statusAnaliseRaw === 'disponivel' ||
         statusAnaliseRaw === 'enviada' ||
-        statusAnaliseRaw === 'rejeitada'
+        statusAnaliseRaw === 'rejeitada' ||
+        statusAnaliseRaw === 'vencida'
           ? statusAnaliseRaw
           : statusAnaliseRaw === 'all'
             ? 'all'

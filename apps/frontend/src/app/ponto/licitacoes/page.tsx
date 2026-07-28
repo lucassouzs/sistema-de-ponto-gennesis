@@ -4,16 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
-  Archive,
   ChevronDown,
   ClipboardList,
-  Database,
   Download,
   ExternalLink,
   FileText,
   Hand,
   Loader2,
-  MapPin,
   Maximize2,
   Minimize2,
   Info,
@@ -1282,40 +1279,6 @@ export default function LicitacoesPage() {
                 </a>
               </div>
             </div>
-
-            {viewMode === 'banco-cats' ? (
-              <div
-                role="note"
-                className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex min-w-0 gap-2.5">
-                  <Info
-                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
-                    aria-hidden
-                  />
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
-                      A consulta de habilitação técnica é baseada no banco de dados das CAT&apos;s.
-                      Caso sua busca não retorne o resultado desejado, complemente sua pesquisa nos
-                      PDFs disponíveis no drive do setor de contratos.
-                    </p>
-                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
-                      Atente-se para grafia de sua pesquisa, teste diferentes combinações de
-                      palavras-chave.
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href={DRIVE_CATS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-950/80"
-                >
-                  <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
-                  Abrir drive das CATs
-                </a>
-              </div>
-            ) : null}
           </header>
 
           <div className="border-b border-gray-200 dark:border-gray-700">
@@ -1326,10 +1289,10 @@ export default function LicitacoesPage() {
             >
               {(
                 [
-                  { id: 'arquivadas' as const, label: 'Análise final', Icon: Archive },
-                  { id: 'analise' as const, label: 'Em análise', Icon: ClipboardList },
-                  { id: 'regioes' as const, label: 'Por região', Icon: MapPin },
-                  { id: 'banco-cats' as const, label: 'CATs', Icon: Database },
+                  { id: 'analise' as const, label: 'Em Análise' },
+                  { id: 'arquivadas' as const, label: 'Análise Final' },
+                  { id: 'regioes' as const, label: 'Por Região' },
+                  { id: 'banco-cats' as const, label: 'Banco CATs' },
                 ] as const
               ).map((tab) => {
                 const active = viewMode === tab.id;
@@ -1343,19 +1306,52 @@ export default function LicitacoesPage() {
                       if (tab.id === 'arquivadas') setSelectedId(null);
                       setViewMode(tab.id);
                     }}
-                    className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                    className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                       active
                         ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                     }`}
                   >
-                    <tab.Icon className="h-4 w-4 shrink-0" aria-hidden />
                     {tab.label}
                   </button>
                 );
               })}
             </nav>
           </div>
+
+          {viewMode === 'banco-cats' ? (
+            <div
+              role="note"
+              className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 gap-2.5">
+                <Info
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
+                  aria-hidden
+                />
+                <div className="min-w-0 space-y-1.5">
+                  <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
+                    A consulta de habilitação técnica é baseada no banco de dados das CAT&apos;s.
+                    Caso sua busca não retorne o resultado desejado, complemente sua pesquisa nos
+                    PDFs disponíveis no drive do setor de contratos.
+                  </p>
+                  <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
+                    Atente-se para grafia de sua pesquisa, teste diferentes combinações de
+                    palavras-chave.
+                  </p>
+                </div>
+              </div>
+              <a
+                href={DRIVE_CATS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-950/80"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+                Abrir drive das CATs
+              </a>
+            </div>
+          ) : null}
 
           {viewMode === 'regioes' ? (
             <div className="border-b border-gray-200 dark:border-gray-700">
@@ -1444,7 +1440,7 @@ export default function LicitacoesPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        {isArquivadasView ? 'Análise final' : 'Processos'}
+                        Licitações
                       </h2>
                       {listPanelExpanded && list.length > 0 ? (
                         <p className="mt-0.5 text-xs text-gray-400">

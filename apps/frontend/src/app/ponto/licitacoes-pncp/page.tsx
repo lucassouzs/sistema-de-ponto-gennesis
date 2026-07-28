@@ -8,9 +8,11 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Clock,
   DownloadCloud,
   ExternalLink,
   Filter,
+  FolderKanban,
   Loader2,
   Plus,
   RotateCcw,
@@ -20,10 +22,12 @@ import {
   ThumbsDown,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -134,14 +138,15 @@ const VALOR_FILTRO_OPTIONS = labeledToSelectOptions([
   { value: 'between', label: 'Entre' },
 ]);
 
-type StatusAnaliseFiltro = 'disponivel' | 'enviada' | 'rejeitada' | 'all';
+type StatusAnaliseFiltro = 'disponivel' | 'enviada' | 'rejeitada' | 'vencida' | 'all';
 
-const STATUS_ANALISE_OPTIONS = labeledToSelectOptions([
-  { value: 'disponivel', label: 'Disponíveis' },
-  { value: 'enviada', label: 'Enviadas' },
-  { value: 'rejeitada', label: 'Rejeitadas' },
-  { value: 'all', label: 'Todos' },
-]);
+type PncpStatusCounts = {
+  all: number;
+  disponivel: number;
+  enviada: number;
+  rejeitada: number;
+  vencida: number;
+};
 
 function resolveValorFiltroBounds(
   modo: ValorFiltroModo,
@@ -205,6 +210,7 @@ type PncpListResult = {
   totalRegistros: number | null;
   totalPaginas: number | null;
   empty: boolean;
+  statusCounts?: PncpStatusCounts;
 };
 
 function toDateInputValue(d: Date): string {
@@ -233,6 +239,18 @@ function formatBrDateParts(iso: string | null): { date: string; time: string } |
       minute: '2-digit',
     }),
   };
+}
+
+function isPncpVencida(row: {
+  dataEncerramentoProposta?: string | null;
+  enviadoAnalise?: boolean;
+  rejeitadoAnalise?: boolean;
+}): boolean {
+  if (row.enviadoAnalise || row.rejeitadoAnalise) return false;
+  if (!row.dataEncerramentoProposta) return false;
+  const d = new Date(row.dataEncerramentoProposta);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getTime() < Date.now();
 }
 
 function DateTimeStacked({ iso }: { iso: string | null }) {
@@ -511,7 +529,6 @@ function LicitacoesPncpPageContent() {
     applied.dataFinal !== defaults.dataFinal ||
     applied.valorMin != null ||
     applied.valorMax != null ||
-    applied.statusAnalise !== 'disponivel' ||
     hasSearch;
 
   const keywordsQuery = useQuery({
@@ -1064,6 +1081,99 @@ function LicitacoesPncpPageContent() {
       }… ${syncProgress?.upserted ?? 0} salvos · ${syncProgress?.pagesFetched ?? 0} págs`
     : `Última sync: ${formatSyncLabel(lastSyncAt)}`;
 
+  const statusCounts: PncpStatusCounts = query.data?.statusCounts ?? {
+    all: totalRegistros,
+    disponivel: applied.statusAnalise === 'disponivel' ? totalRegistros : 0,
+    enviada: applied.statusAnalise === 'enviada' ? totalRegistros : 0,
+    rejeitada: applied.statusAnalise === 'rejeitada' ? totalRegistros : 0,
+    vencida: applied.statusAnalise === 'vencida' ? totalRegistros : 0,
+  };
+
+  const statusCards = useMemo(
+    () =>
+      [
+        {
+          id: 'all' as const,
+          cardLabel: 'Todas',
+          listLabel: 'Licitações',
+          count: statusCounts.all,
+          Icon: FolderKanban,
+          iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+          iconColor: 'text-blue-700 dark:text-blue-300',
+          listIconBg: 'bg-blue-100 dark:bg-blue-900/30',
+          listIconColor: 'text-blue-700 dark:text-blue-300',
+        },
+        {
+          id: 'disponivel' as const,
+          cardLabel: 'Pendentes',
+          listLabel: 'Pendentes',
+          count: statusCounts.disponivel,
+          Icon: ClipboardList,
+          iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+          iconColor: 'text-amber-700 dark:text-amber-300',
+          listIconBg: 'bg-amber-100 dark:bg-amber-900/30',
+          listIconColor: 'text-amber-700 dark:text-amber-300',
+        },
+        {
+          id: 'enviada' as const,
+          cardLabel: 'Enviadas',
+          listLabel: 'Enviadas',
+          count: statusCounts.enviada,
+          Icon: Send,
+          iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+          iconColor: 'text-emerald-700 dark:text-emerald-300',
+          listIconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+          listIconColor: 'text-emerald-700 dark:text-emerald-300',
+        },
+        {
+          id: 'rejeitada' as const,
+          cardLabel: 'Rejeitadas',
+          listLabel: 'Rejeitadas',
+          count: statusCounts.rejeitada,
+          Icon: ThumbsDown,
+          iconBg: 'bg-red-100 dark:bg-red-900/30',
+          iconColor: 'text-red-700 dark:text-red-300',
+          listIconBg: 'bg-red-100 dark:bg-red-900/30',
+          listIconColor: 'text-red-700 dark:text-red-300',
+        },
+        {
+          id: 'vencida' as const,
+          cardLabel: 'Vencidas',
+          listLabel: 'Vencidas',
+          count: statusCounts.vencida,
+          Icon: Clock,
+          iconBg: 'bg-orange-100 dark:bg-orange-900/30',
+          iconColor: 'text-orange-700 dark:text-orange-300',
+          listIconBg: 'bg-orange-100 dark:bg-orange-900/30',
+          listIconColor: 'text-orange-700 dark:text-orange-300',
+        },
+      ] as const satisfies ReadonlyArray<{
+        id: StatusAnaliseFiltro;
+        cardLabel: string;
+        listLabel: string;
+        count: number;
+        Icon: LucideIcon;
+        iconBg: string;
+        iconColor: string;
+        listIconBg: string;
+        listIconColor: string;
+      }>,
+    [statusCounts]
+  );
+
+  const activeStatusCard =
+    statusCards.find((card) => card.id === applied.statusAnalise) ?? statusCards[0];
+  const ListStatusIcon = activeStatusCard.Icon;
+
+  const selectStatusCard = (next: StatusAnaliseFiltro) => {
+    setStatusAnalise(next);
+    setApplied((prev) => ({
+      ...prev,
+      statusAnalise: next,
+      pagina: 1,
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center">
@@ -1075,16 +1185,34 @@ function LicitacoesPncpPageContent() {
         </p>
       </div>
 
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
+        {statusCards.map((card) => (
+          <FilterStatCard
+            key={card.id}
+            label={card.cardLabel}
+            count={card.count}
+            icon={card.Icon}
+            iconBg={card.iconBg}
+            iconColor={card.iconColor}
+            isActive={applied.statusAnalise === card.id}
+            loading={showInitialLoading}
+            onClick={() => selectStatusCard(card.id)}
+          />
+        ))}
+      </div>
+
       <Card className={cadastroListClasses.card}>
         <CardHeader className={cadastroListClasses.cardHeader}>
           <div className={cadastroListClasses.cardHeaderRow}>
             <div className={cadastroListClasses.cardHeaderIconRow}>
-              <div className="flex-shrink-0 rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-900/30">
-                <ClipboardList className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+              <div className={`flex-shrink-0 rounded-lg p-2 sm:p-3 ${activeStatusCard.listIconBg}`}>
+                <ListStatusIcon
+                  className={`h-5 w-5 sm:h-6 sm:w-6 ${activeStatusCard.listIconColor}`}
+                />
               </div>
               <div className="min-w-0">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
-                  Licitações
+                  {activeStatusCard.listLabel}
                 </h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {listSubtitle}
@@ -1154,7 +1282,7 @@ function LicitacoesPncpPageContent() {
           ) : items.length === 0 ? (
             <div className="space-y-4">
               <CadastroListEmpty
-                icon={ClipboardList}
+                icon={ListStatusIcon}
                 title="Nenhuma licitação encontrada"
                 hint={
                   syncRunning
@@ -1352,6 +1480,10 @@ function LicitacoesPncpPageContent() {
                                   </span>
                                 ) : null}
                               </div>
+                            ) : isPncpVencida(row) ? (
+                              <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] font-semibold text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+                                Vencida
+                              </span>
                             ) : (
                               <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                                 Disponível
@@ -1603,30 +1735,6 @@ function LicitacoesPncpPageContent() {
                     className="w-full"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Status
-                </label>
-                <StringSingleSelectDropdown
-                  value={statusAnalise}
-                  onChange={(next) => {
-                    const value = (next as StatusAnaliseFiltro) || 'disponivel';
-                    setStatusAnalise(value);
-                    commitFilters({
-                      ufs,
-                      modalidadeCodigos,
-                      dataInicial,
-                      dataFinal,
-                      statusAnalise: value,
-                    });
-                  }}
-                  options={STATUS_ANALISE_OPTIONS}
-                  placeholder="Selecionar…"
-                  allowEmpty={false}
-                  disableSearch
-                />
               </div>
 
               <div>

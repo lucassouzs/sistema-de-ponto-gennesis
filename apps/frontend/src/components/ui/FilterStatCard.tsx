@@ -28,7 +28,10 @@ export function FilterStatCard({
 }: FilterStatCardProps) {
   return (
     <Card
-      className="cursor-pointer transition-shadow hover:shadow-md"
+      className={clsx(
+        'cursor-pointer transition-shadow hover:shadow-md',
+        isActive && 'bg-gray-50 shadow-md dark:bg-gray-800/80'
+      )}
       role="button"
       tabIndex={0}
       aria-pressed={isActive}

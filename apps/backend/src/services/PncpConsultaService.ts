@@ -41,7 +41,7 @@ export type PncpConsultaParams = {
    * - enviada: já enviadas
    * - all / omitido: todas
    */
-  statusAnalise?: 'disponivel' | 'enviada' | 'rejeitada' | 'all' | null;
+  statusAnalise?: 'disponivel' | 'enviada' | 'rejeitada' | 'vencida' | 'all' | null;
   /**
    * Quando true, mantém só contratações cujo objeto casa com as palavras-chave
    * padrão (engenharia, manutenção predial, áreas verdes, etc.).
@@ -92,6 +92,13 @@ export type PncpConsultaResult = {
   totalRegistros: number | null;
   totalPaginas: number | null;
   empty: boolean;
+  statusCounts?: {
+    all: number;
+    disponivel: number;
+    enviada: number;
+    rejeitada: number;
+    vencida: number;
+  };
 };
 
 function toYyyymmdd(value: string): string {

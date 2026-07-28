@@ -482,6 +482,40 @@ async function ensureLicitacoesTables(prisma: PrismaClient): Promise<void> {
   `);
 }
 
+async function ensureLicitacaoRegiaoRejeitesTable(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "licitacao_regiao_rejeites" (
+      "id" TEXT NOT NULL,
+      "regiaoKey" TEXT NOT NULL,
+      "spreadsheetId" TEXT NOT NULL,
+      "rowKey" TEXT NOT NULL,
+      "rowSnapshot" JSONB,
+      "rejectedBy" TEXT NOT NULL,
+      "rejectedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "licitacao_regiao_rejeites_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "licitacao_regiao_rejeites_regiao_sheet_row_key"
+    ON "licitacao_regiao_rejeites"("regiaoKey", "spreadsheetId", "rowKey");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "licitacao_regiao_rejeites_regiaoKey_idx"
+    ON "licitacao_regiao_rejeites"("regiaoKey");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE "licitacao_regiao_rejeites" ADD CONSTRAINT "licitacao_regiao_rejeites_rejectedBy_fkey"
+        FOREIGN KEY ("rejectedBy") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+}
+
 async function ensureLicitacaoRegiaoAceitesTable(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "licitacao_regiao_aceites" (
@@ -831,6 +865,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacoesTables(prisma);
     await ensureLicitacaoColumns(prisma);
     await ensureLicitacaoRegiaoAceitesTable(prisma);
+    await ensureLicitacaoRegiaoRejeitesTable(prisma);
     await ensureLicitacaoRegiaoManuaisTable(prisma);
     await ensurePncpEnviadosAnaliseTable(prisma);
     await ensurePncpRejeitadosTable(prisma);

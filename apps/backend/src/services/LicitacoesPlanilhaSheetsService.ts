@@ -1,5 +1,6 @@
 import { buildLicitacaoRegiaoRowKey } from '../lib/licitacaoRegiaoRowKey';
 import { listLicitacaoRegiaoAceites } from './licitacaoRegiaoAceiteStore';
+import { listLicitacaoRegiaoRejeites } from './licitacaoRegiaoRejeiteStore';
 import {
   getCanonicalRegiaoHeaders,
   listLicitacaoRegiaoManuais,
@@ -31,6 +32,13 @@ export type LicitacaoRegiaoAceiteSummary = {
   acceptedAt: string;
 };
 
+export type LicitacaoRegiaoRejeiteSummary = {
+  rowKey: string;
+  rejectedBy: string;
+  rejectedByName: string;
+  rejectedAt: string;
+};
+
 export type LicitacaoRegiaoRowRecebimento = {
   enviadoPor: string | null;
   recebidoEm: string | null;
@@ -47,6 +55,7 @@ export type LicitacaoRegiaoSheetData = {
   /** Quem enviou / quando entrou na lista (manual PNCP/nova ou 1ª vez na planilha). */
   recebimentosByRowKey: Record<string, LicitacaoRegiaoRowRecebimento>;
   aceites: LicitacaoRegiaoAceiteSummary[];
+  rejeites: LicitacaoRegiaoRejeiteSummary[];
   rowCount: number;
   sheetAvailable: boolean;
   fetchedAt: string;
@@ -164,6 +173,7 @@ function buildEmptySheetData(tab: LicitacaoRegiaoTab): LicitacaoRegiaoSheetData 
     manualRowKeys: [],
     recebimentosByRowKey: {},
     aceites: [],
+    rejeites: [],
     rowCount: 0,
     sheetAvailable: false,
     fetchedAt: new Date().toISOString(),
@@ -208,6 +218,8 @@ async function repairPncpManualSnapshot(
       numeroControlePNCP: true,
       processo: true,
       modalidade: true,
+      dataEncerramentoProposta: true,
+      dataAberturaProposta: true,
     },
   });
   if (!pncp) return { snapshot, changed: false };
@@ -296,6 +308,64 @@ async function repairPncpManualSnapshot(
     changed = true;
   }
 
+  const aberturaEm = pncp.dataAberturaProposta;
+  if (aberturaEm) {
+    const desiredDate = aberturaEm.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const desiredTime = aberturaEm.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const aberturaKey = findSnapshotKey(next, ['ABERTURA']);
+    const horaKey = findSnapshotKey(next, ['HORA']);
+    if (aberturaKey && next[aberturaKey].trim() !== desiredDate) {
+      next[aberturaKey] = desiredDate;
+      changed = true;
+    } else if (!aberturaKey) {
+      next.ABERTURA = desiredDate;
+      changed = true;
+    }
+    if (horaKey && next[horaKey].trim() !== desiredTime) {
+      next[horaKey] = desiredTime;
+      changed = true;
+    } else if (!horaKey && desiredTime) {
+      next.HORA = desiredTime;
+      changed = true;
+    }
+  }
+
+  const encerramentoEm = pncp.dataEncerramentoProposta;
+  if (encerramentoEm) {
+    const desiredDate = encerramentoEm.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const desiredTime = encerramentoEm.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const encKey = findSnapshotKey(next, ['ENCERRAMENTO']);
+    const encHoraKey = findSnapshotKey(next, ['ENCERRAMENTO_HORA', 'HORA ENCERRAMENTO']);
+    if (encKey && next[encKey].trim() !== desiredDate) {
+      next[encKey] = desiredDate;
+      changed = true;
+    } else if (!encKey) {
+      next.ENCERRAMENTO = desiredDate;
+      changed = true;
+    }
+    if (encHoraKey && next[encHoraKey].trim() !== desiredTime) {
+      next[encHoraKey] = desiredTime;
+      changed = true;
+    } else if (!encHoraKey && desiredTime) {
+      next.ENCERRAMENTO_HORA = desiredTime;
+      changed = true;
+    }
+  }
+
   return { snapshot: next, changed };
 }
 
@@ -331,13 +401,33 @@ async function mergeManualRowsIntoSheet(
   const hasModalidadeHeader = headers.some(
     (header) => normalizeHeaderKeyLoose(header) === 'modalidade'
   );
-  const effectiveHeaders = hasModalidadeHeader ? headers : [...headers, 'MODALIDADE'];
-  const padSheetRow = (row: string[]) => (hasModalidadeHeader ? row : [...row, '']);
+  const hasEncerramentoHeader = headers.some(
+    (header) => normalizeHeaderKeyLoose(header) === 'encerramento'
+  );
+  const hasEncerramentoHoraHeader = headers.some((header) => {
+    const key = normalizeHeaderKeyLoose(header);
+    return key === 'encerramento hora' || key === 'encerramento_hora';
+  });
+
+  let effectiveHeaders = [...headers];
+  if (!hasModalidadeHeader) effectiveHeaders = [...effectiveHeaders, 'MODALIDADE'];
+  if (!hasEncerramentoHeader) effectiveHeaders = [...effectiveHeaders, 'ENCERRAMENTO'];
+  if (!hasEncerramentoHoraHeader) effectiveHeaders = [...effectiveHeaders, 'ENCERRAMENTO_HORA'];
+
+  const padSheetRow = (row: string[]) => {
+    const next = [...row];
+    while (next.length < effectiveHeaders.length) next.push('');
+    return next;
+  };
 
   const manualRows = repairedSnapshots.map((snapshot) =>
     snapshotToCells(effectiveHeaders, {
       ...snapshot,
       MODALIDADE: String(snapshot.MODALIDADE || snapshot.modalidade || '').trim(),
+      ENCERRAMENTO: String(snapshot.ENCERRAMENTO || snapshot.encerramento || '').trim(),
+      ENCERRAMENTO_HORA: String(
+        snapshot.ENCERRAMENTO_HORA || snapshot.encerramentoHora || ''
+      ).trim(),
     })
   );
   const manualRowKeys = manuais.map((manual) => manual.rowKey);
@@ -700,6 +790,33 @@ async function loadAceitesSummary(
   }));
 }
 
+async function loadRejeitesSummary(
+  regiaoKey: string,
+  sheetId: string
+): Promise<LicitacaoRegiaoRejeiteSummary[]> {
+  const rejeiteRows = await listLicitacaoRegiaoRejeites(regiaoKey, sheetId);
+  return rejeiteRows.map((rejeite) => ({
+    rowKey: rejeite.rowKey,
+    rejectedBy: rejeite.rejectedBy,
+    rejectedByName: rejeite.rejectedByName,
+    rejectedAt: rejeite.rejectedAt.toISOString(),
+  }));
+}
+
+async function loadAceitesAndRejeites(
+  regiaoKey: string,
+  sheetId: string
+): Promise<{
+  aceites: LicitacaoRegiaoAceiteSummary[];
+  rejeites: LicitacaoRegiaoRejeiteSummary[];
+}> {
+  const [aceites, rejeites] = await Promise.all([
+    loadAceitesSummary(regiaoKey, sheetId),
+    loadRejeitesSummary(regiaoKey, sheetId),
+  ]);
+  return { aceites, rejeites };
+}
+
 async function fetchSheetWithRetry(url: string, attempts = 3): Promise<Response> {
   let lastError: Error | null = null;
 
@@ -866,10 +983,14 @@ export async function fetchLicitacaoRegiaoSheet(
   if (!sheetMeta) {
     const cachedEmpty = emptySheetCache.get(cacheKey);
     if (!forceRefresh && cachedEmpty && cachedEmpty.expiresAt > Date.now()) {
-      const aceites = await loadAceitesSummary(tab.key, cachedEmpty.data.spreadsheetId);
+      const { aceites, rejeites } = await loadAceitesAndRejeites(
+        tab.key,
+        cachedEmpty.data.spreadsheetId
+      );
       const withRetained = await mergeRetainedSheetRows(tab, {
         ...cachedEmpty.data,
         aceites,
+        rejeites,
         fetchedAt: new Date().toISOString(),
       });
       return mergeManualRowsIntoSheet(tab, withRetained);
@@ -880,8 +1001,8 @@ export async function fetchLicitacaoRegiaoSheet(
       data: empty,
       expiresAt: Date.now() + SHEET_LIST_CACHE_TTL_MS,
     });
-    const aceites = await loadAceitesSummary(tab.key, empty.spreadsheetId);
-    const withRetained = await mergeRetainedSheetRows(tab, { ...empty, aceites });
+    const { aceites, rejeites } = await loadAceitesAndRejeites(tab.key, empty.spreadsheetId);
+    const withRetained = await mergeRetainedSheetRows(tab, { ...empty, aceites, rejeites });
     return mergeManualRowsIntoSheet(tab, withRetained);
   }
 
@@ -894,7 +1015,7 @@ export async function fetchLicitacaoRegiaoSheet(
   const rowKeys = processed.rows.map((row) =>
     buildLicitacaoRegiaoRowKey(tab.key, sheetId, row)
   );
-  const aceites = await loadAceitesSummary(tab.key, sheetId);
+  const { aceites, rejeites } = await loadAceitesAndRejeites(tab.key, sheetId);
 
   const withRetained = await mergeRetainedSheetRows(tab, {
     tab,
@@ -905,6 +1026,7 @@ export async function fetchLicitacaoRegiaoSheet(
     manualRowKeys: [],
     recebimentosByRowKey: {},
     aceites,
+    rejeites,
     rowCount: processed.rows.length,
     sheetAvailable: true,
     fetchedAt: new Date().toISOString(),

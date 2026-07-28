@@ -6,20 +6,25 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  ClipboardList,
+  Clock,
   ExternalLink,
   Filter,
+  FolderKanban,
   Loader2,
-  MapPin,
   Plus,
   RefreshCw,
   Search,
+  ThumbsDown,
   Trash2,
   Undo2,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -37,6 +42,7 @@ import {
 } from '@/components/ui/RowActionMenu';
 import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { getListTableRowClassName } from '@/components/ui/listTableUi';
 import { currencyDigitsToFormatted } from '@/lib/fichaDemandaApproval';
 
 const SPREADSHEET_URL =
@@ -93,6 +99,13 @@ type LicitacaoRegiaoAceiteSummary = {
   acceptedAt: string;
 };
 
+type LicitacaoRegiaoRejeiteSummary = {
+  rowKey: string;
+  rejectedBy: string;
+  rejectedByName: string;
+  rejectedAt: string;
+};
+
 type LicitacaoRegiaoRowRecebimento = {
   enviadoPor: string | null;
   recebidoEm: string | null;
@@ -107,10 +120,20 @@ type LicitacaoRegiaoSheetData = {
   manualRowKeys?: string[];
   recebimentosByRowKey?: Record<string, LicitacaoRegiaoRowRecebimento>;
   aceites: LicitacaoRegiaoAceiteSummary[];
+  rejeites?: LicitacaoRegiaoRejeiteSummary[];
   rowCount: number;
   sheetAvailable: boolean;
   fetchedAt: string;
 };
+
+type RowStatus = 'aceite' | 'rejeitada' | 'vencida' | 'pendente';
+
+type StatusFilterId =
+  | 'all'
+  | 'pendentes'
+  | 'aceites'
+  | 'rejeitadas'
+  | 'vencidas';
 
 type VisibleRow = {
   cells: string[];
@@ -119,6 +142,7 @@ type VisibleRow = {
   isManual: boolean;
   enviadoPor: string | null;
   recebidoEm: string | null;
+  status: RowStatus;
 };
 
 type LicitacoesRegiaoPanelProps = {
@@ -240,6 +264,7 @@ function normalizeHeaderKey(header: string): string {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toUpperCase()
+    .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ');
 }
 
@@ -314,6 +339,7 @@ function isEditalHeader(header: string): boolean {
 
 /** Colunas embutidas em outras — não aparecem sozinhas na lista. */
 function isNestedListColumn(header: string): boolean {
+  const key = normalizeHeaderKey(header);
   return (
     isItemHeader(header) ||
     isEstadoHeader(header) ||
@@ -323,7 +349,9 @@ function isNestedListColumn(header: string): boolean {
     isDescontoHeader(header) ||
     isEmpresaHeader(header) ||
     isFaseHeader(header) ||
-    isModalidadeHeader(header)
+    isModalidadeHeader(header) ||
+    key === 'ENCERRAMENTO' ||
+    key === 'ENCERRAMENTO HORA'
   );
 }
 
@@ -336,8 +364,117 @@ function cellAt(cells: string[], index: number): string {
   return (cells[index] ?? '').trim();
 }
 
-function isAberturaHeader(header: string): boolean {
+/** Coluna visível "Período" (header ABERTURA na planilha). */
+function isPeriodoHeader(header: string): boolean {
   return normalizeHeaderKey(header) === 'ABERTURA';
+}
+
+function isEncerramentoOnlyHeader(header: string): boolean {
+  return normalizeHeaderKey(header) === 'ENCERRAMENTO';
+}
+
+function isEncerramentoHoraHeader(header: string): boolean {
+  return normalizeHeaderKey(header) === 'ENCERRAMENTO HORA';
+}
+
+function displayColumnHeader(header: string): string {
+  if (isPeriodoHeader(header)) return 'Período';
+  const key = normalizeHeaderKey(header);
+  if (key === 'QUALIFICACAO TECNICA') return 'Qualificação técnica';
+  return header.trim();
+}
+
+function parseEncerramentoDate(dateStr: string, horaStr?: string): Date | null {
+  const m = dateStr.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (!day || !month || !year) return null;
+  const time = String(horaStr || '')
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})/);
+  if (time) {
+    return new Date(year, month - 1, day, Number(time[1]), Number(time[2]), 0, 0);
+  }
+  return new Date(year, month - 1, day, 23, 59, 59, 999);
+}
+
+function isEncerramentoVencido(dateStr: string, horaStr?: string): boolean {
+  const end = parseEncerramentoDate(dateStr, horaStr);
+  if (!end) return false;
+  return end.getTime() < Date.now();
+}
+
+function StatusBadge({
+  status,
+  aceiteName,
+  rejeiteName,
+}: {
+  status: RowStatus;
+  aceiteName?: string | null;
+  rejeiteName?: string | null;
+}) {
+  if (status === 'aceite') {
+    return (
+      <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+          Aceite
+        </span>
+        {aceiteName ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">{aceiteName}</p>
+        ) : null}
+      </div>
+    );
+  }
+  if (status === 'rejeitada') {
+    return (
+      <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+        <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-800 dark:bg-red-900/40 dark:text-red-300">
+          Rejeitada
+        </span>
+        {rejeiteName ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">{rejeiteName}</p>
+        ) : null}
+      </div>
+    );
+  }
+  if (status === 'vencida') {
+    return (
+      <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+        <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-[11px] font-semibold text-orange-800 dark:bg-orange-900/40 dark:text-orange-300">
+          Vencida
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
+      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+        Pendente
+      </span>
+    </div>
+  );
+}
+
+function resolveRowStatus(input: {
+  rowKey: string;
+  cells: string[];
+  headers: string[];
+  isManual: boolean;
+  aceitesByRowKey: Map<string, LicitacaoRegiaoAceiteSummary>;
+  rejeitesByRowKey: Map<string, LicitacaoRegiaoRejeiteSummary>;
+}): RowStatus {
+  if (input.rowKey && input.rejeitesByRowKey.has(input.rowKey)) return 'rejeitada';
+  if (input.rowKey && input.aceitesByRowKey.has(input.rowKey)) return 'aceite';
+  // Vencidas: só licitações do sistema (PNCP / nova), nunca da planilha.
+  if (!input.isManual) return 'pendente';
+  const encIdx = findHeaderIndex(input.headers, isEncerramentoOnlyHeader);
+  const encHoraIdx = findHeaderIndex(input.headers, isEncerramentoHoraHeader);
+  if (isEncerramentoVencido(cellAt(input.cells, encIdx), cellAt(input.cells, encHoraIdx))) {
+    return 'vencida';
+  }
+  return 'pendente';
 }
 
 function isHoraHeader(header: string): boolean {
@@ -388,7 +525,7 @@ function prepareCreateFields(
     const raw = fields[header] ?? '';
     if (isLinkHeader(header)) {
       next[header] = normalizeLinkInput(raw);
-    } else if (isAberturaHeader(header)) {
+    } else if (isPeriodoHeader(header)) {
       next[header] = isoDateToBr(raw);
     } else {
       next[header] = raw.trim();
@@ -502,6 +639,7 @@ export function LicitacoesRegiaoPanel({
   const queryClient = useQueryClient();
   const regiaoKey = regiaoKeyProp || DEFAULT_REGIAO_KEY;
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterId>('all');
   const [page, setPage] = useState(1);
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -571,9 +709,18 @@ export function LicitacoesRegiaoPanel({
     return map;
   }, [sheet?.aceites]);
 
+  const rejeitesByRowKey = useMemo(() => {
+    const map = new Map<string, LicitacaoRegiaoRejeiteSummary>();
+    for (const rejeite of sheet?.rejeites ?? []) {
+      map.set(rejeite.rowKey, rejeite);
+    }
+    return map;
+  }, [sheet?.rejeites]);
+
   const visibleRows = useMemo((): VisibleRow[] => {
     const rows = sheet?.rows ?? [];
     const rowKeys = sheet?.rowKeys ?? [];
+    const headers = sheet?.headers ?? [];
     const recebimentos = sheet?.recebimentosByRowKey ?? {};
     const query = normalizeSearchText(search);
 
@@ -581,15 +728,25 @@ export function LicitacoesRegiaoPanel({
       .map((cells, sourceIndex) => {
         const rowKey = rowKeys[sourceIndex] ?? '';
         const meta = rowKey ? recebimentos[rowKey] : undefined;
+        const isManual =
+          Boolean(rowKey) &&
+          (rowKey.startsWith('manual:') || manualRowKeySet.has(rowKey));
+        const status = resolveRowStatus({
+          rowKey,
+          cells,
+          headers,
+          isManual,
+          aceitesByRowKey,
+          rejeitesByRowKey,
+        });
         return {
           cells,
           rowKey,
           sourceIndex,
-          isManual:
-            Boolean(rowKey) &&
-            (rowKey.startsWith('manual:') || manualRowKeySet.has(rowKey)),
+          isManual,
           enviadoPor: meta?.enviadoPor?.trim() || null,
           recebidoEm: meta?.recebidoEm || null,
+          status,
         };
       })
       .filter((row) => {
@@ -600,22 +757,146 @@ export function LicitacoesRegiaoPanel({
           if (!textMatch) return false;
         }
 
-        if (!recebidoDe && !recebidoAte) return true;
-        const day = localDayKeyFromIso(row.recebidoEm);
-        if (!day) return false;
-        if (recebidoDe && day < recebidoDe) return false;
-        if (recebidoAte && day > recebidoAte) return false;
+        if (!recebidoDe && !recebidoAte) {
+          // ok
+        } else {
+          const day = localDayKeyFromIso(row.recebidoEm);
+          if (!day) return false;
+          if (recebidoDe && day < recebidoDe) return false;
+          if (recebidoAte && day > recebidoAte) return false;
+        }
+
+        if (statusFilter === 'aceites' && row.status !== 'aceite') return false;
+        if (statusFilter === 'rejeitadas' && row.status !== 'rejeitada') return false;
+        if (statusFilter === 'vencidas' && row.status !== 'vencida') return false;
+        if (statusFilter === 'pendentes' && row.status !== 'pendente') return false;
         return true;
       });
   }, [
     sheet?.rows,
     sheet?.rowKeys,
+    sheet?.headers,
     sheet?.recebimentosByRowKey,
     search,
     manualRowKeySet,
     recebidoDe,
     recebidoAte,
+    aceitesByRowKey,
+    rejeitesByRowKey,
+    statusFilter,
   ]);
+
+  const statusStats = useMemo(() => {
+    const rows = sheet?.rows ?? [];
+    const rowKeys = sheet?.rowKeys ?? [];
+    const headers = sheet?.headers ?? [];
+    let aceites = 0;
+    let rejeitadas = 0;
+    let vencidas = 0;
+    let pendentes = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const rowKey = rowKeys[i] ?? '';
+      const isManual =
+        Boolean(rowKey) &&
+        (rowKey.startsWith('manual:') || manualRowKeySet.has(rowKey));
+      const status = resolveRowStatus({
+        rowKey,
+        cells: rows[i],
+        headers,
+        isManual,
+        aceitesByRowKey,
+        rejeitesByRowKey,
+      });
+      if (status === 'aceite') aceites += 1;
+      else if (status === 'rejeitada') rejeitadas += 1;
+      else if (status === 'vencida') vencidas += 1;
+      else pendentes += 1;
+    }
+    const total = rows.length;
+    return {
+      total,
+      aceites,
+      rejeitadas,
+      vencidas,
+      pendentes,
+    };
+  }, [sheet?.rows, sheet?.rowKeys, sheet?.headers, aceitesByRowKey, rejeitesByRowKey, manualRowKeySet]);
+
+  const statusCards = useMemo(
+    () =>
+      [
+        {
+          id: 'all' as const,
+          label: 'Licitações',
+          cardLabel: 'Total',
+          count: statusStats.total,
+          Icon: FolderKanban,
+          iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+          iconColor: 'text-blue-700 dark:text-blue-300',
+          listIconBg: 'bg-blue-100 dark:bg-blue-900/30',
+          listIconColor: 'text-blue-700 dark:text-blue-300',
+        },
+        {
+          id: 'pendentes' as const,
+          label: 'Pendentes',
+          cardLabel: 'Pendentes',
+          count: statusStats.pendentes,
+          Icon: ClipboardList,
+          iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+          iconColor: 'text-amber-700 dark:text-amber-300',
+          listIconBg: 'bg-amber-100 dark:bg-amber-900/30',
+          listIconColor: 'text-amber-700 dark:text-amber-300',
+        },
+        {
+          id: 'aceites' as const,
+          label: 'Aceites',
+          cardLabel: 'Aceites',
+          count: statusStats.aceites,
+          Icon: CheckCircle2,
+          iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+          iconColor: 'text-emerald-700 dark:text-emerald-300',
+          listIconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+          listIconColor: 'text-emerald-700 dark:text-emerald-300',
+        },
+        {
+          id: 'rejeitadas' as const,
+          label: 'Rejeitadas',
+          cardLabel: 'Rejeitadas',
+          count: statusStats.rejeitadas,
+          Icon: ThumbsDown,
+          iconBg: 'bg-red-100 dark:bg-red-900/30',
+          iconColor: 'text-red-700 dark:text-red-300',
+          listIconBg: 'bg-red-100 dark:bg-red-900/30',
+          listIconColor: 'text-red-700 dark:text-red-300',
+        },
+        {
+          id: 'vencidas' as const,
+          label: 'Vencidas',
+          cardLabel: 'Vencidas',
+          count: statusStats.vencidas,
+          Icon: Clock,
+          iconBg: 'bg-orange-100 dark:bg-orange-900/30',
+          iconColor: 'text-orange-700 dark:text-orange-300',
+          listIconBg: 'bg-orange-100 dark:bg-orange-900/30',
+          listIconColor: 'text-orange-700 dark:text-orange-300',
+        },
+      ] as const satisfies ReadonlyArray<{
+        id: StatusFilterId;
+        label: string;
+        cardLabel: string;
+        count: number;
+        Icon: LucideIcon;
+        iconBg: string;
+        iconColor: string;
+        listIconBg: string;
+        listIconColor: string;
+      }>,
+    [statusStats]
+  );
+
+  const activeStatusCard =
+    statusCards.find((card) => card.id === statusFilter) ?? statusCards[0];
+  const ListStatusIcon = activeStatusCard.Icon;
 
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -642,10 +923,11 @@ export function LicitacoesRegiaoPanel({
 
   useEffect(() => {
     setPage(1);
-  }, [search, regiaoKey, activeTab?.key, recebidoDe, recebidoAte]);
+  }, [search, regiaoKey, activeTab?.key, recebidoDe, recebidoAte, statusFilter]);
 
   useEffect(() => {
     setSearch('');
+    setStatusFilter('all');
     setRecebidoDe('');
     setRecebidoAte('');
     setShowRecebidoFilter(false);
@@ -670,18 +952,38 @@ export function LicitacoesRegiaoPanel({
   }, [sheet?.rowCount, activeTab?.key, regiaoKey, queryClient]);
 
   const selectableVisibleRowKeys = useMemo(
-    () => pageRows.filter((row) => row.rowKey && !aceitesByRowKey.has(row.rowKey)).map((r) => r.rowKey),
-    [pageRows, aceitesByRowKey]
+    () =>
+      pageRows
+        .filter((row) => row.rowKey && (row.status === 'pendente' || row.status === 'vencida'))
+        .map((r) => r.rowKey),
+    [pageRows]
   );
 
   const selectedPendingRowKeys = useMemo(
-    () => Array.from(selectedRowKeys).filter((key) => !aceitesByRowKey.has(key)),
-    [selectedRowKeys, aceitesByRowKey]
+    () =>
+      Array.from(selectedRowKeys).filter((key) => {
+        const row = visibleRows.find((r) => r.rowKey === key);
+        return row && (row.status === 'pendente' || row.status === 'vencida');
+      }),
+    [selectedRowKeys, visibleRows]
   );
 
   const selectedAcceptedRowKeys = useMemo(
-    () => Array.from(selectedRowKeys).filter((key) => aceitesByRowKey.has(key)),
-    [selectedRowKeys, aceitesByRowKey]
+    () =>
+      Array.from(selectedRowKeys).filter((key) => {
+        const row = visibleRows.find((r) => r.rowKey === key);
+        return row?.status === 'aceite';
+      }),
+    [selectedRowKeys, visibleRows]
+  );
+
+  const selectedRejectedRowKeys = useMemo(
+    () =>
+      Array.from(selectedRowKeys).filter((key) => {
+        const row = visibleRows.find((r) => r.rowKey === key);
+        return row?.status === 'rejeitada';
+      }),
+    [selectedRowKeys, visibleRows]
   );
 
   const selectedManualRowKeys = useMemo(
@@ -727,6 +1029,7 @@ export function LicitacoesRegiaoPanel({
 
       const incomingAceites = payload?.data ?? [];
       if (incomingAceites.length > 0 && activeTab?.key) {
+        const acceptedKeys = new Set(incomingAceites.map((a) => a.rowKey));
         queryClient.setQueryData<LicitacaoRegiaoSheetData>(
           ['licitacoes-planilha-regiao', activeTab.key],
           (current) => {
@@ -735,7 +1038,11 @@ export function LicitacoesRegiaoPanel({
             for (const aceite of incomingAceites) {
               byKey.set(aceite.rowKey, aceite);
             }
-            return { ...current, aceites: Array.from(byKey.values()) };
+            return {
+              ...current,
+              aceites: Array.from(byKey.values()),
+              rejeites: (current.rejeites ?? []).filter((r) => !acceptedKeys.has(r.rowKey)),
+            };
           }
         );
       }
@@ -789,6 +1096,106 @@ export function LicitacoesRegiaoPanel({
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message ?? 'Erro ao desfazer aceite.');
+    },
+  });
+
+  const rejeitarMutation = useMutation({
+    mutationFn: async (rowKeys: string[]) => {
+      if (!sheet || !activeTab) throw new Error('Dados da planilha indisponíveis.');
+
+      const items = rowKeys.map((rowKey) => {
+        const sourceIndex = sheet.rowKeys.indexOf(rowKey);
+        return {
+          rowKey,
+          rowSnapshot:
+            sourceIndex >= 0
+              ? buildRowSnapshot(sheet.headers, sheet.rows[sourceIndex])
+              : undefined,
+        };
+      });
+
+      const res = await api.post('/licitacoes/planilha-regioes/rejeites', {
+        regiaoKey: activeTab.key,
+        spreadsheetId: sheet.spreadsheetId,
+        items,
+      });
+      return res.data as {
+        message?: string;
+        data?: LicitacaoRegiaoRejeiteSummary[];
+      };
+    },
+    onSuccess: async (payload) => {
+      toast.success(payload?.message ?? 'Licitação rejeitada.');
+      setSelectedRowKeys(new Set());
+
+      const incoming = payload?.data ?? [];
+      if (incoming.length > 0 && activeTab?.key) {
+        const rejectedKeys = new Set(incoming.map((r) => r.rowKey));
+        queryClient.setQueryData<LicitacaoRegiaoSheetData>(
+          ['licitacoes-planilha-regiao', activeTab.key],
+          (current) => {
+            if (!current) return current;
+            const byKey = new Map((current.rejeites ?? []).map((r) => [r.rowKey, r]));
+            for (const rejeite of incoming) {
+              byKey.set(rejeite.rowKey, rejeite);
+            }
+            return {
+              ...current,
+              rejeites: Array.from(byKey.values()),
+              aceites: (current.aceites ?? []).filter((a) => !rejectedKeys.has(a.rowKey)),
+            };
+          }
+        );
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['licitacoes-planilha-regiao', activeTab?.key] });
+      await queryClient.invalidateQueries({ queryKey: ['licitacoes'] });
+      await refetch();
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message ?? 'Erro ao rejeitar licitação.');
+    },
+  });
+
+  const desfazerRejeiteMutation = useMutation({
+    mutationFn: async (rowKeys: string[]) => {
+      if (!sheet || !activeTab) throw new Error('Dados da planilha indisponíveis.');
+
+      const res = await api.delete('/licitacoes/planilha-regioes/rejeites', {
+        data: {
+          regiaoKey: activeTab.key,
+          spreadsheetId: sheet.spreadsheetId,
+          rowKeys,
+        },
+      });
+      return res.data as {
+        message?: string;
+        data?: { rowKeys?: string[] };
+      };
+    },
+    onSuccess: async (payload) => {
+      toast.success(payload?.message ?? 'Rejeição desfeita.');
+      setSelectedRowKeys(new Set());
+
+      const removedRowKeys = new Set(payload?.data?.rowKeys ?? []);
+      if (removedRowKeys.size > 0 && activeTab?.key) {
+        queryClient.setQueryData<LicitacaoRegiaoSheetData>(
+          ['licitacoes-planilha-regiao', activeTab.key],
+          (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              rejeites: (current.rejeites ?? []).filter((r) => !removedRowKeys.has(r.rowKey)),
+            };
+          }
+        );
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['licitacoes-planilha-regiao', activeTab?.key] });
+      await refetch();
+    },
+    onError: (err: { response?: { data?: { message?: string } } }) => {
+      toast.error(err.response?.data?.message ?? 'Erro ao desfazer rejeição.');
     },
   });
 
@@ -849,7 +1256,11 @@ export function LicitacoesRegiaoPanel({
     },
   });
 
-  const isAceiteBusy = aceiteMutation.isPending || desfazerAceiteMutation.isPending;
+  const isAceiteBusy =
+    aceiteMutation.isPending ||
+    desfazerAceiteMutation.isPending ||
+    rejeitarMutation.isPending ||
+    desfazerRejeiteMutation.isPending;
   const isManualBusy = createManualMutation.isPending || deleteManualMutation.isPending;
 
   const toggleRowSelection = (rowKey: string) => {
@@ -890,6 +1301,8 @@ export function LicitacoesRegiaoPanel({
     estado: findHeaderIndex(tableHeaders, isEstadoHeader),
     site: findHeaderIndex(tableHeaders, isSiteLocalHeader),
     hora: findHeaderIndex(tableHeaders, isHoraHeader),
+    encerramento: findHeaderIndex(tableHeaders, isEncerramentoOnlyHeader),
+    encerramentoHora: findHeaderIndex(tableHeaders, isEncerramentoHoraHeader),
     codigo: findHeaderIndex(tableHeaders, isCodigoHeader),
     desconto: findHeaderIndex(tableHeaders, isDescontoHeader),
     empresa: findHeaderIndex(tableHeaders, isEmpresaHeader),
@@ -908,26 +1321,49 @@ export function LicitacoesRegiaoPanel({
 
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4">
+        {statusCards.map((card) => (
+          <FilterStatCard
+            key={card.id}
+            label={card.cardLabel}
+            count={card.count}
+            icon={card.Icon}
+            iconBg={card.iconBg}
+            iconColor={card.iconColor}
+            isActive={statusFilter === card.id}
+            loading={loadingSheet}
+            onClick={() => {
+              if (card.id === 'all') {
+                setStatusFilter('all');
+              } else {
+                setStatusFilter((prev) => (prev === card.id ? 'all' : card.id));
+              }
+              setPage(1);
+            }}
+          />
+        ))}
+      </div>
+
       <Card className={cadastroListClasses.card}>
         <CardHeader className={cadastroListClasses.cardHeader}>
           <div className={cadastroListClasses.cardHeaderRow}>
             <div className={cadastroListClasses.cardHeaderIconRow}>
-              <div className="rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-900/30">
-                <MapPin
-                  className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6"
+              <div className={`rounded-lg p-2 sm:p-3 ${activeStatusCard.listIconBg}`}>
+                <ListStatusIcon
+                  className={`h-5 w-5 sm:h-6 sm:w-6 ${activeStatusCard.listIconColor}`}
                   aria-hidden
                 />
               </div>
               <div className="min-w-0">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Licitações por região
+                  {activeStatusCard.label}
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {loadingSheet
                     ? 'Carregando…'
-                    : `${visibleRows.length} licitação(ões)`}
-                  {sheet?.aceites?.length ? ` · ${sheet.aceites.length} com aceite` : ''}
-                  {manualRowKeySet.size ? ` · ${manualRowKeySet.size} no sistema` : ''}
+                    : `${visibleRows.length} ${
+                        visibleRows.length === 1 ? 'licitação' : 'licitações'
+                      }`}
                   {sheet?.fetchedAt ? ` · Atualizado em ${formatFetchedAt(sheet.fetchedAt)}` : ''}
                 </p>
               </div>
@@ -958,14 +1394,13 @@ export function LicitacoesRegiaoPanel({
                 onClick={() => setShowRecebidoFilter(true)}
                 aria-label="Filtrar por data recebida"
                 title="Filtrar por data recebida"
-                className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
                   recebidoDe || recebidoAte
                     ? 'border-red-300 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300'
                     : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
-                <Filter className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="hidden sm:inline">Período</span>
+                <Filter className="h-4 w-4" aria-hidden />
               </button>
               <a
                 href={SPREADSHEET_URL}
@@ -1017,6 +1452,21 @@ export function LicitacoesRegiaoPanel({
                   <span>Aceite ({selectedPendingRowKeys.length})</span>
                 </button>
               ) : null}
+              {selectedPendingRowKeys.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => rejeitarMutation.mutate(selectedPendingRowKeys)}
+                  disabled={isAceiteBusy || loadingSheet || !sheet}
+                  className="flex h-10 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-800 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+                >
+                  {rejeitarMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <ThumbsDown className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  <span>Rejeitar ({selectedPendingRowKeys.length})</span>
+                </button>
+              ) : null}
               {selectedAcceptedRowKeys.length > 0 ? (
                 <button
                   type="button"
@@ -1030,6 +1480,21 @@ export function LicitacoesRegiaoPanel({
                     <Undo2 className="h-4 w-4 shrink-0" aria-hidden />
                   )}
                   <span>Desfazer aceite ({selectedAcceptedRowKeys.length})</span>
+                </button>
+              ) : null}
+              {selectedRejectedRowKeys.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => desfazerRejeiteMutation.mutate(selectedRejectedRowKeys)}
+                  disabled={isAceiteBusy || loadingSheet || !sheet}
+                  className="flex h-10 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-900 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  {desfazerRejeiteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Undo2 className="h-4 w-4 shrink-0" aria-hidden />
+                  )}
+                  <span>Desfazer rejeição ({selectedRejectedRowKeys.length})</span>
                 </button>
               ) : null}
               {selectedManualRowKeys.length > 0 ? (
@@ -1077,15 +1542,15 @@ export function LicitacoesRegiaoPanel({
             <CadastroListLoading message="Carregando licitações..." />
           ) : !canShowTable || visibleRows.length === 0 ? (
             <CadastroListEmpty
-              icon={MapPin}
+              icon={ListStatusIcon}
               title={
-                search.trim()
-                  ? 'Nenhum resultado para a busca atual'
+                search.trim() || statusFilter !== 'all'
+                  ? 'Nenhum resultado para o filtro atual'
                   : 'Nenhuma licitação nesta região'
               }
               hint={
-                search.trim()
-                  ? 'Tente ajustar a busca'
+                search.trim() || statusFilter !== 'all'
+                  ? 'Tente ajustar a busca ou o card de status'
                   : sheet?.sheetAvailable === false
                     ? `Use “Nova licitação” ou aguarde a aba ${sheet.tab.sheetName} na planilha`
                     : 'Use “Nova licitação” para cadastrar a primeira'
@@ -1116,13 +1581,12 @@ export function LicitacoesRegiaoPanel({
                         />
                       </th>
                       {tableColumnsWithoutValor.map(({ header, colIndex }) => {
-                        const key = normalizeHeaderKey(header);
                         const isWide =
                           isObjetoHeader(header) ||
                           isQualificacaoHeader(header) ||
                           isOrgaoHeader(header);
                         const isCenter =
-                          isAberturaHeader(header) ||
+                          isPeriodoHeader(header) ||
                           isEditalHeader(header) ||
                           isPregaoHeader(header);
                         return (
@@ -1133,11 +1597,9 @@ export function LicitacoesRegiaoPanel({
                                 isCenter ? cadastroListClasses.thCenter : cadastroListClasses.th
                               } ${isWide ? 'min-w-[14rem]' : 'whitespace-nowrap'}`}
                             >
-                              {key === 'QUALIFICACAO TECNICA'
-                                ? 'Qualificação técnica'
-                                : header.trim()}
+                              {displayColumnHeader(header)}
                             </th>
-                            {isAberturaHeader(header) ? (
+                            {isPeriodoHeader(header) ? (
                               <>
                                 {valorColumn ? (
                                   <th
@@ -1156,7 +1618,7 @@ export function LicitacoesRegiaoPanel({
                         );
                       })}
                       {!tableColumnsWithoutValor.some(({ header }) =>
-                        isAberturaHeader(header)
+                        isPeriodoHeader(header)
                       ) ? (
                         <>
                           {valorColumn ? (
@@ -1186,11 +1648,13 @@ export function LicitacoesRegiaoPanel({
                   <tbody>
                     {pageRows.map((row) => {
                       const aceite = row.rowKey ? aceitesByRowKey.get(row.rowKey) : undefined;
-                      const isAccepted = Boolean(aceite);
+                      const rejeite = row.rowKey ? rejeitesByRowKey.get(row.rowKey) : undefined;
                       const isSelected = row.rowKey ? selectedRowKeys.has(row.rowKey) : false;
                       const estado = cellAt(row.cells, col.estado);
                       const site = cellAt(row.cells, col.site);
                       const hora = cellAt(row.cells, col.hora);
+                      const encerramento = cellAt(row.cells, col.encerramento);
+                      const encerramentoHora = cellAt(row.cells, col.encerramentoHora);
                       const codigo = cellAt(row.cells, col.codigo);
                       const desconto = cellAt(row.cells, col.desconto);
                       const empresa = cellAt(row.cells, col.empresa);
@@ -1201,13 +1665,12 @@ export function LicitacoesRegiaoPanel({
                       return (
                         <tr
                           key={`${row.sourceIndex}-${row.rowKey}`}
-                          className={`border-b border-gray-200 align-middle dark:border-gray-700 ${
-                            isAccepted
-                              ? 'shadow-[inset_0_0_0_9999px_rgba(209,250,229,0.45)] dark:shadow-[inset_0_0_0_9999px_rgba(6,78,59,0.2)]'
-                              : isSelected
-                                ? 'shadow-[inset_0_0_0_9999px_rgba(254,226,226,0.55)] dark:shadow-[inset_0_0_0_9999px_rgba(127,29,29,0.22)]'
-                                : 'hover:shadow-[inset_0_0_0_9999px_rgba(249,250,251,0.8)] dark:hover:shadow-[inset_0_0_0_9999px_rgba(17,24,39,0.35)]'
-                          }`}
+                          className={getListTableRowClassName(
+                            false,
+                            `border-b border-gray-200 align-middle dark:border-gray-700${
+                              isSelected ? ' bg-gray-50 dark:bg-gray-700/40' : ''
+                            }`
+                          )}
                         >
                           <td className={cadastroListClasses.tdCenter}>
                             <TableCheckbox
@@ -1292,20 +1755,26 @@ export function LicitacoesRegiaoPanel({
                               );
                             }
 
-                            if (isAberturaHeader(header)) {
+                            if (isPeriodoHeader(header)) {
                               const valorValue = valorColumn
                                 ? cellAt(row.cells, valorColumn.colIndex)
+                                : '';
+                              const aberturaLabel = [value, hora].filter(Boolean).join(' ') || '—';
+                              const encerramentoLabel = row.isManual
+                                ? [encerramento, encerramentoHora].filter(Boolean).join(' ')
                                 : '';
                               return (
                                 <Fragment key={`${row.rowKey}-${colIndex}-abertura-valor-status`}>
                                   <td className={cadastroListClasses.tdCenter}>
                                     <div>
                                       <p className="whitespace-nowrap text-gray-900 dark:text-gray-100">
-                                        {value || '—'}
+                                        {aberturaLabel}
                                       </p>
-                                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                                        {hora || '—'}
-                                      </p>
+                                      {encerramentoLabel ? (
+                                        <p className="mt-0.5 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                          {encerramentoLabel}
+                                        </p>
+                                      ) : null}
                                     </div>
                                   </td>
                                   {valorColumn ? (
@@ -1323,24 +1792,11 @@ export function LicitacoesRegiaoPanel({
                                     </td>
                                   ) : null}
                                   <td className={cadastroListClasses.tdCenter}>
-                                    <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
-                                      {isAccepted ? (
-                                        <>
-                                          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                            Aceite
-                                          </span>
-                                          {aceite?.acceptedByName ? (
-                                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                                              {aceite.acceptedByName}
-                                            </p>
-                                          ) : null}
-                                        </>
-                                      ) : (
-                                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                                          Pendente
-                                        </span>
-                                      )}
-                                    </div>
+                                    <StatusBadge
+                                      status={row.status}
+                                      aceiteName={aceite?.acceptedByName}
+                                      rejeiteName={rejeite?.rejectedByName}
+                                    />
                                   </td>
                                 </Fragment>
                               );
@@ -1385,7 +1841,7 @@ export function LicitacoesRegiaoPanel({
                             );
                           })}
                           {!tableColumnsWithoutValor.some(({ header }) =>
-                            isAberturaHeader(header)
+                            isPeriodoHeader(header)
                           ) ? (
                             <>
                               {valorColumn ? (
@@ -1403,24 +1859,11 @@ export function LicitacoesRegiaoPanel({
                                 </td>
                               ) : null}
                               <td className={cadastroListClasses.tdCenter}>
-                                <div className="inline-flex min-w-[6rem] flex-col items-center gap-1">
-                                  {isAccepted ? (
-                                    <>
-                                      <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                        Aceite
-                                      </span>
-                                      {aceite?.acceptedByName ? (
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                                          {aceite.acceptedByName}
-                                        </p>
-                                      ) : null}
-                                    </>
-                                  ) : (
-                                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                                      Pendente
-                                    </span>
-                                  )}
-                                </div>
+                                <StatusBadge
+                                  status={row.status}
+                                  aceiteName={aceite?.acceptedByName}
+                                  rejeiteName={rejeite?.rejectedByName}
+                                />
                               </td>
                             </>
                           ) : null}
@@ -1476,7 +1919,8 @@ export function LicitacoesRegiaoPanel({
                   onEdit={() => undefined}
                   hideDefaultActions
                   extraItems={[
-                    ...(!aceitesByRowKey.has(rowForActionMenu.rowKey)
+                    ...(rowForActionMenu.status === 'pendente' ||
+                    rowForActionMenu.status === 'vencida'
                       ? [
                           {
                             label: 'Aceite',
@@ -1486,10 +1930,20 @@ export function LicitacoesRegiaoPanel({
                               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
                             ),
                           },
-                        ]
-                      : [
                           {
-                            label: 'Desfazer',
+                            label: 'Rejeitar',
+                            disabled: !rowForActionMenu.rowKey || isAceiteBusy,
+                            onClick: () => rejeitarMutation.mutate([rowForActionMenu.rowKey]),
+                            icon: (
+                              <ThumbsDown className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                            ),
+                          },
+                        ]
+                      : []),
+                    ...(rowForActionMenu.status === 'aceite'
+                      ? [
+                          {
+                            label: 'Desfazer aceite',
                             disabled: !rowForActionMenu.rowKey || isAceiteBusy,
                             onClick: () =>
                               desfazerAceiteMutation.mutate([rowForActionMenu.rowKey]),
@@ -1497,7 +1951,21 @@ export function LicitacoesRegiaoPanel({
                               <Undo2 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                             ),
                           },
-                        ]),
+                        ]
+                      : []),
+                    ...(rowForActionMenu.status === 'rejeitada'
+                      ? [
+                          {
+                            label: 'Desfazer rejeição',
+                            disabled: !rowForActionMenu.rowKey || isAceiteBusy,
+                            onClick: () =>
+                              desfazerRejeiteMutation.mutate([rowForActionMenu.rowKey]),
+                            icon: (
+                              <Undo2 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                            ),
+                          },
+                        ]
+                      : []),
                     ...(rowForActionMenu.isManual
                       ? [
                           {
@@ -1551,32 +2019,6 @@ export function LicitacoesRegiaoPanel({
                 Filtra pela data em que a licitação entrou nesta lista (envio PNCP, nova licitação ou
                 inclusão da planilha).
               </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const today = toDateInputValue(new Date());
-                    setRecebidoDe(today);
-                    setRecebidoAte(today);
-                  }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  Hoje
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const end = new Date();
-                    const start = new Date();
-                    start.setDate(end.getDate() - 6);
-                    setRecebidoDe(toDateInputValue(start));
-                    setRecebidoAte(toDateInputValue(end));
-                  }}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  Últimos 7 dias
-                </button>
-              </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1647,7 +2089,7 @@ export function LicitacoesRegiaoPanel({
           </p>
           <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
             {formHeaders.map((header) => {
-              const label = header.trim();
+              const label = displayColumnHeader(header);
               const value = createFields[header] ?? '';
               const fieldClass =
                 'h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900';
@@ -1701,7 +2143,7 @@ export function LicitacoesRegiaoPanel({
                 );
               }
 
-              if (isAberturaHeader(header)) {
+              if (isPeriodoHeader(header)) {
                 return (
                   <label key={header} className="block sm:col-span-1">
                     <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">

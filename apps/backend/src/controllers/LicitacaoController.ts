@@ -43,6 +43,11 @@ import {
   getLicitacaoIdsForAceiteRowKeys,
 } from '../services/licitacaoRegiaoAceiteStore';
 import {
+  createLicitacaoRegiaoRejeites,
+  deleteLicitacaoRegiaoRejeites,
+  listLicitacaoRegiaoRejeites,
+} from '../services/licitacaoRegiaoRejeiteStore';
+import {
   createLicitacaoRegiaoManual,
   deleteLicitacaoRegiaoManual,
   getCanonicalRegiaoHeaders,
@@ -321,6 +326,13 @@ export class LicitacaoController {
         items: normalizedItems,
       });
 
+      // Aceite e rejeição são exclusivos.
+      await deleteLicitacaoRegiaoRejeites({
+        regiaoKey,
+        spreadsheetId,
+        rowKeys: normalizedItems.map((item) => item.rowKey),
+      });
+
       invalidateLicitacaoRegiaoSheetCache(regiaoKey);
 
       const rowKeys = normalizedItems.map((item) => item.rowKey);
@@ -401,6 +413,139 @@ export class LicitacaoController {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro ao desfazer aceite';
+      next(error instanceof Error ? createError(message, 400) : error);
+    }
+  }
+
+  async registrarRejeiteRegiao(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const regiaoKey = typeof req.body?.regiaoKey === 'string' ? req.body.regiaoKey.trim() : '';
+      const spreadsheetId =
+        typeof req.body?.spreadsheetId === 'string' ? req.body.spreadsheetId.trim() : '';
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+
+      if (!regiaoKey || !findLicitacaoRegiaoTab(regiaoKey)) {
+        throw createError('Região inválida.', 400);
+      }
+      if (!spreadsheetId) {
+        throw createError('Planilha inválida.', 400);
+      }
+      if (items.length === 0) {
+        throw createError('Selecione ao menos uma licitação.', 400);
+      }
+
+      const normalizedItems = items
+        .map((item: unknown) => {
+          if (!item || typeof item !== 'object') return null;
+          const rowKey = typeof (item as { rowKey?: string }).rowKey === 'string'
+            ? (item as { rowKey: string }).rowKey.trim()
+            : '';
+          if (!rowKey) return null;
+          const snapshot = (item as { rowSnapshot?: Record<string, string> }).rowSnapshot;
+          return {
+            rowKey,
+            rowSnapshot:
+              snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+                ? snapshot
+                : null,
+          };
+        })
+        .filter(Boolean) as Array<{ rowKey: string; rowSnapshot?: Record<string, string> | null }>;
+
+      if (normalizedItems.length === 0) {
+        throw createError('Selecione ao menos uma licitação válida.', 400);
+      }
+
+      const rowKeys = normalizedItems.map((item) => item.rowKey);
+
+      // Se havia aceite, desfaz e remove o processo vinculado.
+      const licitacaoIds = await getLicitacaoIdsForAceiteRowKeys({
+        regiaoKey,
+        spreadsheetId,
+        rowKeys,
+      });
+      await deleteLicitacaoRegiaoAceites({
+        regiaoKey,
+        spreadsheetId,
+        rowKeys,
+      });
+      await removeLicitacoesLinkedToAceites(licitacaoIds);
+
+      const created = await createLicitacaoRegiaoRejeites({
+        regiaoKey,
+        spreadsheetId,
+        rejectedBy: req.user!.id,
+        items: normalizedItems,
+      });
+
+      invalidateLicitacaoRegiaoSheetCache(regiaoKey);
+
+      const rejeites =
+        created.length > 0
+          ? created
+          : (await listLicitacaoRegiaoRejeites(regiaoKey, spreadsheetId)).filter((row) =>
+              rowKeys.includes(row.rowKey)
+            );
+
+      res.status(201).json({
+        success: true,
+        data: rejeites.map((rejeite) => ({
+          rowKey: rejeite.rowKey,
+          rejectedBy: rejeite.rejectedBy,
+          rejectedByName: rejeite.rejectedByName,
+          rejectedAt: rejeite.rejectedAt.toISOString(),
+        })),
+        message:
+          created.length > 0
+            ? `${created.length} licitação(ões) rejeitada(s).`
+            : 'As licitações selecionadas já estavam rejeitadas.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao rejeitar licitação';
+      next(error instanceof Error ? createError(message, 400) : error);
+    }
+  }
+
+  async desfazerRejeiteRegiao(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const regiaoKey = typeof req.body?.regiaoKey === 'string' ? req.body.regiaoKey.trim() : '';
+      const spreadsheetId =
+        typeof req.body?.spreadsheetId === 'string' ? req.body.spreadsheetId.trim() : '';
+      const rowKeys = Array.isArray(req.body?.rowKeys) ? req.body.rowKeys : [];
+
+      if (!regiaoKey || !findLicitacaoRegiaoTab(regiaoKey)) {
+        throw createError('Região inválida.', 400);
+      }
+      if (!spreadsheetId) {
+        throw createError('Planilha inválida.', 400);
+      }
+
+      const normalizedRowKeys = rowKeys
+        .map((key: unknown) => (typeof key === 'string' ? key.trim() : ''))
+        .filter(Boolean);
+
+      if (normalizedRowKeys.length === 0) {
+        throw createError('Selecione ao menos uma licitação rejeitada.', 400);
+      }
+
+      const deletedRowKeys = await deleteLicitacaoRegiaoRejeites({
+        regiaoKey,
+        spreadsheetId,
+        rowKeys: normalizedRowKeys,
+      });
+
+      invalidateLicitacaoRegiaoSheetCache(regiaoKey);
+
+      res.json({
+        success: true,
+        data: { rowKeys: deletedRowKeys },
+        message:
+          deletedRowKeys.length > 0
+            ? `${deletedRowKeys.length} rejeição(ões) desfeita(s).`
+            : 'Nenhuma rejeição encontrada para remover.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao desfazer rejeição';
       next(error instanceof Error ? createError(message, 400) : error);
     }
   }
