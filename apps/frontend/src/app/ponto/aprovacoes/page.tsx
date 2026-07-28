@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import api from '@/lib/api';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -494,7 +494,7 @@ const espelhoTdCenterCls = `${espelhoCellPad} text-center text-sm min-w-0`;
 const espelhoActionThCls = `${cadastroListClasses.thRight} ${espelhoActionColCls} !pl-1 !pr-2 sm:!pr-3`;
 const espelhoActionTdCls = `${espelhoActionColCls} !pl-1 !pr-2 sm:!pr-3 py-3 align-middle`;
 
-export default function AprovacoesPage() {
+function AprovacoesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -1781,5 +1781,14 @@ export default function AprovacoesPage() {
         </div>
       </MainLayout>
     </ProtectedRoute>
+  );
+}
+
+/** Next.js exige Suspense em volta de `useSearchParams` na geração estática. */
+export default function AprovacoesPageWithSuspense() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <AprovacoesPage />
+    </Suspense>
   );
 }

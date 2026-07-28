@@ -1618,33 +1618,33 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             sidebarHydrated ? `transition-[width,opacity] ${SIDEBAR_TRANSITION_CLASS}` : 'transition-none'
           } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
         >
-          {/* Header do módulo */}
-          <div className="p-4 flex-shrink-0">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+          {/* Header do módulo — mesma altura da TopNavbar (h-16) pra linha bater */}
+          <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-4 dark:border-gray-800">
+            <div className="flex w-full items-center justify-between gap-2">
+              <h2 className="truncate text-lg font-semibold leading-none text-gray-900 dark:text-gray-100">
                 {searchTerm.trim() ? 'Busca' : selectedModule?.name ?? 'Menu'}
               </h2>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex shrink-0 items-center gap-1">
                 <button
                   onClick={handleCollapseSidebar}
-                  className="hidden lg:flex items-center justify-center rounded-lg transition-colors duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-8 h-8"
+                  className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 lg:flex"
                   title="Recolher menu"
                 >
-                  <ArrowLeftToLine className="w-5 h-5 flex-shrink-0" />
+                  <ArrowLeftToLine className="h-5 w-5 flex-shrink-0" />
                 </button>
                 <button
                   onClick={closeSidebarPanel}
-                  className="lg:hidden w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-600 dark:text-gray-300"
+                  className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 lg:hidden"
                   aria-label="Fechar menu"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
           </div>
 
           {/* Lista de páginas */}
-          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4 pt-0">
+          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4">
             {sidebarHydrated && !isLoading ? searchTerm.trim() ? (
               menuItems.map((category) => {
                 const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);
