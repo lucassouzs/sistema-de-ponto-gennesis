@@ -3,12 +3,10 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
-import { toast } from 'react-hot-toast';
 import api from '@/lib/api';
 import { buildFluigApproversNavHref } from '@/lib/fluigWorkflowApproval';
-import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 
 const FLUIG_APPROVAL_DATASET_IDS = [
   'Processos_Workflow_Aprovacao_G3',
@@ -18,18 +16,13 @@ const FLUIG_PREFETCH_HREFS = new Set([
   '/ponto/fluig/aprovacoes-workflow',
   '/ponto/fluig/aprovadores',
 ]);
-import { CircularPhotoCropModal } from '@/components/conversas/CircularPhotoCropModal';
 import { 
   Home, 
   Users, 
   Clock, 
-  LogOut, 
-  Menu, 
   X,
   User,
   ArrowLeftToLine,
-  Lock,
-  Settings,
   FolderClock,
   ImagePlus,
   CalendarDays,
@@ -44,11 +37,8 @@ import {
   Wallet,
   CalendarX2,
   MailPlus,
-  Moon,
-  Sun,
-  AlertCircle,
+  MessageCircle,
   MessageSquare,
-  MessagesSquare,
   FileCheck,
   DollarSign,
   CircleDollarSign,
@@ -73,8 +63,6 @@ import {
   Contact,
   Scale,
   ScrollText,
-  Camera,
-  Loader2,
   Fuel,
   Car,
   CalendarRange,
@@ -89,18 +77,21 @@ import { useFdNotificationCounts } from '@/hooks/useFdNotificationCounts';
 import { useApprovalNotificationCounts } from '@/hooks/useApprovalNotificationCounts';
 import { NotificationCountBadge } from '@/components/ui/NotificationCountBadge';
 import {
-  isHomeRoute,
-  isRailFooterRoute,
   readSelectedModuleId,
   readSidebarCollapsed,
   SIDEBAR_TRANSITION_CLASS,
   writeSelectedModuleId,
   writeSidebarCollapsed,
+  isHomeRoute,
+  isRailFooterRoute,
 } from '@/lib/sidebarStorage';
+import {
+  LAYOUT_CHROME,
+  type MenuSearchDetail,
+} from '@/lib/layoutChrome';
+import { useBrandingLogo } from '@/hooks/useBrandingLogo';
 
 const pk = pathToModuleKey;
-import { useBrandingLogo } from '@/hooks/useBrandingLogo';
-import { useTheme } from '@/context/ThemeContext';
 
 interface SidebarProps {
   userRole: 'EMPLOYEE';
@@ -164,7 +155,7 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
   );
 }
 
-export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChangePassword }: SidebarProps) {
+export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCollapsed, setIsCollapsedState] = useState(false);
   const [sidebarHydrated, setSidebarHydrated] = useState(false);
@@ -179,7 +170,6 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
   const [selectedModuleId, setSelectedModuleId] = useState('main');
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedNavGroups, setExpandedNavGroups] = useState<Record<string, boolean>>({});
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const pathname = usePathname();
   /** true quando o usuário clicou num módulo no rail sem mudar de rota */
   const userPickedModuleRef = useRef(false);
@@ -205,12 +195,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     fluigApproverFullAccess,
     canAccessFluigApproversRoute,
   } = usePermissions();
-  const { theme, toggleTheme, isDark } = useTheme();
   const { logoSrc, logoAlt } = useBrandingLogo();
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const profileAvatarInputRef = useRef<HTMLInputElement>(null);
-  const profileAvatarSectionRef = useRef<HTMLDivElement>(null);
-  const profileAvatarMenuRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -285,28 +270,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     fluigApproverNameKeys,
     canAccessFluigApproversRoute,
   ]);
-  const [profileAvatarMenu, setProfileAvatarMenu] = useState(false);
-  const [profileAvatarMenuPos, setProfileAvatarMenuPos] = useState<{
-    left: number;
-    bottom: number;
-  } | null>(null);
-  const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
 
-  const { data: chatUnreadCount = 0 } = useQuery({
-    queryKey: ['chat-unread-count', user?.id],
-    queryFn: async () => {
-      const res = await api.get('/chats/direct/unread/count');
-      const n = Number(res.data?.data?.count ?? res.data?.count);
-      return Number.isFinite(n) && n > 0 ? n : 0;
-    },
-    enabled: !!user?.id,
-    staleTime: 15_000,
-    refetchInterval: () => {
-      if (typeof document === 'undefined') return 30_000;
-      return document.hidden ? false : 30_000;
-    },
-  });
-  
   // Verificar se é administrador
   const isAdministrator = userPosition === 'Administrador';
   const isDepartmentCompras = userDepartment?.toLowerCase().includes('compras');
@@ -318,6 +282,19 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-reserva-veiculos'));
   const canSeeEntregaLogistica =
     isAdministrator || can(pk('/ponto/entrega-logistica'));
+
+  const { data: chatUnreadCount = 0 } = useQuery({
+    queryKey: ['chat-unread-count', user?.id],
+    queryFn: async () => {
+      const res = await api.get('/chats/direct/unread/count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: !!user?.id,
+    staleTime: 15_000,
+    refetchInterval: () => visibleTabRefetchInterval(30_000),
+    refetchOnWindowFocus: true,
+  });
 
   const { data: pendingFuroCount = 0 } = useQuery({
     queryKey: ['stock-shortfalls-pending-count'],
@@ -391,7 +368,15 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
 
   const navBadgeCountForHref = (href: string): number => {
     if (href === '/ponto/aprovacoes') return approvalCounts.total;
+    // RM já entra no badge de Aprovações — não somar de novo em Suprimentos
     if (href === '/ponto/gerenciar-materiais' && canApproveMaterialRequests) {
+      const aprovacoesVisible =
+        canAccessDpApproverPages ||
+        canApproveEspelhoNf ||
+        canApproveOc ||
+        canApproveFuel ||
+        canApproveMaterialRequests;
+      if (aprovacoesVisible) return 0;
       return approvalCounts.rm;
     }
     if (href === '/ponto/fds-aprovadas') return fdNotificationCounts.pendingPurchase;
@@ -466,103 +451,7 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
   const isDepartmentJuridico = userDepartment?.toLowerCase().includes('jurídico') ||
     userDepartment?.toLowerCase().includes('juridico');
 
-  const handleLogout = () => {
-    setProfileAvatarMenu(false);
-    setShowLogoutConfirm(true);
-  };
-
-  const handleConfirmLogout = () => {
-    setShowLogoutConfirm(false);
-    onLogout();
-  };
-
-  const handleCancelLogout = () => {
-    setShowLogoutConfirm(false);
-  };
-
-  const uploadProfilePhotoMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData();
-      fd.append('profileAvatar', file);
-      await api.patch('/auth/me/photo', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      toast.success('Foto de perfil atualizada');
-      setProfileCropSrc((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-    },
-    onError: () => toast.error('Não foi possível atualizar a foto'),
-  });
-
-  const removeProfilePhotoMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete('/auth/me/photo');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      toast.success('Foto removida');
-      setProfileAvatarMenu(false);
-    },
-    onError: () => toast.error('Não foi possível remover a foto'),
-  });
-
-  const profilePhotoHref = resolveApiMediaUrl(user?.profilePhotoUrl ?? null);
-
-  const updateProfileAvatarMenuPos = useCallback(() => {
-    const el = profileAvatarSectionRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setProfileAvatarMenuPos({
-      left: Math.round(rect.right + 8),
-      bottom: Math.round(window.innerHeight - rect.bottom),
-    });
-  }, []);
-
-  // Posiciona o menu do avatar e fecha ao clicar fora (portal no body)
-  useEffect(() => {
-    if (!profileAvatarMenu) {
-      setProfileAvatarMenuPos(null);
-      return;
-    }
-
-    updateProfileAvatarMenuPos();
-
-    const handleClickOutside = (event: MouseEvent) => {
-      const t = event.target as Node;
-      if (profileAvatarSectionRef.current?.contains(t)) return;
-      if (profileAvatarMenuRef.current?.contains(t)) return;
-      setProfileAvatarMenu(false);
-    };
-
-    const handleReposition = () => updateProfileAvatarMenuPos();
-
-    document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('resize', handleReposition);
-    window.addEventListener('scroll', handleReposition, true);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('resize', handleReposition);
-      window.removeEventListener('scroll', handleReposition, true);
-    };
-  }, [profileAvatarMenu, updateProfileAvatarMenuPos]);
-
   const isEmployee = userRole === 'EMPLOYEE';
-
-  // Função para extrair iniciais do nome do usuário (primeiro e segundo nome)
-  const getInitials = (name: string | undefined | null) => {
-    if (!name) return 'U';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
 
   // Menu items agrupados por categoria
   const getMenuItems = () => {
@@ -1405,11 +1294,45 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
     closeSidebarPanel();
   };
 
+  const expandSidebarPanel = useCallback(() => {
+    setCollapsed(false);
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setIsOpen(true);
+    }
+  }, [setCollapsed]);
+
+  useEffect(() => {
+    const onToggle = () => {
+      if (isCollapsed) expandSidebarPanel();
+      else closeSidebarPanel();
+    };
+    const onExpand = () => expandSidebarPanel();
+    const onOpenMobile = () => setIsOpen(true);
+    const onSetSearch = (event: Event) => {
+      const detail = (event as CustomEvent<MenuSearchDetail>).detail;
+      const term = detail?.term ?? '';
+      setSearchTerm(term);
+      if (term.trim()) expandSidebarPanel();
+    };
+
+    window.addEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
+    window.addEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
+    window.addEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+    window.addEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
+    return () => {
+      window.removeEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
+      window.removeEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
+      window.removeEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+      window.removeEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
+    };
+  }, [closeSidebarPanel, expandSidebarPanel, isCollapsed]);
+
   // Ao mudar de rota: recolhe só em home/atalhos do rodapé; demais rotas mantêm o painel aberto
   React.useEffect(() => {
     if (pathname === prevPathnameRef.current) return;
     prevPathnameRef.current = pathname;
     userPickedModuleRef.current = false;
+    setSearchTerm('');
 
     if (onHomeRoute || onRailFooterRoute) {
       setCollapsed(true);
@@ -1455,17 +1378,21 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
   // Fecha o painel ao clicar fora da sidebar no desktop (mobile usa o overlay)
   React.useEffect(() => {
     if (effectiveCollapsed) return;
+    if (searchTerm.trim()) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const sidebarEl = sidebarRef.current;
       if (!sidebarEl) return;
-      if (sidebarEl.contains(event.target as Node)) return;
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (sidebarEl.contains(target)) return;
+      if (target instanceof Element && target.closest('[data-app-topnav]')) return;
       closeSidebarPanel();
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
-  }, [effectiveCollapsed, closeSidebarPanel]);
+  }, [effectiveCollapsed, closeSidebarPanel, searchTerm]);
 
   // Mobile drawer: trava scroll do body e fecha ao passar para desktop
   React.useEffect(() => {
@@ -1510,14 +1437,6 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
 
   return (
     <>
-      {/* Botão de menu mobile */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-md hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100"
-      >
-        <Menu className="w-6 h-6" />
-      </button>
-
       {/* Overlay mobile */}
       {isOpen && (
         <div
@@ -1615,21 +1534,21 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
             )}
           </nav>
 
-          {/* Rodapé: atalhos, divisor e perfil */}
+          {/* Rodapé: atalhos */}
           <div className="relative z-20 flex flex-shrink-0 flex-col items-center overflow-visible px-2 pb-4 [@media(max-height:820px)]:pb-2">
             <div className="flex flex-col items-center gap-2 [@media(max-height:820px)]:gap-1">
-              <SidebarRailTooltip label="Chat">
+              <SidebarRailTooltip label="Conversas">
                 <Link
                   href="/ponto/conversas"
                   prefetch={navLinkPrefetch}
-                  aria-label={`Chat${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
-                  className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-label={`Conversas${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
+                  className={`relative flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/conversas')
                       ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <MessagesSquare className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" strokeWidth={2} />
+                  <MessageCircle className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                   <NotificationCountBadge count={chatUnreadCount} rail />
                 </Link>
               </SidebarRailTooltip>
@@ -1690,134 +1609,6 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
                 </Link>
               </SidebarRailTooltip>
             </div>
-            <div className="mt-2 flex flex-col items-center gap-2 [@media(max-height:820px)]:mt-1.5">
-              <div className="h-px w-12 shrink-0 bg-gray-200 dark:bg-gray-700" />
-            </div>
-            <div className="flex w-full justify-center pt-4 [@media(max-height:820px)]:pt-2">
-            <div ref={profileAvatarSectionRef} className="relative size-12 shrink-0 [@media(max-height:820px)]:size-10">
-                      <button
-                        type="button"
-                        aria-haspopup="true"
-                        aria-expanded={profileAvatarMenu}
-                        aria-label="Configurações e foto de perfil"
-                        onClick={() => setProfileAvatarMenu((v) => !v)}
-                        className="group relative block size-12 overflow-hidden rounded-full focus:outline-none focus:ring-2 focus:ring-red-500/50 [@media(max-height:820px)]:size-10"
-                      >
-                        <div className="relative flex size-12 items-center justify-center overflow-hidden rounded-full bg-red-600 [@media(max-height:820px)]:size-10">
-                          {profilePhotoHref ? (
-                            <img
-                              src={profilePhotoHref}
-                              alt=""
-                              className="h-full w-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <span className="font-semibold text-white text-sm">
-                              {getInitials(user?.name || userName || 'U')}
-                            </span>
-                          )}
-                          <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 pointer-events-none">
-                            <Settings size={14} className="text-white shrink-0" strokeWidth={2} />
-                          </div>
-                          {(uploadProfilePhotoMutation.isPending ||
-                            removeProfilePhotoMutation.isPending) && (
-                            <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
-                              <Loader2 size={20} className="animate-spin text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </button>
-
-                      <input
-                        ref={profileAvatarInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setProfileCropSrc(URL.createObjectURL(file));
-                          setProfileAvatarMenu(false);
-                          e.target.value = '';
-                        }}
-                      />
-
-                      {profileAvatarMenu &&
-                        profileAvatarMenuPos &&
-                        typeof document !== 'undefined' &&
-                        createPortal(
-                          <>
-                            <div
-                              className="fixed inset-0 z-[9998]"
-                              aria-hidden="true"
-                              onClick={() => setProfileAvatarMenu(false)}
-                            />
-                            <div
-                              ref={profileAvatarMenuRef}
-                              role="menu"
-                              style={{
-                                position: 'fixed',
-                                left: profileAvatarMenuPos.left,
-                                bottom: profileAvatarMenuPos.bottom,
-                                zIndex: 9999,
-                              }}
-                              className="min-w-[200px] rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1"
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  setProfileAvatarMenu(false);
-                                  profileAvatarInputRef.current?.click();
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                              >
-                                <Camera size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                                <span className="font-medium">Carregar foto</span>
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  toggleTheme();
-                                  setProfileAvatarMenu(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                              >
-                                {isDark ? (
-                                  <Sun size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                                ) : (
-                                  <Moon size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                                )}
-                                <span className="font-medium">{isDark ? 'Modo Claro' : 'Modo Escuro'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  setProfileAvatarMenu(false);
-                                  onOpenChangePassword?.();
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                              >
-                                <Lock size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                                <span className="font-medium">Alterar Senha</span>
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={handleLogout}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-red-900/20 transition-colors group"
-                              >
-                                <LogOut size={15} className="text-gray-500 dark:text-gray-400 shrink-0 group-hover:text-red-600 dark:group-hover:text-red-400" />
-                                <span className="font-medium group-hover:text-red-600 dark:group-hover:text-red-400">Sair</span>
-                              </button>
-                            </div>
-                          </>,
-                          document.body
-                        )}
-            </div>
-            </div>
           </div>
         </div>
 
@@ -1852,23 +1643,8 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
             </div>
           </div>
 
-          {/* Busca */}
-          <div className="px-4 flex-shrink-0">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                placeholder="Buscar"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100"
-              />
-            </div>
-          </div>
-
           {/* Lista de páginas */}
-          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4 pt-4">
+          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4 pt-0">
             {sidebarHydrated && !isLoading ? searchTerm.trim() ? (
               menuItems.map((category) => {
                 const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);
@@ -1893,57 +1669,6 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle, onOpenChan
 
         </div>
       </div>
-
-      {/* Modal de Confirmação de Logout */}
-      {showLogoutConfirm && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={handleCancelLogout} />
-          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-              <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
-              Deseja sair?
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
-              Tem certeza que deseja sair do sistema? Você precisará fazer login novamente para acessar.
-            </p>
-            <div className="flex items-center justify-center space-x-3">
-              <button
-                type="button"
-                onClick={handleCancelLogout}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmLogout}
-                className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
-              >
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <CircularPhotoCropModal
-        open={!!profileCropSrc}
-        imageSrc={profileCropSrc ?? ''}
-        onClose={() => {
-          if (profileCropSrc) URL.revokeObjectURL(profileCropSrc);
-          setProfileCropSrc(null);
-        }}
-        onConfirm={async (file: File) => {
-          await uploadProfilePhotoMutation.mutateAsync(file);
-        }}
-        onPickReplacement={(file) => {
-          if (profileCropSrc) URL.revokeObjectURL(profileCropSrc);
-          setProfileCropSrc(URL.createObjectURL(file));
-        }}
-      />
-
     </>
   );
 }

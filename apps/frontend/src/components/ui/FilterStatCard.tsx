@@ -29,8 +29,8 @@ export function FilterStatCard({
   return (
     <Card
       className={clsx(
-        'cursor-pointer transition-shadow hover:shadow-md',
-        isActive && 'bg-gray-50 shadow-md dark:bg-gray-800/80'
+        'cursor-pointer transition-colors',
+        isActive && 'bg-gray-50 dark:bg-gray-800/80'
       )}
       role="button"
       tabIndex={0}

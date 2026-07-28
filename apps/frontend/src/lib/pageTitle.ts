@@ -3,15 +3,18 @@ import { PERMISSION_MODULES } from '@sistema-ponto/permission-modules';
 export const APP_TITLE = 'Gennesis Conecta';
 
 /** Rotas que não estão em PERMISSION_MODULES ou usam href diferente no menu. */
-const EXTRA_PAGE_TITLES: Record<string, string> = {
-  '/ponto/home': 'Início',
-  '/ponto/agenda': 'Agenda',
-  '/ponto/aprovacoes': 'Aprovações',
-  '/ponto/solicitacoes-gerais': 'Solicitações DP/ADM/TST',
-  '/ponto/gerenciar-solicitacoes-gerais': 'Gerenciar Solicitações',
-  '/ponto/conversas': 'Conversas',
-  '/ponto/gestao-solicitacoes': 'Gestão de Solicitações',
-  '/auth/login': 'Login',
+const EXTRA_PAGE_TITLES: Record<string, { title: string; category?: string; href?: string }> = {
+  '/ponto/home': { title: 'Início' },
+  '/ponto/agenda': { title: 'Agenda', category: 'Principal' },
+  '/ponto/aprovacoes': { title: 'Aprovações', category: 'Principal' },
+  '/ponto/solicitacoes-gerais': { title: 'Solicitações DP/ADM/TST', category: 'Principal' },
+  '/ponto/gerenciar-solicitacoes-gerais': {
+    title: 'Gerenciar Solicitações',
+    category: 'Departamento Pessoal',
+  },
+  '/ponto/conversas': { title: 'Conversas', category: 'Principal' },
+  '/ponto/gestao-solicitacoes': { title: 'Gestão de Solicitações', category: 'Principal' },
+  '/auth/login': { title: 'Login' },
 };
 
 const SUB_PATH_TITLES: Record<string, string> = {
@@ -55,17 +58,43 @@ function decodePathSegment(segment: string): string {
   }
 }
 
+export type BreadcrumbItem = {
+  label: string;
+  /** Se definido, o crumb é clicável (exceto o último). */
+  href?: string;
+};
+
 /** Resolve o nome da página a partir da rota (ex.: `/ponto/kanban` → `Tasks`). */
 export function resolvePageTitle(pathname: string): string | null {
+  const crumbs = resolveBreadcrumbs(pathname);
+  if (crumbs.length === 0) return null;
+  return crumbs[crumbs.length - 1]?.label ?? null;
+}
+
+/**
+ * Breadcrumb da rota: categoria/módulo (muted) > página atual (destaque).
+ * Ex.: `/ponto/aprovacoes` → Principal > Aprovações
+ */
+export function resolveBreadcrumbs(pathname: string): BreadcrumbItem[] {
   const path = normalizePath(pathname);
 
-  if (EXTRA_PAGE_TITLES[path]) {
-    return EXTRA_PAGE_TITLES[path];
+  const extra = EXTRA_PAGE_TITLES[path];
+  if (extra) {
+    if (extra.category) {
+      return [{ label: extra.category }, { label: extra.title, href: extra.href ?? path }];
+    }
+    return [{ label: extra.title, href: path }];
   }
 
   for (const module of MODULES_BY_HREF_LENGTH) {
     if (path === module.href) {
-      return module.name;
+      if (module.category && module.category !== module.name) {
+        return [
+          { label: module.category },
+          { label: module.name, href: module.href },
+        ];
+      }
+      return [{ label: module.name, href: module.href }];
     }
 
     if (path.startsWith(`${module.href}/`)) {
@@ -73,12 +102,39 @@ export function resolvePageTitle(pathname: string): string | null {
       const segments = suffix.split('/').filter(Boolean);
       const lastSegment = decodePathSegment(segments[segments.length - 1] ?? '');
 
-      if (!lastSegment || looksLikeOpaqueId(lastSegment)) {
-        return module.name;
+      const crumbs: BreadcrumbItem[] = [];
+      if (module.category && module.category !== module.name) {
+        crumbs.push({ label: module.category });
+      }
+      crumbs.push({ label: module.name, href: module.href });
+
+      if (lastSegment && !looksLikeOpaqueId(lastSegment)) {
+        const subTitle = SUB_PATH_TITLES[lastSegment] ?? humanizeSegment(lastSegment);
+        crumbs.push({ label: subTitle, href: path });
       }
 
-      const subTitle = SUB_PATH_TITLES[lastSegment] ?? humanizeSegment(lastSegment);
-      return `${module.name} - ${subTitle}`;
+      return crumbs;
+    }
+  }
+
+  // Fallback: humaniza o último segmento da URL
+  const parts = path.split('/').filter(Boolean);
+  const last = parts[parts.length - 1];
+  if (!last || looksLikeOpaqueId(last)) return [];
+  return [{ label: humanizeSegment(decodePathSegment(last)), href: path }];
+}
+
+/** Categoria/módulo do menu (ícone do rail), não o nome da página. */
+export function resolveModuleCategory(pathname: string): string | null {
+  const path = normalizePath(pathname);
+
+  const extra = EXTRA_PAGE_TITLES[path];
+  if (extra?.category) return extra.category;
+  if (path === '/ponto/home') return 'Principal';
+
+  for (const module of MODULES_BY_HREF_LENGTH) {
+    if (path === module.href || path.startsWith(`${module.href}/`)) {
+      return module.category || null;
     }
   }
 

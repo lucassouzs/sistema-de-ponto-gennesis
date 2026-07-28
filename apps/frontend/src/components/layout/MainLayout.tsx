@@ -11,6 +11,7 @@ import {
 } from '@/lib/sidebarStorage';
 import { SHOW_CHAT_FLOAT_BUTTON } from '@/lib/chatFloatButton';
 import { Sidebar } from './Sidebar';
+import { TopNavbar } from './TopNavbar';
 import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLogout } from '@/hooks/useLogout';
@@ -125,6 +126,11 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
           layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
         } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
       >
+        <TopNavbar
+          userName={userName}
+          onLogout={handleLogout}
+          onOpenChangePassword={handleOpenChangePassword}
+        />
         <main className={isFullBleedRoute ? 'p-0' : 'p-4 lg:p-8'}>
           {children}
         </main>

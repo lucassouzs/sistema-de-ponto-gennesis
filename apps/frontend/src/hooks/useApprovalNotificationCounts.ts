@@ -86,11 +86,9 @@ export function useApprovalNotificationCounts() {
 
   const counts = useMemo((): ApprovalNotificationCounts => {
     const base = mainQuery.data;
-    const espelho = canApproveEspelhoNf
-      ? (espelhoQuery.data ?? 0)
-      : 0;
-    const dp = base?.dp ?? 0;
-    const fd = base?.fd ?? 0;
+    const espelho = canApproveEspelhoNf ? (espelhoQuery.data ?? 0) : 0;
+    const dp = canAccessDpApproverPages ? (base?.dp ?? 0) : 0;
+    const fd = canAccessDpApproverPages ? (base?.fd ?? 0) : 0;
     const fuel = canApproveFuel ? (base?.fuel ?? 0) : 0;
     const oc = canApproveOc ? (base?.oc ?? 0) : 0;
     const rm = canApproveMaterialRequests ? (base?.rm ?? 0) : 0;
@@ -99,6 +97,7 @@ export function useApprovalNotificationCounts() {
   }, [
     mainQuery.data,
     espelhoQuery.data,
+    canAccessDpApproverPages,
     canApproveEspelhoNf,
     canApproveFuel,
     canApproveOc,
@@ -106,7 +105,7 @@ export function useApprovalNotificationCounts() {
   ]);
 
   return {
-    counts,
+    counts: enabled ? counts : emptyCounts,
     isLoading: mainQuery.isLoading || (canApproveEspelhoNf && espelhoQuery.isLoading),
     refetch: async () => {
       await Promise.all([mainQuery.refetch(), espelhoQuery.refetch()]);

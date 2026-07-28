@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/Input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Check, Download, Eye, FileText, Filter, MoreVertical, Wrench, Search, X, CheckCircle, Clock, LayoutList, XCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
@@ -548,8 +548,32 @@ export default function AprovacoesPage() {
   const { canAccessDpApproverPages, canApproveEspelhoNf, canApproveOc, canApproveFuel, canApproveMaterialRequests } =
     usePermissions();
   const canApproveDp = canAccessDpApproverPages;
-  const [activeTab, setActiveTab] = useState<AprovacaoTabId>('dp');
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
+  const initialTab: AprovacaoTabId =
+    tabFromUrl === 'dp' ||
+    tabFromUrl === 'espelho' ||
+    tabFromUrl === 'fd' ||
+    tabFromUrl === 'fuel' ||
+    tabFromUrl === 'rm' ||
+    tabFromUrl === 'oc'
+      ? tabFromUrl
+      : 'dp';
+  const [activeTab, setActiveTab] = useState<AprovacaoTabId>(initialTab);
   const { counts: approvalCounts } = useApprovalNotificationCounts();
+
+  useEffect(() => {
+    if (
+      tabFromUrl === 'dp' ||
+      tabFromUrl === 'espelho' ||
+      tabFromUrl === 'fd' ||
+      tabFromUrl === 'fuel' ||
+      tabFromUrl === 'rm' ||
+      tabFromUrl === 'oc'
+    ) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
