@@ -1492,14 +1492,15 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                     <Link
                       href={singleItem.href}
                       prefetch={navLinkPrefetch}
-                      className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                      className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                         active
-                          ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                       }`}
                       aria-label={singleItem.name}
+                      aria-current={active ? 'page' : undefined}
                     >
-                      <SingleItemIcon className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                      <SingleItemIcon className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                       <NotificationCountBadge count={singleBadge} rail />
                     </Link>
                   </SidebarRailTooltip>
@@ -1512,15 +1513,15 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   <button
                     type="button"
                     onClick={() => handleSelectModule(category.id)}
-                    className={`relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                       isRailActive
-                        ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                     }`}
                     aria-label={category.name}
                     aria-current={isRailActive ? 'true' : undefined}
                   >
-                    <CategoryIcon className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                    <CategoryIcon className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                     <NotificationCountBadge count={moduleBadge} rail />
                   </button>
                 </SidebarRailTooltip>
@@ -1542,13 +1543,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   href="/ponto/conversas"
                   prefetch={navLinkPrefetch}
                   aria-label={`Conversas${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
-                  className={`relative flex h-10 w-10 items-center justify-center overflow-visible rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-current={isFooterShortcutActive('/ponto/conversas') ? 'page' : undefined}
+                  className={`sidebar-rail-btn relative flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/conversas')
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <MessageCircle className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <MessageCircle className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                   <NotificationCountBadge count={chatUnreadCount} rail />
                 </Link>
               </SidebarRailTooltip>
@@ -1557,13 +1559,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   href="/ponto/kanban"
                   prefetch={navLinkPrefetch}
                   aria-label="Tasks"
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-current={isFooterShortcutActive('/ponto/kanban') ? 'page' : undefined}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/kanban')
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <SquareKanban className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <SquareKanban className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Agenda">
@@ -1571,13 +1574,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   href="/ponto/agenda"
                   prefetch={navLinkPrefetch}
                   aria-label="Agenda"
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-current={isFooterShortcutActive('/ponto/agenda') ? 'page' : undefined}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/agenda')
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <CalendarRange className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <CalendarRange className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Flow">
@@ -1585,13 +1589,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   href="/ponto/flow"
                   prefetch={navLinkPrefetch}
                   aria-label="Flow"
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-current={isFooterShortcutActive('/ponto/flow') ? 'page' : undefined}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/flow')
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <Workflow className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <Workflow className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
               <SidebarRailTooltip label="Drive">
@@ -1599,13 +1604,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   href="/ponto/drive"
                   prefetch={navLinkPrefetch}
                   aria-label="Drive"
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                  aria-current={isFooterShortcutActive('/ponto/drive') ? 'page' : undefined}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/drive')
-                      ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
-                  <HardDrive className="h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <HardDrive className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
             </div>

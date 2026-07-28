@@ -516,6 +516,152 @@
   }
 }
 
+/* Sidebar rail — módulos (só movimento; cores ficam no Tailwind) */
+@keyframes sidebar-rail-select {
+  0% {
+    transform: scale(0.86);
+  }
+  55% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes sidebar-rail-icon-pop {
+  0% {
+    transform: scale(0.75) rotate(-8deg);
+    opacity: 0.7;
+  }
+  60% {
+    transform: scale(1.12) rotate(3deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.sidebar-rail-btn {
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.sidebar-rail-btn .sidebar-rail-btn__icon {
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.sidebar-rail-btn:hover {
+  transform: scale(1.08);
+}
+
+.sidebar-rail-btn:hover .sidebar-rail-btn__icon {
+  transform: scale(1.08);
+}
+
+.sidebar-rail-btn:active {
+  transform: scale(0.94);
+}
+
+.sidebar-rail-btn--active {
+  animation: sidebar-rail-select 0.4s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.sidebar-rail-btn--active .sidebar-rail-btn__icon {
+  animation: sidebar-rail-icon-pop 0.45s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.sidebar-rail-btn--active:hover {
+  transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-rail-btn,
+  .sidebar-rail-btn .sidebar-rail-btn__icon {
+    transition-duration: 0.01ms !important;
+  }
+
+  .sidebar-rail-btn--active,
+  .sidebar-rail-btn--active .sidebar-rail-btn__icon {
+    animation: none;
+  }
+
+  .sidebar-rail-btn:hover,
+  .sidebar-rail-btn:active,
+  .sidebar-rail-btn--active:hover {
+    transform: none;
+  }
+}
+
+/* Sino de notificações */
+@keyframes notif-bell-ring {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  15% {
+    transform: rotate(14deg);
+  }
+  30% {
+    transform: rotate(-12deg);
+  }
+  45% {
+    transform: rotate(10deg);
+  }
+  60% {
+    transform: rotate(-6deg);
+  }
+  75% {
+    transform: rotate(3deg);
+  }
+}
+
+.notif-bell-btn {
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+    background-color 0.2s ease;
+}
+
+.notif-bell-btn__icon {
+  transform-origin: top center;
+  transition: transform 0.22s ease;
+}
+
+.notif-bell-btn:hover {
+  transform: scale(1.08);
+}
+
+.notif-bell-btn:hover .notif-bell-btn__icon {
+  animation: notif-bell-ring 0.7s ease-in-out;
+}
+
+.notif-bell-btn:active {
+  transform: scale(0.94);
+}
+
+.notif-bell-btn[aria-expanded='true'] {
+  transform: scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-bell-btn {
+    transition-duration: 0.01ms !important;
+  }
+
+  .notif-bell-btn:hover,
+  .notif-bell-btn:active,
+  .notif-bell-btn[aria-expanded='true'] {
+    transform: none;
+  }
+
+  .notif-bell-btn:hover .notif-bell-btn__icon {
+    animation: none;
+  }
+}
+
 /* Home page — entradas suaves */
 @keyframes home-fade-in {
   from {

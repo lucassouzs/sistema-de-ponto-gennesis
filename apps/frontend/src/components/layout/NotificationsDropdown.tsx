@@ -350,9 +350,9 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         aria-label={`Notificações${badgeTotal > 0 ? `, ${badgeTotal} pendentes` : ''}`}
         title="Notificações"
         onClick={() => setOpen((v) => !v)}
-        className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        className="notif-bell-btn relative flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
-        <Bell className="h-5 w-5" />
+        <Bell className="notif-bell-btn__icon h-5 w-5" />
         <NotificationCountBadge count={badgeTotal} rail />
       </button>
 
