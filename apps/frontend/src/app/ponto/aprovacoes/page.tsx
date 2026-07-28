@@ -549,7 +549,7 @@ export default function AprovacoesPage() {
     usePermissions();
   const canApproveDp = canAccessDpApproverPages;
   const searchParams = useSearchParams();
-  const tabFromUrl = searchParams.get('tab');
+  const tabFromUrl = searchParams?.get('tab') ?? null;
   const initialTab: AprovacaoTabId =
     tabFromUrl === 'dp' ||
     tabFromUrl === 'espelho' ||

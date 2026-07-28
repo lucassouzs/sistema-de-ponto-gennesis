@@ -28,7 +28,7 @@ const EXTRA_ITEMS: SearchItem[] = [
 const OPEN_ACCESS = new Set(PERMISSION_MODULE_KEYS_OPEN_ACCESS);
 
 type NavSearchProps = {
-  inputRef?: React.RefObject<HTMLInputElement | null>;
+  inputRef?: React.MutableRefObject<HTMLInputElement | null>;
 };
 
 export function NavSearch({ inputRef }: NavSearchProps) {
@@ -42,7 +42,7 @@ export function NavSearch({ inputRef }: NavSearchProps) {
     canApproveOc,
     canApproveMaterialRequests,
   } = usePermissions();
-  const localInputRef = useRef<HTMLInputElement>(null);
+  const localInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [term, setTerm] = useState('');
@@ -54,8 +54,8 @@ export function NavSearch({ inputRef }: NavSearchProps) {
 
   const setInputRef = (el: HTMLInputElement | null) => {
     localInputRef.current = el;
-    if (inputRef && 'current' in inputRef) {
-      (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+    if (inputRef) {
+      inputRef.current = el;
     }
   };
 

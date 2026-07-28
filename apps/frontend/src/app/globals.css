@@ -458,6 +458,64 @@
   }
 }
 
+/* Theme toggle — sol / lua */
+@keyframes theme-toggle-moon-float {
+  0%,
+  100% {
+    transform: scale(1.1) translateY(0);
+  }
+  50% {
+    transform: scale(1.1) translateY(-1px);
+  }
+}
+
+@keyframes theme-toggle-star-twinkle {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+.theme-toggle-moon-active {
+  animation: theme-toggle-moon-float 3.2s ease-in-out infinite;
+}
+
+.theme-toggle-stars > span:nth-child(1) {
+  animation: theme-toggle-star-twinkle 2.2s ease-in-out infinite;
+}
+.theme-toggle-stars > span:nth-child(2) {
+  animation: theme-toggle-star-twinkle 2.8s ease-in-out 0.4s infinite;
+}
+.theme-toggle-stars > span:nth-child(3) {
+  animation: theme-toggle-star-twinkle 1.9s ease-in-out 0.9s infinite;
+}
+
+.theme-toggle:active .theme-toggle-knob.translate-x-8 {
+  transform: translateX(2rem) scale(0.92);
+}
+
+.theme-toggle:active .theme-toggle-knob.translate-x-0 {
+  transform: translateX(0) scale(0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle-moon-active,
+  .theme-toggle-stars > span {
+    animation: none;
+  }
+
+  .theme-toggle,
+  .theme-toggle-knob,
+  .theme-toggle svg {
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Home page — entradas suaves */
 @keyframes home-fade-in {
   from {

@@ -48,26 +48,60 @@ function ThemeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => vo
       onClick={onToggle}
       aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
       title={isDark ? 'Modo claro' : 'Modo escuro'}
-      className="relative flex h-10 w-[4.5rem] shrink-0 items-center overflow-hidden rounded-full bg-gray-100 p-1 dark:bg-gray-800"
+      className={`theme-toggle relative flex h-10 w-[4.5rem] shrink-0 items-center overflow-hidden rounded-full p-1 transition-[background-color,box-shadow] duration-500 ease-out ${
+        isDark
+          ? 'bg-slate-800 shadow-[inset_0_0_12px_rgba(15,23,42,0.55)]'
+          : 'bg-sky-100 shadow-[inset_0_0_12px_rgba(56,189,248,0.25)]'
+      }`}
     >
+      {/* Brilho do céu / noite */}
       <span
         aria-hidden
-        className={`pointer-events-none absolute left-1 top-1 size-8 rounded-full bg-white shadow-sm transition-transform duration-300 ease-out dark:bg-gray-700 ${
-          isDark ? 'translate-x-0' : 'translate-x-8'
+        className={`pointer-events-none absolute inset-0 rounded-full transition-opacity duration-500 ${
+          isDark
+            ? 'opacity-100 bg-[radial-gradient(circle_at_75%_30%,rgba(99,102,241,0.35),transparent_55%)]'
+            : 'opacity-100 bg-[radial-gradient(circle_at_25%_20%,rgba(253,224,71,0.45),transparent_50%)]'
         }`}
       />
+
+      {/* Estrelinhas no modo escuro */}
+      <span
+        aria-hidden
+        className={`theme-toggle-stars pointer-events-none absolute inset-0 transition-opacity duration-500 ${
+          isDark ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        <span className="absolute right-2.5 top-2 size-0.5 rounded-full bg-white/90" />
+        <span className="absolute right-4 top-3.5 size-[3px] rounded-full bg-white/70" />
+        <span className="absolute bottom-2 right-3 size-0.5 rounded-full bg-white/80" />
+      </span>
+
+      {/* Knob */}
+      <span
+        aria-hidden
+        className={`theme-toggle-knob pointer-events-none absolute left-1 top-1 size-8 rounded-full transition-transform duration-500 ease-[cubic-bezier(0.34,1.45,0.64,1)] ${
+          isDark
+            ? 'translate-x-0 bg-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(255,255,255,0.12)]'
+            : 'translate-x-8 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]'
+        }`}
+      />
+
       <span className="relative z-10 grid w-full grid-cols-2 items-center">
         <span className="flex items-center justify-center">
           <Moon
-            className={`h-4 w-4 ${
-              isDark ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'
+            className={`h-4 w-4 transition-all duration-500 ease-out ${
+              isDark
+                ? 'theme-toggle-moon-active scale-110 text-slate-800'
+                : 'scale-90 rotate-[-25deg] text-slate-400/70'
             }`}
           />
         </span>
         <span className="flex items-center justify-center">
           <Sun
-            className={`h-4 w-4 ${
-              !isDark ? 'text-amber-400' : 'text-gray-400 dark:text-gray-500'
+            className={`h-4 w-4 transition-all duration-500 ease-out ${
+              !isDark
+                ? 'scale-110 text-amber-400'
+                : 'scale-90 rotate-90 text-slate-500/60'
             }`}
           />
         </span>
@@ -85,7 +119,7 @@ export function TopNavbar({
   const pathname = usePathname();
   const { user, userDepartment, userPosition } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const profileTriggerRef = useRef<HTMLButtonElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const profileAvatarInputRef = useRef<HTMLInputElement>(null);
