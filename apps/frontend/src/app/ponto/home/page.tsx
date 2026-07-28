@@ -2,8 +2,9 @@
 
 // Página padrão de entrada para todos os usuários autenticados (home minimalista).
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileCheck,
@@ -15,10 +16,32 @@ import {
   CalendarClock,
   ListTodo,
   Gavel,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import {
+  DATE_PICKER_FOOTER_ACTION_CLS,
+  DATE_PICKER_FOOTER_CLS,
+  DATE_PICKER_NAV_BTN_CLS,
+  DATE_PICKER_POPOVER_CLS,
+  DATE_PICKER_WEEKDAY_ROW_CLS,
+  DATE_PICKER_WEEKDAYS,
+  datePickerDayButtonCls,
+} from '@/components/ui/datePickerDropdownUi';
+import { useTheme } from '@/context/ThemeContext';
 import api from '@/lib/api';
 import { authService } from '@/lib/auth';
 import { useLogout } from '@/hooks/useLogout';
@@ -30,9 +53,7 @@ import {
   fetchPlannerTasks,
   toTimeInputValue,
   type PlannerTask,
-} from '@/lib/plannerTasks';
-
-type QuickAction = {
+} from '@/lib/plannerTasks';type QuickAction = {
   id: string;
   label: string;
   href: string;
@@ -74,6 +95,245 @@ function getStoredUserQueryData() {
   const stored = authService.getUser();
   if (!stored) return undefined;
   return { success: true, data: stored };
+}
+
+function toDateInputValue(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatDayLabelPt(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+}
+
+function shiftDateInputValue(dateStr: string, deltaDays: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + deltaDays);
+  return toDateInputValue(date);
+}
+
+function resolveMondayYmd(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d, 12, 0, 0, 0);
+  const dow = date.getDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  date.setDate(date.getDate() + offset);
+  return toDateInputValue(date);
+}
+
+function formatWeekRangeLabel(monday: string, friday: string): string {
+  const fmt = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map(Number);
+    if (!y || !m || !d) return ymd;
+    return new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+    });
+  };
+  return `${fmt(monday)} – ${fmt(friday)}`;
+}
+
+function parseYmdLocal(s: string): Date | null {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function CompactDayPicker({
+  value,
+  max,
+  onChange,
+}: {
+  value: string;
+  max: string;
+  onChange: (ymd: string) => void;
+}) {
+  const listboxId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [viewDate, setViewDate] = useState(() => parseYmdLocal(value) ?? new Date());
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 280 });
+
+  const updatePosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const popoverH = 340;
+    const gap = 6;
+    let top = rect.bottom + gap;
+    if (top + popoverH > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - popoverH - gap);
+    }
+    const width = 280;
+    let left = rect.left;
+    if (left + width > window.innerWidth - 8) {
+      left = window.innerWidth - width - 8;
+    }
+    setCoords({ top, left: Math.max(8, left), width });
+  }, []);
+
+  useEffect(() => {
+    const parsed = parseYmdLocal(value);
+    if (parsed) setViewDate(parsed);
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const onScrollOrResize = () => updatePosition();
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [open, updatePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthLabel = viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const pickDay = (day: number) => {
+    const ymd = toDateInputValue(new Date(year, month, day, 12, 0, 0, 0));
+    if (ymd > max) return;
+    onChange(ymd);
+    setOpen(false);
+  };
+
+  const popover = open ? (
+    <div
+      ref={popoverRef}
+      id={listboxId}
+      role="dialog"
+      aria-label="Calendário"
+      className={DATE_PICKER_POPOVER_CLS}
+      style={{ top: coords.top, left: coords.left, width: coords.width }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setViewDate(new Date(year, month - 1, 1))}
+          className={DATE_PICKER_NAV_BTN_CLS}
+          aria-label="Mês anterior"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">
+          {monthLabel}
+        </span>
+        <button
+          type="button"
+          onClick={() => setViewDate(new Date(year, month + 1, 1))}
+          className={DATE_PICKER_NAV_BTN_CLS}
+          aria-label="Próximo mês"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
+        {DATE_PICKER_WEEKDAYS.map((d) => (
+          <span key={d} className="py-1">
+            {d}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((day, i) => {
+          if (day === null) return <span key={`e-${i}`} aria-hidden />;
+          const ymd = toDateInputValue(new Date(year, month, day, 12, 0, 0, 0));
+          const selected = value === ymd;
+          const isToday = ymd === max;
+          const disabled = ymd > max;
+          return (
+            <button
+              key={day}
+              type="button"
+              disabled={disabled}
+              onClick={() => pickDay(day)}
+              className={`${datePickerDayButtonCls(selected, isToday)} disabled:pointer-events-none disabled:opacity-30`}
+            >
+              {day}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={DATE_PICKER_FOOTER_CLS}>
+        <span />
+        <button
+          type="button"
+          onClick={() => {
+            onChange(max);
+            setViewDate(parseYmdLocal(max) ?? new Date());
+            setOpen(false);
+          }}
+          className={DATE_PICKER_FOOTER_ACTION_CLS}
+        >
+          Hoje
+        </button>
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Escolher data"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={open ? listboxId : undefined}
+        title="Escolher data"
+        onClick={() => {
+          if (!open) updatePosition();
+          setOpen((v) => !v);
+        }}
+        className="min-w-[4.25rem] select-none rounded px-1 py-0 text-center text-[10px] font-medium leading-5 tabular-nums text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+      >
+        {formatDayLabelPt(value)}
+      </button>
+      {typeof document !== 'undefined' && popover
+        ? createPortal(popover, document.body)
+        : null}
+    </>
+  );
 }
 
 function startOfDay(date: Date): Date {
@@ -138,6 +398,11 @@ function buildTodayItems(events: PlannerEvent[], tasks: PlannerTask[]): TodayIte
 export default function HomePage() {
   const handleLogout = useLogout();
   const [now, setNow] = useState<Date>(() => new Date());
+  const [profileHydrated, setProfileHydrated] = useState(false);
+
+  useEffect(() => {
+    setProfileHydrated(true);
+  }, []);
 
   // Não bloqueia o shell: usa cache/storage e atualiza /auth/me em background
   const { data: userData } = useQuery({
@@ -154,7 +419,8 @@ export default function HomePage() {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 1,
-    placeholderData: () => getStoredUserQueryData(),
+    // Só após mount: localStorage no 1º paint do cliente diverge do SSR ("Usuário" vs nome real)
+    placeholderData: profileHydrated ? getStoredUserQueryData() : undefined,
   });
 
   const todayRange = useMemo(() => {
@@ -202,16 +468,86 @@ export default function HomePage() {
     can(pathToModuleKey('/ponto/licitacoes-pncp')) ||
     can(pathToModuleKey('/ponto/licitacoes'));
 
+  const [pncpCaptacaoDay, setPncpCaptacaoDay] = useState(() => toDateInputValue(new Date()));
+  const todayInputValue = toDateInputValue(now);
+  const canGoNextPncpDay = pncpCaptacaoDay < todayInputValue;
+  const currentWeekMonday = resolveMondayYmd(todayInputValue);
+  const [pncpWeekMonday, setPncpWeekMonday] = useState(currentWeekMonday);
+  const canGoNextPncpWeek = pncpWeekMonday < currentWeekMonday;
+
   const { data: pncpEnviosData } = useQuery({
-    queryKey: ['pncp-meus-envios-count'],
+    queryKey: ['pncp-meus-envios-count', pncpCaptacaoDay],
     queryFn: async () => {
-      const res = await api.get('/pncp/meus-envios-count');
+      const res = await api.get('/pncp/meus-envios-count', {
+        params: { date: pncpCaptacaoDay },
+      });
       return res.data?.data as { total?: number } | undefined;
     },
-    enabled: canSeePncp,
-    staleTime: 60_000,
+    enabled: canSeePncp && Boolean(pncpCaptacaoDay),
+    staleTime: 30_000,
   });
   const pncpEnviadosCount = Number(pncpEnviosData?.total || 0);
+
+  const { data: pncpSemanaData, isLoading: pncpSemanaLoading } = useQuery({
+    queryKey: ['pncp-meus-envios-semana', pncpWeekMonday],
+    queryFn: async () => {
+      const res = await api.get('/pncp/meus-envios-semana', {
+        params: { weekStart: pncpWeekMonday },
+      });
+      return res.data?.data as
+        | {
+            monday?: string;
+            friday?: string;
+            days?: Array<{ date: string; label: string; total: number }>;
+          }
+        | undefined;
+    },
+    enabled: canSeePncp && Boolean(pncpWeekMonday),
+    staleTime: 30_000,
+  });
+
+  const pncpWeekChartData = useMemo(() => {
+    const days = pncpSemanaData?.days;
+    if (days?.length) {
+      return days.map((d) => ({
+        label: d.label,
+        total: Number(d.total || 0),
+        date: d.date,
+      }));
+    }
+    return ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'].map((label, i) => ({
+      label,
+      total: 0,
+      date: shiftDateInputValue(pncpWeekMonday, i),
+    }));
+  }, [pncpSemanaData, pncpWeekMonday]);
+
+  const pncpWeekFriday =
+    pncpSemanaData?.friday || shiftDateInputValue(pncpWeekMonday, 4);
+  const pncpWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.total, 0);
+  const { isDark } = useTheme();
+  // Alinha ao padrão do sistema: text-xs / text-sm + gray-500/400 (eixos) e gray-900/100 (valores)
+  const chartFontFamily =
+    'inherit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  const chartTick = isDark ? '#9ca3af' : '#6b7280'; // gray-400 / gray-500
+  const chartValueFill = isDark ? '#f3f4f6' : '#111827'; // gray-100 / gray-900
+  const chartMuted = isDark ? '#6b7280' : '#9ca3af'; // gray-500 / gray-400
+  const chartGrid = isDark ? '#374151' : '#e5e7eb';
+  const chartTooltipBg = isDark ? 'rgba(31, 41, 55, 0.96)' : 'rgba(255, 255, 255, 0.96)';
+  const chartTooltipBorder = isDark ? '#4b5563' : '#e5e7eb';
+  const chartTooltipColor = isDark ? '#f3f4f6' : '#111827';
+  const chartAxisTick = {
+    fill: chartTick,
+    fontSize: 12,
+    fontWeight: 500 as const,
+    fontFamily: chartFontFamily,
+  };
+  const chartValueLabel = {
+    fill: chartValueFill,
+    fontSize: 12,
+    fontWeight: 600 as const,
+    fontFamily: chartFontFamily,
+  };
 
   const allStatCards: StatCard[] = [
     {
@@ -304,7 +640,7 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, []);
 
-  const user = userData?.data || authService.getUser() || { name: 'Usuário', role: 'EMPLOYEE' };
+  const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
   const firstName = (user?.name || 'Usuário').split(' ')[0] || 'Usuário';
 
   const greeting = getGreeting(now);
@@ -345,15 +681,75 @@ export default function HomePage() {
 
           {/* Cards de status */}
           {statCards.length > 0 && (
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-6">
+            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
               {statCards.map((card) => {
                 const Icon = card.icon;
                 const colors = STAT_CARD_ACCENT_CLASSES[card.accent];
+
+                if (card.id === 'pncp-enviados') {
+                  return (
+                    <Card key={card.id} className="h-full">
+                      <CardContent className="flex h-full items-center p-4 sm:p-6">
+                        <div className="flex w-full items-center">
+                          <Link
+                            href={card.href}
+                            className={`p-2 sm:p-3 rounded-lg flex-shrink-0 ${colors.bg} transition-opacity hover:opacity-90`}
+                            aria-label="Abrir PNCP"
+                          >
+                            <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.icon}`} />
+                          </Link>
+                          <div className="ml-3 sm:ml-4 min-w-0 flex-1">
+                            <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-normal">
+                              {card.label}
+                            </p>
+                            <div className="mt-1 flex items-baseline gap-1.5">
+                              <p className="shrink-0 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                                {card.value}
+                              </p>
+                              <div className="flex min-w-0 items-center gap-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setPncpCaptacaoDay((day) => shiftDateInputValue(day, -1))
+                                  }
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                                  aria-label="Dia anterior"
+                                >
+                                  <ChevronLeft className="h-3 w-3" />
+                                </button>
+                                <CompactDayPicker
+                                  value={pncpCaptacaoDay}
+                                  max={todayInputValue}
+                                  onChange={setPncpCaptacaoDay}
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!canGoNextPncpDay}
+                                  onClick={() =>
+                                    setPncpCaptacaoDay((day) => {
+                                      const next = shiftDateInputValue(day, 1);
+                                      return next > todayInputValue ? todayInputValue : next;
+                                    })
+                                  }
+                                  className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                                  aria-label="Próximo dia"
+                                >
+                                  <ChevronRight className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                }
+
                 return (
-                  <Link key={card.id} href={card.href} className="block">
-                    <Card>
-                      <CardContent className="p-4 sm:p-6">
-                        <div className="flex items-center">
+                  <Link key={card.id} href={card.href} className="block h-full">
+                    <Card className="h-full">
+                      <CardContent className="flex h-full items-center p-4 sm:p-6">
+                        <div className="flex w-full items-center">
                           <div className={`p-2 sm:p-3 rounded-lg flex-shrink-0 ${colors.bg}`}>
                             <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.icon}`} />
                           </div>
@@ -372,6 +768,141 @@ export default function HomePage() {
                 );
               })}
             </div>
+          )}
+
+          {canSeePncp && (
+            <Card className="mt-6">
+              <CardHeader className="border-b-0 pb-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center space-x-3">
+                    <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30 sm:p-3">
+                      <Gavel className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Captações da semana
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Segunda a sexta · {pncpWeekTotal} no período
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPncpWeekMonday((day) => shiftDateInputValue(day, -7))
+                      }
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                      aria-label="Semana anterior"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[8.5rem] text-center text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300">
+                      {formatWeekRangeLabel(pncpWeekMonday, pncpWeekFriday)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={!canGoNextPncpWeek}
+                      onClick={() =>
+                        setPncpWeekMonday((day) => {
+                          const next = shiftDateInputValue(day, 7);
+                          return next > currentWeekMonday ? currentWeekMonday : next;
+                        })
+                      }
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                      aria-label="Próxima semana"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[220px] w-full font-sans text-xs text-gray-500 dark:text-gray-400 sm:h-[260px]">
+                  {pncpSemanaLoading ? (
+                    <p className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                      Carregando…
+                    </p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={pncpWeekChartData}
+                        margin={{ top: 20, right: 8, left: -12, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
+                        <XAxis
+                          dataKey="label"
+                          tick={chartAxisTick}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          tick={chartAxisTick}
+                          axisLine={false}
+                          tickLine={false}
+                          width={32}
+                        />
+                        <Tooltip
+                          cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
+                          formatter={(value: number) => [value, 'Captações']}
+                          labelFormatter={(label, payload) => {
+                            const date = payload?.[0]?.payload?.date as string | undefined;
+                            if (!date) return String(label);
+                            const [y, m, d] = date.split('-').map(Number);
+                            if (!y || !m || !d) return String(label);
+                            const pretty = new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
+                              weekday: 'long',
+                              day: '2-digit',
+                              month: 'short',
+                            });
+                            return capitalizeFirst(pretty);
+                          }}
+                          contentStyle={{
+                            backgroundColor: chartTooltipBg,
+                            borderRadius: 8,
+                            border: `1px solid ${chartTooltipBorder}`,
+                            color: chartTooltipColor,
+                            fontFamily: chartFontFamily,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                          }}
+                          labelStyle={{
+                            color: chartMuted,
+                            fontFamily: chartFontFamily,
+                            fontSize: 12,
+                            fontWeight: 500,
+                            marginBottom: 2,
+                          }}
+                          itemStyle={{
+                            color: chartTooltipColor,
+                            fontFamily: chartFontFamily,
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        />
+                        <Bar
+                          dataKey="total"
+                          fill="#10b981"
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={48}
+                        >
+                          <LabelList
+                            dataKey="total"
+                            position="top"
+                            offset={8}
+                            {...chartValueLabel}
+                            formatter={(value: number) => (value > 0 ? value : '')}
+                          />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Corpo: agenda (principal) + acesso rápido (lateral) */}

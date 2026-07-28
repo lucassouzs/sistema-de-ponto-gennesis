@@ -129,6 +129,12 @@ export function TopNavbar({
   );
   const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  // Evita mismatch de hidratação: no SSR não há localStorage/API user → "Usuário"/"US"
+  const [profileReady, setProfileReady] = useState(false);
+
+  useEffect(() => {
+    setProfileReady(true);
+  }, []);
 
   const breadcrumbs = resolveBreadcrumbs(pathname ?? '/');
   const displayName = user?.name || userName || 'Usuário';
@@ -296,7 +302,7 @@ export function TopNavbar({
             onClick={() => setProfileMenuOpen((v) => !v)}
             className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
           >
-            {profilePhotoHref ? (
+            {profileReady && profilePhotoHref ? (
               <img
                 src={profilePhotoHref}
                 alt=""
@@ -305,7 +311,7 @@ export function TopNavbar({
               />
             ) : (
               <span className="text-sm font-semibold text-white">
-                {getInitials(displayName)}
+                {profileReady ? getInitials(displayName) : '\u00A0'}
               </span>
             )}
             {uploadProfilePhotoMutation.isPending && (

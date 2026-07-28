@@ -10,7 +10,7 @@ import {
 import { consultarContratacoesLocais } from '../services/PncpLocalConsultaService';
 import { enviarPncpParaAnalise } from '../services/PncpEnviarAnaliseService';
 import { rejeitarPncpContratacao } from '../services/PncpRejeitarService';
-import { countPncpEnviadosByUser } from '../services/pncpEnviadoAnaliseStore';
+import { countPncpEnviadosByUser, countPncpEnviadosByUserWeekdays } from '../services/pncpEnviadoAnaliseStore';
 import {
   getPncpSyncStatus,
   requestPncpSyncCancel,
@@ -295,8 +295,27 @@ export class PncpController {
 
   async meusEnviosCount(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const total = await countPncpEnviadosByUser(req.user!.id);
-      res.json({ success: true, data: { total } });
+      const dayRaw = req.query.date;
+      const day =
+        typeof dayRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dayRaw.trim())
+          ? dayRaw.trim()
+          : null;
+      const total = await countPncpEnviadosByUser(req.user!.id, day);
+      res.json({ success: true, data: { total, date: day } });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async meusEnviosSemana(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const weekRaw = req.query.weekStart ?? req.query.date;
+      const weekStart =
+        typeof weekRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(weekRaw.trim())
+          ? weekRaw.trim()
+          : null;
+      const data = await countPncpEnviadosByUserWeekdays(req.user!.id, weekStart);
+      res.json({ success: true, data });
     } catch (err) {
       next(err);
     }
