@@ -47,6 +47,7 @@ export function NavSearch({ inputRef }: NavSearchProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number } | null>(
     null,
@@ -152,6 +153,7 @@ export function NavSearch({ inputRef }: NavSearchProps) {
 
   const showPanel = open && term.trim().length > 0;
   const hasTerm = term.trim().length > 0;
+  const showShortcutHint = !focused && !hasTerm;
 
   return (
     <>
@@ -168,8 +170,10 @@ export function NavSearch({ inputRef }: NavSearchProps) {
               setOpen(true);
             }}
             onFocus={() => {
+              setFocused(true);
               if (term.trim()) setOpen(true);
             }}
+            onBlur={() => setFocused(false)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 if (hasTerm) {
@@ -210,11 +214,11 @@ export function NavSearch({ inputRef }: NavSearchProps) {
             >
               <X className="h-4 w-4" />
             </button>
-          ) : (
+          ) : showShortcutHint ? (
             <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center rounded-md bg-gray-200/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-gray-500 dark:bg-gray-700 dark:text-gray-400 sm:inline-flex">
               Ctrl K
             </kbd>
-          )}
+          ) : null}
         </label>
       </div>
 
