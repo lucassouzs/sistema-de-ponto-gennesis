@@ -100,6 +100,13 @@ import {
 import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
 import { aggregateGastosNaturezaRows } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
 import { normalizeGastosOperacionaisContractName } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisContractOrder';
+import {
+  buildTetoOrcamentarioLookup,
+  resolveMonthlyTetoOrcamentarioForLabels,
+  resolveYearlyTetoOrcamentarioForLabels,
+  tetoLabelsForSystemContract,
+  type ControleGeralTetoOrcamentarioEntry
+} from '@/app/ponto/contratos/controle-geral/tetoOrcamentario';
 import { resolveGastosPoloFromContractName } from '@/lib/extratoCaixaPolo';
 import { ContractGastosResumoModal } from '@/components/contract/ContractGastosResumoModal';
 
@@ -1187,6 +1194,18 @@ export default function ContractDetailPage() {
     enabled: !!contractId
   });
 
+  const { data: tetoOrcamentarioEntries = [], isLoading: loadingTetoOrcamentario } = useQuery({
+    queryKey: ['controle-geral-teto-orcamentario'],
+    queryFn: async () => {
+      const res = await api.get<{
+        success?: boolean;
+        data?: ControleGeralTetoOrcamentarioEntry[];
+      }>('/controle-geral/teto-orcamentario');
+      return (res.data?.data ?? []) as ControleGeralTetoOrcamentarioEntry[];
+    },
+    enabled: !!contractId
+  });
+
   const { data: pleitoDetailData, isLoading: loadingPleitoDetail } = useQuery({
     queryKey: ['pleito', selectedPleitoId],
     queryFn: async () => {
@@ -2095,6 +2114,36 @@ export default function ContractDetailPage() {
   const gastosOperacionaisPorAno = useMemo(
     () => aggregateGastosNaturezaYearlyTotals(contractGastosNaturezaRows, availableYears),
     [contractGastosNaturezaRows, availableYears]
+  );
+
+  const tetoOrcamentarioLookup = useMemo(
+    () => buildTetoOrcamentarioLookup(tetoOrcamentarioEntries),
+    [tetoOrcamentarioEntries]
+  );
+
+  const tetoOrcamentarioLabels = useMemo(
+    () => (contract ? tetoLabelsForSystemContract(contract) : []),
+    [contract]
+  );
+
+  const tetoOrcamentarioPorMes = useMemo(
+    () =>
+      resolveMonthlyTetoOrcamentarioForLabels(
+        tetoOrcamentarioLabels,
+        tetoOrcamentarioLookup,
+        safeSelectedYear
+      ),
+    [tetoOrcamentarioLabels, tetoOrcamentarioLookup, safeSelectedYear]
+  );
+
+  const tetoOrcamentarioPorAno = useMemo(
+    () =>
+      resolveYearlyTetoOrcamentarioForLabels(
+        tetoOrcamentarioLabels,
+        tetoOrcamentarioLookup,
+        availableYears
+      ),
+    [tetoOrcamentarioLabels, tetoOrcamentarioLookup, availableYears]
   );
 
   const gastosOperacionaisTemDados = contractGastosNaturezaRows.length > 0;
@@ -3823,6 +3872,32 @@ export default function ContractDetailPage() {
                           </td>
                         ))}
                       </tr>
+                      <tr className="bg-indigo-50/40 dark:bg-indigo-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-indigo-800 dark:text-indigo-300 whitespace-nowrap">
+                          Teto de Gastos
+                          {loadingTetoOrcamentario ? (
+                            <Loader2
+                              className="ml-1.5 inline h-3.5 w-3.5 shrink-0 animate-spin align-[-0.125em] text-indigo-600 dark:text-indigo-400"
+                              aria-label="Carregando teto de gastos"
+                            />
+                          ) : null}
+                        </td>
+                        {availableYears.map((year) => {
+                          const valor = tetoOrcamentarioPorAno[year] ?? 0;
+                          return (
+                            <td
+                              key={year}
+                              className="px-4 py-3 text-center text-sm font-medium text-indigo-800 dark:text-indigo-300"
+                            >
+                              {loadingTetoOrcamentario
+                                ? '…'
+                                : valor > 0
+                                  ? formatCurrency(valor)
+                                  : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
                       <tr className="bg-violet-50/40 dark:bg-violet-900/15">
                         <td className="px-4 py-3 text-sm font-medium text-violet-800 dark:text-violet-300">
                           <div className="flex items-center gap-2">
@@ -3921,6 +3996,32 @@ export default function ContractDetailPage() {
                               className="px-4 py-3 text-center text-sm font-medium text-emerald-800 dark:text-emerald-300"
                             >
                               {v !== null ? formatCurrency(v) : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-indigo-50/40 dark:bg-indigo-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-indigo-800 dark:text-indigo-300 whitespace-nowrap">
+                          Teto de Gastos
+                          {loadingTetoOrcamentario ? (
+                            <Loader2
+                              className="ml-1.5 inline h-3.5 w-3.5 shrink-0 animate-spin align-[-0.125em] text-indigo-600 dark:text-indigo-400"
+                              aria-label="Carregando teto de gastos"
+                            />
+                          ) : null}
+                        </td>
+                        {MESES.map((mes, i) => {
+                          const v = tetoOrcamentarioPorMes[i];
+                          return (
+                            <td
+                              key={mes}
+                              className="px-4 py-3 text-center text-sm font-medium text-indigo-800 dark:text-indigo-300"
+                            >
+                              {loadingTetoOrcamentario
+                                ? '…'
+                                : v != null && v > 0
+                                  ? formatCurrency(v)
+                                  : '-'}
                             </td>
                           );
                         })}

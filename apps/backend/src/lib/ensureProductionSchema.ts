@@ -671,7 +671,7 @@ async function ensureLicitacaoColumns(prisma: PrismaClient): Promise<void> {
     WHERE COALESCE("arquivada", FALSE) = TRUE
       AND "arquivadaMotivo" IS NULL
       AND ("analiseJson"->>'arquivadaMotivo') IN (
-        'suspensa', 'declinada', 'encerrada', 'em_andamento', 'vencidas', 'aguardando_aprovacao'
+        'suspensa', 'declinada', 'encerrada', 'em_andamento', 'vencidas', 'aguardando_aprovacao', 'orcamento'
       );
   `);
   await prisma.$executeRawUnsafe(`
@@ -692,6 +692,43 @@ async function ensureLicitacaoConfigTable(prisma: PrismaClient): Promise<void> {
       CONSTRAINT "licitacao_config_pkey" PRIMARY KEY ("key")
     );
   `);
+}
+
+async function ensureLicitacaoOrcamentosTable(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "licitacao_orcamentos" (
+      "id" TEXT NOT NULL,
+      "licitacaoId" TEXT NOT NULL,
+      "inputsJson" JSONB NOT NULL,
+      "resultJson" JSONB NOT NULL,
+      "createdBy" TEXT,
+      "updatedBy" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "licitacao_orcamentos_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "licitacao_orcamentos_licitacaoId_key"
+    ON "licitacao_orcamentos"("licitacaoId");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "licitacao_orcamentos_updatedAt_idx"
+    ON "licitacao_orcamentos"("updatedAt");
+  `);
+
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "licitacao_orcamentos"
+      ADD CONSTRAINT "licitacao_orcamentos_licitacaoId_fkey"
+      FOREIGN KEY ("licitacaoId") REFERENCES "licitacoes"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+    `);
+  } catch {
+    // constraint already exists
+  }
 }
 
 async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): Promise<void> {
@@ -749,6 +786,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoRegiaoSheetRowsTable(prisma);
     await ensureBancoCatsServicosTable(prisma);
     await ensureLicitacaoConfigTable(prisma);
+    await ensureLicitacaoOrcamentosTable(prisma);
     await ensureControleGeralTetoOrcamentarioTable(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {

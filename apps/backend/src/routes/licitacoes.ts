@@ -20,6 +20,12 @@ router.delete('/planilha-regioes/manuais', (req, res, next) => ctrl.deleteManual
 router.get('/banco-cats', (req, res, next) => ctrl.getBancoCatsSheet(req, res, next));
 router.post('/banco-cats', (req, res, next) => ctrl.createBancoCatsServico(req, res, next));
 router.delete('/banco-cats', (req, res, next) => ctrl.deleteBancoCatsServico(req, res, next));
+router.get('/orcamento-line-template', (req, res, next) =>
+  ctrl.getOrcamentoLineTemplate(req, res, next)
+);
+router.put('/orcamento-line-template', (req, res, next) =>
+  ctrl.updateOrcamentoLineTemplate(req, res, next)
+);
 
 router.get('/', (req, res, next) => ctrl.list(req, res, next));
 router.post('/', (req, res, next) => ctrl.create(req, res, next));
@@ -30,6 +36,8 @@ router.patch('/:id/liberar-analise', (req, res, next) => ctrl.liberarAnaliseManu
 router.patch('/:id/finalizar-analise', (req, res, next) => ctrl.finalizarAnaliseManual(req, res, next));
 router.patch('/:id/arquivar', (req, res, next) => ctrl.arquivarAnalise(req, res, next));
 router.patch('/:id/desarquivar', (req, res, next) => ctrl.desarquivarAnalise(req, res, next));
+router.get('/:id/orcamento', (req, res, next) => ctrl.getOrcamento(req, res, next));
+router.put('/:id/orcamento', (req, res, next) => ctrl.saveOrcamento(req, res, next));
 router.patch('/:id', (req, res, next) => ctrl.update(req, res, next));
 router.delete('/:id', (req, res, next) => ctrl.delete(req, res, next));
 

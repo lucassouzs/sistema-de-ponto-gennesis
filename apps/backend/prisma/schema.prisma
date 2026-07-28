@@ -3314,6 +3314,21 @@ model Licitacao {
   @@map("licitacoes")
 }
 
+/// Orçamento de participação em licitação (manutenção predial).
+model LicitacaoOrcamento {
+  id          String   @id @default(cuid())
+  licitacaoId String   @unique
+  inputsJson  Json
+  resultJson  Json
+  createdBy   String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([updatedAt])
+  @@map("licitacao_orcamentos")
+}
+
 /// Documento anexado a um processo de licitação.
 model LicitacaoDocumento {
   id           String    @id @default(cuid())

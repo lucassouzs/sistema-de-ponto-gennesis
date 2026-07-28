@@ -9,6 +9,7 @@ export const LICITACAO_ARQUIVADA_MOTIVOS = [
   'em_andamento',
   'vencidas',
   'aguardando_aprovacao',
+  'orcamento',
 ] as const;
 export type LicitacaoArquivadaMotivo = (typeof LICITACAO_ARQUIVADA_MOTIVOS)[number];
 
@@ -188,6 +189,10 @@ export async function licitacaoStoreList(filters: LicitacaoListFilters = {}) {
 
   if (filters.arquivada === true) {
     conditions.push(Prisma.sql`COALESCE(l.arquivada, FALSE) = TRUE`);
+    // Sem motivo específico: Análise final — Orçamento tem aba própria.
+    if (!filters.arquivadaMotivo) {
+      conditions.push(Prisma.sql`(l."arquivadaMotivo" IS DISTINCT FROM 'orcamento')`);
+    }
   } else if (filters.arquivada !== 'all') {
     conditions.push(Prisma.sql`COALESCE(l.arquivada, FALSE) = FALSE`);
   }

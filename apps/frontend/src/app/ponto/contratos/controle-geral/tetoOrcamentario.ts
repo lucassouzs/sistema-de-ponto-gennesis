@@ -46,12 +46,78 @@ export function buildTetoOrcamentarioLookup(
 ): Map<string, ControleGeralTetoOrcamentarioEntry[]> {
   const map = new Map<string, ControleGeralTetoOrcamentarioEntry[]>();
   for (const entry of entries) {
-    const key = getGastosContractAggregateKey(entry.contractName) || entry.contractKey;
-    const list = map.get(key) ?? [];
-    list.push(entry);
-    map.set(key, list);
+    const keys = new Set<string>();
+    const fromName = getGastosContractAggregateKey(entry.contractName);
+    if (fromName) keys.add(fromName);
+    if (entry.contractKey?.trim()) keys.add(entry.contractKey.trim());
+    for (const key of Array.from(keys)) {
+      const list = map.get(key) ?? [];
+      list.push(entry);
+      map.set(key, list);
+    }
   }
   return map;
+}
+
+/**
+ * Labels de associação do contrato (prioridade: centro de custo, depois nome).
+ * O teto no Controle Geral usa a mesma chave normalizada dos gastos/CC.
+ */
+export function tetoLabelsForSystemContract(contract: {
+  name?: string | null;
+  costCenter?: { name?: string | null; code?: string | null } | null;
+}): string[] {
+  return [contract.costCenter?.name, contract.costCenter?.code, contract.name].filter(
+    (label): label is string => Boolean(label?.trim())
+  );
+}
+
+/** Primeiro conjunto de entries que casar com algum label (evita somar chaves distintas). */
+export function collectTetoEntriesForLabels(
+  labels: readonly string[],
+  lookup: Map<string, ControleGeralTetoOrcamentarioEntry[]>
+): ControleGeralTetoOrcamentarioEntry[] {
+  for (const label of labels) {
+    const key = getGastosContractAggregateKey(label);
+    if (!key) continue;
+    const list = lookup.get(key);
+    if (list && list.length > 0) return list;
+  }
+  return [];
+}
+
+/** Valores mensais do teto (índice 0 = jan) para o ano; null = sem cadastro. */
+export function resolveMonthlyTetoOrcamentarioForLabels(
+  labels: readonly string[],
+  lookup: Map<string, ControleGeralTetoOrcamentarioEntry[]>,
+  year: number
+): (number | null)[] {
+  const entries = collectTetoEntriesForLabels(labels, lookup);
+  const byMonth = new Map<number, number>();
+  for (const entry of entries) {
+    if (entry.year !== year) continue;
+    const amount = Number.isFinite(entry.amount) ? entry.amount : 0;
+    byMonth.set(entry.month, (byMonth.get(entry.month) ?? 0) + amount);
+  }
+  return Array.from({ length: 12 }, (_, i) =>
+    byMonth.has(i + 1) ? (byMonth.get(i + 1) as number) : null
+  );
+}
+
+/** Soma anual do teto por ano (0 se não houver cadastro). */
+export function resolveYearlyTetoOrcamentarioForLabels(
+  labels: readonly string[],
+  lookup: Map<string, ControleGeralTetoOrcamentarioEntry[]>,
+  years: readonly number[]
+): Record<number, number> {
+  const entries = collectTetoEntriesForLabels(labels, lookup);
+  const out: Record<number, number> = {};
+  for (const y of years) out[y] = 0;
+  for (const entry of entries) {
+    if (!(entry.year in out)) continue;
+    out[entry.year] += Number.isFinite(entry.amount) ? entry.amount : 0;
+  }
+  return out;
 }
 
 /**
