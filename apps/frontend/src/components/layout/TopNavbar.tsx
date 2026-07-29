@@ -306,7 +306,11 @@ export function TopNavbar({
             aria-expanded={profileMenuOpen}
             aria-label="Conta e configurações"
             onClick={() => setProfileMenuOpen((v) => !v)}
-            className="profile-avatar-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
+            className={`profile-avatar-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+              profileReady && profilePhotoHref
+                ? 'bg-transparent'
+                : 'bg-red-600'
+            }`}
           >
             {profileReady && profilePhotoHref ? (
               <img

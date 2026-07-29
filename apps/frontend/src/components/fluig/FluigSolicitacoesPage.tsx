@@ -1622,9 +1622,9 @@ export function FluigSolicitacoesPage({
               };
               return (
                 <div className="space-y-5">
-                  <div className="px-2 bg-transparent">
+                  <div className="border-b border-gray-200 dark:border-gray-700">
                     <nav
-                      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
+                      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
                       role="tablist"
                       aria-label="Etapas do processo"
                     >
@@ -1637,7 +1637,7 @@ export function FluigSolicitacoesPage({
                             role="tab"
                             aria-selected={active}
                             onClick={() => setSelectedEtapaIndex(idx)}
-                            className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                            className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                               active
                                 ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
                                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'

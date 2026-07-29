@@ -10,6 +10,7 @@ import {
   pathToModuleKey,
 } from '@sistema-ponto/permission-modules';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useTheme } from '@/context/ThemeContext';
 import { resolveModuleCategoryIcon } from '@/lib/moduleNavIcons';
 
 type SearchItem = {
@@ -33,6 +34,7 @@ type NavSearchProps = {
 
 export function NavSearch({ inputRef }: NavSearchProps) {
   const router = useRouter();
+  const { isDark } = useTheme();
   const {
     can,
     isAdministrator,
@@ -158,9 +160,43 @@ export function NavSearch({ inputRef }: NavSearchProps) {
   return (
     <>
       <div ref={wrapRef} className="relative w-[min(28rem,42vw)] min-w-[14rem] sm:w-[22rem] lg:w-[28rem]" data-app-topnav>
-        <label className="relative block">
+        <label
+          className={`nav-search relative block overflow-hidden rounded-full transition-[background-color,box-shadow] duration-500 ease-out ${
+            isDark
+              ? 'bg-slate-800 shadow-[inset_0_2px_8px_rgba(0,0,0,0.7),inset_0_-1px_2px_rgba(255,255,255,0.06)]'
+              : 'bg-sky-100 shadow-[inset_0_2px_8px_rgba(15,23,42,0.2),inset_0_-1px_2px_rgba(255,255,255,0.75)]'
+          }`}
+        >
           <span className="sr-only">Buscar páginas</span>
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+
+          {/* Atmosfera dia / noite — clipada no pill */}
+          <span aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+            <span
+              className={`absolute inset-0 transition-opacity duration-500 ${
+                isDark
+                  ? 'opacity-100 bg-[radial-gradient(ellipse_at_12%_35%,rgba(99,102,241,0.4),transparent_42%),radial-gradient(ellipse_at_88%_60%,rgba(56,189,248,0.12),transparent_45%)]'
+                  : 'opacity-100 bg-[radial-gradient(ellipse_at_10%_30%,rgba(253,224,71,0.55),transparent_40%),radial-gradient(ellipse_at_85%_70%,rgba(125,211,252,0.45),transparent_48%)]'
+              }`}
+            />
+            <span
+              className={`nav-search-stars absolute inset-0 transition-opacity duration-500 ${
+                isDark ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              <span className="absolute left-[18%] top-2 size-0.5 rounded-full bg-white/90" />
+              <span className="absolute left-[32%] top-3.5 size-[3px] rounded-full bg-white/65" />
+              <span className="absolute left-[48%] top-2 size-0.5 rounded-full bg-white/80" />
+              <span className="absolute left-[62%] top-3 size-[2px] rounded-full bg-white/70" />
+              <span className="absolute left-[78%] top-2.5 size-0.5 rounded-full bg-white/85" />
+              <span className="absolute bottom-2 left-[40%] size-0.5 rounded-full bg-white/75" />
+            </span>
+          </span>
+
+          <Search
+            className={`pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 transition-colors duration-500 ${
+              isDark ? 'text-slate-300/80' : 'text-sky-700/55'
+            }`}
+          />
           <input
             ref={setInputRef}
             type="text"
@@ -198,7 +234,11 @@ export function NavSearch({ inputRef }: NavSearchProps) {
               }
             }}
             placeholder="Buscar..."
-            className="h-10 w-full rounded-full border-0 bg-gray-100 py-2 pl-10 pr-11 text-sm font-medium text-gray-900 placeholder:text-gray-400 outline-none ring-0 transition-shadow focus:bg-gray-100 focus:ring-2 focus:ring-red-500/30 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:bg-gray-800 dark:focus:ring-red-500/40"
+            className={`relative z-10 h-10 w-full rounded-full border-0 bg-transparent py-2 pl-10 pr-11 text-sm font-medium outline-none ring-0 transition-colors duration-500 ${
+              isDark
+                ? 'text-slate-100 placeholder:text-slate-400/70'
+                : 'text-slate-800 placeholder:text-sky-900/40'
+            }`}
             autoComplete="off"
           />
           {hasTerm ? (
@@ -210,12 +250,22 @@ export function NavSearch({ inputRef }: NavSearchProps) {
                 setOpen(false);
                 localInputRef.current?.focus();
               }}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-200/80 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+              className={`absolute right-2 top-1/2 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+                isDark
+                  ? 'text-slate-300 hover:bg-white/10 hover:text-white'
+                  : 'text-sky-800/60 hover:bg-white/50 hover:text-sky-900'
+              }`}
             >
               <X className="h-4 w-4" />
             </button>
           ) : showShortcutHint ? (
-            <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 items-center rounded-md bg-gray-200/80 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-gray-500 dark:bg-gray-700 dark:text-gray-400 sm:inline-flex">
+            <kbd
+              className={`pointer-events-none absolute right-3 top-1/2 z-10 hidden -translate-y-1/2 items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide transition-colors duration-500 sm:inline-flex ${
+                isDark
+                  ? 'bg-slate-950/45 text-slate-400 shadow-[inset_0_1px_2px_rgba(0,0,0,0.55)]'
+                  : 'bg-white/45 text-sky-800/55 shadow-[inset_0_1px_2px_rgba(15,23,42,0.12)]'
+              }`}
+            >
               Ctrl K
             </kbd>
           ) : null}
