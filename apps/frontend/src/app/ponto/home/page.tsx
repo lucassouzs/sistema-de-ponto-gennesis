@@ -174,9 +174,7 @@ function formatWeekRangeLabel(monday: string, friday: string): string {
 }
 
 function formatDayMonthShort(ymd: string): string {
-  const [y, m, d] = ymd.split('-').map(Number);
-  if (!y || !m || !d) return '';
-  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+  return formatDayLabelPt(ymd);
 }
 
 function parseYmdLocal(s: string): Date | null {
@@ -781,10 +779,10 @@ export default function HomePage() {
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                          Captações da semana
+                          Captações
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {pncpWeekTotal} esta semana · {pncpPrevWeekTotal} anterior
+                          {pncpWeekTotal} esta semana e {pncpPrevWeekTotal} na anterior
                         </p>
                       </div>
                     </div>
@@ -996,10 +994,10 @@ export default function HomePage() {
                     </div>
                     <div className="min-w-0">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Na agenda hoje
+                        Agenda
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {todayItems.length} no período
+                        {formattedDate}
                       </p>
                     </div>
                   </div>
