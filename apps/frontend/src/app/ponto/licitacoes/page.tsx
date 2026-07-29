@@ -1303,40 +1303,6 @@ export default function LicitacoesPage() {
                 </a>
               </div>
             </div>
-
-            {viewMode === 'banco-cats' ? (
-              <div
-                role="note"
-                className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex min-w-0 gap-2.5">
-                  <Info
-                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300"
-                    aria-hidden
-                  />
-                  <div className="min-w-0 space-y-1.5">
-                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
-                      A consulta de habilitação técnica é baseada no banco de dados das CAT&apos;s.
-                      Caso sua busca não retorne o resultado desejado, complemente sua pesquisa nos
-                      PDFs disponíveis no drive do setor de contratos.
-                    </p>
-                    <p className="text-sm leading-relaxed text-amber-950 dark:text-amber-100">
-                      Atente-se para grafia de sua pesquisa, teste diferentes combinações de
-                      palavras-chave.
-                    </p>
-                  </div>
-                </div>
-                <a
-                  href={DRIVE_CATS_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 text-sm font-semibold text-amber-950 transition-colors hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-50 dark:hover:bg-amber-950/80"
-                >
-                  <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
-                  Abrir drive das CATs
-                </a>
-              </div>
-            ) : null}
           </header>
 
           <div className="border-b border-gray-200 dark:border-gray-700">
