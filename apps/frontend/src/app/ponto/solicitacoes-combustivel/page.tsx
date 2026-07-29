@@ -7,10 +7,12 @@ import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
+  Check,
   CheckCircle,
   Clock,
-  FileText,
+  Eye,
   Filter,
+  MoreVertical,
   Search,
   Users,
   X,
@@ -22,6 +24,7 @@ import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -66,6 +69,11 @@ const DETAIL_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
 ]);
 
 const DEFAULT_CARD_FILTER: SuppliesCardFilter = 'pending';
+
+const FUEL_SUPPLIES_ACTION_MENU_WIDTH_PX = 224;
+const MENU_ITEM_CLASS =
+  'w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700';
+const MENU_ITEM_BORDER_CLASS = `${MENU_ITEM_CLASS} border-t border-gray-200 dark:border-gray-700`;
 
 const SUPPLIES_CARD_LIST_CONFIG: Record<
   SuppliesCardFilter,
@@ -324,6 +332,11 @@ export default function SolicitacoesCombustivelPage() {
   const [refuelDeadlineUnit, setRefuelDeadlineUnit] = useState<FuelRefuelDeadlineUnit>('HOURS');
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [actionMenu, setActionMenu] = useState<{
+    requestId: string;
+    top: number;
+    left: number;
+  } | null>(null);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -488,6 +501,18 @@ export default function SolicitacoesCombustivelPage() {
   const isListEmpty = !loadingList && !listError && totalFiltered === 0;
   const hasActiveFilter = detailStatusFilter !== 'ALL';
 
+  const requestForMenu = useMemo(() => {
+    if (!actionMenu) return null;
+    return records.find((r) => r.id === actionMenu.requestId) ?? null;
+  }, [actionMenu, records]);
+
+  const openRequestDetail = (row: FuelRefuelRequest, opts?: { reject?: boolean }) => {
+    setActionMenu(null);
+    setSelected(row);
+    setShowRejectForm(!!opts?.reject);
+    if (!opts?.reject) setRejectReason('');
+  };
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, cardFilter, detailStatusFilter]);
@@ -497,13 +522,17 @@ export default function SolicitacoesCombustivelPage() {
   }, [currentPage, totalPages]);
 
   useEffect(() => {
+    if (actionMenu && !requestForMenu) {
+      setActionMenu(null);
+    }
+  }, [actionMenu, requestForMenu]);
+
+  useEffect(() => {
     if (selected?.status === 'PENDING_SUPPLIES') {
       setApproveGasStationId('');
       setSuppliesComment('');
       setRefuelDeadlineAmount('24');
       setRefuelDeadlineUnit('HOURS');
-      setShowRejectForm(false);
-      setRejectReason('');
     }
   }, [selected?.id, selected?.status]);
 
@@ -629,7 +658,7 @@ export default function SolicitacoesCombustivelPage() {
                   <p className="text-gray-600 dark:text-gray-400">Nenhuma solicitação encontrada</p>
                   {cardFilter === 'pending' ? (
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
-                      Colaboradores podem solicitar via Conversas → Gennecy → opção 1 (combustível)
+                      Colaboradores podem solicitar em Solicitar Combustível ou via Conversas → Gennecy → opção 1
                     </p>
                   ) : null}
                 </div>
@@ -675,7 +704,7 @@ export default function SolicitacoesCombustivelPage() {
                         {paginatedRows.map((row) => (
                           <tr
                             key={row.id}
-                            onClick={() => setSelected(row)}
+                            onClick={() => openRequestDetail(row)}
                             className={getListTableRowClassName(true)}
                           >
                             <td className="px-3 py-4 sm:px-6">
@@ -709,14 +738,33 @@ export default function SolicitacoesCombustivelPage() {
                               className="px-3 py-4 text-right sm:px-6"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <button
-                                type="button"
-                                onClick={() => setSelected(row)}
-                                className={rowActionMenuButtonClass(false)}
-                                aria-label="Ver detalhes da solicitação"
-                              >
-                                <FileText className="h-4 w-4" />
-                              </button>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setActionMenu((prev) => {
+                                      if (prev?.requestId === row.id) return null;
+                                      let left = rect.right - FUEL_SUPPLIES_ACTION_MENU_WIDTH_PX;
+                                      left = Math.max(
+                                        8,
+                                        Math.min(
+                                          left,
+                                          window.innerWidth - FUEL_SUPPLIES_ACTION_MENU_WIDTH_PX - 8,
+                                        ),
+                                      );
+                                      return { requestId: row.id, top: rect.bottom + 4, left };
+                                    });
+                                  }}
+                                  className={rowActionMenuButtonClass(actionMenu?.requestId === row.id)}
+                                  aria-label="Menu de ações"
+                                  aria-expanded={actionMenu?.requestId === row.id}
+                                  aria-haspopup="menu"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -748,6 +796,49 @@ export default function SolicitacoesCombustivelPage() {
             </CardContent>
           </Card>
         </div>
+
+        <ActionMenuOverlay
+          open={!!actionMenu && !!requestForMenu}
+          onClose={() => setActionMenu(null)}
+          top={actionMenu?.top ?? 0}
+          left={actionMenu?.left ?? 0}
+        >
+          {requestForMenu ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => openRequestDetail(requestForMenu)}
+                className={MENU_ITEM_CLASS}
+              >
+                <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                <span>Ver detalhes</span>
+              </button>
+              {requestForMenu.status === 'PENDING_SUPPLIES' ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openRequestDetail(requestForMenu)}
+                    className={MENU_ITEM_BORDER_CLASS}
+                  >
+                    <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>Atender solicitação</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openRequestDetail(requestForMenu, { reject: true })}
+                    className={MENU_ITEM_BORDER_CLASS}
+                  >
+                    <X className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>Rejeitar</span>
+                  </button>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </ActionMenuOverlay>
 
         <Modal
           isOpen={!!selected}

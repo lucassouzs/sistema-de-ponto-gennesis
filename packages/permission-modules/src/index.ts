@@ -70,6 +70,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/fluig/aprovacoes-workflow'), name: 'Fluig - Aprovações', href: '/ponto/fluig/aprovacoes-workflow', category: 'Principal' },
   { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações DP/ADM/TST', href: '/ponto/solicitacoes-dp', category: 'Principal' },
   { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Reserva de Veículos', href: '/ponto/reserva-veiculos', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Solicitar Combustível', href: '/ponto/solicitar-combustivel', category: 'Principal' },
   { key: pathToModuleKey('/ponto/entrega-logistica'), name: 'Entrega da Logística', href: '/ponto/entrega-logistica', category: 'Principal' },
   /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */
   { key: pathToModuleKey('/ponto/flow'), name: 'Flow', href: '/ponto/flow', category: 'Principal' },

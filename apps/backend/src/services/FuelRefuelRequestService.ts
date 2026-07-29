@@ -479,23 +479,41 @@ export class FuelRefuelRequestService {
             vehicleType: FuelVehicleType.PRIVATE,
           }
         : params.phase === 'APPROVED'
-          ? { managerApprovedAt: { not: null }, vehicleType: FuelVehicleType.PRIVATE }
+          ? {
+              managerApprovedAt: { not: null },
+              vehicleType: FuelVehicleType.PRIVATE,
+              status: {
+                notIn: [
+                  FuelRefuelRequestStatus.REJECTED,
+                  FuelRefuelRequestStatus.CANCELLED,
+                  FuelRefuelRequestStatus.PENDING_MANAGER,
+                ],
+              },
+            }
           : params.phase === 'REJECTED'
-            ? { status: FuelRefuelRequestStatus.REJECTED, vehicleType: FuelVehicleType.PRIVATE }
-            : {
+            ? {
+                vehicleType: FuelVehicleType.PRIVATE,
                 OR: [
-                  {
-                    status: FuelRefuelRequestStatus.PENDING_MANAGER,
-                    vehicleType: FuelVehicleType.PRIVATE,
-                  },
+                  { status: FuelRefuelRequestStatus.REJECTED },
+                  { status: FuelRefuelRequestStatus.CANCELLED },
+                ],
+              }
+            : {
+                vehicleType: FuelVehicleType.PRIVATE,
+                OR: [
+                  { status: FuelRefuelRequestStatus.PENDING_MANAGER },
                   {
                     managerApprovedAt: { not: null },
-                    vehicleType: FuelVehicleType.PRIVATE,
+                    status: {
+                      notIn: [
+                        FuelRefuelRequestStatus.REJECTED,
+                        FuelRefuelRequestStatus.CANCELLED,
+                        FuelRefuelRequestStatus.PENDING_MANAGER,
+                      ],
+                    },
                   },
-                  {
-                    status: FuelRefuelRequestStatus.REJECTED,
-                    vehicleType: FuelVehicleType.PRIVATE,
-                  },
+                  { status: FuelRefuelRequestStatus.REJECTED },
+                  { status: FuelRefuelRequestStatus.CANCELLED },
                 ],
               };
 

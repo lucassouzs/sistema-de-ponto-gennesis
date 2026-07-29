@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { FuelRefuelRequestStatus } from '@prisma/client';
+import { FuelRefuelRequestStatus, FuelVehicleType } from '@prisma/client';
 import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
@@ -13,7 +13,23 @@ import {
   listActiveFuelGasStationsByCity,
   listFuelSatelliteCities,
 } from '../lib/fuelAdministrativeRegions';
+import { FUEL_ABASTECIMENTO_STATE_CODES } from '../constants/fuelSatelliteCities';
 import { getFuelSuppliesSlaHours } from '../lib/fuelSuppliesSla';
+import {
+  findEmployeeByCpf,
+  isValidCpf,
+  resolveFuelRequestContextFromEmployee,
+  type EmployeeCpfLookupResult,
+} from '../lib/employeeCpfLookup';
+import { prisma } from '../lib/prisma';
+import { PhotoService } from '../services/PhotoService';
+
+const photoService = new PhotoService();
+
+function parseImageContentType(dataUrl: string): string {
+  const match = /^data:([^;]+);base64,/i.exec(dataUrl);
+  return match?.[1]?.trim() || 'image/jpeg';
+}
 
 const listQuerySchema = z.object({
   search: z.string().optional(),
@@ -59,6 +75,97 @@ const rejectSchema = z.object({
   comment: z.string().optional(),
 });
 
+const createSchema = z.object({
+  refuelDate: z.string().min(1, 'Informe a data do abastecimento'),
+  route: z.string().min(2, 'Informe a rota'),
+  satelliteCityCode: z.string().min(1, 'Selecione a cidade de abastecimento'),
+  vehiclePlate: z.string().min(1, 'Informe a placa do veículo'),
+  vehicleDescription: z.string().optional(),
+  vehicleType: z.enum(['PRIVATE', 'COMPANY']),
+  dashboardPhotoBase64: z.string().min(1, 'Envie a foto do painel'),
+  observations: z.string().optional(),
+  driverCpf: z.string().optional(),
+  driverUserId: z.string().optional(),
+});
+
+async function resolveDriverContext(
+  requesterId: string,
+  opts?: { driverCpf?: string | null; driverUserId?: string | null },
+): Promise<{ driverName: string; costCenterLabel: string }> {
+  const driverUserId = opts?.driverUserId?.trim();
+  if (driverUserId) {
+    const user = await prisma.user.findUnique({
+      where: { id: driverUserId },
+      select: {
+        id: true,
+        name: true,
+        cpf: true,
+        employee: { select: { costCenter: true, id: true } },
+      },
+    });
+    if (!user?.employee) {
+      throw createError('Condutor não encontrado ou sem vínculo de colaborador.', 404);
+    }
+    const asLookup: EmployeeCpfLookupResult = {
+      userId: user.id,
+      employeeId: user.employee.id,
+      name: user.name,
+      cpfDigits: (user.cpf || '').replace(/\D/g, ''),
+      cpfMasked: user.cpf || '',
+      costCenter: user.employee.costCenter,
+      department: null,
+      position: null,
+    };
+    const ctx = resolveFuelRequestContextFromEmployee(asLookup);
+    if (!ctx.ok) throw createError(ctx.message, 400);
+    return { driverName: user.name, costCenterLabel: ctx.costCenterLabel };
+  }
+
+  const cpfRaw = opts?.driverCpf?.trim();
+  if (cpfRaw) {
+    if (!isValidCpf(cpfRaw)) {
+      throw createError('CPF do condutor inválido', 400);
+    }
+    const employee = await findEmployeeByCpf(cpfRaw);
+    if (!employee) {
+      throw createError('Condutor não encontrado. Verifique o CPF cadastrado.', 404);
+    }
+    const ctx = resolveFuelRequestContextFromEmployee(employee);
+    if (!ctx.ok) throw createError(ctx.message, 400);
+    return { driverName: employee.name, costCenterLabel: ctx.costCenterLabel };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: requesterId },
+    select: {
+      name: true,
+      cpf: true,
+      employee: { select: { costCenter: true, id: true } },
+    },
+  });
+  if (!user) throw createError('Usuário não encontrado', 404);
+  if (!user.employee) {
+    throw createError(
+      'Seu usuário não está vinculado a um colaborador. Fale com o RH.',
+      400,
+    );
+  }
+
+  const asLookup: EmployeeCpfLookupResult = {
+    userId: requesterId,
+    employeeId: user.employee.id,
+    name: user.name,
+    cpfDigits: (user.cpf || '').replace(/\D/g, ''),
+    cpfMasked: user.cpf || '',
+    costCenter: user.employee.costCenter,
+    department: null,
+    position: null,
+  };
+  const ctx = resolveFuelRequestContextFromEmployee(asLookup);
+  if (!ctx.ok) throw createError(ctx.message, 400);
+  return { driverName: user.name, costCenterLabel: ctx.costCenterLabel };
+}
+
 function mapManagerScopeToFuelWhere(
   scope: Record<string, unknown>,
 ): { contractId?: { in: string[] } } {
@@ -68,6 +175,201 @@ function mapManagerScopeToFuelWhere(
 }
 
 export class FuelRefuelRequestController {
+  async listSatelliteCitiesForRequester(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const stateCode = String(req.query.stateCode ?? '').trim().toUpperCase();
+      if (stateCode && !FUEL_ABASTECIMENTO_STATE_CODES.includes(stateCode as 'DF' | 'GO')) {
+        throw createError('Estado inválido. Use DF ou GO.', 400);
+      }
+      const rows = listFuelSatelliteCities(stateCode || undefined);
+      res.json({
+        success: true,
+        data: {
+          states: [...FUEL_ABASTECIMENTO_STATE_CODES],
+          cities: rows,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async lookupDriver(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const cpf = String(req.query.cpf ?? '').trim();
+      if (!cpf) throw createError('Informe o CPF', 400);
+      if (!isValidCpf(cpf)) throw createError('CPF inválido', 400);
+
+      const employee = await findEmployeeByCpf(cpf);
+      if (!employee) throw createError('Colaborador não encontrado', 404);
+
+      const ctx = resolveFuelRequestContextFromEmployee(employee);
+      if (!ctx.ok) {
+        return res.json({
+          success: true,
+          data: {
+            name: employee.name,
+            cpf: employee.cpfMasked,
+            costCenter: null,
+            ok: false,
+            message: ctx.message,
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          name: employee.name,
+          cpf: employee.cpfMasked,
+          costCenter: ctx.costCenterLabel,
+          ok: true,
+        },
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  async listDriverOptions(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+
+      const users = await prisma.user.findMany({
+        where: {
+          isActive: true,
+          role: 'EMPLOYEE',
+          employee: { isNot: null },
+        },
+        select: {
+          id: true,
+          name: true,
+          cpf: true,
+          employee: {
+            select: {
+              id: true,
+              costCenter: true,
+              position: true,
+            },
+          },
+        },
+        orderBy: { name: 'asc' },
+        take: 2000,
+      });
+
+      const data = users
+        .filter((u) => {
+          if (!u.employee?.id) return false;
+          if (u.employee.position === 'Administrador') return false;
+          const name = String(u.name || '').trim();
+          if (name.localeCompare('Administrador', 'pt-BR', { sensitivity: 'accent' }) === 0) {
+            return false;
+          }
+          return true;
+        })
+        .map((u) => {
+          const cpfDigits = (u.cpf || '').replace(/\D/g, '');
+          const cpfMasked =
+            cpfDigits.length === 11
+              ? `${cpfDigits.slice(0, 3)}.${cpfDigits.slice(3, 6)}.${cpfDigits.slice(6, 9)}-${cpfDigits.slice(9)}`
+              : u.cpf || '';
+          return {
+            id: u.id,
+            name: String(u.name || '').trim(),
+            cpf: cpfMasked,
+            cpfDigits,
+            costCenter: u.employee?.costCenter?.trim() || null,
+          };
+        })
+        .filter((row) => row.id && row.name)
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listMine(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw createError('Usuário não autenticado', 401);
+
+      const parsed = listQuerySchema.parse(req.query);
+      const rows = await fuelRefuelRequestService.listForSupplies({
+        search: parsed.search,
+        statuses: parseStatusFilter(parsed.status),
+        requesterId: user.id,
+      });
+
+      res.json({ success: true, data: rows });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async create(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw createError('Usuário não autenticado', 401);
+
+      const body = createSchema.parse(req.body);
+      const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(body.refuelDate.trim());
+      if (!dateMatch) {
+        throw createError('Data inválida. Use o formato AAAA-MM-DD.', 400);
+      }
+      const refuelDate = new Date(
+        `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}T12:00:00`,
+      );
+      if (Number.isNaN(refuelDate.getTime())) {
+        throw createError('Data inválida', 400);
+      }
+
+      const { driverName, costCenterLabel } = await resolveDriverContext(user.id, {
+        driverCpf: body.driverCpf,
+        driverUserId: body.driverUserId,
+      });
+
+      if (!body.dashboardPhotoBase64.includes('base64,')) {
+        throw createError('Foto do painel inválida', 400);
+      }
+
+      const upload = await photoService.uploadPhotoFromBase64(
+        body.dashboardPhotoBase64,
+        user.id,
+        parseImageContentType(body.dashboardPhotoBase64),
+      );
+
+      const row = await fuelRefuelRequestService.create({
+        requesterId: user.id,
+        refuelDate,
+        route: body.route,
+        satelliteCityCode: body.satelliteCityCode,
+        costCenter: costCenterLabel,
+        driverName,
+        vehiclePlate: body.vehiclePlate,
+        vehicleDescription: body.vehicleDescription,
+        vehicleType: body.vehicleType as FuelVehicleType,
+        dashboardPhotoUrl: upload.url,
+        dashboardPhotoKey: upload.key,
+        dashboardPhotoName: 'painel.jpg',
+        observations: body.observations,
+      });
+
+      const presented = await fuelRefuelRequestService.getByIdForApi(row.id);
+      const waitingMsg =
+        row.status === FuelRefuelRequestStatus.PENDING_MANAGER
+          ? 'Solicitação registrada. Aguardando aprovação do gestor.'
+          : 'Solicitação registrada. Aguardando análise do Suprimentos.';
+
+      res.status(201).json({ success: true, data: presented, message: waitingMsg });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async listAdministrativeRegions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const user = req.user;

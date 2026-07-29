@@ -7,6 +7,22 @@ const router = Router();
 
 router.use(authenticate);
 
+router.get('/satellite-cities', (req, res, next) =>
+  fuelRefuelRequestController.listSatelliteCitiesForRequester(req, res, next),
+);
+router.get('/driver-lookup', (req, res, next) =>
+  fuelRefuelRequestController.lookupDriver(req, res, next),
+);
+router.get('/driver-options', (req, res, next) =>
+  fuelRefuelRequestController.listDriverOptions(req, res, next),
+);
+router.get('/mine', (req, res, next) =>
+  fuelRefuelRequestController.listMine(req, res, next),
+);
+router.post('/', (req, res, next) =>
+  fuelRefuelRequestController.create(req, res, next),
+);
+
 router.get('/gas-stations', requireFuelSuppliesAccess, (req, res, next) =>
   fuelRefuelRequestController.listGasStationsByRegion(req, res, next),
 );

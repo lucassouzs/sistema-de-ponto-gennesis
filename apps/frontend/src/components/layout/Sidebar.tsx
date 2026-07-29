@@ -526,6 +526,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || isDepartmentCompras || can(pk('/ponto/reserva-veiculos'))
           },
           {
+            name: 'Solicitar Combustível',
+            href: '/ponto/solicitar-combustivel',
+            icon: Fuel,
+            description: 'Solicitar abastecimento de veículos',
+            permission:
+              isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitar-combustivel'))
+          },
+          {
             name: 'Entrega da Logística',
             href: '/ponto/entrega-logistica',
             icon: Truck,
@@ -927,7 +935,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             name: 'Solicitações de Combustível',
             href: '/ponto/solicitacoes-combustivel',
             icon: Fuel,
-            description: 'Pedidos de abastecimento feitos pela Gennecy',
+            description: 'Pedidos de abastecimento (sistema e Gennecy)',
             permission:
               isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel'))
           },
