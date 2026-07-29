@@ -53,7 +53,8 @@ export interface ReuniaoData {
   identificacao: {
     data: string;
     responsavelPreenchimento: string;
-    contrato: string;
+    /** Nome/título da reunião (o contrato já é o da pasta). */
+    nome: string;
   };
   /** Respostas por id da pergunta */
   answers: Record<string, ReuniaoAnswer>;
@@ -65,7 +66,7 @@ export interface ReuniaoIndexEntry {
   id: string;
   data: string;
   responsavelPreenchimento: string;
-  contrato: string;
+  nome: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -234,11 +235,17 @@ export function buildDefaultTemplate(): ReuniaoTemplate {
 }
 
 const EMPTY_DATA: ReuniaoData = {
-  identificacao: { data: '', responsavelPreenchimento: '', contrato: '' },
+  identificacao: { data: '', responsavelPreenchimento: '', nome: '' },
   answers: {},
   ata: null,
   video: null,
 };
+
+function pickIdentificacaoNome(id: Record<string, unknown> | ReuniaoData['identificacao']): string {
+  const raw = id as Record<string, unknown>;
+  // Compat: formulários antigos gravavam o nome do contrato em `contrato`
+  return String(raw.nome || raw.contrato || '');
+}
 
 const TEMPLATE_KEY = 'reunioes/_form-template.json';
 
@@ -253,7 +260,7 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
       identificacao: {
         data: id.data || '',
         responsavelPreenchimento: id.responsavelPreenchimento || '',
-        contrato: id.contrato || '',
+        nome: pickIdentificacaoNome(id),
       },
       answers: obj.answers as Record<string, ReuniaoAnswer>,
       ata: (obj.ata as ReuniaoAnexoInfo | null) ?? null,
@@ -300,7 +307,7 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
     identificacao: {
       data: id.data || '',
       responsavelPreenchimento: id.responsavelPreenchimento || '',
-      contrato: id.contrato || '',
+      nome: pickIdentificacaoNome(id),
     },
     answers,
     ata: (obj.ata as ReuniaoAnexoInfo | null) ?? null,
@@ -423,7 +430,17 @@ export class ReuniaoService {
 
   async getIndex(contractId: string): Promise<ReuniaoIndex> {
     const idx = await this.readJson<ReuniaoIndex>(this.getIndexKey(contractId));
-    return idx ?? { reunioes: [] };
+    if (!idx) return { reunioes: [] };
+    // Compat: índices antigos usavam `contrato` no lugar de `nome`
+    return {
+      reunioes: (idx.reunioes || []).map((r) => {
+        const raw = r as ReuniaoIndexEntry & { contrato?: string };
+        return {
+          ...raw,
+          nome: raw.nome || raw.contrato || '',
+        };
+      }),
+    };
   }
 
   async createReuniao(contractId: string): Promise<ReuniaoIndexEntry> {
@@ -433,7 +450,7 @@ export class ReuniaoService {
       id,
       data: '',
       responsavelPreenchimento: '',
-      contrato: '',
+      nome: '',
       createdAt: now,
       updatedAt: now,
     };
@@ -465,7 +482,7 @@ export class ReuniaoService {
       entry.updatedAt = new Date().toISOString();
       entry.data = normalized.identificacao?.data || '';
       entry.responsavelPreenchimento = normalized.identificacao?.responsavelPreenchimento || '';
-      entry.contrato = normalized.identificacao?.contrato || '';
+      entry.nome = normalized.identificacao?.nome || '';
       await this.writeJson(this.getIndexKey(contractId), idx);
     }
   }

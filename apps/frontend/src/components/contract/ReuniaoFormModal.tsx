@@ -73,7 +73,7 @@ export interface ReuniaoData {
   identificacao: {
     data: string;
     responsavelPreenchimento: string;
-    contrato: string;
+    nome: string;
   };
   answers: Record<string, ReuniaoAnswer>;
   ata: ReuniaoAnexoInfo | null;
@@ -83,18 +83,12 @@ export interface ReuniaoData {
 export interface ReuniaoListPatch {
   data: string;
   responsavelPreenchimento: string;
-  contrato: string;
+  nome: string;
   updatedAt: string;
 }
 
-const CONTRATO_OPTIONS = [
-  'MRE', 'SES', 'FHE', 'ICMBIO', 'SEDES', 'SENAC', 'MINC', 'CONFEA',
-  'TJGO CALDAS NOVAS', 'TJGO RIO VERDE', 'TJGO RETROFIT 01', 'TJGO RETROFIT 04 E 05',
-  'UFG', 'SEMASH', 'UNB', 'HUB', 'BBGO', 'POLO', 'DF', 'GO',
-];
-
 const EMPTY_DATA: ReuniaoData = {
-  identificacao: { data: '', responsavelPreenchimento: '', contrato: '' },
+  identificacao: { data: '', responsavelPreenchimento: '', nome: '' },
   answers: {},
   ata: null,
   video: null,
@@ -120,15 +114,9 @@ function todayYmd() {
   return `${y}-${m}-${day}`;
 }
 
-function matchContratoOption(contractName?: string): string {
-  if (!contractName) return '';
-  const upper = contractName.trim().toUpperCase();
-  const exact = CONTRATO_OPTIONS.find((o) => o === upper || o.toUpperCase() === upper);
-  if (exact) return exact;
-  const partial = CONTRATO_OPTIONS.find(
-    (o) => upper.includes(o.toUpperCase()) || o.toUpperCase().includes(upper)
-  );
-  return partial || '';
+function pickNome(identificacao?: { nome?: string; contrato?: string } | null): string {
+  if (!identificacao) return '';
+  return identificacao.nome || identificacao.contrato || '';
 }
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
@@ -432,8 +420,6 @@ type Props = {
   onClose: () => void;
   contractId: string;
   reuniaoId: string | null;
-  /** Nome do contrato da página (ex.: SEDES) para pré-preencher */
-  contractName?: string;
   /** Atualiza a linha na lista em tempo real */
   onListPatch?: (reuniaoId: string, patch: ReuniaoListPatch) => void;
 };
@@ -443,7 +429,6 @@ export function ReuniaoFormModal({
   onClose,
   contractId,
   reuniaoId,
-  contractName,
   onListPatch,
 }: Props) {
   const queryClient = useQueryClient();
@@ -515,10 +500,9 @@ export function ReuniaoFormModal({
     const d = reuniaoResponse?.data as ReuniaoData | undefined;
     if (!d) return;
 
-    const matched = matchContratoOption(contractName);
     const needsSeed =
       !seededRef.current &&
-      !d.identificacao?.contrato &&
+      !pickNome(d.identificacao) &&
       !d.identificacao?.data &&
       !d.identificacao?.responsavelPreenchimento;
 
@@ -526,7 +510,7 @@ export function ReuniaoFormModal({
       identificacao: {
         data: d.identificacao?.data || (needsSeed ? todayYmd() : ''),
         responsavelPreenchimento: d.identificacao?.responsavelPreenchimento || '',
-        contrato: d.identificacao?.contrato || (needsSeed ? matched : ''),
+        nome: pickNome(d.identificacao),
       },
       answers: d.answers || {},
       ata: d.ata ?? null,
@@ -536,19 +520,19 @@ export function ReuniaoFormModal({
     setForm(next);
     setHydrated(true);
 
-    if (needsSeed && (next.identificacao.contrato || next.identificacao.data)) {
+    if (needsSeed && next.identificacao.data) {
       seededRef.current = true;
       void api.put(`/reunioes/${contractId}/${reuniaoId}`, { data: next }).then(() => {
         onListPatch?.(reuniaoId, {
           data: next.identificacao.data,
           responsavelPreenchimento: next.identificacao.responsavelPreenchimento,
-          contrato: next.identificacao.contrato,
+          nome: next.identificacao.nome,
           updatedAt: new Date().toISOString(),
         });
         queryClient.invalidateQueries({ queryKey: ['reunioes', contractId] });
       });
     }
-  }, [reuniaoResponse, isOpen, reuniaoId, contractName, contractId, onListPatch, queryClient]);
+  }, [reuniaoResponse, isOpen, reuniaoId, contractId, onListPatch, queryClient]);
 
   const persist = useCallback(
     async (data: ReuniaoData) => {
@@ -560,7 +544,7 @@ export function ReuniaoFormModal({
         onListPatch?.(reuniaoId, {
           data: data.identificacao.data,
           responsavelPreenchimento: data.identificacao.responsavelPreenchimento,
-          contrato: data.identificacao.contrato,
+          nome: data.identificacao.nome,
           updatedAt: new Date().toISOString(),
         });
         queryClient.invalidateQueries({ queryKey: ['reuniao', contractId, reuniaoId] });
@@ -592,7 +576,7 @@ export function ReuniaoFormModal({
         onListPatch?.(reuniaoId, {
           data: next.identificacao.data,
           responsavelPreenchimento: next.identificacao.responsavelPreenchimento,
-          contrato: next.identificacao.contrato,
+          nome: next.identificacao.nome,
           updatedAt: new Date().toISOString(),
         });
       }
@@ -673,8 +657,13 @@ export function ReuniaoFormModal({
           : `Etapa ${step} de 3`;
 
   const validateStep = (current: number): string | null => {
-    if (current === 1 && !form.identificacao.responsavelPreenchimento.trim()) {
-      return 'Selecione o responsável pelo preenchimento.';
+    if (current === 1) {
+      if (!form.identificacao.nome.trim()) {
+        return 'Informe o título.';
+      }
+      if (!form.identificacao.responsavelPreenchimento.trim()) {
+        return 'Selecione o responsável pelo preenchimento.';
+      }
     }
     const sections = stepSections[current - 1] || [];
     for (const section of sections) {
@@ -874,6 +863,21 @@ export function ReuniaoFormModal({
                 </div>
                 <div className="rounded-xl border border-gray-200/80 bg-white p-4 shadow-sm dark:border-gray-700/80 dark:bg-gray-800/40">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <FieldLabel required>Título</FieldLabel>
+                      <input
+                        type="text"
+                        value={form.identificacao.nome}
+                        onChange={(e) =>
+                          updateForm((prev) => ({
+                            ...prev,
+                            identificacao: { ...prev.identificacao, nome: e.target.value },
+                          }))
+                        }
+                        placeholder="Ex.: Acompanhamento semanal, Kick-off, Revisão de cronograma…"
+                        className={inputClasse}
+                      />
+                    </div>
                     <div>
                       <FieldLabel>Data</FieldLabel>
                       <DatePickerField
@@ -910,23 +914,6 @@ export function ReuniaoFormModal({
                         searchPlaceholder="Pesquisar funcionário..."
                         emptyOptionsMessage="Nenhum funcionário encontrado."
                         emptySearchMessage="Nenhum funcionário para esta pesquisa."
-                        allowEmpty
-                        emptyOptionLabel="Nenhum"
-                      />
-                    </div>
-                    <div className="sm:col-span-2">
-                      <FieldLabel>Contrato</FieldLabel>
-                      <StringSingleSelectDropdown
-                        value={form.identificacao.contrato}
-                        onChange={(v) =>
-                          updateForm((prev) => ({
-                            ...prev,
-                            identificacao: { ...prev.identificacao, contrato: v },
-                          }))
-                        }
-                        options={CONTRATO_OPTIONS}
-                        placeholder="Selecionar contrato..."
-                        searchPlaceholder="Pesquisar contrato..."
                         allowEmpty
                         emptyOptionLabel="Nenhum"
                       />
