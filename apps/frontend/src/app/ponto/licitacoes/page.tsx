@@ -4,17 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
-  Archive,
-  Calculator,
   ChevronDown,
   ClipboardList,
-  Database,
   Download,
   ExternalLink,
   FileText,
   Hand,
   Loader2,
-  MapPin,
   Maximize2,
   Minimize2,
   Info,
@@ -1351,11 +1347,11 @@ export default function LicitacoesPage() {
             >
               {(
                 [
-                  { id: 'orcamento' as const, label: 'Orçamento', Icon: Calculator },
-                  { id: 'analise' as const, label: 'Em Análise', Icon: ClipboardList },
-                  { id: 'arquivadas' as const, label: 'Análise Final', Icon: Archive },
-                  { id: 'regioes' as const, label: 'Por Região', Icon: MapPin },
-                  { id: 'banco-cats' as const, label: 'Banco CATs', Icon: Database },
+                  { id: 'orcamento' as const, label: 'Orçamento' },
+                  { id: 'analise' as const, label: 'Em Análise' },
+                  { id: 'arquivadas' as const, label: 'Análise Final' },
+                  { id: 'regioes' as const, label: 'Por Região' },
+                  { id: 'banco-cats' as const, label: 'Banco CATs' },
                 ] as const
               ).map((tab) => {
                 const active = viewMode === tab.id;
@@ -1369,13 +1365,12 @@ export default function LicitacoesPage() {
                       if (tab.id === 'arquivadas') setSelectedId(null);
                       setViewMode(tab.id);
                     }}
-                    className={`inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                    className={`inline-flex items-center whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                       active
                         ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
                     }`}
                   >
-                    <tab.Icon className="h-4 w-4 shrink-0" aria-hidden />
                     {tab.label}
                   </button>
                 );
