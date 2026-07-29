@@ -199,3 +199,70 @@ export function playNewMessageSound(): void {
     });
   });
 }
+
+let lastBellHoverAt = 0;
+
+function strikeBell(
+  ctx: AudioContext,
+  startAt: number,
+  intensity: number
+) {
+  const master = ctx.createGain();
+  master.gain.value = 0.18 * intensity;
+  master.connect(ctx.destination);
+
+  // Sino metálico: fundamental + parciais inarmônicas
+  const partials: Array<{ freq: number; type: OscillatorType; peak: number; dur: number }> = [
+    { freq: 987.8, type: 'triangle', peak: 0.42, dur: 0.55 }, // B5
+    { freq: 1480, type: 'sine', peak: 0.16, dur: 0.4 },
+    { freq: 2093, type: 'sine', peak: 0.1, dur: 0.28 },
+    { freq: 2637, type: 'sine', peak: 0.05, dur: 0.18 },
+  ];
+
+  partials.forEach(({ freq, type, peak, dur }) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, startAt);
+    // Queda leve de afinação (metal)
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.97, startAt + dur);
+
+    g.gain.setValueAtTime(0.0001, startAt);
+    g.gain.exponentialRampToValueAtTime(Math.max(peak, 0.001), startAt + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+
+    osc.connect(g);
+    g.connect(master);
+    osc.start(startAt);
+    osc.stop(startAt + dur + 0.03);
+  });
+}
+
+/**
+ * Tilintar do sino de notificações — 3 batidas no ritmo da animação
+ * `notif-bell-ring` (0.7s: picos em ~15%, 30% e 45%).
+ */
+export function playNotificationBellSound(): void {
+  const now = Date.now();
+  // Mesma duração da animação CSS — um toque por hover
+  if (now - lastBellHoverAt < 700) return;
+  lastBellHoverAt = now;
+
+  const play = () => {
+    const ctx = getCtx();
+    if (!ctx || ctx.state !== 'running') return;
+
+    const t0 = ctx.currentTime;
+    // Alinhado aos keyframes: 15%≈0.105, 30%≈0.21, 45%≈0.315
+    strikeBell(ctx, t0 + 0.1, 1);
+    strikeBell(ctx, t0 + 0.21, 0.7);
+    strikeBell(ctx, t0 + 0.315, 0.4);
+  };
+
+  const ctx = getCtx();
+  if (ctx?.state === 'running') {
+    play();
+  } else {
+    void unlockChatAudio().then(play);
+  }
+}

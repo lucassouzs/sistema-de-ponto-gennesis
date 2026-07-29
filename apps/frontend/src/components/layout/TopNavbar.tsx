@@ -49,45 +49,46 @@ function ThemeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => vo
       onClick={onToggle}
       aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
       title={isDark ? 'Modo claro' : 'Modo escuro'}
-      className={`theme-toggle relative flex h-10 w-[4.5rem] shrink-0 items-center overflow-hidden rounded-full p-1 transition-[background-color,box-shadow] duration-500 ease-out ${
+      className={`theme-toggle relative flex h-10 w-[4.5rem] shrink-0 items-center rounded-full p-1 transition-[background-color,box-shadow] duration-500 ease-out ${
         isDark
-          ? 'bg-slate-800 shadow-[inset_0_0_12px_rgba(15,23,42,0.55)]'
-          : 'bg-sky-100 shadow-[inset_0_0_12px_rgba(56,189,248,0.25)]'
+          ? 'bg-slate-800 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65),inset_0_-1px_2px_rgba(255,255,255,0.06)]'
+          : 'bg-sky-100 shadow-[inset_0_2px_6px_rgba(15,23,42,0.22),inset_0_-1px_2px_rgba(255,255,255,0.7)]'
       }`}
     >
-      {/* Brilho do céu / noite */}
+      {/* Brilho do céu / noite — clipado pra não vazar do pill */}
       <span
         aria-hidden
-        className={`pointer-events-none absolute inset-0 rounded-full transition-opacity duration-500 ${
-          isDark
-            ? 'opacity-100 bg-[radial-gradient(circle_at_75%_30%,rgba(99,102,241,0.35),transparent_55%)]'
-            : 'opacity-100 bg-[radial-gradient(circle_at_25%_20%,rgba(253,224,71,0.45),transparent_50%)]'
-        }`}
-      />
-
-      {/* Estrelinhas no modo escuro */}
-      <span
-        aria-hidden
-        className={`theme-toggle-stars pointer-events-none absolute inset-0 transition-opacity duration-500 ${
-          isDark ? 'opacity-100' : 'opacity-0'
-        }`}
+        className="pointer-events-none absolute inset-0 overflow-hidden rounded-full"
       >
-        <span className="absolute right-2.5 top-2 size-0.5 rounded-full bg-white/90" />
-        <span className="absolute right-4 top-3.5 size-[3px] rounded-full bg-white/70" />
-        <span className="absolute bottom-2 right-3 size-0.5 rounded-full bg-white/80" />
+        <span
+          className={`absolute inset-0 transition-opacity duration-500 ${
+            isDark
+              ? 'opacity-100 bg-[radial-gradient(circle_at_75%_30%,rgba(99,102,241,0.35),transparent_55%)]'
+              : 'opacity-100 bg-[radial-gradient(circle_at_25%_20%,rgba(253,224,71,0.45),transparent_50%)]'
+          }`}
+        />
+        <span
+          className={`theme-toggle-stars absolute inset-0 transition-opacity duration-500 ${
+            isDark ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <span className="absolute right-2.5 top-2 size-0.5 rounded-full bg-white/90" />
+          <span className="absolute right-4 top-3.5 size-[3px] rounded-full bg-white/70" />
+          <span className="absolute bottom-2 right-3 size-0.5 rounded-full bg-white/80" />
+        </span>
       </span>
 
-      {/* Knob */}
+      {/* Knob — acima da sombra inset da borda, com sombra normal */}
       <span
         aria-hidden
-        className={`theme-toggle-knob pointer-events-none absolute left-1 top-1 size-8 rounded-full transition-transform duration-500 ease-[cubic-bezier(0.34,1.45,0.64,1)] ${
+        className={`theme-toggle-knob pointer-events-none absolute left-1 top-1 z-20 size-8 rounded-full transition-transform duration-500 ease-[cubic-bezier(0.34,1.45,0.64,1)] ${
           isDark
-            ? 'translate-x-0 bg-slate-200 shadow-[0_2px_8px_rgba(0,0,0,0.35),0_0_0_1px_rgba(255,255,255,0.12)]'
-            : 'translate-x-8 bg-white shadow-[0_2px_8px_rgba(0,0,0,0.12)]'
+            ? 'translate-x-0 bg-slate-200 shadow-[0_2px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)]'
+            : 'translate-x-8 bg-white shadow-[0_2px_6px_rgba(15,23,42,0.22),0_1px_2px_rgba(15,23,42,0.12)]'
         }`}
       />
 
-      <span className="relative z-10 grid w-full grid-cols-2 items-center">
+      <span className="relative z-30 grid w-full grid-cols-2 items-center">
         <span className="flex items-center justify-center">
           <Moon
             className={`h-4 w-4 transition-all duration-500 ease-out ${

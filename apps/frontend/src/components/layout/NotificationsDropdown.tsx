@@ -26,6 +26,7 @@ import { useFdNotificationCounts } from '@/hooks/useFdNotificationCounts';
 import { usePermissions } from '@/hooks/usePermissions';
 import { visibleTabRefetchInterval } from '@/hooks/useVisibleTabRefetchInterval';
 import { NotificationCountBadge } from '@/components/ui/NotificationCountBadge';
+import { playNotificationBellSound } from '@/lib/chatSounds';
 
 type NotificationItem = {
   id: string;
@@ -350,6 +351,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         aria-label={`Notificações${badgeTotal > 0 ? `, ${badgeTotal} pendentes` : ''}`}
         title="Notificações"
         onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => playNotificationBellSound()}
         className="notif-bell-btn relative flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
       >
         <Bell className="notif-bell-btn__icon h-5 w-5" />
