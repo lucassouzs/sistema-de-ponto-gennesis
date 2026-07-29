@@ -8,11 +8,6 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileCheck,
-  Users,
-  ShoppingCart,
-  BookPlus,
-  ImagePlus,
-  Car,
   CalendarClock,
   ListTodo,
   Gavel,
@@ -53,13 +48,7 @@ import {
   fetchPlannerTasks,
   toTimeInputValue,
   type PlannerTask,
-} from '@/lib/plannerTasks';type QuickAction = {
-  id: string;
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  visible: boolean;
-};
+} from '@/lib/plannerTasks';
 
 type StatCard = {
   id: string;
@@ -89,6 +78,48 @@ function getGreeting(date: Date): string {
 function capitalizeFirst(text: string): string {
   if (!text) return text;
   return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** Frases motivacionais (trabalho e foco) — uma por dia civil. */
+const HOME_DAILY_QUOTES = [
+  'Foque no que importa hoje: um passo bem feito vale mais que dez improvisados.',
+  'Disciplina é fazer o essencial mesmo quando a motivação oscila.',
+  'Trabalho com clareza: defina a prioridade e proteja o seu foco.',
+  'Constância vence intensidade: avance um pouco, mas avance todo dia.',
+  'Organização libera energia. Comece pelo que gera mais impacto.',
+  'Foco não é fazer tudo; é escolher o que merece a sua atenção agora.',
+  'Cada tarefa concluída fortalece o próximo resultado.',
+  'Produtividade nasce de intenção: saiba o porquê antes do como.',
+  'Menos distração, mais entrega. O dia rende quando você decide.',
+  'Excelência é hábito: faça bem feito o que estiver nas suas mãos.',
+  'Progresso silencioso também conta. Continue, mesmo sem aplauso.',
+  'Planeje com calma, execute com firmeza.',
+  'O foco de hoje constrói a tranquilidade de amanhã.',
+  'Trabalhe com propósito: qualidade antes de quantidade.',
+  'Uma prioridade clara vale mais que uma lista interminável.',
+  'Respiração, foco, ação. Repita até o fim do expediente.',
+  'Pequenas vitórias diárias formam grandes conquistas.',
+  'Concentração é um músculo: treine escolhendo o essencial.',
+  'Faça o difícil primeiro. O resto flui com mais leveza.',
+  'Resultado vem de presença: esteja inteiro na tarefa atual.',
+  'Clareza no início evita retrabalho no fim.',
+  'Compromisso consigo mesmo: termine o que começou.',
+  'O melhor momento para avançar é agora, com o que você tem.',
+  'Trabalho bem feito é a melhor apresentação do seu nome.',
+  'Foque no processo certo; o resultado acompanha.',
+  'Menos ruído, mais profundidade. É assim que o dia rende.',
+  'Disciplina diária transforma esforço em evolução.',
+  'Priorize, execute, revise. Simples e poderoso.',
+  'Seu foco é o recurso mais valioso do dia. Use com intenção.',
+  'Comece simples, mantenha o ritmo, termine com qualidade.',
+  'Ação consistente supera planos perfeitos sem movimento.',
+] as const;
+
+function getDailyQuote(date: Date): string {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date.getTime() - start.getTime()) / 86_400_000);
+  const idx = ((dayOfYear % HOME_DAILY_QUOTES.length) + HOME_DAILY_QUOTES.length) % HOME_DAILY_QUOTES.length;
+  return HOME_DAILY_QUOTES[idx];
 }
 
 function getStoredUserQueryData() {
@@ -139,6 +170,12 @@ function formatWeekRangeLabel(monday: string, friday: string): string {
     });
   };
   return `${fmt(monday)} – ${fmt(friday)}`;
+}
+
+function formatDayMonthShort(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
 }
 
 function parseYmdLocal(s: string): Date | null {
@@ -457,7 +494,7 @@ export default function HomePage() {
 
   const agendaLoading = loadingEvents || loadingTasks;
 
-  const { isAdministrator, isDepartmentPessoal, permissions, can, canAccessDpApproverPages, canApproveEspelhoNf, canApproveFuel, canApproveOc, canApproveMaterialRequests } = usePermissions();
+  const { isAdministrator, can, canAccessDpApproverPages, canApproveEspelhoNf, canApproveFuel, canApproveOc, canApproveMaterialRequests } = usePermissions();
   const { counts: approvalCounts } = useApprovalNotificationCounts();
 
   const canSeeApprovals =
@@ -488,44 +525,55 @@ export default function HomePage() {
   });
   const pncpEnviadosCount = Number(pncpEnviosData?.total || 0);
 
-  const { data: pncpSemanaData, isLoading: pncpSemanaLoading } = useQuery({
-    queryKey: ['pncp-meus-envios-semana', pncpWeekMonday],
+  const pncpPrevWeekMonday = shiftDateInputValue(pncpWeekMonday, -7);
+
+  type PncpSemanaPayload = {
+    monday?: string;
+    friday?: string;
+    days?: Array<{ date: string; label: string; total: number }>;
+  };
+
+  const { data: pncpSemanaCompare, isLoading: pncpSemanaLoading } = useQuery({
+    queryKey: ['pncp-meus-envios-semana-compare', pncpWeekMonday],
     queryFn: async () => {
-      const res = await api.get('/pncp/meus-envios-semana', {
-        params: { weekStart: pncpWeekMonday },
-      });
-      return res.data?.data as
-        | {
-            monday?: string;
-            friday?: string;
-            days?: Array<{ date: string; label: string; total: number }>;
-          }
-        | undefined;
+      const [atualRes, anteriorRes] = await Promise.all([
+        api.get('/pncp/meus-envios-semana', { params: { weekStart: pncpWeekMonday } }),
+        api.get('/pncp/meus-envios-semana', { params: { weekStart: pncpPrevWeekMonday } }),
+      ]);
+      return {
+        atual: atualRes.data?.data as PncpSemanaPayload | undefined,
+        anterior: anteriorRes.data?.data as PncpSemanaPayload | undefined,
+      };
     },
     enabled: canSeePncp && Boolean(pncpWeekMonday),
     staleTime: 30_000,
   });
 
   const pncpWeekChartData = useMemo(() => {
-    const days = pncpSemanaData?.days;
-    if (days?.length) {
-      return days.map((d) => ({
-        label: d.label,
-        total: Number(d.total || 0),
-        date: d.date,
-      }));
-    }
-    return ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'].map((label, i) => ({
-      label,
-      total: 0,
-      date: shiftDateInputValue(pncpWeekMonday, i),
-    }));
-  }, [pncpSemanaData, pncpWeekMonday]);
+    const labels = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'] as const;
+    const atualDays = pncpSemanaCompare?.atual?.days;
+    const anteriorDays = pncpSemanaCompare?.anterior?.days;
+    return labels.map((label, i) => {
+      const atual = atualDays?.[i];
+      const anterior = anteriorDays?.[i];
+      return {
+        label,
+        atual: Number(atual?.total || 0),
+        anterior: Number(anterior?.total || 0),
+        date: atual?.date || shiftDateInputValue(pncpWeekMonday, i),
+        dateAnterior: anterior?.date || shiftDateInputValue(pncpPrevWeekMonday, i),
+        dateLabel: formatDayMonthShort(atual?.date || shiftDateInputValue(pncpWeekMonday, i)),
+      };
+    });
+  }, [pncpSemanaCompare, pncpWeekMonday, pncpPrevWeekMonday]);
 
   const pncpWeekFriday =
-    pncpSemanaData?.friday || shiftDateInputValue(pncpWeekMonday, 4);
-  const pncpWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.total, 0);
+    pncpSemanaCompare?.atual?.friday || shiftDateInputValue(pncpWeekMonday, 4);
+  const pncpWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.atual, 0);
+  const pncpPrevWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.anterior, 0);
   const { isDark } = useTheme();
+  const chartBarAtual = '#10b981';
+  const chartBarAnterior = isDark ? '#6b7280' : '#d1d5db';
   // Alinha ao padrão do sistema: text-xs / text-sm + gray-500/400 (eixos) e gray-900/100 (valores)
   const chartFontFamily =
     'inherit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
@@ -589,51 +637,6 @@ export default function HomePage() {
   ];
   const statCards = allStatCards.filter((card) => card.visible);
 
-  const quickActions: QuickAction[] = [
-    {
-      id: 'materiais',
-      label: 'Solicitar materiais',
-      href: '/ponto/solicitar-materiais',
-      icon: ShoppingCart,
-      visible: isAdministrator || can(pathToModuleKey('/ponto/solicitar-materiais')),
-    },
-    {
-      id: 'ferias',
-      label: 'Solicitar férias',
-      href: '/ponto/ferias',
-      icon: ImagePlus,
-      visible: isAdministrator || can(pathToModuleKey('/ponto/ferias')),
-    },
-    {
-      id: 'atestados',
-      label: 'Registrar ausência',
-      href: '/ponto/atestados',
-      icon: BookPlus,
-      visible: isAdministrator || can(pathToModuleKey('/ponto/atestados')),
-    },
-    {
-      id: 'aprovacoes',
-      label: 'Aprovações',
-      href: '/ponto/aprovacoes',
-      icon: FileCheck,
-      visible: canSeeApprovals,
-    },
-    {
-      id: 'funcionarios',
-      label: 'Funcionários',
-      href: '/ponto/funcionarios',
-      icon: Users,
-      visible: isAdministrator || isDepartmentPessoal || permissions.canManageEmployees,
-    },
-    {
-      id: 'reserva-veiculos',
-      label: 'Reserva de veículos',
-      href: '/ponto/reserva-veiculos',
-      icon: Car,
-      visible: isAdministrator || can(pathToModuleKey('/ponto/reserva-veiculos')),
-    },
-  ].filter((action) => action.visible);
-
   useEffect(() => {
     // Atualiza o relógio a cada minuto (suficiente para a home)
     const timer = setInterval(() => setNow(new Date()), 60_000);
@@ -644,21 +647,16 @@ export default function HomePage() {
   const firstName = (user?.name || 'Usuário').split(' ')[0] || 'Usuário';
 
   const greeting = getGreeting(now);
+  const dailyQuote = useMemo(() => getDailyQuote(now), [now]);
 
   const formattedDate = useMemo(() => {
     const formatter = new Intl.DateTimeFormat('pt-BR', {
       weekday: 'long',
-      day: '2-digit',
+      day: 'numeric',
       month: 'long',
+      year: 'numeric',
     });
     return capitalizeFirst(formatter.format(now));
-  }, [now]);
-
-  const formattedTime = useMemo(() => {
-    return now.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
   }, [now]);
 
   return (
@@ -666,17 +664,18 @@ export default function HomePage() {
       <div className="relative min-h-[calc(100vh-6rem)]">
         <div className="w-full">
           {/* Cabeçalho de boas-vindas */}
-          <div className="animate-home-fade-in text-left">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
-              {greeting}, <span className="text-red-600 dark:text-red-500">{firstName}</span>!
-            </h1>
-            <div className="mt-1 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <span>{formattedDate}</span>
-              <span aria-hidden>·</span>
-              <span className="font-mono font-semibold tabular-nums text-gray-700 dark:text-gray-300">
-                {formattedTime}
-              </span>
+          <div className="animate-home-fade-in flex flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
+                {greeting}, <span className="text-red-600 dark:text-red-500">{firstName}</span>!
+              </h1>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{formattedDate}</p>
             </div>
+            <blockquote className="max-w-xl shrink-0 border-l-2 border-red-500/70 pl-4 sm:mt-1 sm:max-w-md sm:border-l-0 sm:border-r-2 sm:pl-0 sm:pr-4 md:max-w-lg lg:max-w-xl">
+              <p className="text-base font-medium leading-snug text-gray-700 dark:text-gray-200 sm:text-right sm:text-lg">
+                “{dailyQuote}”
+              </p>
+            </blockquote>
           </div>
 
           {/* Cards de status */}
@@ -770,240 +769,291 @@ export default function HomePage() {
             </div>
           )}
 
-          {canSeePncp && (
-            <Card className="mt-6">
-              <CardHeader className="border-b-0 pb-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center space-x-3">
-                    <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30 sm:p-3">
-                      <Gavel className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
+            {canSeePncp && (
+              <Card className="flex h-full flex-col lg:col-span-2">
+                <CardHeader className="border-b-0 pb-1">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 items-center space-x-3">
+                      <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30 sm:p-3">
+                        <Gavel className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          Captações da semana
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Segunda a sexta · {pncpWeekTotal} esta semana · {pncpPrevWeekTotal} anterior
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Captações da semana
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Segunda a sexta · {pncpWeekTotal} no período
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPncpWeekMonday((day) => shiftDateInputValue(day, -7))
-                      }
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                      aria-label="Semana anterior"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <span className="min-w-[8.5rem] text-center text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300">
-                      {formatWeekRangeLabel(pncpWeekMonday, pncpWeekFriday)}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={!canGoNextPncpWeek}
-                      onClick={() =>
-                        setPncpWeekMonday((day) => {
-                          const next = shiftDateInputValue(day, 7);
-                          return next > currentWeekMonday ? currentWeekMonday : next;
-                        })
-                      }
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                      aria-label="Próxima semana"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-[220px] w-full font-sans text-xs text-gray-500 dark:text-gray-400 sm:h-[260px]">
-                  {pncpSemanaLoading ? (
-                    <p className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
-                      Carregando…
-                    </p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={pncpWeekChartData}
-                        margin={{ top: 20, right: 8, left: -12, bottom: 0 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={chartAxisTick}
-                          axisLine={false}
-                          tickLine={false}
-                        />
-                        <YAxis
-                          allowDecimals={false}
-                          tick={chartAxisTick}
-                          axisLine={false}
-                          tickLine={false}
-                          width={32}
-                        />
-                        <Tooltip
-                          cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
-                          formatter={(value: number) => [value, 'Captações']}
-                          labelFormatter={(label, payload) => {
-                            const date = payload?.[0]?.payload?.date as string | undefined;
-                            if (!date) return String(label);
-                            const [y, m, d] = date.split('-').map(Number);
-                            if (!y || !m || !d) return String(label);
-                            const pretty = new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
-                              weekday: 'long',
-                              day: '2-digit',
-                              month: 'short',
-                            });
-                            return capitalizeFirst(pretty);
-                          }}
-                          contentStyle={{
-                            backgroundColor: chartTooltipBg,
-                            borderRadius: 8,
-                            border: `1px solid ${chartTooltipBorder}`,
-                            color: chartTooltipColor,
-                            fontFamily: chartFontFamily,
-                            fontSize: 12,
-                            fontWeight: 500,
-                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                          }}
-                          labelStyle={{
-                            color: chartMuted,
-                            fontFamily: chartFontFamily,
-                            fontSize: 12,
-                            fontWeight: 500,
-                            marginBottom: 2,
-                          }}
-                          itemStyle={{
-                            color: chartTooltipColor,
-                            fontFamily: chartFontFamily,
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
-                        />
-                        <Bar
-                          dataKey="total"
-                          fill="#10b981"
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={48}
-                        >
-                          <LabelList
-                            dataKey="total"
-                            position="top"
-                            offset={8}
-                            {...chartValueLabel}
-                            formatter={(value: number) => (value > 0 ? value : '')}
+                    <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-4 lg:justify-end">
+                      <div className="flex items-center gap-3 text-xs font-medium text-gray-600 dark:text-gray-400">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: chartBarAnterior }}
+                            aria-hidden
                           />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Corpo: agenda (principal) + acesso rápido (lateral) */}
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Agenda de hoje */}
-            <div className="lg:col-span-2">
-              <Card>
-                <CardHeader>
-                  <div className="flex w-full flex-row items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <CalendarClock className="h-5 w-5 text-red-600 dark:text-red-400" />
-                      <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        Na agenda hoje
-                      </h2>
-                      {todayItems.length > 0 && (
-                        <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600 dark:bg-red-500/10 dark:text-red-400">
-                          {todayItems.length}
+                          Semana anterior
                         </span>
-                      )}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: chartBarAtual }}
+                            aria-hidden
+                          />
+                          Esta semana
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPncpWeekMonday((day) => shiftDateInputValue(day, -7))
+                          }
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                          aria-label="Semana anterior"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="min-w-[8.5rem] text-center text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300">
+                          {formatWeekRangeLabel(pncpWeekMonday, pncpWeekFriday)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!canGoNextPncpWeek}
+                          onClick={() =>
+                            setPncpWeekMonday((day) => {
+                              const next = shiftDateInputValue(day, 7);
+                              return next > currentWeekMonday ? currentWeekMonday : next;
+                            })
+                          }
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                          aria-label="Próxima semana"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <Link
-                      href="/ponto/agenda"
-                      className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                    >
-                      Abrir agenda
-                    </Link>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  {agendaLoading ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Carregando…</p>
-                  ) : todayItems.length === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Nada marcado na agenda para hoje.
-                    </p>
-                  ) : (
-                    <ol className="relative ml-1">
-                      {todayItems.map((item) => (
-                        <li key={item.id} className="flex gap-3 pb-5 last:pb-0">
-                          <div className="relative flex w-2.5 shrink-0 flex-col items-center self-stretch">
-                            <span
-                              className="absolute bottom-0 left-1/2 top-[5px] w-px -translate-x-1/2 bg-gray-200 dark:bg-gray-700"
-                              aria-hidden
-                            />
-                            <span
-                              className="relative z-10 h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{
-                                backgroundColor:
-                                  item.kind === 'event' ? item.color || '#3B82F6' : '#F59E0B',
-                              }}
-                              aria-hidden
-                            />
-                          </div>
-                          <Link href="/ponto/agenda" className="group block min-w-0 flex-1">
-                            <div className="flex items-baseline gap-2">
-                              <time className="font-mono text-xs font-semibold tabular-nums text-red-600 dark:text-red-400">
-                                {item.timeLabel}
-                              </time>
-                              <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                                {item.kind === 'task' ? 'Tarefa' : 'Evento'}
-                              </span>
-                            </div>
-                            <p className="mt-0.5 text-sm font-medium text-gray-900 group-hover:text-red-600 dark:text-gray-100 dark:group-hover:text-red-400">
-                              {item.title}
-                            </p>
-                          </Link>
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Acesso rápido */}
-            {quickActions.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
-                    Acesso rápido
-                  </h2>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col gap-2">
-                    {quickActions.map((action) => {
-                      const Icon = action.icon;
-                      return (
-                        <Link
-                          key={action.id}
-                          href={action.href}
-                          className="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:border-red-300 hover:bg-red-50/50 hover:text-red-600 dark:text-gray-300 dark:hover:border-red-500/40 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                <CardContent className="flex min-h-0 flex-1 flex-col">
+                  <div className="h-[260px] w-full flex-1 font-sans text-xs text-gray-500 dark:text-gray-400 sm:min-h-[320px] sm:h-auto">
+                    {pncpSemanaLoading ? (
+                      <p className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                        Carregando…
+                      </p>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={pncpWeekChartData}
+                          margin={{ top: 20, right: 12, left: 8, bottom: 8 }}
+                          barCategoryGap="28%"
+                          barGap={0}
                         >
-                          <Icon className="h-5 w-5 shrink-0" />
-                          {action.label}
-                        </Link>
-                      );
-                    })}
+                          <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
+                          <XAxis
+                            dataKey="label"
+                            interval={0}
+                            tick={(props) => {
+                              const { x, y, payload } = props;
+                              const row = pncpWeekChartData.find((d) => d.label === payload.value);
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <text
+                                    x={0}
+                                    y={0}
+                                    dy={12}
+                                    textAnchor="middle"
+                                    fill={chartTick}
+                                    fontSize={12}
+                                    fontWeight={600}
+                                    fontFamily={chartFontFamily}
+                                  >
+                                    {payload.value}
+                                  </text>
+                                  <text
+                                    x={0}
+                                    y={0}
+                                    dy={26}
+                                    textAnchor="middle"
+                                    fill={chartMuted}
+                                    fontSize={10}
+                                    fontWeight={500}
+                                    fontFamily={chartFontFamily}
+                                  >
+                                    {row?.dateLabel || ''}
+                                  </text>
+                                </g>
+                              );
+                            }}
+                            height={36}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <YAxis
+                            allowDecimals={false}
+                            tick={chartAxisTick}
+                            axisLine={false}
+                            tickLine={false}
+                            width={44}
+                          />
+                          <Tooltip
+                            cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
+                            formatter={(value: number, name: string) => [
+                              value,
+                              name === 'atual' ? 'Esta semana' : 'Semana anterior',
+                            ]}
+                            labelFormatter={(label, payload) => {
+                              const row = payload?.[0]?.payload as
+                                | { date?: string; dateLabel?: string }
+                                | undefined;
+                              const date = row?.date;
+                              if (!date) return String(label);
+                              const [y, m, d] = date.split('-').map(Number);
+                              if (!y || !m || !d) return String(label);
+                              const pretty = new Date(y, m - 1, d).toLocaleDateString('pt-BR', {
+                                weekday: 'long',
+                                day: '2-digit',
+                                month: 'short',
+                              });
+                              return capitalizeFirst(pretty);
+                            }}
+                            contentStyle={{
+                              backgroundColor: chartTooltipBg,
+                              borderRadius: 8,
+                              border: `1px solid ${chartTooltipBorder}`,
+                              color: chartTooltipColor,
+                              fontFamily: chartFontFamily,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                            }}
+                            labelStyle={{
+                              color: chartMuted,
+                              fontFamily: chartFontFamily,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              marginBottom: 2,
+                            }}
+                            itemStyle={{
+                              color: chartTooltipColor,
+                              fontFamily: chartFontFamily,
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                          />
+                          <Bar
+                            dataKey="anterior"
+                            name="anterior"
+                            fill={chartBarAnterior}
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={48}
+                            minPointSize={2}
+                          >
+                            <LabelList
+                              dataKey="anterior"
+                              position="top"
+                              offset={6}
+                              {...chartValueLabel}
+                              fontSize={11}
+                              formatter={(value: number) => (value > 0 ? value : '')}
+                            />
+                          </Bar>
+                          <Bar
+                            dataKey="atual"
+                            name="atual"
+                            fill={chartBarAtual}
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={48}
+                            minPointSize={2}
+                          >
+                            <LabelList
+                              dataKey="atual"
+                              position="top"
+                              offset={6}
+                              {...chartValueLabel}
+                              fontSize={11}
+                              formatter={(value: number) => (value > 0 ? value : '')}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             )}
+
+            <Card className={`flex h-full flex-col ${canSeePncp ? '' : 'lg:col-span-3'}`}>
+              <CardHeader className="border-b-0 pb-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center space-x-3">
+                    <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                      <CalendarClock className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Na agenda hoje
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Compromissos do dia · {todayItems.length} no período
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/ponto/agenda"
+                    className="shrink-0 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  >
+                    Abrir agenda
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent className="flex min-h-0 flex-1 flex-col">
+                {agendaLoading ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Carregando…</p>
+                ) : todayItems.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Nada marcado na agenda para hoje.
+                  </p>
+                ) : (
+                  <ol className="relative ml-1 max-h-[320px] overflow-y-auto pr-1">
+                    {todayItems.map((item) => (
+                      <li key={item.id} className="flex gap-3 pb-5 last:pb-0">
+                        <div className="relative flex w-2.5 shrink-0 flex-col items-center self-stretch">
+                          <span
+                            className="absolute bottom-0 left-1/2 top-[5px] w-px -translate-x-1/2 bg-gray-200 dark:bg-gray-700"
+                            aria-hidden
+                          />
+                          <span
+                            className="relative z-10 h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor:
+                                item.kind === 'event' ? item.color || '#3B82F6' : '#F59E0B',
+                            }}
+                            aria-hidden
+                          />
+                        </div>
+                        <Link href="/ponto/agenda" className="group block min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <time className="font-mono text-xs font-semibold tabular-nums text-red-600 dark:text-red-400">
+                              {item.timeLabel}
+                            </time>
+                            <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              {item.kind === 'task' ? 'Tarefa' : 'Evento'}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-sm font-medium text-gray-900 group-hover:text-red-600 dark:text-gray-100 dark:group-hover:text-red-400">
+                            {item.title}
+                          </p>
+                        </Link>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
