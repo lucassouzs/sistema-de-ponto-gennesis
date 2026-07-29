@@ -13,6 +13,7 @@ import {
   Gavel,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -783,7 +784,7 @@ export default function HomePage() {
                           Captações da semana
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          Segunda a sexta · {pncpWeekTotal} esta semana · {pncpPrevWeekTotal} anterior
+                          {pncpWeekTotal} esta semana · {pncpPrevWeekTotal} anterior
                         </p>
                       </div>
                     </div>
@@ -998,15 +999,17 @@ export default function HomePage() {
                         Na agenda hoje
                       </h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Compromissos do dia · {todayItems.length} no período
+                        {todayItems.length} no período
                       </p>
                     </div>
                   </div>
                   <Link
                     href="/ponto/agenda"
-                    className="shrink-0 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    aria-label="Abrir agenda"
+                    title="Abrir agenda"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
                   >
-                    Abrir agenda
+                    <ExternalLink className="h-4 w-4" aria-hidden />
                   </Link>
                 </div>
               </CardHeader>
