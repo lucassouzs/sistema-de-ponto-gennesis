@@ -131,6 +131,12 @@ export function TopNavbar({
   );
   const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  // Evita mismatch de hidratação: no SSR não há localStorage/API user → "Usuário"/"US"
+  const [profileReady, setProfileReady] = useState(false);
+
+  useEffect(() => {
+    setProfileReady(true);
+  }, []);
 
   const breadcrumbs = appendBreadcrumbEntity(
     resolveBreadcrumbs(pathname ?? '/'),
@@ -301,7 +307,7 @@ export function TopNavbar({
             onClick={() => setProfileMenuOpen((v) => !v)}
             className="profile-avatar-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40"
           >
-            {profilePhotoHref ? (
+            {profileReady && profilePhotoHref ? (
               <img
                 src={profilePhotoHref}
                 alt=""
@@ -310,7 +316,7 @@ export function TopNavbar({
               />
             ) : (
               <span className="profile-avatar-btn__media text-sm font-semibold text-white">
-                {getInitials(displayName)}
+                {profileReady ? getInitials(displayName) : '\u00A0'}
               </span>
             )}
             {uploadProfilePhotoMutation.isPending && (
