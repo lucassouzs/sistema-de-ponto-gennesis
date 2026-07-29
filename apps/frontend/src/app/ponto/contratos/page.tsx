@@ -115,34 +115,64 @@ function parseCurrencyInput(value: string): number {
   return isNaN(num) ? 0 : num;
 }
 
-/** Menor k ≥ 1 tal que (início + k anos) ≥ fim — mesma regra do detalhe do contrato / backend. */
-function getYearsBetween(startDate: string, endDate: string): number {
-  if (!startDate || !endDate) return 0;
-  const startMatch = String(startDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const endMatch = String(endDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const start = startMatch
-    ? new Date(Number(startMatch[1]), Number(startMatch[2]) - 1, Number(startMatch[3]), 12, 0, 0, 0)
-    : new Date(startDate);
-  const end = endMatch
-    ? new Date(Number(endMatch[1]), Number(endMatch[2]) - 1, Number(endMatch[3]), 12, 0, 0, 0)
-    : new Date(endDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() <= start.getTime()) {
-    return 0;
+function parseYmdLocal(value: string): Date | null {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
   }
-  const addYears = (d: Date, years: number) =>
-    new Date(d.getFullYear() + years, d.getMonth(), d.getDate(), 12, 0, 0, 0);
-  let k = 0;
-  while (k < 100) {
-    k += 1;
-    if (addYears(start, k).getTime() >= end.getTime()) return k;
-  }
-  return 0;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function getValorMaisAditivosAnual(valuePlusAddenda: number, startDate: string, endDate: string): number | null {
-  const years = getYearsBetween(startDate, endDate);
-  if (years <= 0) return null;
-  return valuePlusAddenda / years;
+function calendarMonthInVigencia(
+  calendarYear: number,
+  calendarMonth1to12: number,
+  contractStart: Date,
+  contractEnd: Date
+): boolean {
+  const ms = new Date(calendarYear, calendarMonth1to12 - 1, 1, 12, 0, 0, 0);
+  const me = new Date(calendarYear, calendarMonth1to12, 0, 12, 0, 0, 0);
+  return ms.getTime() < contractEnd.getTime() && me.getTime() >= contractStart.getTime();
+}
+
+function countVigenciaMonths(startDate: string, endDate: string): number {
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return 0;
+  let n = 0;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+  const endCursor = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
+  while (cursor.getTime() <= endCursor.getTime()) {
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth() + 1;
+    if (calendarMonthInVigencia(y, m, start, end)) n += 1;
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return n;
+}
+
+/** Valor anual por ano civil: proporcional aos meses da vigência naquele ano. */
+function getValorAnualPorAno(
+  valuePlusAddenda: number,
+  startDate: string,
+  endDate: string
+): Array<{ year: number; months: number; value: number }> {
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return [];
+  const totalMonths = countVigenciaMonths(startDate, endDate);
+  if (totalMonths <= 0 || !Number.isFinite(valuePlusAddenda)) return [];
+  const monthly = valuePlusAddenda / totalMonths;
+  const rows: Array<{ year: number; months: number; value: number }> = [];
+  for (let y = start.getFullYear(); y <= end.getFullYear(); y++) {
+    let months = 0;
+    for (let m = 1; m <= 12; m++) {
+      if (calendarMonthInVigencia(y, m, start, end)) months += 1;
+    }
+    if (months > 0) rows.push({ year: y, months, value: monthly * months });
+  }
+  return rows;
 }
 
 function ContractAccessCheckbox({
@@ -874,8 +904,18 @@ export default function ContratosPage() {
                           </td>
                           <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
                             {(() => {
-                              const anual = getValorMaisAditivosAnual(c.valuePlusAddenda, c.startDate, c.endDate);
-                              return anual !== null ? formatCurrency(anual) : '-';
+                              const rows = getValorAnualPorAno(c.valuePlusAddenda, c.startDate, c.endDate);
+                              if (!rows.length) return '-';
+                              if (rows.length === 1) return formatCurrency(rows[0].value);
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5 text-xs leading-tight">
+                                  {rows.map((r) => (
+                                    <span key={r.year}>
+                                      {r.year}: {formatCurrency(r.value)}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
                             })()}
                           </td>
                           {showActionsColumn && (
@@ -1209,16 +1249,51 @@ function ContractFormModal({
                 <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Valor mais Aditivos Anual
                 </label>
-                <div className="flex h-10 items-center px-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-medium">
-                  {(() => {
-                    const valor = parseCurrencyInput(formData.valuePlusAddenda);
-                    const anual = getValorMaisAditivosAnual(valor, formData.startDate, formData.endDate);
-                    return anual !== null ? formatCurrency(anual) : 'Informe valor e vigência';
-                  })()}
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Calculado automaticamente: Valor ÷ anos de vigência
-                </p>
+                {(() => {
+                  const valor = parseCurrencyInput(formData.valuePlusAddenda);
+                  const rows = getValorAnualPorAno(valor, formData.startDate, formData.endDate);
+                  const totalMonths = countVigenciaMonths(formData.startDate, formData.endDate);
+                  if (!rows.length) {
+                    return (
+                      <>
+                        <div className="flex h-10 items-center px-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 font-medium">
+                          Informe valor e vigência
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Rateio proporcional aos meses de cada ano
+                        </p>
+                      </>
+                    );
+                  }
+                  const monthly = totalMonths > 0 ? valor / totalMonths : 0;
+                  return (
+                    <>
+                      <div className="space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatCurrency(monthly)}/mês × {totalMonths}{' '}
+                          {totalMonths === 1 ? 'mês' : 'meses'}
+                        </p>
+                        {rows.map((r) => (
+                          <div
+                            key={r.year}
+                            className="flex items-center justify-between gap-3 text-sm font-medium text-gray-900 dark:text-gray-100"
+                          >
+                            <span className="text-gray-600 dark:text-gray-300">
+                              {r.year}{' '}
+                              <span className="font-normal text-gray-400 dark:text-gray-500">
+                                ({r.months} {r.months === 1 ? 'mês' : 'meses'})
+                              </span>
+                            </span>
+                            <span>{formatCurrency(r.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Calculado automaticamente: Valor ÷ meses × meses de cada ano
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 

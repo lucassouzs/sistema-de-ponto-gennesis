@@ -3,7 +3,10 @@ import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { assertContractAccess } from '../lib/contractAccess';
-import { computedBaseAnnualValue } from '../lib/contractAnnualMath';
+import {
+  computedBaseAnnualByYear,
+  computedBaseAnnualValueForYear,
+} from '../lib/contractAnnualMath';
 
 function toNum(v: unknown): number {
   if (v === null || v === undefined) return 0;
@@ -32,11 +35,8 @@ export class ContractAnnualValueController {
         orderBy: { year: 'asc' }
       });
 
-      const baseAnnual = computedBaseAnnualValue(
-        toNum(contract.valuePlusAddenda),
-        contract.startDate,
-        contract.endDate
-      );
+      const total = toNum(contract.valuePlusAddenda);
+      const byYear = computedBaseAnnualByYear(total, contract.startDate, contract.endDate);
 
       const withNumbers = values.map((v) => ({
         ...v,
@@ -45,13 +45,13 @@ export class ContractAnnualValueController {
         budgetAdjustmentEffectiveDate: v.budgetAdjustmentEffectiveDate
           ? v.budgetAdjustmentEffectiveDate.toISOString()
           : null,
-        computedBaseAnnual: baseAnnual
+        computedBaseAnnual: byYear[v.year] ?? null
       }));
 
       res.json({
         success: true,
         data: withNumbers,
-        computedBaseAnnual: baseAnnual
+        computedBaseAnnualByYear: byYear
       });
     } catch (error) {
       next(error);
@@ -80,10 +80,11 @@ export class ContractAnnualValueController {
         throw createError('Contrato não encontrado', 404);
       }
 
-      const baseAnnual = computedBaseAnnualValue(
+      const baseAnnual = computedBaseAnnualValueForYear(
         toNum(contract.valuePlusAddenda),
         contract.startDate,
-        contract.endDate
+        contract.endDate,
+        yearNum
       );
       if (baseAnnual === null) {
         throw createError('Não foi possível calcular o valor anual base (vigência inválida)', 400);

@@ -666,14 +666,20 @@ function buildContractAvailableYears(startDate: string, endDate: string): number
   return Array.from(years).sort((a, b) => a - b);
 }
 
-function getYearsBetween(startDate: string, endDate: string): number {
-  return countContractYearsOfVigencia(startDate, endDate);
-}
-
-function getValorMaisAditivosAnual(valuePlusAddenda: number, startDate: string, endDate: string): number | null {
-  const years = getYearsBetween(startDate, endDate);
-  if (years <= 0) return null;
-  return valuePlusAddenda / years;
+function getValorAnualBaseDoAno(
+  valuePlusAddenda: number,
+  startDate: string,
+  endDate: string,
+  year: number
+): number | null {
+  const start = parseDateSafe(startDate);
+  const end = parseDateSafe(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return null;
+  const months = listVigenciaMonthKeys(start, end);
+  if (!months.length) return null;
+  const monthsInYear = months.filter((m) => m.y === year).length;
+  if (monthsInYear <= 0) return 0;
+  return (valuePlusAddenda / months.length) * monthsInYear;
 }
 
 function parseCurrencyInput(value: string): number {
@@ -1182,7 +1188,7 @@ export default function ContractDetailPage() {
       return res.data as {
         success: boolean;
         data: ContractAnnualValueRow[];
-        computedBaseAnnual: number | null;
+        computedBaseAnnualByYear?: Record<number, number>;
       };
     },
     enabled: !!contractId
@@ -1675,15 +1681,18 @@ export default function ContractDetailPage() {
     [availableYears]
   );
 
-  /** Valor de cada ano de vigência: (valor + aditivos) ÷ anos da vigência (aniversários a partir da data inicial até o fim). */
+  /** Anos / meses de vigência (para labels e rateio proporcional). */
   const contractYearsCount = useMemo(
     () => (contract ? countContractYearsOfVigencia(contract.startDate, contract.endDate) : 0),
     [contract]
   );
-  const valorAnualBase = useMemo(() => {
-    if (!contract || contractYearsCount <= 0) return null;
-    return valorMaisAditivosTotal / contractYearsCount;
-  }, [contract, contractYearsCount, valorMaisAditivosTotal]);
+  const contractVigenciaMonthCount = useMemo(() => {
+    if (!contract) return 0;
+    const start = parseDateSafe(contract.startDate);
+    const end = parseDateSafe(contract.endDate);
+    if (!start || !end) return 0;
+    return listVigenciaMonthKeys(start, end).length;
+  }, [contract]);
 
   const contractVigenciaDates = useMemo(() => {
     if (!contract) return null;
@@ -1700,6 +1709,28 @@ export default function ContractDetailPage() {
     : availableYears.includes(selectedYear)
       ? selectedYear
       : availableYears[0] ?? currentYear;
+
+  const contractMonthsInSelectedYear = useMemo(() => {
+    if (!contractVigenciaDates) return 0;
+    return countVigenciaMonthsInRange(
+      safeSelectedYear,
+      1,
+      12,
+      contractVigenciaDates.start,
+      contractVigenciaDates.end
+    );
+  }, [contractVigenciaDates, safeSelectedYear]);
+
+  /** Valor anual do ano selecionado: (valor + aditivos) ÷ meses totais × meses do ano. */
+  const valorAnualBase = useMemo(() => {
+    if (!contract) return null;
+    return getValorAnualBaseDoAno(
+      valorMaisAditivosTotal,
+      contract.startDate,
+      contract.endDate,
+      safeSelectedYear
+    );
+  }, [contract, valorMaisAditivosTotal, safeSelectedYear]);
 
   const annualAdjustByYear = useMemo(() => {
     const rows = annualValuesResponse?.data;
@@ -2309,15 +2340,21 @@ export default function ContractDetailPage() {
     if (!contract) return {} as Record<number, number | null>;
     const result: Record<number, number | null> = {};
     availableYears.forEach((year) => {
-      if (valorAnualBase === null) {
+      const base = getValorAnualBaseDoAno(
+        valorMaisAditivosTotal,
+        contract.startDate,
+        contract.endDate,
+        year
+      );
+      if (base === null) {
         result[year] = null;
         return;
       }
       const adj = annualAdjustByYear.get(year);
-      result[year] = adj ? valorAnualBase + adj.delta : valorAnualBase;
+      result[year] = adj ? base + adj.delta : base;
     });
     return result;
-  }, [contract, availableYears, valorAnualBase, annualAdjustByYear]);
+  }, [contract, availableYears, valorMaisAditivosTotal, annualAdjustByYear]);
 
   const faturamentoPorAno = useMemo(() => {
     const result: Record<number, number> = {};
@@ -3504,10 +3541,14 @@ export default function ContractDetailPage() {
                           >
                             <p>Valor + aditivos: {formatCurrency(valorMaisAditivosTotal)}</p>
                             <p>
-                              ÷ {contractYearsCount > 0 ? contractYearsCount : '—'} ano(s)
-                              {valorAnualBase !== null
-                                ? ` = ${formatCurrency(valorAnualBase)}`
+                              ÷ {contractVigenciaMonthCount > 0 ? contractVigenciaMonthCount : '—'} mês(es)
+                              {contractVigenciaMonthCount > 0
+                                ? ` = ${formatCurrency(valorMaisAditivosTotal / contractVigenciaMonthCount)}/mês`
                                 : ''}
+                            </p>
+                            <p>
+                              × {contractMonthsInSelectedYear} mês(es) em {safeSelectedYear}
+                              {valorAnualBase !== null ? ` = ${formatCurrency(valorAnualBase)}` : ''}
                             </p>
                             {valorAnualBase !== null &&
                               valorAnualAjustado !== null &&
