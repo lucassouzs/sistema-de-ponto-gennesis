@@ -1627,7 +1627,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           {/* Header do módulo — mesma altura da TopNavbar (h-16) pra linha bater */}
           <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-4 dark:border-gray-800">
             <div className="flex w-full items-center justify-between gap-2">
-              <h2 className="truncate text-lg font-semibold leading-none text-gray-900 dark:text-gray-100">
+              <h2 className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-gray-100">
                 {searchTerm.trim() ? 'Busca' : selectedModule?.name ?? 'Menu'}
               </h2>
               <div className="flex shrink-0 items-center gap-1">

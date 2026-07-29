@@ -19,7 +19,7 @@ interface ReuniaoEntry {
   id: string;
   data: string;
   responsavelPreenchimento: string;
-  contrato: string;
+  nome: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -140,7 +140,7 @@ export default function ContratoReunioesPage() {
                 ...r,
                 data: patch.data,
                 responsavelPreenchimento: patch.responsavelPreenchimento,
-                contrato: patch.contrato,
+                nome: patch.nome,
                 updatedAt: patch.updatedAt,
               }
             : r
@@ -162,7 +162,12 @@ export default function ContratoReunioesPage() {
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
   const contract = contractData?.data as Contract | undefined;
-  const reunioesRaw: ReuniaoEntry[] = reunioesData?.data ?? [];
+  const reunioesRaw: ReuniaoEntry[] = (reunioesData?.data ?? []).map(
+    (r: ReuniaoEntry & { contrato?: string }) => ({
+      ...r,
+      nome: r.nome || r.contrato || '',
+    })
+  );
   const reunioes = reunioesRaw.map((r) => {
     const ov = listOverrides[r.id];
     return ov
@@ -170,7 +175,7 @@ export default function ContratoReunioesPage() {
           ...r,
           data: ov.data,
           responsavelPreenchimento: ov.responsavelPreenchimento,
-          contrato: ov.contrato,
+          nome: ov.nome,
           updatedAt: ov.updatedAt,
         }
       : r;
@@ -179,7 +184,7 @@ export default function ContratoReunioesPage() {
   const reunioesFiltradas = reunioes.filter(
     (r) =>
       !q ||
-      r.contrato.toLowerCase().includes(q) ||
+      (r.nome || '').toLowerCase().includes(q) ||
       r.responsavelPreenchimento.toLowerCase().includes(q)
   );
 
@@ -234,7 +239,7 @@ export default function ContratoReunioesPage() {
                         type="text"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Buscar por contrato ou responsável..."
+                        placeholder="Buscar por título ou responsável..."
                         className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                     </div>
@@ -286,7 +291,7 @@ export default function ContratoReunioesPage() {
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
                         <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          Contrato
+                          Título
                         </th>
                         <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                           Responsável
@@ -318,7 +323,7 @@ export default function ContratoReunioesPage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <ListRowNavigableLabel className="truncate font-medium">
-                                  {r.contrato || 'Reunião sem contrato definido'}
+                                  {r.nome || 'Reunião sem título'}
                                 </ListRowNavigableLabel>
                               </div>
                             </div>
@@ -410,7 +415,6 @@ export default function ContratoReunioesPage() {
           onClose={() => setModalReuniaoId(null)}
           contractId={contractId}
           reuniaoId={modalReuniaoId}
-          contractName={contract?.name}
           onListPatch={handleListPatch}
         />
       </MainLayout>
