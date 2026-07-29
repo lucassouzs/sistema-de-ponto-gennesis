@@ -122,7 +122,7 @@ function formatVehicleModel(vehicle: Pick<Vehicle, 'marcaVeic' | 'modeloVeic'>):
 function formatVehicleContratoLabel(value: string | null | undefined): string {
   const trimmed = (value || '').trim();
   if (!trimmed) return '—';
-  const withoutCode = trimmed.replace(/^\d{1,2}(?:\.\d{1,2})+\s*[-–—]\s*/, '').trim();
+  const withoutCode = trimmed.replace(/^\d+(?:\.\d+)+\s*[-–—]\s*/, '').trim();
   return withoutCode || trimmed;
 }
 
@@ -585,10 +585,10 @@ export default function VeiculosPage() {
                         <tr>
                           <th className={cadastroListClasses.th}>ID</th>
                           <th className={cadastroListClasses.th}>Modelo</th>
-                          <th className={cadastroListClasses.th}>Placa</th>
-                          <th className={cadastroListClasses.th}>Contrato</th>
-                          <th className={cadastroListClasses.th}>Responsável</th>
-                          <th className={cadastroListClasses.th}>Frota / Particular</th>
+                          <th className={cadastroListClasses.thCenter}>Placa</th>
+                          <th className={cadastroListClasses.thCenter}>Contrato</th>
+                          <th className={cadastroListClasses.thCenter}>Responsável</th>
+                          <th className={cadastroListClasses.thCenter}>Frota / Particular</th>
                           <th className={cadastroListClasses.thRight}>Ação</th>
                         </tr>
                       </thead>
@@ -602,14 +602,16 @@ export default function VeiculosPage() {
                               )}
                             </td>
                             <td className={cadastroListClasses.td}>{formatVehicleModel(vehicle)}</td>
-                            <td className={cadastroListClasses.tdMono}>
+                            <td className={`${cadastroListClasses.tdMono} text-center`}>
                               {formatPlacaDisplay(vehicle.placaVeic)}
                             </td>
-                            <td className={cadastroListClasses.td}>
+                            <td className={`${cadastroListClasses.td} text-center`}>
                               {formatVehicleContratoLabel(vehicle.contrato)}
                             </td>
-                            <td className={cadastroListClasses.td}>{vehicle.responsavel || '—'}</td>
-                            <td className={cadastroListClasses.td}>
+                            <td className={`${cadastroListClasses.td} text-center`}>
+                              {vehicle.responsavel || '—'}
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
                               {formatFrotaPartic(vehicle.frotaPartic)}
                             </td>
                             <RowActionMenuCell
@@ -693,20 +695,6 @@ export default function VeiculosPage() {
                   {editing ? 'Editar veículo' : 'Novo veículo'}
                 </h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {editing ? (
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        ID
-                      </label>
-                      <input
-                        type="text"
-                        value={formatCadastroListId(editing.code)}
-                        readOnly
-                        className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-400"
-                      />
-                    </div>
-                  ) : null}
-
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Marca *
