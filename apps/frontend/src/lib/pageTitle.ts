@@ -23,6 +23,7 @@ const SUB_PATH_TITLES: Record<string, string> = {
   'historico-os': 'Histórico OS',
   faturamento: 'Faturamento',
   relatorios: 'Relatórios Fotográficos',
+  reunioes: 'Reuniões',
 };
 
 const MODULES_BY_HREF_LENGTH = [...PERMISSION_MODULES].sort(

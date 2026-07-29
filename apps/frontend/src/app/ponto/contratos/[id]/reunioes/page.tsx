@@ -246,10 +246,11 @@ export default function ContratoReunioesPage() {
                   )}
                   <Link
                     href={`/ponto/contratos/${contractId}/reunioes/configurar`}
-                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    title="Editar formulário"
+                    aria-label="Editar formulário"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                   >
-                    <Settings2 className="h-4 w-4 shrink-0" />
-                    Editar formulário
+                    <Settings2 className="h-4 w-4" />
                   </Link>
                   <button
                     type="button"
@@ -317,16 +318,9 @@ export default function ContratoReunioesPage() {
                           }`}
                         >
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-indigo-50 dark:bg-indigo-900/20">
-                                <History className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <ListRowNavigableLabel className="truncate font-medium">
-                                  {r.nome || 'Reunião sem título'}
-                                </ListRowNavigableLabel>
-                              </div>
-                            </div>
+                            <ListRowNavigableLabel className="truncate font-medium">
+                              {r.nome || 'Reunião sem título'}
+                            </ListRowNavigableLabel>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-300">
                             {r.responsavelPreenchimento || '-'}
