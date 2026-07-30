@@ -15,7 +15,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
@@ -234,6 +234,7 @@ export default function FuelRequestsScreen() {
   const isTabScreen = navState?.type === 'tab';
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const styles = getStyles(colors, isDark);
 
   const [rows, setRows] = useState<FuelRequestRow[]>([]);
@@ -604,8 +605,22 @@ export default function FuelRequestsScreen() {
       </ScrollView>
 
       {/* Formulário */}
-      <Modal visible={showForm} animationType="slide" onRequestClose={() => setShowForm(false)}>
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setShowForm(false)}
+      >
+        <View
+          style={[
+            styles.safeArea,
+            {
+              backgroundColor: colors.background,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+            },
+          ]}
+        >
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -836,7 +851,7 @@ export default function FuelRequestsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Picker genérico */}
@@ -932,7 +947,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       alignItems: 'center',
       gap: 14,
       paddingHorizontal: 20,
-      paddingTop: 8,
+      paddingTop: 12,
       paddingBottom: 16,
     },
     formCloseBtn: {

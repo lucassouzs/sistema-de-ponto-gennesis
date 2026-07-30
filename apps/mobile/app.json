@@ -52,6 +52,23 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "@react-native-community/datetimepicker",
+        {
+          "android": {
+            "datePicker": {
+              "colorAccent": { "light": "#ce3736", "dark": "#ef4444" },
+              "colorControlActivated": { "light": "#ce3736", "dark": "#ef4444" }
+            },
+            "timePicker": {
+              "headerBackground": { "light": "#ce3736", "dark": "#ef4444" },
+              "numbersSelectorColor": { "light": "#ce3736", "dark": "#ef4444" }
+            }
+          }
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"

@@ -179,6 +179,9 @@ export default function DateField({
           minimumDate={minimumDate}
           maximumDate={maximumDate}
           locale="pt-BR"
+          accentColor={colors.primary}
+          positiveButton={{ label: 'OK', textColor: colors.primary }}
+          negativeButton={{ label: 'Cancelar', textColor: colors.textSecondary }}
         />
       ) : null}
 
@@ -224,6 +227,7 @@ export default function DateField({
                 maximumDate={maximumDate}
                 locale="pt-BR"
                 themeVariant={isDark ? 'dark' : 'light'}
+                accentColor={colors.primary}
                 style={{ alignSelf: 'center' }}
               />
             </Pressable>
