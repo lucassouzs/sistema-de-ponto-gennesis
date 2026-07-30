@@ -31,15 +31,13 @@ import {
   XCircle,
   ChevronDown,
   ClipboardCheck,
-  Moon,
-  Sun,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
-
+import AppHeader from '../components/AppHeader';
 type VehicleReservationStatus =
   | 'PENDING_SUPPLIES'
   | 'APPROVED'
@@ -321,7 +319,7 @@ export default function VehicleReservationsScreen() {
   const navigation = useNavigation();
   const navState = navigation.getState?.();
   const isTabScreen = navState?.type === 'tab';
-  const { colors, isDark, toggleTheme } = useTheme();
+  const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const styles = getStyles(colors);
 
@@ -618,25 +616,7 @@ export default function VehicleReservationsScreen() {
   return (
     <View style={styles.safeArea}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <SafeAreaView edges={['top']} style={styles.topSafe}>
-        <View style={styles.header}>
-          <View style={styles.headerSide}>
-            <Image
-              source={require('../../assets/logobranca.png')}
-              style={styles.headerLogo}
-              resizeMode="contain"
-            />
-          </View>
-          <Text style={styles.headerTitle}>Reserva de veículo</Text>
-          <TouchableOpacity onPress={toggleTheme} style={styles.iconBtn}>
-            {isDark ? (
-              <Sun size={22} color={colors.headerText} strokeWidth={2} />
-            ) : (
-              <Moon size={22} color={colors.headerText} strokeWidth={2} />
-            )}
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+      <AppHeader />
 
       <ScrollView
         style={styles.container}
@@ -652,6 +632,8 @@ export default function VehicleReservationsScreen() {
           />
         }
       >
+        <Text style={styles.pageTitle}>Reserva de veículo</Text>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
           {chips.map(({ key, label, count, Icon }) => {
             const active = cardFilter === key;
@@ -1013,31 +995,18 @@ export default function VehicleReservationsScreen() {
 const getStyles = (colors: any) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: colors.background },
-    topSafe: { backgroundColor: colors.headerBackground },
-    header: {
-      backgroundColor: colors.headerBackground,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomLeftRadius: 24,
-      borderBottomRightRadius: 24,
-    },
-    headerTitle: { color: colors.headerText, fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
-    headerSide: {
-      width: 72,
-      alignItems: 'flex-start',
-      justifyContent: 'center',
-    },
-    headerLogo: {
-      width: 72,
-      height: 28,
-    },
-    iconBtn: { padding: 8, width: 40, alignItems: 'center' },
-    container: { flex: 1 },
+    container: { flex: 1, backgroundColor: colors.background },
     scrollContent: { padding: 16, paddingBottom: 40 },
+    pageTitle: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '700',
+      letterSpacing: -0.4,
+      marginBottom: 14,
+    },
     chipsRow: { gap: 8, paddingBottom: 12 },
+    iconBtn: { padding: 8, width: 40, alignItems: 'center' },
+    headerTitle: { color: colors.headerText, fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',

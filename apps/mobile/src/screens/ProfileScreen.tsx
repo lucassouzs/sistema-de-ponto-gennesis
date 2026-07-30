@@ -7,10 +7,10 @@ import {
   ScrollView,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Mail, Briefcase, Calendar, LogOut, MapPin, CreditCard } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import AppHeader from '../components/AppHeader';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -27,15 +27,16 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.safeArea}>
-      <SafeAreaView edges={['top']} style={styles.topSafeArea} />
+      <AppHeader />
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        <Text style={styles.pageTitle}>Perfil</Text>
+
+        <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <User size={48} color="#fff" />
+            <User size={40} color="#fff" />
           </View>
           <Text style={styles.name}>{user?.name}</Text>
           <Text style={styles.role}>
@@ -172,10 +173,7 @@ export default function ProfileScreen() {
 const getStyles = (colors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.surface,
-  },
-  topSafeArea: {
-    backgroundColor: colors.headerBackground,
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
@@ -183,37 +181,45 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 110,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
-  header: {
+  pageTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    marginBottom: 14,
+  },
+  profileCard: {
     backgroundColor: colors.headerBackground,
-    paddingVertical: 40,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
+    borderRadius: 20,
     marginBottom: 20,
-    elevation: 3,
   },
   avatarContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   name: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 4,
   },
   role: {
-    fontSize: 16,
+    fontSize: 15,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   section: {
-    padding: 20,
+    paddingVertical: 8,
   },
   sectionTitle: {
     fontSize: 18,
