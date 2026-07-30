@@ -7,7 +7,6 @@ import {
   Platform,
   Animated,
   Easing,
-  LayoutChangeEvent,
 } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +22,7 @@ const CONTENT_PADDING = 2;
 const FAB_SPACING = 8;
 const HORIZONTAL_PADDING = 21;
 const BOTTOM_PADDING = 21;
+const PILL_BORDER = StyleSheet.hairlineWidth * 1.5;
 
 type TabIcon =
   | { set: 'ion'; name: React.ComponentProps<typeof Ionicons>['name'] }
@@ -48,8 +48,6 @@ const SHORT_LABELS: Record<string, string> = {
 
 const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle']);
 
-type TabLayout = { x: number; width: number };
-
 const SLIDE_EASE = Easing.bezier(0.32, 0.72, 0, 1);
 
 function TabItem({
@@ -58,23 +56,35 @@ function TabItem({
   icon,
   activeColor,
   inactiveColor,
+  selectFill,
+  selectBorder,
   onPress,
   onLongPress,
   accessibilityLabel,
-  onLayout,
 }: {
   focused: boolean;
   label: string;
   icon: TabIcon;
   activeColor: string;
   inactiveColor: string;
+  selectFill: string;
+  selectBorder: string;
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel?: string;
-  onLayout: (e: LayoutChangeEvent) => void;
 }) {
   const pressScale = useRef(new Animated.Value(1)).current;
+  const selectAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
   const tint = focused ? activeColor : inactiveColor;
+
+  useEffect(() => {
+    Animated.timing(selectAnim, {
+      toValue: focused ? 1 : 0,
+      duration: focused ? 280 : 160,
+      easing: SLIDE_EASE,
+      useNativeDriver: true,
+    }).start();
+  }, [focused, selectAnim]);
 
   return (
     <Pressable
@@ -98,9 +108,28 @@ function TabItem({
         }).start();
       }}
       onLongPress={onLongPress}
-      onLayout={onLayout}
       style={styles.item}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.select,
+          {
+            backgroundColor: selectFill,
+            borderColor: selectBorder,
+            borderWidth: StyleSheet.hairlineWidth,
+            opacity: selectAnim,
+            transform: [
+              {
+                scale: selectAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.86, 1],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
       <Animated.View style={[styles.tabInner, { transform: [{ scale: pressScale }] }]}>
         {icon.set === 'mci' ? (
           <MaterialCommunityIcons name={icon.name} size={22} color={tint} />
@@ -118,18 +147,16 @@ function TabItem({
 export default function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
-  const [layouts, setLayouts] = useState<Record<number, TabLayout>>({});
+  const [rowWidth, setRowWidth] = useState(0);
 
-  const indicatorX = useRef(new Animated.Value(0)).current;
-  const indicatorW = useRef(new Animated.Value(80)).current;
   const barY = useRef(new Animated.Value(0)).current;
-  const fabScale = useRef(new Animated.Value(1)).current;
-  const ready = useRef(false);
+  const fabPressScale = useRef(new Animated.Value(1)).current;
   const prevIndex = useRef(state.index);
-  const animRef = useRef<Animated.CompositeAnimation | null>(null);
+  const centeringRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const activeRoute = state.routes[state.index]?.name ?? '';
   const showFab = FAB_TABS.has(activeRoute);
+  const centerProgress = useRef(new Animated.Value(showFab ? 0 : 1)).current;
 
   // Liquid glass nos dois (iOS + Android)
   const barFill = isDark ? 'rgba(31, 41, 55, 0.52)' : 'rgba(255, 255, 255, 0.55)';
@@ -142,56 +169,25 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const blurIntensity = Platform.OS === 'ios' ? 55 : 48;
 
   useEffect(() => {
-    const to = layouts[state.index];
-    if (!to) return;
-
-    if (!ready.current) {
-      indicatorX.setValue(to.x);
-      indicatorW.setValue(to.width);
-      ready.current = true;
-      prevIndex.current = state.index;
-      return;
-    }
-
     if (prevIndex.current === state.index) return;
     prevIndex.current = state.index;
-    animRef.current?.stop();
-
-    animRef.current = Animated.parallel([
-      Animated.timing(indicatorX, {
-        toValue: to.x,
-        duration: 320,
-        easing: SLIDE_EASE,
-        useNativeDriver: false,
-      }),
-      Animated.timing(indicatorW, {
-        toValue: to.width,
-        duration: 320,
-        easing: SLIDE_EASE,
-        useNativeDriver: false,
-      }),
-    ]);
-    animRef.current.start();
 
     Animated.sequence([
       Animated.timing(barY, { toValue: 1.5, duration: 70, useNativeDriver: true }),
       Animated.spring(barY, { toValue: 0, friction: 7, tension: 140, useNativeDriver: true }),
     ]).start();
-  }, [state.index, layouts, indicatorX, indicatorW, barY]);
+  }, [state.index, barY]);
 
-  // Recalcula select quando o FAB some/aparece (largura da pill muda)
   useEffect(() => {
-    ready.current = false;
-  }, [showFab]);
-
-  const setTabLayout = (index: number, e: LayoutChangeEvent) => {
-    const { x, width } = e.nativeEvent.layout;
-    setLayouts((prev) => {
-      const curr = prev[index];
-      if (curr && Math.abs(curr.x - x) < 0.5 && Math.abs(curr.width - width) < 0.5) return prev;
-      return { ...prev, [index]: { x, width } };
+    centeringRef.current?.stop();
+    centeringRef.current = Animated.spring(centerProgress, {
+      toValue: showFab ? 0 : 1,
+      friction: 8,
+      tension: 90,
+      useNativeDriver: false,
     });
-  };
+    centeringRef.current.start();
+  }, [showFab, centerProgress]);
 
   const handleFabPress = () => {
     const name = activeRoute as FabBarTabName;
@@ -199,6 +195,36 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
       emitFabBarPress(name === 'Fuel' ? 'Combustivel' : name === 'Vehicle' ? 'Reservas' : name);
     }
   };
+
+  const fabSlot = BAR_HEIGHT + FAB_SPACING;
+  const pillWidthWithFab = Math.max(rowWidth - fabSlot, 1);
+  const pillWidthCentered = Math.max(Math.min(rowWidth * 0.78, 320), 1);
+  const pillMarginCentered = Math.max((rowWidth - pillWidthCentered) / 2, 0);
+
+  const pillWidth = centerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [pillWidthWithFab, pillWidthCentered],
+  });
+  const pillMarginLeft = centerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, pillMarginCentered],
+  });
+  const fabOpacity = centerProgress.interpolate({
+    inputRange: [0, 0.45, 1],
+    outputRange: [1, 0, 0],
+  });
+  const fabHideScale = centerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.55],
+  });
+  const fabWidth = centerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [BAR_HEIGHT, 0],
+  });
+  const fabGap = centerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [FAB_SPACING, 0],
+  });
 
   return (
     <View
@@ -212,20 +238,23 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
       ]}
     >
       <Animated.View
-        style={[
-          styles.row,
-          { transform: [{ translateY: barY }] },
-        ]}
+        style={[styles.row, { transform: [{ translateY: barY }] }]}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (Math.abs(w - rowWidth) > 0.5) setRowWidth(w);
+        }}
       >
-        <View
+        <Animated.View
           style={[
             styles.pill,
             {
+              width: rowWidth > 0 ? pillWidth : undefined,
+              marginLeft: rowWidth > 0 ? pillMarginLeft : 0,
+              flex: rowWidth > 0 ? undefined : 1,
               borderColor: pillBorder,
-              borderWidth: StyleSheet.hairlineWidth * 1.5,
+              borderWidth: PILL_BORDER,
               backgroundColor: useBlur ? 'transparent' : barFill,
             },
-            isDark ? styles.pillElevatedDark : styles.shadowLight,
           ]}
         >
           {useBlur ? (
@@ -240,17 +269,6 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
                 pointerEvents="none"
                 style={[StyleSheet.absoluteFillObject, { backgroundColor: barFill }]}
               />
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.glassHighlight,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255,255,255,0.08)'
-                      : 'rgba(255,255,255,0.28)',
-                  },
-                ]}
-              />
             </>
           ) : (
             <View
@@ -259,87 +277,90 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
             />
           )}
 
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.select,
-              {
-                left: indicatorX,
-                width: indicatorW,
-                backgroundColor: selectFill,
-                borderColor: selectBorder,
-                borderWidth: StyleSheet.hairlineWidth,
-              },
-            ]}
-          />
+          <View style={styles.track}>
+            {state.routes.map((route, index) => {
+              const { options } = descriptors[route.key];
+              const focused = state.index === index;
+              const label =
+                SHORT_LABELS[route.name] ??
+                (typeof options.title === 'string' ? options.title : route.name);
+              const icon = ICONS[route.name] ?? { set: 'mci' as const, name: 'gas-station' as const };
 
-          {state.routes.map((route, index) => {
-            const { options } = descriptors[route.key];
-            const focused = state.index === index;
-            const label =
-              SHORT_LABELS[route.name] ??
-              (typeof options.title === 'string' ? options.title : route.name);
-            const icon = ICONS[route.name] ?? { set: 'mci' as const, name: 'gas-station' as const };
+              return (
+                <TabItem
+                  key={route.key}
+                  focused={focused}
+                  label={label}
+                  icon={icon}
+                  activeColor={activeColor}
+                  inactiveColor={inactiveColor}
+                  selectFill={selectFill}
+                  selectBorder={selectBorder}
+                  accessibilityLabel={options.tabBarAccessibilityLabel}
+                  onPress={() => {
+                    const event = navigation.emit({
+                      type: 'tabPress',
+                      target: route.key,
+                      canPreventDefault: true,
+                    });
+                    if (!focused && !event.defaultPrevented) {
+                      navigation.navigate(route.name, route.params);
+                    }
+                  }}
+                  onLongPress={() => {
+                    navigation.emit({ type: 'tabLongPress', target: route.key });
+                  }}
+                />
+              );
+            })}
+          </View>
+        </Animated.View>
 
-            return (
-              <TabItem
-                key={route.key}
-                focused={focused}
-                label={label}
-                icon={icon}
-                activeColor={activeColor}
-                inactiveColor={inactiveColor}
-                accessibilityLabel={options.tabBarAccessibilityLabel}
-                onLayout={(e) => setTabLayout(index, e)}
-                onPress={() => {
-                  const event = navigation.emit({
-                    type: 'tabPress',
-                    target: route.key,
-                    canPreventDefault: true,
-                  });
-                  if (!focused && !event.defaultPrevented) {
-                    navigation.navigate(route.name, route.params);
-                  }
-                }}
-                onLongPress={() => {
-                  navigation.emit({ type: 'tabLongPress', target: route.key });
-                }}
-              />
-            );
-          })}
-        </View>
-
-        {showFab ? (
+        <Animated.View
+          pointerEvents={showFab ? 'auto' : 'none'}
+          style={{
+            width: fabWidth,
+            marginLeft: fabGap,
+            opacity: fabOpacity,
+            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transform: [{ scale: fabHideScale }],
+          }}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Nova"
             onPress={handleFabPress}
             onPressIn={() => {
-              Animated.timing(fabScale, {
+              Animated.timing(fabPressScale, {
                 toValue: 0.9,
                 duration: 80,
-                useNativeDriver: true,
+                useNativeDriver: false,
               }).start();
             }}
             onPressOut={() => {
-              Animated.spring(fabScale, {
+              Animated.spring(fabPressScale, {
                 toValue: 1,
                 friction: 6,
                 tension: 160,
-                useNativeDriver: true,
+                useNativeDriver: false,
               }).start();
             }}
           >
             <Animated.View
               style={[
                 styles.fab,
-                { backgroundColor: colors.primary, transform: [{ scale: fabScale }] },
+                {
+                  backgroundColor: colors.primary,
+                  transform: [{ scale: fabPressScale }],
+                },
               ]}
             >
               <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
             </Animated.View>
           </Pressable>
-        ) : null}
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -356,82 +377,38 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: FAB_SPACING,
     height: BAR_HEIGHT,
-  },
-  shadowLight: {
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 18,
-      },
-      android: { elevation: 10 },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.12,
-        shadowRadius: 18,
-      },
-    }),
-  },
-  pillElevatedDark: {
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-      android: { elevation: 6 },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 12,
-      },
-    }),
   },
   pill: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    flexDirection: 'column',
     height: BAR_HEIGHT,
     borderRadius: 999,
-    paddingHorizontal: CONTENT_PADDING,
-    paddingVertical: CONTENT_PADDING,
+    padding: CONTENT_PADDING,
     position: 'relative',
     overflow: 'hidden',
   },
-  select: {
-    position: 'absolute',
-    top: CONTENT_PADDING,
-    bottom: CONTENT_PADDING,
-    borderRadius: 999,
-    zIndex: 0,
+  track: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
   },
-  glassHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: '8%',
-    right: '22%',
-    height: '42%',
-    borderBottomLeftRadius: 999,
-    borderBottomRightRadius: 999,
-    opacity: 0.7,
+  select: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 999,
     zIndex: 0,
   },
   item: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
     zIndex: 2,
   },
   tabInner: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,
+    zIndex: 2,
   },
   label: {
     fontSize: 10,
@@ -444,15 +421,5 @@ const styles = StyleSheet.create({
     borderRadius: BAR_HEIGHT / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 6 },
-      default: {},
-    }),
   },
 });

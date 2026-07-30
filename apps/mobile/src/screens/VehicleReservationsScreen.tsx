@@ -14,6 +14,7 @@ import {
   Platform,
   PanResponder,
   LayoutChangeEvent,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -22,7 +23,6 @@ import { useNavigation } from '@react-navigation/native';
 import Svg, { Path } from 'react-native-svg';
 import {
   Car,
-  Plus,
   Search,
   Camera,
   X,
@@ -38,6 +38,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
 import AppHeader from '../components/AppHeader';
+import DateField from '../components/DateField';
 type VehicleReservationStatus =
   | 'PENDING_SUPPLIES'
   | 'APPROVED'
@@ -173,39 +174,67 @@ function SelectField({
   placeholder,
   onPress,
   colors,
+  isDark,
 }: {
   label: string;
   valueLabel: string;
   placeholder: string;
   onPress: () => void;
   colors: any;
+  isDark: boolean;
 }) {
+  const filled = !!valueLabel;
   return (
     <View style={{ marginBottom: 14 }}>
-      <Text style={{ fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 6 }}>
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '600',
+          color: colors.textSecondary,
+          marginBottom: 8,
+          letterSpacing: -0.1,
+        }}
+      >
         {label}
       </Text>
       <TouchableOpacity
         onPress={onPress}
+        activeOpacity={0.75}
         style={{
-          borderWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.card,
-          borderRadius: 10,
+          backgroundColor: isDark ? colors.card : '#EEF0F3',
+          borderRadius: 14,
           paddingHorizontal: 14,
-          paddingVertical: 14,
+          paddingVertical: 15,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: 10,
         }}
       >
         <Text
-          style={{ flex: 1, fontSize: 15, color: valueLabel ? colors.text : colors.textSecondary }}
+          style={{
+            flex: 1,
+            fontSize: 15,
+            fontWeight: filled ? '600' : '500',
+            color: filled ? colors.text : colors.textSecondary,
+            letterSpacing: -0.2,
+          }}
           numberOfLines={1}
         >
           {valueLabel || placeholder}
         </Text>
-        <ChevronDown size={18} color={colors.textSecondary} />
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ChevronDown size={16} color={colors.textSecondary} strokeWidth={2.2} />
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -321,7 +350,7 @@ export default function VehicleReservationsScreen() {
   const isTabScreen = navState?.type === 'tab';
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
-  const styles = getStyles(colors);
+  const styles = getStyles(colors, isDark);
 
   const [rows, setRows] = useState<VehicleReservation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -632,28 +661,30 @@ export default function VehicleReservationsScreen() {
           />
         }
       >
-        <Text style={styles.pageTitle}>Reserva de veículo</Text>
+        <Text style={styles.pageTitle}>Reservas</Text>
+        <Text style={styles.pageSubtitle}>
+          {counts.total} {counts.total === 1 ? 'reserva' : 'reservas'}
+        </Text>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-          {chips.map(({ key, label, count, Icon }) => {
+          {chips.map(({ key, label, count }) => {
             const active = cardFilter === key;
             return (
               <TouchableOpacity
                 key={key}
                 onPress={() => setCardFilter(key)}
                 style={[styles.chip, active && styles.chipActive]}
+                activeOpacity={0.7}
               >
-                <Icon size={14} color={active ? '#fff' : colors.textSecondary} />
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {label} ({count})
-                </Text>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
 
         <View style={styles.searchBox}>
-          <Search size={18} color={colors.textSecondary} />
+          <Search size={16} color={colors.textSecondary} strokeWidth={2} />
           <TextInput
             style={styles.searchInput}
             placeholder="Buscar motorista, placa, status..."
@@ -663,213 +694,266 @@ export default function VehicleReservationsScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.primaryBtn} onPress={openForm}>
-          <Plus size={18} color="#fff" />
-          <Text style={styles.primaryBtnText}>Nova reserva</Text>
-        </TouchableOpacity>
-
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+          <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} />
         ) : filteredRows.length === 0 ? (
           <View style={styles.empty}>
-            <Car size={40} color={colors.textSecondary} />
+            <View style={styles.emptyIcon}>
+              <Car size={28} color={colors.textSecondary} />
+            </View>
             <Text style={styles.emptyTitle}>Nenhuma reserva</Text>
-            <Text style={styles.emptyText}>Toque em Nova reserva para solicitar um veículo.</Text>
+            <Text style={styles.emptyText}>Toque no + para solicitar um veículo.</Text>
           </View>
         ) : (
-          filteredRows.map((row) => (
-            <View key={row.id} style={styles.card}>
-              <View style={styles.cardTop}>
-                <Text style={styles.cardNumber}>#{row.code}</Text>
-                <View style={[styles.badge, { backgroundColor: `${statusColor(row.status)}22` }]}>
-                  <Text style={[styles.badgeText, { color: statusColor(row.status) }]}>
-                    {STATUS_LABELS[row.status]}
+          <View style={styles.list}>
+            {filteredRows.map((row) => (
+              <View key={row.id} style={styles.card}>
+                <View style={styles.cardTop}>
+                  <Text style={styles.cardNumber}>#{row.code}</Text>
+                  <View style={[styles.badge, { backgroundColor: `${statusColor(row.status)}18` }]}>
+                    <Text style={[styles.badgeText, { color: statusColor(row.status) }]}>
+                      {STATUS_LABELS[row.status]}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.cardRoute} numberOfLines={2}>
+                  {row.atividade}
+                </Text>
+                <View style={styles.cardFooter}>
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {formatDateLabel(row.dataUsoInicio)} → {formatDateLabel(row.dataUsoFim)}
+                  </Text>
+                  <View style={styles.dot} />
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {formatPeriodo(row.periodoUso)}
                   </Text>
                 </View>
+                <Text style={styles.cardSub} numberOfLines={1}>
+                  {row.motorista} · {row.localDestino}
+                </Text>
+                <Text style={styles.cardSub} numberOfLines={1}>
+                  {row.vehicle?.placaVeic || 'Placa a definir'}
+                </Text>
+                {canReturn(row) ? (
+                  <TouchableOpacity
+                    style={styles.returnBtn}
+                    onPress={() => {
+                      setReturnForm({
+                        devolucaoAt: nowDatetimeLocal(),
+                        baixaFoto: '',
+                        baixaObservacao: '',
+                        baixaAssinatura: '',
+                      });
+                      setReturnTarget(row);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <ClipboardCheck size={15} color={colors.primary} strokeWidth={2.2} />
+                    <Text style={styles.returnBtnText}>Dar baixa</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <Text style={styles.cardRoute}>{row.atividade}</Text>
-              <Text style={styles.cardMeta}>
-                {formatDateLabel(row.dataUsoInicio)} → {formatDateLabel(row.dataUsoFim)} ·{' '}
-                {formatPeriodo(row.periodoUso)}
-              </Text>
-              <Text style={styles.cardMeta}>
-                Motorista: {row.motorista} · Destino: {row.localDestino}
-              </Text>
-              <Text style={styles.cardMeta}>
-                Veículo: {row.vehicle?.placaVeic || 'A definir'}
-              </Text>
-              {canReturn(row) ? (
-                <TouchableOpacity
-                  style={styles.returnBtn}
-                  onPress={() => {
-                    setReturnForm({
-                      devolucaoAt: nowDatetimeLocal(),
-                      baixaFoto: '',
-                      baixaObservacao: '',
-                      baixaAssinatura: '',
-                    });
-                    setReturnTarget(row);
-                  }}
-                >
-                  <ClipboardCheck size={16} color="#fff" />
-                  <Text style={styles.returnBtnText}>Dar baixa</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ))
+            ))}
+          </View>
         )}
       </ScrollView>
 
       {/* Form criar */}
       <Modal visible={showForm} animationType="slide" onRequestClose={() => setShowForm(false)}>
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-          <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
-            <TouchableOpacity onPress={() => setShowForm(false)} style={styles.iconBtn}>
-              <X size={24} color={colors.headerText} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Nova reserva</Text>
-            <View style={{ width: 40 }} />
-          </View>
-
-          {loadingOptions ? (
-            <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
-          ) : (
-            <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-              <SelectField
-                label="Solicitante"
-                valueLabel={form.solicitante}
-                placeholder="Selecione"
-                colors={colors}
-                onPress={() => {
-                  setPickerSearch('');
-                  setPicker({
-                    title: 'Solicitante',
-                    options: employees.map((e) => ({ value: e.name, label: e.name })),
-                    onSelect: (solicitante) => setForm((f) => ({ ...f, solicitante })),
-                  });
-                }}
-              />
-              <SelectField
-                label="Motorista"
-                valueLabel={form.motorista}
-                placeholder="Selecione"
-                colors={colors}
-                onPress={() => {
-                  setPickerSearch('');
-                  setPicker({
-                    title: 'Motorista',
-                    options: employees.map((e) => ({ value: e.name, label: e.name })),
-                    onSelect: (motorista) => setForm((f) => ({ ...f, motorista })),
-                  });
-                }}
-              />
-
-              <Text style={styles.fieldLabel}>Atividade</Text>
-              <TextInput
-                style={styles.input}
-                value={form.atividade}
-                onChangeText={(atividade) => setForm((f) => ({ ...f, atividade }))}
-                placeholder="Descreva a atividade"
-                placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={styles.fieldLabel}>Local de destino</Text>
-              <TextInput
-                style={styles.input}
-                value={form.localDestino}
-                onChangeText={(localDestino) => setForm((f) => ({ ...f, localDestino }))}
-                placeholder="Destino"
-                placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={styles.fieldLabel}>Data início (AAAA-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                value={form.dataUsoInicio}
-                onChangeText={(dataUsoInicio) => setForm((f) => ({ ...f, dataUsoInicio }))}
-                placeholderTextColor={colors.textSecondary}
-              />
-              <Text style={styles.fieldLabel}>Data fim (AAAA-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                value={form.dataUsoFim}
-                onChangeText={(dataUsoFim) => setForm((f) => ({ ...f, dataUsoFim }))}
-                placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={styles.fieldLabel}>Período de uso</Text>
-              <View style={styles.periodoRow}>
-                {PERIODO_OPTIONS.map((p) => {
-                  const active = form.periodoUso.includes(p.value);
-                  return (
-                    <TouchableOpacity
-                      key={p.value}
-                      onPress={() => togglePeriodo(p.value)}
-                      style={[styles.periodoChip, active && styles.periodoChipActive]}
-                    >
-                      <Text style={[styles.periodoText, active && styles.periodoTextActive]}>
-                        {p.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.formHeader}>
+              <View style={styles.formHeaderText}>
+                <Text style={styles.formTitle}>Nova reserva</Text>
+                <Text style={styles.formSubtitle}>Agende o uso do veículo</Text>
               </View>
-
-              <SelectField
-                label="Polo (opcional)"
-                valueLabel={form.polo}
-                placeholder="Selecione"
-                colors={colors}
-                onPress={() => {
-                  setPickerSearch('');
-                  setPicker({
-                    title: 'Polo',
-                    options: POLO_OPTIONS,
-                    onSelect: (polo) => setForm((f) => ({ ...f, polo })),
-                  });
-                }}
-              />
-
-              <SelectField
-                label="Contrato / CC (opcional)"
-                valueLabel={form.contrato}
-                placeholder="Selecione"
-                colors={colors}
-                onPress={() => {
-                  setPickerSearch('');
-                  setPicker({
-                    title: 'Contrato',
-                    options: contracts.map((c) => ({ value: c.label, label: c.label })),
-                    onSelect: (contrato) => setForm((f) => ({ ...f, contrato })),
-                  });
-                }}
-              />
-
-              <Text style={styles.fieldLabel}>Obs. capacidade do veículo (opcional)</Text>
-              <TextInput
-                style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
-                value={form.observacaoCapacidadeVeiculo}
-                onChangeText={(observacaoCapacidadeVeiculo) =>
-                  setForm((f) => ({ ...f, observacaoCapacidadeVeiculo }))
-                }
-                placeholder="Ex.: precisa de 5 lugares"
-                placeholderTextColor={colors.textSecondary}
-                multiline
-              />
-
               <TouchableOpacity
-                style={[styles.primaryBtn, submitting && { opacity: 0.7 }]}
-                onPress={submitForm}
-                disabled={submitting}
+                onPress={() => setShowForm(false)}
+                style={[styles.formCloseBtn, { backgroundColor: colors.card }]}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
               >
-                {submitting ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Enviar reserva</Text>
-                )}
+                <X size={20} color={colors.text} strokeWidth={2.2} />
               </TouchableOpacity>
-            </ScrollView>
-          )}
+            </View>
+
+            {loadingOptions ? (
+              <View style={styles.formLoading}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={styles.formLoadingText}>Carregando opções…</Text>
+              </View>
+            ) : (
+              <>
+                <ScrollView
+                  contentContainerStyle={styles.formScroll}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.sectionTitle}>Pessoas</Text>
+                  <SelectField
+                    label="Solicitante"
+                    valueLabel={form.solicitante}
+                    placeholder="Selecione"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      setPickerSearch('');
+                      setPicker({
+                        title: 'Solicitante',
+                        options: employees.map((e) => ({ value: e.name, label: e.name })),
+                        onSelect: (solicitante) => setForm((f) => ({ ...f, solicitante })),
+                      });
+                    }}
+                  />
+                  <SelectField
+                    label="Motorista"
+                    valueLabel={form.motorista}
+                    placeholder="Selecione"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      setPickerSearch('');
+                      setPicker({
+                        title: 'Motorista',
+                        options: employees.map((e) => ({ value: e.name, label: e.name })),
+                        onSelect: (motorista) => setForm((f) => ({ ...f, motorista })),
+                      });
+                    }}
+                  />
+
+                  <Text style={styles.sectionTitle}>Atividade</Text>
+                  <Text style={styles.fieldLabel}>Atividade</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={form.atividade}
+                    onChangeText={(atividade) => setForm((f) => ({ ...f, atividade }))}
+                    placeholder="Descreva a atividade"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+
+                  <Text style={styles.fieldLabel}>Local de destino</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={form.localDestino}
+                    onChangeText={(localDestino) => setForm((f) => ({ ...f, localDestino }))}
+                    placeholder="Destino"
+                    placeholderTextColor={colors.textSecondary}
+                  />
+
+                  <Text style={styles.sectionTitle}>Agenda</Text>
+                  <DateField
+                    label="Data início"
+                    value={form.dataUsoInicio}
+                    onChange={(dataUsoInicio) =>
+                      setForm((f) => ({
+                        ...f,
+                        dataUsoInicio,
+                        dataUsoFim: f.dataUsoFim < dataUsoInicio ? dataUsoInicio : f.dataUsoFim,
+                      }))
+                    }
+                    placeholder="Selecionar data"
+                  />
+                  <DateField
+                    label="Data fim"
+                    value={form.dataUsoFim}
+                    onChange={(dataUsoFim) => setForm((f) => ({ ...f, dataUsoFim }))}
+                    placeholder="Selecionar data"
+                    minimumDate={
+                      form.dataUsoInicio
+                        ? new Date(
+                            +form.dataUsoInicio.slice(0, 4),
+                            +form.dataUsoInicio.slice(5, 7) - 1,
+                            +form.dataUsoInicio.slice(8, 10),
+                          )
+                        : undefined
+                    }
+                  />
+
+                  <Text style={styles.fieldLabel}>Período de uso</Text>
+                  <View style={styles.periodoRow}>
+                    {PERIODO_OPTIONS.map((p) => {
+                      const active = form.periodoUso.includes(p.value);
+                      return (
+                        <TouchableOpacity
+                          key={p.value}
+                          onPress={() => togglePeriodo(p.value)}
+                          style={[styles.periodoChip, active && styles.periodoChipActive]}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[styles.periodoText, active && styles.periodoTextActive]}>
+                            {p.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.sectionTitle}>Extras</Text>
+                  <SelectField
+                    label="Polo (opcional)"
+                    valueLabel={form.polo}
+                    placeholder="Selecione"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      setPickerSearch('');
+                      setPicker({
+                        title: 'Polo',
+                        options: POLO_OPTIONS,
+                        onSelect: (polo) => setForm((f) => ({ ...f, polo })),
+                      });
+                    }}
+                  />
+
+                  <SelectField
+                    label="Contrato / CC (opcional)"
+                    valueLabel={form.contrato}
+                    placeholder="Selecione"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      setPickerSearch('');
+                      setPicker({
+                        title: 'Contrato',
+                        options: contracts.map((c) => ({ value: c.label, label: c.label })),
+                        onSelect: (contrato) => setForm((f) => ({ ...f, contrato })),
+                      });
+                    }}
+                  />
+
+                  <Text style={styles.fieldLabel}>Obs. capacidade do veículo (opcional)</Text>
+                  <TextInput
+                    style={[styles.input, styles.inputMultiline]}
+                    value={form.observacaoCapacidadeVeiculo}
+                    onChangeText={(observacaoCapacidadeVeiculo) =>
+                      setForm((f) => ({ ...f, observacaoCapacidadeVeiculo }))
+                    }
+                    placeholder="Ex.: precisa de 5 lugares"
+                    placeholderTextColor={colors.textSecondary}
+                    multiline
+                  />
+                </ScrollView>
+
+                <View style={[styles.formFooter, { borderTopColor: isDark ? colors.border : 'rgba(0,0,0,0.06)' }]}>
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, styles.formSubmitBtn, submitting && { opacity: 0.7 }]}
+                    onPress={submitForm}
+                    disabled={submitting}
+                    activeOpacity={0.85}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>Enviar reserva</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
 
@@ -879,80 +963,99 @@ export default function VehicleReservationsScreen() {
         animationType="slide"
         onRequestClose={() => setReturnTarget(null)}
       >
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
-          <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
-            <TouchableOpacity onPress={() => setReturnTarget(null)} style={styles.iconBtn}>
-              <X size={24} color={colors.headerText} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Dar baixa</Text>
-            <View style={{ width: 40 }} />
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-            <Text style={styles.cardMeta}>
-              Reserva #{returnTarget?.code} · {returnTarget?.vehicle?.placaVeic || 'Veículo'}
-            </Text>
-
-            <Text style={styles.fieldLabel}>Data/hora devolução</Text>
-            <TextInput
-              style={styles.input}
-              value={returnForm.devolucaoAt}
-              onChangeText={(devolucaoAt) => setReturnForm((f) => ({ ...f, devolucaoAt }))}
-              placeholder="AAAA-MM-DDTHH:mm"
-              placeholderTextColor={colors.textSecondary}
-            />
-
-            <Text style={styles.fieldLabel}>Foto do veículo</Text>
-            {returnForm.baixaFoto ? (
-              <Image source={{ uri: returnForm.baixaFoto }} style={styles.photoPreview} />
-            ) : null}
-            <TouchableOpacity style={styles.secondaryBtn} onPress={takeReturnPhoto}>
-              <Camera size={16} color={colors.primary} />
-              <Text style={styles.secondaryBtnText}>Tirar foto</Text>
-            </TouchableOpacity>
-
-            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Assinatura</Text>
-            <SignaturePad
-              colors={colors}
-              onChange={(baixaAssinatura) => setReturnForm((f) => ({ ...f, baixaAssinatura }))}
-            />
-
-            <Text style={styles.fieldLabel}>Observação (opcional)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
-              value={returnForm.baixaObservacao}
-              onChangeText={(baixaObservacao) =>
-                setReturnForm((f) => ({ ...f, baixaObservacao }))
-              }
-              multiline
-              placeholderTextColor={colors.textSecondary}
-            />
-
-            <TouchableOpacity
-              style={[styles.primaryBtn, returning && { opacity: 0.7 }]}
-              onPress={submitReturn}
-              disabled={returning}
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.formHeader}>
+              <View style={styles.formHeaderText}>
+                <Text style={styles.formTitle}>Dar baixa</Text>
+                <Text style={styles.formSubtitle}>
+                  Reserva #{returnTarget?.code} · {returnTarget?.vehicle?.placaVeic || 'Veículo'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setReturnTarget(null)}
+                style={[styles.formCloseBtn, { backgroundColor: colors.card }]}
+                hitSlop={6}
+              >
+                <X size={20} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              contentContainerStyle={styles.formScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              {returning ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryBtnText}>Confirmar baixa</Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
+              <DateField
+                label="Data/hora devolução"
+                value={returnForm.devolucaoAt}
+                onChange={(devolucaoAt) => setReturnForm((f) => ({ ...f, devolucaoAt }))}
+                mode="datetime"
+                placeholder="Selecionar data e hora"
+              />
+
+              <Text style={styles.fieldLabel}>Foto do veículo</Text>
+              {returnForm.baixaFoto ? (
+                <Image source={{ uri: returnForm.baixaFoto }} style={styles.photoPreview} />
+              ) : null}
+              <TouchableOpacity style={styles.secondaryBtn} onPress={takeReturnPhoto} activeOpacity={0.75}>
+                <Camera size={16} color={colors.primary} strokeWidth={2.2} />
+                <Text style={styles.secondaryBtnText}>Tirar foto</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Assinatura</Text>
+              <SignaturePad
+                colors={colors}
+                onChange={(baixaAssinatura) => setReturnForm((f) => ({ ...f, baixaAssinatura }))}
+              />
+
+              <Text style={styles.fieldLabel}>Observação (opcional)</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline]}
+                value={returnForm.baixaObservacao}
+                onChangeText={(baixaObservacao) =>
+                  setReturnForm((f) => ({ ...f, baixaObservacao }))
+                }
+                multiline
+                placeholderTextColor={colors.textSecondary}
+              />
+            </ScrollView>
+            <View style={[styles.formFooter, { borderTopColor: isDark ? colors.border : 'rgba(0,0,0,0.06)' }]}>
+              <TouchableOpacity
+                style={[styles.primaryBtn, styles.formSubmitBtn, returning && { opacity: 0.7 }]}
+                onPress={submitReturn}
+                disabled={returning}
+                activeOpacity={0.85}
+              >
+                {returning ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Confirmar baixa</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
 
       {/* Picker */}
       <Modal visible={!!picker} animationType="slide" transparent onRequestClose={() => setPicker(null)}>
         <View style={styles.pickerOverlay}>
-          <View style={[styles.pickerSheet, { backgroundColor: colors.card }]}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setPicker(null)} />
+          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
+            <View style={styles.pickerHandle} />
             <View style={styles.pickerHeader}>
               <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker?.title}</Text>
-              <TouchableOpacity onPress={() => setPicker(null)}>
-                <X size={22} color={colors.text} />
+              <TouchableOpacity
+                onPress={() => setPicker(null)}
+                style={[styles.formCloseBtn, { backgroundColor: colors.card, width: 36, height: 36, borderRadius: 18 }]}
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
-            <View style={[styles.searchBox, { marginBottom: 8 }]}>
+            <View style={[styles.searchBox, { marginBottom: 12 }]}>
               <Search size={18} color={colors.textSecondary} />
               <TextInput
                 style={styles.searchInput}
@@ -966,24 +1069,27 @@ export default function VehicleReservationsScreen() {
               data={pickerFiltered}
               keyExtractor={(item) => item.value}
               keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.pickerItem}
+                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : '#EEF0F3' }]}
                   onPress={() => {
                     picker?.onSelect(item.value);
                     setPicker(null);
                   }}
+                  activeOpacity={0.75}
                 >
-                  <Text style={{ color: colors.text, fontSize: 16, fontWeight: '500' }}>
+                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
                     {item.label}
                   </Text>
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
-                <Text style={{ textAlign: 'center', color: colors.textSecondary, padding: 20 }}>
+                <Text style={{ textAlign: 'center', color: colors.textSecondary, padding: 28, fontWeight: '500' }}>
                   Nenhum resultado
                 </Text>
               }
+              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
             />
           </View>
         </View>
@@ -992,166 +1098,287 @@ export default function VehicleReservationsScreen() {
   );
 }
 
-const getStyles = (colors: any) =>
+const getStyles = (colors: any, isDark: boolean) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: colors.background },
     container: { flex: 1, backgroundColor: colors.background },
-    scrollContent: { padding: 16, paddingBottom: 40 },
+    scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
     pageTitle: {
+      color: colors.text,
+      fontSize: 28,
+      fontWeight: '700',
+      letterSpacing: -0.6,
+      marginBottom: 4,
+    },
+    pageSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 18,
+    },
+    chipsRow: { gap: 8, paddingBottom: 14 },
+    iconBtn: { padding: 8, width: 40, alignItems: 'center' },
+    formHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 16,
+    },
+    formCloseBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    formHeaderText: { flex: 1 },
+    formTitle: {
       color: colors.text,
       fontSize: 24,
       fontWeight: '700',
-      letterSpacing: -0.4,
-      marginBottom: 14,
+      letterSpacing: -0.5,
     },
-    chipsRow: { gap: 8, paddingBottom: 12 },
-    iconBtn: { padding: 8, width: 40, alignItems: 'center' },
+    formSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+      marginTop: 2,
+    },
+    formLoading: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+    },
+    formLoadingText: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    formScroll: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
+      paddingBottom: 28,
+    },
+    formFooter: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    formSubmitBtn: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
+    sectionTitle: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      marginTop: 10,
+      marginBottom: 12,
+      opacity: 0.55,
+    },
     headerTitle: { color: colors.headerText, fontSize: 17, fontWeight: '700', flex: 1, textAlign: 'center' },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
       borderRadius: 999,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
     },
-    chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    chipText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+    chipActive: { backgroundColor: colors.primary },
+    chipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     chipTextActive: { color: '#fff' },
+    chipCount: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      opacity: 0.7,
+    },
+    chipCountActive: { color: 'rgba(255,255,255,0.85)', opacity: 1 },
     searchBox: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      marginBottom: 12,
+      gap: 10,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      marginBottom: 20,
     },
     searchInput: {
       flex: 1,
-      paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+      paddingVertical: Platform.OS === 'ios' ? 13 : 10,
       color: colors.text,
       fontSize: 15,
     },
+    list: { gap: 10 },
     primaryBtn: {
       backgroundColor: colors.primary,
-      borderRadius: 10,
-      paddingVertical: 14,
+      borderRadius: 14,
+      paddingVertical: 15,
       alignItems: 'center',
       justifyContent: 'center',
       flexDirection: 'row',
       gap: 8,
-      marginBottom: 16,
+      marginTop: 8,
+      marginBottom: 8,
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-    empty: { alignItems: 'center', paddingVertical: 48, gap: 8 },
+    empty: { alignItems: 'center', paddingVertical: 56, gap: 8, paddingHorizontal: 24 },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
     emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
-    emptyText: { fontSize: 13, color: colors.textSecondary, textAlign: 'center' },
+    emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
     card: {
       backgroundColor: colors.card,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 18,
+      padding: 16,
     },
     cardTop: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 6,
+      marginBottom: 8,
     },
-    cardNumber: { fontWeight: '700', color: colors.text, fontSize: 15 },
-    badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+    cardNumber: {
+      fontWeight: '700',
+      color: colors.textSecondary,
+      fontSize: 13,
+      letterSpacing: 0.2,
+    },
+    badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
     badgeText: { fontSize: 11, fontWeight: '700' },
-    cardRoute: { fontSize: 15, fontWeight: '600', color: colors.text, marginBottom: 4 },
-    cardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+    cardRoute: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 10,
+      letterSpacing: -0.2,
+    },
+    cardFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 4,
+    },
+    dot: {
+      width: 3,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: colors.textSecondary,
+      opacity: 0.5,
+    },
+    cardMeta: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+    cardSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
     returnBtn: {
-      marginTop: 12,
-      backgroundColor: '#059669',
-      borderRadius: 10,
-      paddingVertical: 10,
+      marginTop: 14,
+      backgroundColor: isDark ? 'rgba(206,55,54,0.15)' : 'rgba(206,55,54,0.08)',
+      borderRadius: 12,
+      paddingVertical: 11,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
     },
-    returnBtnText: { color: '#fff', fontWeight: '700' },
+    returnBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
     fieldLabel: {
       fontSize: 13,
       fontWeight: '600',
       color: colors.textSecondary,
-      marginBottom: 6,
-      marginTop: 4,
+      marginBottom: 8,
+      letterSpacing: -0.1,
     },
     input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.card,
-      borderRadius: 10,
+      borderWidth: 0,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingVertical: 15,
       fontSize: 15,
+      fontWeight: '500',
       color: colors.text,
       marginBottom: 14,
+      letterSpacing: -0.2,
+    },
+    inputMultiline: {
+      minHeight: 96,
+      textAlignVertical: 'top',
+      paddingTop: 14,
     },
     periodoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
     periodoChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
       borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.card,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
     },
-    periodoChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-    periodoText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
+    periodoChipActive: { backgroundColor: colors.primary },
+    periodoText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     periodoTextActive: { color: '#fff' },
     photoPreview: {
       width: '100%',
-      height: 180,
-      borderRadius: 12,
+      height: 200,
+      borderRadius: 18,
       marginBottom: 10,
       backgroundColor: colors.border,
     },
     secondaryBtn: {
-      borderWidth: 1,
-      borderColor: colors.primary,
-      borderRadius: 10,
-      paddingVertical: 12,
+      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      borderRadius: 14,
+      paddingVertical: 13,
       alignItems: 'center',
       justifyContent: 'center',
       flexDirection: 'row',
       gap: 6,
       marginBottom: 8,
     },
-    secondaryBtnText: { color: colors.primary, fontWeight: '700' },
+    secondaryBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
     pickerOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.45)',
       justifyContent: 'flex-end',
     },
     pickerSheet: {
-      maxHeight: '75%',
-      borderTopLeftRadius: 18,
-      borderTopRightRadius: 18,
-      padding: 16,
+      maxHeight: '78%',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 8,
+    },
+    pickerHandle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)',
+      marginBottom: 10,
     },
     pickerHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: 10,
+      marginBottom: 12,
+      paddingHorizontal: 4,
     },
-    pickerTitle: { fontSize: 17, fontWeight: '700' },
+    pickerTitle: { fontSize: 20, fontWeight: '700', letterSpacing: -0.4 },
     pickerItem: {
       paddingVertical: 14,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: '#e5e7eb',
+      paddingHorizontal: 14,
+      borderRadius: 14,
     },
   });
