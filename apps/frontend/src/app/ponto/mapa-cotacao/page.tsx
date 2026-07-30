@@ -50,6 +50,8 @@ type MaterialRequest = MaterialRequestBase & {
 type PurchaseOrderLite = {
   materialRequestId?: string;
   materialRequest?: { id?: string };
+  supplierId?: string;
+  supplier?: { id?: string };
 };
 
 type Supplier = {
@@ -516,6 +518,8 @@ export default function MapaCotacaoPage() {
   const [quoteMapId, setQuoteMapId] = useState<string>('');
 
   const [ocModalSupplierId, setOcModalSupplierId] = useState<string | null>(null);
+  /** Fornecedores cuja OC acabou de ser gerada nesta sessão (antes do refetch das OCs) */
+  const [generatedOcSupplierIds, setGeneratedOcSupplierIds] = useState<Set<string>>(new Set());
 
   /** Quantidade a comprar na OC por item da SC (≤ solicitado na SC). Afeta totais e vencedor. */
   const [ocItemQtyByItemId, setOcItemQtyByItemId] = useState<Record<string, number>>({});
@@ -580,7 +584,7 @@ export default function MapaCotacaoPage() {
 
   const allOrders: PurchaseOrderLite[] = ordersData?.data || [];
 
-  /** Mesma regra da aba "RMs Aprovadas" em Gerenciar materiais: aprovadas e ainda sem OC */
+  /** RMs que já possuem ao menos uma OC (para ocultar no seletor de novas cotações) */
   const materialRequestIdsWithOc = useMemo(() => {
     const s = new Set<string>();
     for (const o of allOrders) {
@@ -592,13 +596,32 @@ export default function MapaCotacaoPage() {
 
   const rawApprovedRequests: MaterialRequest[] = requestsData?.data?.requests || requestsData?.data || [];
 
+  /**
+   * Lista elegível: RMs aprovadas sem OC.
+   * Mantém a RM selecionada mesmo após a 1ª OC, para permitir gerar OC dos demais fornecedores vencedores.
+   */
   const approvedRequests = useMemo(
     () =>
       rawApprovedRequests.filter(
-        (r) => r.status === 'APPROVED' && !materialRequestIdsWithOc.has(r.id)
+        (r) =>
+          r.status === 'APPROVED' &&
+          (r.id === selectedRequestId || !materialRequestIdsWithOc.has(r.id))
       ),
-    [rawApprovedRequests, materialRequestIdsWithOc]
+    [rawApprovedRequests, materialRequestIdsWithOc, selectedRequestId]
   );
+
+  /** Fornecedores que já têm OC vinculada à RM selecionada */
+  const ocSupplierIdsForSelectedRequest = useMemo(() => {
+    if (!selectedRequestId) return new Set<string>();
+    const s = new Set<string>();
+    for (const o of allOrders) {
+      const mid = o.materialRequestId ?? o.materialRequest?.id;
+      if (mid !== selectedRequestId) continue;
+      const sid = o.supplierId ?? o.supplier?.id;
+      if (sid) s.add(sid);
+    }
+    return s;
+  }, [allOrders, selectedRequestId]);
 
   const materialRequestOptions = useMemo(
     () =>
@@ -719,6 +742,7 @@ export default function MapaCotacaoPage() {
     setSupplierItemDetailByKey({});
     setPaymentDraftBySupplier({});
     setOcModalSupplierId(null);
+    setGeneratedOcSupplierIds(new Set());
   }, [selectedRequestId]);
 
   useEffect(() => {
@@ -876,6 +900,12 @@ export default function MapaCotacaoPage() {
   const generateOrdersMutation = useMutation({
     mutationFn: async (supplierId: string) => {
       if (!selectedRequest) throw new Error('Selecione uma requisição na fase RMs Aprovadas.');
+      if (
+        ocSupplierIdsForSelectedRequest.has(supplierId) ||
+        generatedOcSupplierIds.has(supplierId)
+      ) {
+        throw new Error('Já existe OC para este fornecedor nesta RM.');
+      }
       if ((wonItemsBySupplier[supplierId] ?? []).length === 0) {
         throw new Error('Este fornecedor não venceu nenhum item da cotação.');
       }
@@ -1018,8 +1048,13 @@ export default function MapaCotacaoPage() {
         setIsGenerating(false);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, supplierId) => {
       setOcModalSupplierId(null);
+      setGeneratedOcSupplierIds((prev) => {
+        const next = new Set(prev);
+        next.add(supplierId);
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' });
@@ -1394,6 +1429,9 @@ export default function MapaCotacaoPage() {
                                   {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
                                     const wonCount = (wonItemsBySupplier[supplierId] ?? []).length;
                                     const totals = computedSupplierTotals[supplierId];
+                                    const alreadyHasOc =
+                                      ocSupplierIdsForSelectedRequest.has(supplierId) ||
+                                      generatedOcSupplierIds.has(supplierId);
                                     const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
                                       supplierIndex === supplierIds.length - 1
                                         ? 'border-r border-gray-200 dark:border-gray-700'
@@ -1404,7 +1442,11 @@ export default function MapaCotacaoPage() {
                                         key={`gerar-oc-${supplierId}`}
                                         className={`${cadastroListClasses.tdCenter} ${borderCls}`}
                                       >
-                                        {wonCount > 0 ? (
+                                        {alreadyHasOc ? (
+                                          <span className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                            OC gerada
+                                          </span>
+                                        ) : wonCount > 0 ? (
                                           <button
                                             type="button"
                                             onClick={() => {
