@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Car, CheckCircle, ClipboardCheck, Clock, FileText, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { Car, CheckCircle, ClipboardCheck, Clock, Eye, FileText, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Modal } from '@/components/ui/Modal';
@@ -23,28 +23,26 @@ import {
   RowActionMenuCell,
   RowActionMenuPortal,
   cadastroListClasses,
-  listTableRowClasses,
+  getListTableRowClassName,
+  ListRowNavigableLabel,
   type RowActionMenuExtraItem
 } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
-import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { SignatureField, isBlankSignature } from '@/components/ui/SignatureField';
 import {
   VehicleReturnPhotoField,
   isBlankVehiclePhoto
 } from '@/components/ui/VehicleReturnPhotoField';
-import { DatePickerField } from '@/components/ui/DatePickerField';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { POLO_OPTIONS } from '@/components/suprimentos/materialDeliveryLabels';
 import { useCostCenters } from '@/hooks/useCostCenters';
-import { fetchEmployeeSelectOptions } from '@/lib/employeeSelectOptions';
 import { formatPlacaDisplay } from '@/lib/brazilianVehiclePlate';
 import {
   defaultReturnDatetimeLocalValue,
-  formatPeriodoUso,
+  defaultUsoDatetimeLocalValue,
   formatVehicleReservationStatus,
   vehicleReservationStatusBadgeClass,
   type VehicleReservationStatus
@@ -52,12 +50,11 @@ import {
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 
-const PERIODO_USO_OPTIONS: MultiSelectSearchOption[] = [
-  { value: 'INTEGRAL', label: 'Integral' },
-  { value: 'MATUTINO', label: 'Matutino' },
-  { value: 'VESPERTINO', label: 'Vespertino' },
-  { value: 'NOTURNO', label: 'Noturno' }
-];
+type DriverSelectOption = {
+  id: string;
+  name: string;
+  cpf: string;
+};
 
 type VehicleOption = {
   id: string;
@@ -78,11 +75,13 @@ type VehicleReservation = {
   localDestino: string;
   dataUsoInicio: string;
   dataUsoFim: string;
-  periodoUso: string[];
   polo?: string | null;
   contrato?: string | null;
   assinatura: string;
   status: VehicleReservationStatus;
+  createdAt?: string | null;
+  suppliesApprovalComment?: string | null;
+  suppliesRejectionReason?: string | null;
   createdBy?: { id: string; name: string } | null;
   vehicle?: VehicleOption;
   vistoriaAt?: string | null;
@@ -106,31 +105,23 @@ const EMPTY_RETURN_FORM = (): ReturnFormState => ({
 });
 
 type ReservationFormState = {
-  solicitante: string;
   motorista: string;
   observacaoCapacidadeVeiculo: string;
   atividade: string;
   localDestino: string;
   dataUsoInicio: string;
   dataUsoFim: string;
-  periodoUso: string[];
   polo: string;
   contrato: string;
 };
 
-function todayInputValue() {
-  return format(new Date(), 'yyyy-MM-dd');
-}
-
 const EMPTY_FORM = (): ReservationFormState => ({
-  solicitante: '',
   motorista: '',
   observacaoCapacidadeVeiculo: '',
   atividade: '',
   localDestino: '',
-  dataUsoInicio: todayInputValue(),
-  dataUsoFim: todayInputValue(),
-  periodoUso: [],
+  dataUsoInicio: defaultUsoDatetimeLocalValue(8, 0),
+  dataUsoFim: defaultUsoDatetimeLocalValue(17, 0),
   polo: '',
   contrato: ''
 });
@@ -141,13 +132,13 @@ const fieldClassName =
 function formatVehicleLabel(vehicle: VehicleOption): string {
   const placa = formatPlacaDisplay(vehicle.placaVeic);
   const modelo = [vehicle.marcaVeic, vehicle.modeloVeic].filter(Boolean).join(' ').trim();
-  return modelo ? `${placa} — ${modelo}` : placa;
+  return modelo ? `${placa} · ${modelo}` : placa;
 }
 
 function formatDateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return format(date, 'dd/MM/yyyy', { locale: ptBR });
+  return format(date, 'dd/MM/yyyy HH:mm', { locale: ptBR });
 }
 
 function formatDateTimeLabel(value: string): string {
@@ -260,6 +251,7 @@ export default function ReservaVeiculosPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [returnReservation, setReturnReservation] = useState<VehicleReservation | null>(null);
   const [inspectionReservation, setInspectionReservation] = useState<VehicleReservation | null>(null);
+  const [detailReservation, setDetailReservation] = useState<VehicleReservation | null>(null);
   const [returnFormData, setReturnFormData] = useState<ReturnFormState>(EMPTY_RETURN_FORM);
   const [formData, setFormData] = useState<ReservationFormState>(EMPTY_FORM);
   const { costCenters, isLoading: loadingCostCenters } = useCostCenters();
@@ -303,8 +295,11 @@ export default function ReservaVeiculosPage() {
   });
 
   const { data: employeeOptions = [], isLoading: loadingEmployees } = useQuery({
-    queryKey: ['vehicle-reservation-employees'],
-    queryFn: fetchEmployeeSelectOptions,
+    queryKey: ['vehicle-reservation-driver-options'],
+    queryFn: async () => {
+      const res = await api.get('/fuel-refuel-requests/driver-options');
+      return (res.data?.data || []) as DriverSelectOption[];
+    },
     enabled: showForm,
     staleTime: 10 * 60 * 1000
   });
@@ -341,9 +336,15 @@ export default function ReservaVeiculosPage() {
       employeeOptions.map((employee) => ({
         value: employee.name,
         label: employee.name,
-        searchText: employee.name
+        description: employee.cpf || undefined,
+        searchText: `${employee.name} ${employee.cpf || ''}`
       })),
     [employeeOptions]
+  );
+
+  const selectedMotoristaCpf = useMemo(
+    () => employeeOptions.find((employee) => employee.name === formData.motorista)?.cpf || '',
+    [employeeOptions, formData.motorista]
   );
 
   const contractSelectOptions = useMemo<MultiSelectSearchOption[]>(
@@ -376,11 +377,7 @@ export default function ReservaVeiculosPage() {
   }, [searchTerm, cardFilter]);
 
   const openCreateForm = () => {
-    const userName = userData?.data?.name ? String(userData.data.name) : '';
-    setFormData({
-      ...EMPTY_FORM(),
-      solicitante: userName
-    });
+    setFormData(EMPTY_FORM());
     setShowForm(true);
   };
 
@@ -437,12 +434,19 @@ export default function ReservaVeiculosPage() {
   });
 
   const openReturnModal = (reservation: VehicleReservation) => {
+    setDetailReservation(null);
     setReturnReservation(reservation);
     setReturnFormData(EMPTY_RETURN_FORM());
   };
 
   const openInspectionModal = (reservation: VehicleReservation) => {
+    setDetailReservation(null);
     setInspectionReservation(reservation);
+  };
+
+  const openDetail = (reservation: VehicleReservation) => {
+    closeRowActionMenu();
+    setDetailReservation(reservation);
   };
 
   const { data: inspectionDetail, isLoading: loadingInspectionDetail } = useQuery({
@@ -466,7 +470,13 @@ export default function ReservaVeiculosPage() {
   };
 
   const buildRowExtraMenuItems = (reservation: VehicleReservation): RowActionMenuExtraItem[] => {
-    const items: RowActionMenuExtraItem[] = [];
+    const items: RowActionMenuExtraItem[] = [
+      {
+        label: 'Ver detalhes',
+        onClick: () => openDetail(reservation),
+        icon: <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+      }
+    ];
 
     if (reservation.status === 'APPROVED' && userCanSubmitReturn(reservation)) {
       items.push({
@@ -515,25 +525,25 @@ export default function ReservaVeiculosPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.solicitante) return toast.error('Selecione o solicitante');
+    const solicitante = userData?.data?.name ? String(userData.data.name).trim() : '';
+    if (!solicitante) return toast.error('Não foi possível identificar o solicitante logado');
     if (!formData.motorista) return toast.error('Selecione o motorista');
     if (!formData.atividade.trim()) return toast.error('Informe a atividade');
     if (!formData.localDestino.trim()) return toast.error('Informe o local de destino');
-    if (!formData.dataUsoInicio) return toast.error('Informe a data de início');
-    if (!formData.dataUsoFim) return toast.error('Informe a data de fim');
+    if (!formData.dataUsoInicio) return toast.error('Informe o início do uso');
+    if (!formData.dataUsoFim) return toast.error('Informe o fim do uso');
     if (formData.dataUsoFim < formData.dataUsoInicio) {
-      return toast.error('A data final não pode ser anterior à data inicial');
+      return toast.error('O fim do uso não pode ser anterior ao início');
     }
-    if (!formData.periodoUso.length) return toast.error('Selecione o período de uso');
 
     createMutation.mutate({
-      solicitante: formData.solicitante,
+      solicitante,
       motorista: formData.motorista,
       atividade: formData.atividade.trim(),
       localDestino: formData.localDestino.trim(),
       dataUsoInicio: formData.dataUsoInicio,
       dataUsoFim: formData.dataUsoFim,
-      periodoUso: formData.periodoUso,
+      periodoUso: [],
       polo: formData.polo || undefined,
       contrato: formData.contrato || undefined,
       observacaoCapacidadeVeiculo: formData.observacaoCapacidadeVeiculo.trim() || undefined
@@ -658,7 +668,6 @@ export default function ReservaVeiculosPage() {
                           <th className={cadastroListClasses.th}>Solicitante</th>
                           <th className={cadastroListClasses.th}>Motorista</th>
                           <th className={cadastroListClasses.th}>Veículo</th>
-                          <th className={cadastroListClasses.thCenter}>Período</th>
                           <th className={cadastroListClasses.thCenter}>Uso</th>
                           <th className={cadastroListClasses.thCenter}>Contrato</th>
                           <th className={cadastroListClasses.thCenter}>Status</th>
@@ -667,12 +676,18 @@ export default function ReservaVeiculosPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                         {reservations.map((reservation, index) => (
-                          <tr key={reservation.id} className={listTableRowClasses.tr}>
+                          <tr
+                            key={reservation.id}
+                            onClick={() => openDetail(reservation)}
+                            className={getListTableRowClassName(true)}
+                          >
                             <td className={cadastroListClasses.tdMono}>
-                              {formatCadastroListId(
-                                reservation.code,
-                                listRange.startItem + index
-                              )}
+                              <ListRowNavigableLabel className="font-mono font-medium">
+                                {formatCadastroListId(
+                                  reservation.code,
+                                  listRange.startItem + index
+                                )}
+                              </ListRowNavigableLabel>
                             </td>
                             <td className={cadastroListClasses.td}>{reservation.solicitante}</td>
                             <td className={cadastroListClasses.td}>{reservation.motorista}</td>
@@ -683,18 +698,21 @@ export default function ReservaVeiculosPage() {
                                   ? 'A definir'
                                   : '—'}
                             </td>
-                            <td className={cadastroListClasses.tdCenter}>
-                              {formatDateLabel(reservation.dataUsoInicio)}
-                              {reservation.dataUsoFim !== reservation.dataUsoInicio
-                                ? ` — ${formatDateLabel(reservation.dataUsoFim)}`
-                                : ''}
+                            <td className={`${cadastroListClasses.tdCenter} !whitespace-normal`}>
+                              <div className="inline-flex flex-col items-center gap-0.5 leading-tight">
+                                <span className="whitespace-nowrap">
+                                  {formatDateLabel(reservation.dataUsoInicio)}
+                                </span>
+                                {reservation.dataUsoFim !== reservation.dataUsoInicio ? (
+                                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                    até {formatDateLabel(reservation.dataUsoFim)}
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
-                              {formatPeriodoUso(
-                                Array.isArray(reservation.periodoUso) ? reservation.periodoUso : []
-                              )}
+                              {reservation.contrato || '—'}
                             </td>
-                            <td className={cadastroListClasses.tdCenter}>{reservation.contrato || '—'}</td>
                             <td className={cadastroListClasses.tdCenter}>
                               <span
                                 className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${vehicleReservationStatusBadgeClass(
@@ -741,6 +759,151 @@ export default function ReservaVeiculosPage() {
           </Card>
 
           <Modal
+            isOpen={Boolean(detailReservation)}
+            onClose={() => setDetailReservation(null)}
+            title={
+              detailReservation
+                ? `Reserva ${detailReservation.code}`
+                : 'Detalhes da reserva'
+            }
+            size="lg"
+          >
+            {detailReservation ? (
+              <div className="space-y-4 text-sm">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Status</span>
+                    <p className="mt-0.5">
+                      <span
+                        className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${vehicleReservationStatusBadgeClass(
+                          detailReservation.status
+                        )}`}
+                      >
+                        {formatVehicleReservationStatus(detailReservation.status)}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Contrato</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailReservation.contrato || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Solicitante</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailReservation.solicitante}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Motorista</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailReservation.motorista}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Atividade</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailReservation.atividade}
+                    </p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Local de destino
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailReservation.localDestino}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Início do uso</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {formatDateLabel(detailReservation.dataUsoInicio)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Fim do uso</span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {formatDateLabel(detailReservation.dataUsoFim)}
+                    </p>
+                  </div>
+                  {detailReservation.polo ? (
+                    <div>
+                      <span className="font-medium text-gray-500 dark:text-gray-400">Polo</span>
+                      <p className="text-gray-900 dark:text-gray-100">{detailReservation.polo}</p>
+                    </div>
+                  ) : null}
+                  {detailReservation.observacaoCapacidadeVeiculo ? (
+                    <div className="sm:col-span-2">
+                      <span className="font-medium text-gray-500 dark:text-gray-400">
+                        Observações
+                      </span>
+                      <p className="text-gray-900 dark:text-gray-100">
+                        {detailReservation.observacaoCapacidadeVeiculo}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+
+                {detailReservation.vehicle ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/50 dark:bg-emerald-950/20">
+                    <span className="font-medium text-emerald-800 dark:text-emerald-200">
+                      Veículo liberado
+                    </span>
+                    <p className="mt-1 text-gray-900 dark:text-gray-100">
+                      {formatVehicleLabel(detailReservation.vehicle)}
+                    </p>
+                  </div>
+                ) : null}
+
+                {detailReservation.suppliesApprovalComment ? (
+                  <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Observação do Suprimentos
+                    </span>
+                    <p className="mt-1 text-gray-900 dark:text-gray-100">
+                      {detailReservation.suppliesApprovalComment}
+                    </p>
+                  </div>
+                ) : null}
+
+                {detailReservation.suppliesRejectionReason ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800/50 dark:bg-red-950/20">
+                    <span className="font-medium text-red-800 dark:text-red-200">
+                      Motivo da rejeição
+                    </span>
+                    <p className="mt-1 text-gray-900 dark:text-gray-100">
+                      {detailReservation.suppliesRejectionReason}
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                  {detailReservation.status === 'INSPECTED' ? (
+                    <button
+                      type="button"
+                      onClick={() => openInspectionModal(detailReservation)}
+                      className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200"
+                    >
+                      Ver vistoria
+                    </button>
+                  ) : null}
+                  {detailReservation.status === 'APPROVED' &&
+                  userCanSubmitReturn(detailReservation) ? (
+                    <button
+                      type="button"
+                      onClick={() => openReturnModal(detailReservation)}
+                      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      Dar baixa
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </Modal>
+
+          <Modal
             isOpen={showForm}
             onClose={() => {
               setShowForm(false);
@@ -749,168 +912,178 @@ export default function ReservaVeiculosPage() {
             title="Nova reserva de veículo"
             size="lg"
           >
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Solicitante
-                </label>
-                <SingleSelectSearchDropdown
-                  value={formData.solicitante}
-                  onChange={(solicitante) => setFormData((current) => ({ ...current, solicitante }))}
-                  options={employeeSelectOptions}
-                  disabled={loadingEmployees}
-                  allowEmpty={false}
-                  placeholder={
-                    loadingEmployees ? 'Carregando funcionários...' : 'Selecionar solicitante...'
-                  }
-                  searchPlaceholder="Pesquisar..."
-                  noFocusRing
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Motorista *
-                </label>
-                <SingleSelectSearchDropdown
-                  value={formData.motorista}
-                  onChange={(motorista) => setFormData((current) => ({ ...current, motorista }))}
-                  options={employeeSelectOptions}
-                  disabled={loadingEmployees}
-                  allowEmpty={false}
-                  placeholder={
-                    loadingEmployees ? 'Carregando funcionários...' : 'Selecionar motorista...'
-                  }
-                  searchPlaceholder="Pesquisar..."
-                  noFocusRing
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Observações sobre capacidade do veículo
-                </label>
-                <textarea
-                  value={formData.observacaoCapacidadeVeiculo}
-                  onChange={(e) =>
-                    setFormData((current) => ({
-                      ...current,
-                      observacaoCapacidadeVeiculo: e.target.value
-                    }))
-                  }
-                  className={`${fieldClassName} min-h-[80px] resize-y`}
-                  placeholder="Ex.: necessário veículo para 5 passageiros, com caçamba, etc. (opcional)"
-                  rows={3}
-                />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  O veículo será definido pelo setor de Suprimentos ao atender a solicitação.
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Atividade *
-                </label>
-                <input
-                  type="text"
-                  value={formData.atividade}
-                  onChange={(e) => setFormData((current) => ({ ...current, atividade: e.target.value }))}
-                  className={fieldClassName}
-                  placeholder="Descreva a atividade"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Local de destino *
-                </label>
-                <input
-                  type="text"
-                  value={formData.localDestino}
-                  onChange={(e) =>
-                    setFormData((current) => ({ ...current, localDestino: e.target.value }))
-                  }
-                  className={fieldClassName}
-                  placeholder="Informe o destino"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Pessoas
+                </h3>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Data de uso — início *
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Motorista *
                   </label>
-                  <DatePickerField
-                    value={formData.dataUsoInicio}
-                    onChange={(dataUsoInicio) =>
-                      setFormData((current) => ({ ...current, dataUsoInicio }))
+                  <SingleSelectSearchDropdown
+                    value={formData.motorista}
+                    onChange={(motorista) => setFormData((current) => ({ ...current, motorista }))}
+                    options={employeeSelectOptions}
+                    disabled={loadingEmployees}
+                    allowEmpty={false}
+                    placeholder={
+                      loadingEmployees ? 'Carregando funcionários...' : 'Selecionar motorista...'
                     }
-                    placeholder="dd/mm/aaaa"
-                    aria-label="Data de uso — início"
+                    searchPlaceholder="Pesquisar por nome ou CPF..."
+                    noFocusRing
+                  />
+                  {selectedMotoristaCpf ? (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      CPF: {selectedMotoristaCpf}
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Atividade
+                </h3>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Atividade *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.atividade}
+                    onChange={(e) =>
+                      setFormData((current) => ({ ...current, atividade: e.target.value }))
+                    }
+                    className={fieldClassName}
+                    placeholder="Descreva a atividade"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Data de uso — fim *
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Local de destino *
                   </label>
-                  <DatePickerField
-                    value={formData.dataUsoFim}
-                    onChange={(dataUsoFim) =>
-                      setFormData((current) => ({ ...current, dataUsoFim }))
+                  <input
+                    type="text"
+                    value={formData.localDestino}
+                    onChange={(e) =>
+                      setFormData((current) => ({ ...current, localDestino: e.target.value }))
                     }
-                    placeholder="dd/mm/aaaa"
-                    aria-label="Data de uso — fim"
+                    className={fieldClassName}
+                    placeholder="Informe o destino"
                   />
                 </div>
-              </div>
+              </section>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Período de uso *
-                </label>
-                <MultiSelectSearchDropdown
-                  options={PERIODO_USO_OPTIONS}
-                  selected={formData.periodoUso}
-                  onChange={(periodoUso) => setFormData((current) => ({ ...current, periodoUso }))}
-                  placeholder="Selecione um ou mais períodos"
-                  searchPlaceholder="Pesquisar..."
-                  noFocusRing
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Polo
-                </label>
-                <div className="flex gap-2">
-                  {POLO_OPTIONS.map((option) => (
-                    <ButtonSeg
-                      key={option.value}
-                      active={formData.polo === option.value}
-                      onClick={() => setFormData((current) => ({ ...current, polo: option.value }))}
-                      label={option.label}
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Agenda
+                </h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Início do uso *
+                    </label>
+                    <DateTimePickerField
+                      value={formData.dataUsoInicio}
+                      onChange={(dataUsoInicio) =>
+                        setFormData((current) => ({
+                          ...current,
+                          dataUsoInicio,
+                          dataUsoFim:
+                            current.dataUsoFim && current.dataUsoFim < dataUsoInicio
+                              ? dataUsoInicio
+                              : current.dataUsoFim
+                        }))
+                      }
+                      placeholder="Selecione data e hora"
+                      aria-label="Início do uso"
+                      noFocusRing
                     />
-                  ))}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Fim do uso *
+                    </label>
+                    <DateTimePickerField
+                      value={formData.dataUsoFim}
+                      onChange={(dataUsoFim) =>
+                        setFormData((current) => ({
+                          ...current,
+                          dataUsoFim:
+                            current.dataUsoInicio && dataUsoFim < current.dataUsoInicio
+                              ? current.dataUsoInicio
+                              : dataUsoFim
+                        }))
+                      }
+                      min={formData.dataUsoInicio || undefined}
+                      placeholder="Selecione data e hora"
+                      aria-label="Fim do uso"
+                      noFocusRing
+                    />
+                  </div>
                 </div>
-              </div>
+              </section>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Contrato
-                </label>
-                <SingleSelectSearchDropdown
-                  value={formData.contrato}
-                  onChange={(contrato) => setFormData((current) => ({ ...current, contrato }))}
-                  options={contractSelectOptions}
-                  disabled={loadingCostCenters}
-                  placeholder={
-                    loadingCostCenters ? 'Carregando contratos...' : 'Selecionar contrato...'
-                  }
-                  searchPlaceholder="Pesquisar..."
-                  emptyOptionsMessage="Nenhum contrato disponível."
-                  noFocusRing
-                />
-              </div>
+              <section className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Extras
+                </h3>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Polo (opcional)
+                  </label>
+                  <div className="flex gap-2">
+                    {POLO_OPTIONS.map((option) => (
+                      <ButtonSeg
+                        key={option.value}
+                        active={formData.polo === option.value}
+                        onClick={() =>
+                          setFormData((current) => ({ ...current, polo: option.value }))
+                        }
+                        label={option.label}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Contrato (opcional)
+                  </label>
+                  <SingleSelectSearchDropdown
+                    value={formData.contrato}
+                    onChange={(contrato) => setFormData((current) => ({ ...current, contrato }))}
+                    options={contractSelectOptions}
+                    disabled={loadingCostCenters}
+                    placeholder={
+                      loadingCostCenters ? 'Carregando contratos...' : 'Selecionar contrato...'
+                    }
+                    searchPlaceholder="Pesquisar..."
+                    emptyOptionsMessage="Nenhum contrato disponível."
+                    noFocusRing
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Observações (opcional)
+                  </label>
+                  <textarea
+                    value={formData.observacaoCapacidadeVeiculo}
+                    onChange={(e) =>
+                      setFormData((current) => ({
+                        ...current,
+                        observacaoCapacidadeVeiculo: e.target.value
+                      }))
+                    }
+                    className={`${fieldClassName} min-h-[80px] resize-y`}
+                    placeholder="Ex.: necessário veículo para 5 passageiros, com caçamba, etc. (opcional)"
+                    rows={3}
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    O veículo será definido pelo setor de Suprimentos ao atender a solicitação.
+                  </p>
+                </div>
+              </section>
 
               <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
                 <button

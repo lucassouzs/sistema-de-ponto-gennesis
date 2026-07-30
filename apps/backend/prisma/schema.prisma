@@ -1736,8 +1736,8 @@ model VehicleReservation {
   observacaoCapacidadeVeiculo String?
   atividade               String
   localDestino            String
-  dataUsoInicio           DateTime                 @db.Date
-  dataUsoFim              DateTime                 @db.Date
+  dataUsoInicio           DateTime
+  dataUsoFim              DateTime
   /// Ex.: ["INTEGRAL","MATUTINO"]
   periodoUso              Json                     @default("[]")
   polo                    String?

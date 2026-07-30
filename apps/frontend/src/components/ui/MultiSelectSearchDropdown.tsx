@@ -228,8 +228,8 @@ function computeFloatingPos(trigger: HTMLElement, listMax: number): FloatingPos 
   const preferred = Math.min(listMax + PANEL_CHROME_PX, window.innerHeight - margin * 2);
   const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
   const spaceAbove = rect.top - gap - margin;
-  // Prefere abrir para baixo e sobrepor o conteúdo; só sobe se quase não houver espaço.
-  const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+  // Abre para cima quando não cabe o painel completo abaixo.
+  const openUp = spaceBelow < preferred && spaceAbove > spaceBelow;
 
   if (openUp) {
     return {
@@ -245,7 +245,7 @@ function computeFloatingPos(trigger: HTMLElement, listMax: number): FloatingPos 
     left: rect.left,
     width,
     top: rect.bottom + gap,
-    maxHeight: Math.max(160, Math.min(preferred, Math.max(spaceBelow, preferred))),
+    maxHeight: Math.max(160, Math.min(preferred, Math.max(spaceBelow, 160))),
     openUp: false,
   };
 }

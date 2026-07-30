@@ -15,6 +15,8 @@ import {
   PanResponder,
   LayoutChangeEvent,
   KeyboardAvoidingView,
+  Alert,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +33,8 @@ import {
   XCircle,
   ChevronDown,
   ClipboardCheck,
+  Trash2,
+  FileText,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
@@ -59,32 +63,39 @@ type VehicleReservation = {
   localDestino: string;
   dataUsoInicio: string;
   dataUsoFim: string;
-  periodoUso: string[];
   polo?: string | null;
   contrato?: string | null;
   observacaoCapacidadeVeiculo?: string | null;
   status: VehicleReservationStatus;
   createdById?: string;
   createdBy?: { id: string; name: string } | null;
+  suppliesApprovalComment?: string | null;
+  suppliesRejectionReason?: string | null;
   vehicle?: {
     id: string;
     placaVeic: string;
     marcaVeic?: string | null;
     modeloVeic?: string | null;
   } | null;
+  devolucaoAt?: string | null;
+  baixaObservacao?: string | null;
+  baixaFotoUrl?: string | null;
+  baixaReportedBy?: { id: string; name: string } | null;
+  vistoriaAt?: string | null;
+  vistoriaLaudoUrl?: string | null;
+  vistoriaLaudoFileName?: string | null;
+  vistoriaReportedBy?: { id: string; name: string } | null;
 };
 
-type EmployeeOption = { id: string; name: string };
+type EmployeeOption = { id: string; name: string; cpf: string };
 type CostCenterOption = { label: string };
 
 type FormState = {
-  solicitante: string;
   motorista: string;
   atividade: string;
   localDestino: string;
   dataUsoInicio: string;
   dataUsoFim: string;
-  periodoUso: string[];
   polo: string;
   contrato: string;
   observacaoCapacidadeVeiculo: string;
@@ -99,21 +110,17 @@ const STATUS_LABELS: Record<VehicleReservationStatus, string> = {
   CANCELLED: 'Cancelada',
 };
 
-const PERIODO_OPTIONS = [
-  { value: 'INTEGRAL', label: 'Integral' },
-  { value: 'MATUTINO', label: 'Matutino' },
-  { value: 'VESPERTINO', label: 'Vespertino' },
-  { value: 'NOTURNO', label: 'Noturno' },
-];
-
 const POLO_OPTIONS = [
   { value: 'DF', label: 'DF' },
   { value: 'GO', label: 'GO' },
 ];
 
-function todayInputValue() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function defaultUsoDatetimeLocal(hour = 8, minute = 0) {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
 }
 
 function nowDatetimeLocal() {
@@ -123,15 +130,13 @@ function nowDatetimeLocal() {
   return local.toISOString().slice(0, 16);
 }
 
-function EMPTY_FORM(userName = ''): FormState {
+function EMPTY_FORM(): FormState {
   return {
-    solicitante: userName,
     motorista: '',
     atividade: '',
     localDestino: '',
-    dataUsoInicio: todayInputValue(),
-    dataUsoFim: todayInputValue(),
-    periodoUso: [],
+    dataUsoInicio: defaultUsoDatetimeLocal(8, 0),
+    dataUsoFim: defaultUsoDatetimeLocal(17, 0),
     polo: '',
     contrato: '',
     observacaoCapacidadeVeiculo: '',
@@ -141,14 +146,28 @@ function EMPTY_FORM(userName = ''): FormState {
 function formatDateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('pt-BR');
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-function formatPeriodo(values?: string[]) {
-  if (!values?.length) return '—';
-  return values
-    .map((v) => PERIODO_OPTIONS.find((p) => p.value === v)?.label || v)
-    .join(', ');
+function formatVehicleLabel(
+  vehicle?: {
+    placaVeic?: string | null;
+    marcaVeic?: string | null;
+    modeloVeic?: string | null;
+  } | null,
+  emptyLabel = 'Veículo a definir'
+) {
+  if (!vehicle?.placaVeic && !vehicle?.modeloVeic && !vehicle?.marcaVeic) {
+    return emptyLabel;
+  }
+  const model = [vehicle?.marcaVeic, vehicle?.modeloVeic].filter(Boolean).join(' ');
+  return [vehicle?.placaVeic, model].filter(Boolean).join(' · ') || emptyLabel;
 }
 
 function statusColor(status: VehicleReservationStatus) {
@@ -169,9 +188,18 @@ function isCancelled(status: VehicleReservationStatus) {
 
 type PickerOption = { value: string; label: string; subtitle?: string };
 
+function formatCpfLabel(value?: string | null): string {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length === 11) {
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  }
+  return String(value || '').trim();
+}
+
 function SelectField({
   label,
   valueLabel,
+  valueSubtitle,
   placeholder,
   onPress,
   colors,
@@ -179,6 +207,7 @@ function SelectField({
 }: {
   label: string;
   valueLabel: string;
+  valueSubtitle?: string;
   placeholder: string;
   onPress: () => void;
   colors: any;
@@ -212,18 +241,32 @@ function SelectField({
           gap: 10,
         }}
       >
-        <Text
-          style={{
-            flex: 1,
-            fontSize: 15,
-            fontWeight: filled ? '600' : '500',
-            color: filled ? colors.text : colors.textSecondary,
-            letterSpacing: -0.2,
-          }}
-          numberOfLines={1}
-        >
-          {valueLabel || placeholder}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            style={{
+              fontSize: 15,
+              fontWeight: filled ? '600' : '500',
+              color: filled ? colors.text : colors.textSecondary,
+              letterSpacing: -0.2,
+            }}
+            numberOfLines={1}
+          >
+            {valueLabel || placeholder}
+          </Text>
+          {filled && valueSubtitle ? (
+            <Text
+              style={{
+                marginTop: 3,
+                fontSize: 12,
+                fontWeight: '500',
+                color: colors.textSecondary,
+              }}
+              numberOfLines={1}
+            >
+              {valueSubtitle}
+            </Text>
+          ) : null}
+        </View>
         <View
           style={{
             width: 28,
@@ -249,29 +292,30 @@ function SignaturePad({
   onChange: (dataUrl: string) => void;
 }) {
   const [paths, setPaths] = useState<string[]>([]);
+  const pathsRef = useRef<string[]>([]);
   const currentPath = useRef('');
-  const [size, setSize] = useState({ w: 1, h: 1 });
+  const sizeRef = useRef({ w: 1, h: 1 });
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
-  const exportSvg = useCallback(
-    (allPaths: string[]) => {
-      if (!allPaths.length) {
-        onChange('');
-        return;
-      }
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size.w}" height="${size.h}" viewBox="0 0 ${size.w} ${size.h}"><rect width="100%" height="100%" fill="white"/>${allPaths
-        .map(
-          (d) =>
-            `<path d="${d}" stroke="#111" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
-        )
-        .join('')}</svg>`;
-      const encoded =
-        typeof btoa === 'function'
-          ? btoa(unescape(encodeURIComponent(svg)))
-          : Buffer.from(svg, 'utf-8').toString('base64');
-      onChange(`data:image/svg+xml;base64,${encoded}`);
-    },
-    [onChange, size.h, size.w],
-  );
+  const exportSvg = useCallback((allPaths: string[]) => {
+    if (!allPaths.length) {
+      onChangeRef.current('');
+      return;
+    }
+    const { w, h } = sizeRef.current;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="white"/>${allPaths
+      .map(
+        (d) =>
+          `<path d="${d}" stroke="#111" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+      )
+      .join('')}</svg>`;
+    const encoded =
+      typeof btoa === 'function'
+        ? btoa(unescape(encodeURIComponent(svg)))
+        : Buffer.from(svg, 'utf-8').toString('base64');
+    onChangeRef.current(`data:image/svg+xml;base64,${encoded}`);
+  }, []);
 
   const pan = useRef(
     PanResponder.create({
@@ -280,7 +324,11 @@ function SignaturePad({
       onPanResponderGrant: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
         currentPath.current = `M ${locationX} ${locationY}`;
-        setPaths((p) => [...p, currentPath.current]);
+        setPaths((p) => {
+          const next = [...p, currentPath.current];
+          pathsRef.current = next;
+          return next;
+        });
       },
       onPanResponderMove: (evt) => {
         const { locationX, locationY } = evt.nativeEvent;
@@ -288,26 +336,26 @@ function SignaturePad({
         setPaths((p) => {
           const next = [...p];
           next[next.length - 1] = currentPath.current;
+          pathsRef.current = next;
           return next;
         });
       },
       onPanResponderRelease: () => {
-        setPaths((p) => {
-          exportSvg(p);
-          return p;
-        });
+        // Fora do setState — evita "Cannot update a component while rendering"
+        exportSvg(pathsRef.current);
       },
     }),
   ).current;
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    setSize({ w: width, h: height });
+    sizeRef.current = { w: width, h: height };
   };
 
   const clear = () => {
+    pathsRef.current = [];
     setPaths([]);
-    onChange('');
+    onChangeRef.current('');
   };
 
   return (
@@ -367,6 +415,7 @@ export default function VehicleReservationsScreen() {
   const [loadingOptions, setLoadingOptions] = useState(false);
 
   const [returnTarget, setReturnTarget] = useState<VehicleReservation | null>(null);
+  const [detailTarget, setDetailTarget] = useState<VehicleReservation | null>(null);
   const [returnForm, setReturnForm] = useState({
     devolucaoAt: nowDatetimeLocal(),
     baixaFoto: '',
@@ -414,20 +463,24 @@ export default function VehicleReservationsScreen() {
   const loadFormOptions = useCallback(async () => {
     setLoadingOptions(true);
     try {
-      const [usersRes, ccRes] = await Promise.all([
-        api.get('/api/users?page=1&limit=1000'),
+      const [driversRes, ccRes] = await Promise.all([
+        api.get('/api/fuel-refuel-requests/driver-options'),
         api.get('/api/cost-centers?isActive=true&limit=2000'),
       ]);
-      const usersJson = await usersRes.json();
+      const driversJson = await driversRes.json();
       const ccJson = await ccRes.json();
 
-      if (usersRes.ok) {
-        const users = usersJson?.data || [];
-        const opts = users
-          .filter((u: any) => u.employee?.id && u.employee?.position !== 'Administrador')
-          .map((u: any) => ({
-            id: String(u.employee.id),
-            name: String(u.name || '').trim(),
+      if (driversRes.ok) {
+        const list = (driversJson?.data || []) as Array<{
+          id: string;
+          name: string;
+          cpf?: string;
+        }>;
+        const opts = list
+          .map((d) => ({
+            id: String(d.id),
+            name: String(d.name || '').trim(),
+            cpf: formatCpfLabel(d.cpf),
           }))
           .filter((e: EmployeeOption) => e.name)
           .sort((a: EmployeeOption, b: EmployeeOption) =>
@@ -456,7 +509,7 @@ export default function VehicleReservationsScreen() {
   }, []);
 
   const openForm = () => {
-    setForm(EMPTY_FORM(user?.name || ''));
+    setForm(EMPTY_FORM());
     setShowForm(true);
     void loadFormOptions();
   };
@@ -464,7 +517,7 @@ export default function VehicleReservationsScreen() {
   useEffect(() => {
     const sub = onFabBarPress('Reservas', openForm);
     return () => sub.remove();
-  }, [user?.name, loadFormOptions]);
+  }, [loadFormOptions]);
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => isPending(r.status)).length;
@@ -488,6 +541,8 @@ export default function VehicleReservationsScreen() {
           r.atividade,
           r.localDestino,
           r.vehicle?.placaVeic || '',
+          r.vehicle?.marcaVeic || '',
+          r.vehicle?.modeloVeic || '',
           STATUS_LABELS[r.status],
         ]
           .join(' ')
@@ -498,18 +553,10 @@ export default function VehicleReservationsScreen() {
     return list;
   }, [rows, cardFilter, searchTerm]);
 
-  const togglePeriodo = (value: string) => {
-    setForm((f) => ({
-      ...f,
-      periodoUso: f.periodoUso.includes(value)
-        ? f.periodoUso.filter((p) => p !== value)
-        : [...f.periodoUso, value],
-    }));
-  };
-
   const submitForm = async () => {
-    if (!form.solicitante) {
-      Toast.show({ type: 'error', text1: 'Selecione o solicitante' });
+    const solicitante = String(user?.name || '').trim();
+    if (!solicitante) {
+      Toast.show({ type: 'error', text1: 'Não foi possível identificar o solicitante logado' });
       return;
     }
     if (!form.motorista) {
@@ -525,28 +572,24 @@ export default function VehicleReservationsScreen() {
       return;
     }
     if (!form.dataUsoInicio || !form.dataUsoFim) {
-      Toast.show({ type: 'error', text1: 'Informe o período de datas' });
+      Toast.show({ type: 'error', text1: 'Informe início e fim do uso' });
       return;
     }
     if (form.dataUsoFim < form.dataUsoInicio) {
-      Toast.show({ type: 'error', text1: 'Data final inválida' });
-      return;
-    }
-    if (!form.periodoUso.length) {
-      Toast.show({ type: 'error', text1: 'Selecione o período de uso' });
+      Toast.show({ type: 'error', text1: 'Fim do uso inválido' });
       return;
     }
 
     setSubmitting(true);
     try {
       const res = await api.post('/api/vehicle-reservations', {
-        solicitante: form.solicitante,
+        solicitante,
         motorista: form.motorista,
         atividade: form.atividade.trim(),
         localDestino: form.localDestino.trim(),
         dataUsoInicio: form.dataUsoInicio,
         dataUsoFim: form.dataUsoFim,
-        periodoUso: form.periodoUso,
+        periodoUso: [],
         polo: form.polo || undefined,
         contrato: form.contrato || undefined,
         observacaoCapacidadeVeiculo: form.observacaoCapacidadeVeiculo.trim() || undefined,
@@ -644,6 +687,53 @@ export default function VehicleReservationsScreen() {
       r.createdBy?.id === user?.id ||
       r.solicitante === user?.name);
 
+  const canDelete = (r: VehicleReservation) => r.status === 'PENDING_SUPPLIES';
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const deleteReservation = (row: VehicleReservation) => {
+    if (!canDelete(row)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Somente reservas pendentes podem ser excluídas',
+      });
+      return;
+    }
+
+    Alert.alert(
+      'Excluir reserva',
+      `Tem certeza que deseja excluir a reserva #${row.code}? Esta ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingId(row.id);
+            try {
+              const res = await api.delete(`/api/vehicle-reservations/${row.id}`);
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(data?.message || data?.error || 'Erro ao excluir');
+              }
+              if (detailTarget?.id === row.id) setDetailTarget(null);
+              Toast.show({ type: 'success', text1: 'Reserva excluída' });
+              await loadList();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Erro',
+                text2: e?.message || 'Não foi possível excluir',
+              });
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View
       style={styles.safeArea}
@@ -716,32 +806,33 @@ export default function VehicleReservationsScreen() {
           <View style={styles.list}>
             {filteredRows.map((row) => (
               <View key={row.id} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardNumber}>#{row.code}</Text>
-                  <View style={[styles.badge, { backgroundColor: `${statusColor(row.status)}18` }]}>
-                    <Text style={[styles.badgeText, { color: statusColor(row.status) }]}>
-                      {STATUS_LABELS[row.status]}
+                <TouchableOpacity onPress={() => setDetailTarget(row)} activeOpacity={0.85}>
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardNumber}>#{row.code}</Text>
+                    <View style={[styles.badge, { backgroundColor: `${statusColor(row.status)}18` }]}>
+                      <Text style={[styles.badgeText, { color: statusColor(row.status) }]}>
+                        {STATUS_LABELS[row.status]}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.cardRoute} numberOfLines={2}>
+                    {row.atividade}
+                  </Text>
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                      {formatDateLabel(row.dataUsoInicio)} → {formatDateLabel(row.dataUsoFim)}
                     </Text>
                   </View>
-                </View>
-                <Text style={styles.cardRoute} numberOfLines={2}>
-                  {row.atividade}
-                </Text>
-                <View style={styles.cardFooter}>
-                  <Text style={styles.cardMeta} numberOfLines={1}>
-                    {formatDateLabel(row.dataUsoInicio)} → {formatDateLabel(row.dataUsoFim)}
+                  <Text style={styles.cardSub} numberOfLines={1}>
+                    {row.motorista} · {row.localDestino}
                   </Text>
-                  <View style={styles.dot} />
-                  <Text style={styles.cardMeta} numberOfLines={1}>
-                    {formatPeriodo(row.periodoUso)}
+                  <Text style={styles.cardSub} numberOfLines={1}>
+                    {formatVehicleLabel(row.vehicle)}
                   </Text>
-                </View>
-                <Text style={styles.cardSub} numberOfLines={1}>
-                  {row.motorista} · {row.localDestino}
-                </Text>
-                <Text style={styles.cardSub} numberOfLines={1}>
-                  {row.vehicle?.placaVeic || 'Placa a definir'}
-                </Text>
+                  <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
+                    Toque para ver detalhes
+                  </Text>
+                </TouchableOpacity>
                 {canReturn(row) ? (
                   <TouchableOpacity
                     style={styles.returnBtn}
@@ -765,6 +856,330 @@ export default function VehicleReservationsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Detalhes da reserva */}
+      <Modal
+        visible={Boolean(detailTarget)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDetailTarget(null)}
+      >
+        <View style={styles.detailOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setDetailTarget(null)}
+          />
+          <View style={[styles.detailSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.detailSheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.detailSheetTitle, { color: colors.text }]}>
+                  Reserva #{detailTarget?.code ?? ''}
+                </Text>
+                <Text style={[styles.detailSheetSubtitle, { color: colors.textSecondary }]}>
+                  {detailTarget ? STATUS_LABELS[detailTarget.status] : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDetailTarget(null)}
+                style={[
+                  styles.formCloseBtn,
+                  { backgroundColor: isDark ? colors.background : '#EEF0F3' },
+                ]}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            {detailTarget ? (
+              <ScrollView
+                style={{ maxHeight: 420 }}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                <View style={styles.detailGrid}>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Status</Text>
+                    <Text style={[styles.detailValue, { color: statusColor(detailTarget.status) }]}>
+                      {STATUS_LABELS[detailTarget.status]}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Atividade
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detailTarget.atividade}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Destino
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detailTarget.localDestino}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Solicitante
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detailTarget.solicitante}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Motorista
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detailTarget.motorista}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Início do uso
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDateLabel(detailTarget.dataUsoInicio)}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Fim do uso
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {formatDateLabel(detailTarget.dataUsoFim)}
+                    </Text>
+                  </View>
+                  {detailTarget.contrato ? (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Contrato
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.contrato}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {detailTarget.polo ? (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Polo</Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.polo}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {detailTarget.observacaoCapacidadeVeiculo ? (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Observações
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.observacaoCapacidadeVeiculo}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {detailTarget.vehicle ? (
+                  <View
+                    style={[
+                      styles.releaseBlock,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(5, 150, 105, 0.12)'
+                          : 'rgba(5, 150, 105, 0.08)',
+                      },
+                    ]}
+                  >
+                    <View style={styles.releaseRow}>
+                      <Car size={16} color="#059669" strokeWidth={2.2} />
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={styles.releaseLabel}>Veículo liberado</Text>
+                        <Text style={[styles.detailValue, { color: colors.text }]}>
+                          {formatVehicleLabel(detailTarget.vehicle, '—')}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
+
+                {detailTarget.suppliesApprovalComment ? (
+                  <View
+                    style={[
+                      styles.releaseBlock,
+                      { backgroundColor: isDark ? colors.background : '#EEF0F3' },
+                    ]}
+                  >
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Observação do Suprimentos
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text, marginTop: 4 }]}>
+                      {detailTarget.suppliesApprovalComment}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {detailTarget.suppliesRejectionReason ? (
+                  <View
+                    style={[
+                      styles.releaseBlock,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(206,55,54,0.12)'
+                          : 'rgba(206,55,54,0.08)',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.detailLabel, { color: colors.error || '#dc2626' }]}>
+                      Motivo da rejeição
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text, marginTop: 4 }]}>
+                      {detailTarget.suppliesRejectionReason}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {detailTarget.status === 'COMPLETED' || detailTarget.status === 'INSPECTED' ? (
+                  <View
+                    style={[
+                      styles.releaseBlock,
+                      { backgroundColor: isDark ? colors.background : '#EEF0F3' },
+                    ]}
+                  >
+                    <Text style={styles.releaseLabel}>Baixa do veículo</Text>
+                    <View style={[styles.detailField, { marginBottom: 0, marginTop: 10 }]}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Data/hora da devolução
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.devolucaoAt
+                          ? formatDateLabel(detailTarget.devolucaoAt)
+                          : '—'}
+                      </Text>
+                    </View>
+                    <View style={[styles.detailField, { marginBottom: 0, marginTop: 10 }]}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Registrado por
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.baixaReportedBy?.name || '—'}
+                      </Text>
+                    </View>
+                    {detailTarget.baixaObservacao ? (
+                      <View style={[styles.detailField, { marginBottom: 0, marginTop: 10 }]}>
+                        <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                          Observação
+                        </Text>
+                        <Text style={[styles.detailValue, { color: colors.text }]}>
+                          {detailTarget.baixaObservacao}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {detailTarget.baixaFotoUrl ? (
+                      <Image
+                        source={{ uri: detailTarget.baixaFotoUrl }}
+                        style={[styles.photoPreview, { marginTop: 12, marginBottom: 0 }]}
+                      />
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {detailTarget.status === 'INSPECTED' ? (
+                  <View
+                    style={[
+                      styles.releaseBlock,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(217, 119, 6, 0.12)'
+                          : 'rgba(217, 119, 6, 0.08)',
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.releaseLabel, { color: '#d97706' }]}>
+                      Vistoria do veículo
+                    </Text>
+                    <View style={[styles.detailField, { marginBottom: 0, marginTop: 10 }]}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Data e hora da vistoria
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.vistoriaAt
+                          ? formatDateLabel(detailTarget.vistoriaAt)
+                          : '—'}
+                      </Text>
+                    </View>
+                    <View style={[styles.detailField, { marginBottom: 0, marginTop: 10 }]}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Registrado por
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detailTarget.vistoriaReportedBy?.name || '—'}
+                      </Text>
+                    </View>
+                    {detailTarget.vistoriaLaudoUrl ? (
+                      <TouchableOpacity
+                        style={[styles.secondaryBtn, { marginTop: 12, marginBottom: 0 }]}
+                        onPress={() => {
+                          void Linking.openURL(detailTarget.vistoriaLaudoUrl!);
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <FileText size={16} color={colors.primary} strokeWidth={2.2} />
+                        <Text style={styles.secondaryBtnText}>
+                          {detailTarget.vistoriaLaudoFileName || 'Abrir laudo de vistoria'}
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
+              </ScrollView>
+            ) : null}
+
+            {detailTarget && canDelete(detailTarget) ? (
+              <TouchableOpacity
+                style={[styles.deleteBtn, styles.returnBtnInModal]}
+                onPress={() => deleteReservation(detailTarget)}
+                activeOpacity={0.85}
+                disabled={deletingId === detailTarget.id}
+              >
+                {deletingId === detailTarget.id ? (
+                  <ActivityIndicator color="#dc2626" />
+                ) : (
+                  <>
+                    <Trash2 size={15} color="#dc2626" strokeWidth={2.2} />
+                    <Text style={styles.deleteBtnText}>Excluir reserva</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
+
+            {detailTarget && canReturn(detailTarget) ? (
+              <TouchableOpacity
+                style={[styles.returnBtn, styles.returnBtnInModal]}
+                onPress={() => {
+                  const row = detailTarget;
+                  setDetailTarget(null);
+                  setReturnForm({
+                    devolucaoAt: nowDatetimeLocal(),
+                    baixaFoto: '',
+                    baixaObservacao: '',
+                    baixaAssinatura: '',
+                  });
+                  setReturnTarget(row);
+                }}
+                activeOpacity={0.85}
+              >
+                <ClipboardCheck size={15} color={colors.primary} strokeWidth={2.2} />
+                <Text style={styles.returnBtnText}>Dar baixa</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
 
       {/* Form criar */}
       <Modal
@@ -816,23 +1231,11 @@ export default function VehicleReservationsScreen() {
                 >
                   <Text style={styles.sectionTitle}>Pessoas</Text>
                   <SelectField
-                    label="Solicitante"
-                    valueLabel={form.solicitante}
-                    placeholder="Selecione"
-                    colors={colors}
-                    isDark={isDark}
-                    onPress={() => {
-                      setPickerSearch('');
-                      setPicker({
-                        title: 'Solicitante',
-                        options: employees.map((e) => ({ value: e.name, label: e.name })),
-                        onSelect: (solicitante) => setForm((f) => ({ ...f, solicitante })),
-                      });
-                    }}
-                  />
-                  <SelectField
                     label="Motorista"
                     valueLabel={form.motorista}
+                    valueSubtitle={
+                      employees.find((e) => e.name === form.motorista)?.cpf || undefined
+                    }
                     placeholder="Selecione"
                     colors={colors}
                     isDark={isDark}
@@ -840,7 +1243,11 @@ export default function VehicleReservationsScreen() {
                       setPickerSearch('');
                       setPicker({
                         title: 'Motorista',
-                        options: employees.map((e) => ({ value: e.name, label: e.name })),
+                        options: employees.map((e) => ({
+                          value: e.name,
+                          label: e.name,
+                          subtitle: e.cpf || undefined,
+                        })),
                         onSelect: (motorista) => setForm((f) => ({ ...f, motorista })),
                       });
                     }}
@@ -867,8 +1274,9 @@ export default function VehicleReservationsScreen() {
 
                   <Text style={styles.sectionTitle}>Agenda</Text>
                   <DateField
-                    label="Data início"
+                    label="Início do uso"
                     value={form.dataUsoInicio}
+                    mode="datetime"
                     onChange={(dataUsoInicio) =>
                       setForm((f) => ({
                         ...f,
@@ -876,42 +1284,34 @@ export default function VehicleReservationsScreen() {
                         dataUsoFim: f.dataUsoFim < dataUsoInicio ? dataUsoInicio : f.dataUsoFim,
                       }))
                     }
-                    placeholder="Selecionar data"
+                    placeholder="Selecionar data e hora"
                   />
                   <DateField
-                    label="Data fim"
+                    label="Fim do uso"
                     value={form.dataUsoFim}
-                    onChange={(dataUsoFim) => setForm((f) => ({ ...f, dataUsoFim }))}
-                    placeholder="Selecionar data"
+                    mode="datetime"
+                    onChange={(dataUsoFim) =>
+                      setForm((f) => ({
+                        ...f,
+                        dataUsoFim:
+                          f.dataUsoInicio && dataUsoFim < f.dataUsoInicio
+                            ? f.dataUsoInicio
+                            : dataUsoFim,
+                      }))
+                    }
+                    placeholder="Selecionar data e hora"
                     minimumDate={
                       form.dataUsoInicio
                         ? new Date(
                             +form.dataUsoInicio.slice(0, 4),
                             +form.dataUsoInicio.slice(5, 7) - 1,
                             +form.dataUsoInicio.slice(8, 10),
+                            +(form.dataUsoInicio.slice(11, 13) || '0'),
+                            +(form.dataUsoInicio.slice(14, 16) || '0'),
                           )
                         : undefined
                     }
                   />
-
-                  <Text style={styles.fieldLabel}>Período de uso</Text>
-                  <View style={styles.periodoRow}>
-                    {PERIODO_OPTIONS.map((p) => {
-                      const active = form.periodoUso.includes(p.value);
-                      return (
-                        <TouchableOpacity
-                          key={p.value}
-                          onPress={() => togglePeriodo(p.value)}
-                          style={[styles.periodoChip, active && styles.periodoChipActive]}
-                          activeOpacity={0.75}
-                        >
-                          <Text style={[styles.periodoText, active && styles.periodoTextActive]}>
-                            {p.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
 
                   <Text style={styles.sectionTitle}>Extras</Text>
                   <SelectField
@@ -931,7 +1331,7 @@ export default function VehicleReservationsScreen() {
                   />
 
                   <SelectField
-                    label="Contrato / CC (opcional)"
+                    label="Contrato (opcional)"
                     valueLabel={form.contrato}
                     placeholder="Selecione"
                     colors={colors}
@@ -946,7 +1346,7 @@ export default function VehicleReservationsScreen() {
                     }}
                   />
 
-                  <Text style={styles.fieldLabel}>Obs. capacidade do veículo (opcional)</Text>
+                  <Text style={styles.fieldLabel}>Observações (opcional)</Text>
                   <TextInput
                     style={[styles.input, styles.inputMultiline]}
                     value={form.observacaoCapacidadeVeiculo}
@@ -1004,7 +1404,8 @@ export default function VehicleReservationsScreen() {
               <View style={styles.formHeaderText}>
                 <Text style={styles.formTitle}>Dar baixa</Text>
                 <Text style={styles.formSubtitle}>
-                  Reserva #{returnTarget?.code} · {returnTarget?.vehicle?.placaVeic || 'Veículo'}
+                  Reserva #{returnTarget?.code} ·{' '}
+                  {formatVehicleLabel(returnTarget?.vehicle, 'Veículo')}
                 </Text>
               </View>
               <TouchableOpacity
@@ -1050,8 +1451,9 @@ export default function VehicleReservationsScreen() {
                 onChangeText={(baixaObservacao) =>
                   setReturnForm((f) => ({ ...f, baixaObservacao }))
                 }
-                multiline
+                placeholder="Ex.: veículo sem avarias"
                 placeholderTextColor={colors.textSecondary}
+                multiline
               />
             </ScrollView>
             <View style={[styles.formFooter, { borderTopColor: isDark ? colors.border : 'rgba(0,0,0,0.06)' }]}>
@@ -1114,6 +1516,11 @@ export default function VehicleReservationsScreen() {
                   <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
                     {item.label}
                   </Text>
+                  {item.subtitle ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 3, fontWeight: '500' }}>
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
                 </TouchableOpacity>
               )}
               ListEmptyComponent={
@@ -1316,6 +1723,12 @@ const getStyles = (colors: any, isDark: boolean) =>
     },
     cardMeta: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
     cardSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    cardHint: {
+      fontSize: 11,
+      fontWeight: '600',
+      marginTop: 10,
+      letterSpacing: -0.1,
+    },
     returnBtn: {
       marginTop: 14,
       backgroundColor: isDark ? 'rgba(206,55,54,0.15)' : 'rgba(206,55,54,0.08)',
@@ -1326,7 +1739,81 @@ const getStyles = (colors: any, isDark: boolean) =>
       justifyContent: 'center',
       gap: 6,
     },
+    returnBtnInModal: {
+      marginTop: 8,
+      minHeight: 48,
+    },
     returnBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
+    deleteBtn: {
+      marginTop: 14,
+      backgroundColor: isDark ? 'rgba(220,38,38,0.15)' : 'rgba(220,38,38,0.08)',
+      borderRadius: 12,
+      paddingVertical: 11,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    deleteBtnText: { color: '#dc2626', fontWeight: '700', fontSize: 14 },
+    detailOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'flex-end',
+      padding: 16,
+      paddingBottom: 28,
+    },
+    detailSheet: {
+      borderRadius: 20,
+      padding: 18,
+      gap: 12,
+      maxHeight: '88%',
+    },
+    detailSheetHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 4,
+    },
+    detailSheetTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      letterSpacing: -0.3,
+    },
+    detailSheetSubtitle: {
+      fontSize: 13,
+      fontWeight: '500',
+      marginTop: 2,
+    },
+    detailGrid: { gap: 12 },
+    detailField: { gap: 2 },
+    detailLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    detailValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      lineHeight: 20,
+    },
+    releaseBlock: {
+      borderRadius: 14,
+      padding: 12,
+      marginTop: 10,
+    },
+    releaseRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    releaseLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#059669',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
     fieldLabel: {
       fontSize: 13,
       fontWeight: '600',
@@ -1351,16 +1838,6 @@ const getStyles = (colors: any, isDark: boolean) =>
       textAlignVertical: 'top',
       paddingTop: 14,
     },
-    periodoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-    periodoChip: {
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 999,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
-    },
-    periodoChipActive: { backgroundColor: colors.primary },
-    periodoText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-    periodoTextActive: { color: '#fff' },
     photoPreview: {
       width: '100%',
       height: 200,

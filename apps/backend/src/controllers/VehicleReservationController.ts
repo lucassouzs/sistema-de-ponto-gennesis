@@ -61,6 +61,34 @@ function parseDateOnly(value: unknown, fieldLabel: string): Date {
 function parseDateTime(value: unknown, fieldLabel: string): Date {
   const raw = String(value ?? '').trim();
   if (!raw) throw createError(`${fieldLabel} é obrigatória`, 400);
+
+  // datetime-local: yyyy-MM-ddTHH:mm (hora local do solicitante, sem timezone)
+  const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (localMatch) {
+    const year = Number(localMatch[1]);
+    const month = Number(localMatch[2]);
+    const day = Number(localMatch[3]);
+    const hour = Number(localMatch[4]);
+    const minute = Number(localMatch[5]);
+    const second = Number(localMatch[6] || 0);
+    const date = new Date(year, month - 1, day, hour, minute, second, 0);
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day ||
+      date.getHours() !== hour ||
+      date.getMinutes() !== minute
+    ) {
+      throw createError(`${fieldLabel} inválida`, 400);
+    }
+    return date;
+  }
+
+  // Compat: apenas data (legado)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return parseDateOnly(raw, fieldLabel);
+  }
+
   const date = new Date(raw);
   if (Number.isNaN(date.getTime())) throw createError(`${fieldLabel} inválida`, 400);
   return date;
@@ -106,8 +134,8 @@ function userCanSubmitReturn(
 }
 
 function buildReservationData(body: Record<string, unknown>) {
-  const dataUsoInicio = parseDateOnly(body.dataUsoInicio, 'Data de uso (início)');
-  const dataUsoFim = parseDateOnly(body.dataUsoFim, 'Data de uso (fim)');
+  const dataUsoInicio = parseDateTime(body.dataUsoInicio, 'Data de uso (início)');
+  const dataUsoFim = parseDateTime(body.dataUsoFim, 'Data de uso (fim)');
   if (dataUsoFim < dataUsoInicio) {
     throw createError('Data final não pode ser anterior à data inicial', 400);
   }
@@ -125,9 +153,6 @@ function buildReservationData(body: Record<string, unknown>) {
   if (!localDestino) throw createError('Local de destino é obrigatório', 400);
 
   const periodoUso = parsePeriodoUso(body.periodoUso);
-  if (!periodoUso.length) {
-    throw createError('Selecione ao menos um período de uso', 400);
-  }
 
   return {
     solicitante,
@@ -226,12 +251,7 @@ export class VehicleReservationController {
       const { id } = req.params;
       const reservation = await prisma.vehicleReservation.findUnique({
         where: { id },
-        include: {
-          vehicle: true,
-          createdBy: { select: { id: true, name: true } },
-          suppliesApprovedBy: { select: { id: true, name: true } },
-          baixaReportedBy: { select: { id: true, name: true } }
-        }
+        include: reservationInclude
       });
       if (!reservation) throw createError('Reserva não encontrada', 404);
       res.json({ success: true, data: reservation });

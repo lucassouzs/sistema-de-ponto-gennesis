@@ -37,6 +37,14 @@ export const PERIODO_USO_LABELS: Record<string, string> = {
   NOTURNO: 'Noturno'
 };
 
+export const PERIODO_USO_OPTIONS = (
+  ['INTEGRAL', 'MATUTINO', 'VESPERTINO', 'NOTURNO'] as const
+).map((value) => ({
+  value,
+  label: PERIODO_USO_LABELS[value],
+  searchText: PERIODO_USO_LABELS[value]
+}));
+
 export function formatVehicleReservationStatus(status: string): string {
   return (
     VEHICLE_RESERVATION_STATUS_LABELS[status as VehicleReservationStatus] || status || '—'
@@ -64,4 +72,13 @@ function nowDatetimeLocalValue(): string {
 
 export function defaultReturnDatetimeLocalValue(): string {
   return nowDatetimeLocalValue();
+}
+
+/** Valor padrão `yyyy-MM-ddTHH:mm` para data/hora de uso. */
+export function defaultUsoDatetimeLocalValue(hour = 8, minute = 0): string {
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60_000);
+  return local.toISOString().slice(0, 16);
 }

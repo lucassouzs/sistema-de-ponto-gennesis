@@ -30,6 +30,7 @@ import {
   ChevronDown,
   ImagePlus,
   MapPin,
+  Trash2,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
@@ -333,6 +334,7 @@ export default function FuelRequestsScreen() {
   const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM());
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [detailTarget, setDetailTarget] = useState<FuelRequestRow | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const [states, setStates] = useState<string[]>([]);
   const [cities, setCities] = useState<SatelliteCity[]>([]);
@@ -669,6 +671,52 @@ export default function FuelRequestsScreen() {
     { key: 'concluded', label: 'Concluídas', count: counts.concluded, Icon: CheckCircle },
     { key: 'cancelled', label: 'Canceladas', count: counts.cancelled, Icon: XCircle },
   ];
+
+  const canCancel = (row: FuelRequestRow) => row.status === 'PENDING_MANAGER';
+
+  const cancelRequest = (row: FuelRequestRow) => {
+    if (!canCancel(row)) {
+      Toast.show({
+        type: 'error',
+        text1: 'Só é possível excluir solicitações aguardando o gestor',
+      });
+      return;
+    }
+
+    Alert.alert(
+      'Excluir solicitação',
+      `Tem certeza que deseja excluir a solicitação #${row.displayNumber}? Esta ação não pode ser desfeita.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setCancellingId(row.id);
+            try {
+              const res = await api.post(`/api/fuel-refuel-requests/${row.id}/cancel`, {});
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok) {
+                throw new Error(data?.message || data?.error || 'Erro ao excluir');
+              }
+              if (detailTarget?.id === row.id) setDetailTarget(null);
+              Toast.show({ type: 'success', text1: 'Solicitação excluída' });
+              setLoading(true);
+              await loadList();
+            } catch (e: any) {
+              Toast.show({
+                type: 'error',
+                text1: 'Erro',
+                text2: e?.message || 'Não foi possível excluir',
+              });
+            } finally {
+              setCancellingId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View
@@ -1209,6 +1257,24 @@ export default function FuelRequestsScreen() {
                   </View>
                 ) : null}
               </ScrollView>
+            ) : null}
+
+            {detailTarget && canCancel(detailTarget) ? (
+              <TouchableOpacity
+                style={[styles.deleteBtn, styles.reportBtnInModal]}
+                onPress={() => cancelRequest(detailTarget)}
+                activeOpacity={0.85}
+                disabled={cancellingId === detailTarget.id}
+              >
+                {cancellingId === detailTarget.id ? (
+                  <ActivityIndicator color="#dc2626" />
+                ) : (
+                  <>
+                    <Trash2 size={15} color="#dc2626" strokeWidth={2.2} />
+                    <Text style={styles.deleteBtnText}>Excluir solicitação</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             ) : null}
 
             {detailTarget?.status === 'AWAITING_REFUEL' ? (
@@ -1839,6 +1905,21 @@ const getStyles = (colors: any, isDark: boolean) =>
     },
     reportBtnText: {
       color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
+    deleteBtn: {
+      backgroundColor: isDark ? 'rgba(220,38,38,0.15)' : 'rgba(220,38,38,0.08)',
+      borderRadius: 12,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    deleteBtnText: {
+      color: '#dc2626',
       fontSize: 14,
       fontWeight: '700',
       letterSpacing: -0.2,

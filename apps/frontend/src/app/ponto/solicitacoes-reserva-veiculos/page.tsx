@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Car, CheckCircle, Clock, FileText, Filter, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { Car, CheckCircle, Clock, FileText, Filter, MoreVertical, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Button } from '@/components/ui/Button';
@@ -23,7 +23,6 @@ import {
 import api from '@/lib/api';
 import { formatPlacaDisplay } from '@/lib/brazilianVehiclePlate';
 import {
-  formatPeriodoUso,
   formatVehicleReservationStatus,
   vehicleReservationStatusBadgeClass,
   defaultReturnDatetimeLocalValue,
@@ -220,19 +219,19 @@ function formatVehicleLabel(vehicle?: VehicleOption | null): string {
   if (!vehicle) return 'A definir';
   const placa = formatPlacaDisplay(vehicle.placaVeic);
   const modelo = [vehicle.marcaVeic, vehicle.modeloVeic].filter(Boolean).join(' ').trim();
-  return modelo ? `${placa} — ${modelo}` : placa;
+  return modelo ? `${placa} · ${modelo}` : placa;
 }
 
 function formatVehicleSelectLabel(vehicle: VehicleOption): string {
   const placa = formatPlacaDisplay(vehicle.placaVeic);
   const modelo = [vehicle.marcaVeic, vehicle.modeloVeic].filter(Boolean).join(' ').trim();
-  return modelo ? `${placa} — ${modelo}` : placa;
+  return modelo ? `${placa} · ${modelo}` : placa;
 }
 
 function formatDateLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return format(date, 'dd/MM/yyyy', { locale: ptBR });
+  return format(date, 'dd/MM/yyyy HH:mm', { locale: ptBR });
 }
 
 function formatDateTimeLabel(value: string): string {
@@ -300,6 +299,19 @@ export default function SolicitacoesReservaVeiculosPage() {
     refetchOnMount: 'always'
   });
 
+  const refreshReservationQueries = (updated?: VehicleReservation | null) => {
+    if (updated?.id) {
+      queryClient.setQueryData(['vehicle-reservation-detail', updated.id], updated);
+    }
+    // Só invalidar listas: o cache de `vehicle-reservations` no app do colaborador
+    // usa `{ data, pagination }`, não um array — um `.map` ali quebrava o onSuccess
+    // e disparava o toast de erro mesmo com a vistoria já salva.
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-detail'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
+  };
+
   const approveMutation = useMutation({
     mutationFn: async ({ id, vehicleId }: { id: string; vehicleId: string }) => {
       const res = await api.put(`/vehicle-reservations/${id}/supplies-approve`, {
@@ -308,15 +320,13 @@ export default function SolicitacoesReservaVeiculosPage() {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success('Reserva aprovada com sucesso.');
       setSelected(null);
       setSuppliesComment('');
       setApproveVehicleId('');
       setShowRejectForm(false);
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
+      refreshReservationQueries((data?.data as VehicleReservation | undefined) ?? null);
     },
     onError: (err: { response?: { data?: { message?: string; error?: string } } }) => {
       toast.error(err.response?.data?.message || err.response?.data?.error || 'Erro ao aprovar reserva');
@@ -330,14 +340,12 @@ export default function SolicitacoesReservaVeiculosPage() {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success('Reserva rejeitada.');
       setSelected(null);
       setRejectReason('');
       setShowRejectForm(false);
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
+      refreshReservationQueries((data?.data as VehicleReservation | undefined) ?? null);
     },
     onError: (err: { response?: { data?: { message?: string; error?: string } } }) => {
       toast.error(err.response?.data?.message || err.response?.data?.error || 'Erro ao rejeitar reserva');
@@ -353,15 +361,13 @@ export default function SolicitacoesReservaVeiculosPage() {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success('Vistoria registrada com sucesso.');
       setSelected(null);
       setVistoriaAt(defaultReturnDatetimeLocalValue());
       setVistoriaLaudo('');
       setVistoriaLaudoFileName('');
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
-      void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
+      refreshReservationQueries((data?.data as VehicleReservation | undefined) ?? null);
     },
     onError: (err: { response?: { data?: { message?: string; error?: string } } }) => {
       toast.error(err.response?.data?.message || err.response?.data?.error || 'Erro ao registrar vistoria');
@@ -374,7 +380,9 @@ export default function SolicitacoesReservaVeiculosPage() {
       const res = await api.get(`/vehicle-reservations/${selected!.id}`);
       return res.data?.data as VehicleReservation;
     },
-    enabled: Boolean(selected?.id)
+    enabled: Boolean(selected?.id),
+    staleTime: 0,
+    refetchOnMount: 'always'
   });
 
   const { data: vehiclesData, isLoading: loadingVehicles } = useQuery({
@@ -385,7 +393,10 @@ export default function SolicitacoesReservaVeiculosPage() {
       });
       return (res.data?.data || []) as VehicleOption[];
     },
-    enabled: Boolean(selected?.status === 'PENDING_SUPPLIES'),
+    enabled: Boolean(
+      selected?.status === 'PENDING_SUPPLIES' &&
+        (!selectedDetail || selectedDetail.status === 'PENDING_SUPPLIES')
+    ),
     staleTime: 5 * 60 * 1000
   });
 
@@ -401,7 +412,36 @@ export default function SolicitacoesReservaVeiculosPage() {
     [vehiclesData]
   );
 
-  const selectedReservation = selectedDetail ?? selected;
+  const selectedFromList = useMemo(
+    () => (selected?.id ? listData?.find((row) => row.id === selected.id) : undefined),
+    [listData, selected?.id]
+  );
+
+  // Prefer list/detail status over a stale modal snapshot so actions disappear right after approve.
+  const selectedReservation = useMemo(() => {
+    if (!selected) return null;
+    const base = selectedDetail ?? selectedFromList ?? selected;
+    const candidates = [
+      selectedDetail?.status,
+      selectedFromList?.status,
+      selected.status
+    ].filter((status): status is VehicleReservationStatus => Boolean(status));
+    // After approve, list can be fresh while detail cache is still PENDING — never keep approve UI.
+    const status =
+      candidates.includes('PENDING_SUPPLIES') &&
+      candidates.some((value) => value !== 'PENDING_SUPPLIES')
+        ? candidates.find((value) => value !== 'PENDING_SUPPLIES')!
+        : (candidates[0] ?? selected.status);
+    return { ...base, status };
+  }, [selected, selectedDetail, selectedFromList]);
+
+  useEffect(() => {
+    if (!selected?.id || !selectedFromList) return;
+    if (selectedFromList.status !== selected.status) {
+      setSelected(selectedFromList);
+    }
+  }, [selected?.id, selected?.status, selectedFromList]);
+
   const records = useMemo(
     () =>
       (listData || []).filter((row) => matchesDetailStatusFilter(row.status, detailStatusFilter)),
@@ -596,13 +636,13 @@ export default function SolicitacoesReservaVeiculosPage() {
                           <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Solicitante
                           </th>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Período de uso
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
+                            Uso
                           </th>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Veículo / Motorista
                           </th>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Contrato
                           </th>
                           <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
@@ -632,17 +672,23 @@ export default function SolicitacoesReservaVeiculosPage() {
                             <td className="px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
                               {row.solicitante}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
-                              {formatDateLabel(row.dataUsoInicio)}
-                              {row.dataUsoFim !== row.dataUsoInicio
-                                ? ` — ${formatDateLabel(row.dataUsoFim)}`
-                                : ''}
+                            <td className="px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
+                              <div className="inline-flex flex-col items-center gap-0.5 leading-tight">
+                                <span className="whitespace-nowrap">
+                                  {formatDateLabel(row.dataUsoInicio)}
+                                </span>
+                                {row.dataUsoFim !== row.dataUsoInicio ? (
+                                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                                    até {formatDateLabel(row.dataUsoFim)}
+                                  </span>
+                                ) : null}
+                              </div>
                             </td>
-                            <td className="px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
+                            <td className="px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
                               <div>{formatVehicleLabel(row.vehicle)}</div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">{row.motorista}</div>
                             </td>
-                            <td className="max-w-[180px] truncate px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
+                            <td className="max-w-[180px] truncate px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
                               {row.contrato || '—'}
                             </td>
                             <td className="px-3 py-4 text-center sm:px-6">
@@ -668,7 +714,7 @@ export default function SolicitacoesReservaVeiculosPage() {
                                 className={rowActionMenuButtonClass(false)}
                                 aria-label="Ver detalhes da reserva"
                               >
-                                <FileText className="h-4 w-4" />
+                                <MoreVertical className="h-4 w-4" />
                               </button>
                             </td>
                           </tr>
@@ -761,23 +807,13 @@ export default function SolicitacoesReservaVeiculosPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500 dark:text-gray-400">Período de uso</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100">
-                    {formatPeriodoUso(
-                      Array.isArray(selectedReservation.periodoUso)
-                        ? selectedReservation.periodoUso
-                        : []
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 dark:text-gray-400">Data início</dt>
+                  <dt className="text-gray-500 dark:text-gray-400">Início do uso</dt>
                   <dd className="font-medium text-gray-900 dark:text-gray-100">
                     {formatDateLabel(selectedReservation.dataUsoInicio)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500 dark:text-gray-400">Data fim</dt>
+                  <dt className="text-gray-500 dark:text-gray-400">Fim do uso</dt>
                   <dd className="font-medium text-gray-900 dark:text-gray-100">
                     {formatDateLabel(selectedReservation.dataUsoFim)}
                   </dd>
@@ -797,7 +833,7 @@ export default function SolicitacoesReservaVeiculosPage() {
                 {selectedReservation.observacaoCapacidadeVeiculo ? (
                   <div className="sm:col-span-2">
                     <dt className="text-gray-500 dark:text-gray-400">
-                      Observações sobre capacidade do veículo
+                      Observações
                     </dt>
                     <dd className="font-medium text-gray-900 dark:text-gray-100">
                       {selectedReservation.observacaoCapacidadeVeiculo}

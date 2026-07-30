@@ -22,6 +22,8 @@ export type DateTimePickerFieldProps = {
   /** Formato `yyyy-MM-ddTHH:mm` (datetime-local) */
   value: string;
   onChange: (value: string) => void;
+  /** Valor mínimo permitido (`yyyy-MM-ddTHH:mm`). Seleções anteriores são ajustadas. */
+  min?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -37,7 +39,20 @@ type DateTimeParts = {
 
 const WEEKDAYS = [...DATE_PICKER_WEEKDAYS];
 const HOURS = Array.from({ length: 24 }, (_, index) => index);
-const MINUTES = Array.from({ length: 60 }, (_, index) => index);
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+function snapMinute(minute: number): number {
+  let best = MINUTES[0];
+  let bestDist = Math.abs(minute - best);
+  for (const step of MINUTES) {
+    const dist = Math.abs(minute - step);
+    if (dist < bestDist) {
+      best = step;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
 
 function parseYmd(s: string): Date | null {
   if (!s) return null;
@@ -59,7 +74,7 @@ function nowParts(): DateTimeParts {
   return {
     ymd: toYmd(date),
     hour: date.getHours(),
-    minute: date.getMinutes()
+    minute: snapMinute(date.getMinutes())
   };
 }
 
@@ -69,12 +84,19 @@ function parseDateTimeLocal(value: string): DateTimeParts | null {
   return {
     ymd: match[1],
     hour: Number(match[2]),
-    minute: Number(match[3])
+    minute: snapMinute(Number(match[3]))
   };
 }
 
 function toDateTimeLocal(parts: DateTimeParts): string {
   return `${parts.ymd}T${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
+
+function clampPartsToMin(parts: DateTimeParts, min?: string): DateTimeParts {
+  if (!min) return parts;
+  const next = toDateTimeLocal(parts);
+  if (next >= min) return parts;
+  return parseDateTimeLocal(min) ?? parts;
 }
 
 function formatDisplayBr(value: string): string {
@@ -304,6 +326,7 @@ function TimeWheelColumn({
 export function DateTimePickerField({
   value,
   onChange,
+  min,
   placeholder = 'dd/mm/aaaa hh:mm',
   disabled = false,
   className,
@@ -320,10 +343,11 @@ export function DateTimePickerField({
 
   const commit = useCallback(
     (parts: DateTimeParts) => {
-      setDraft(parts);
-      onChange(toDateTimeLocal(parts));
+      const clamped = clampPartsToMin(parts, min);
+      setDraft(clamped);
+      onChange(toDateTimeLocal(clamped));
     },
-    [onChange]
+    [min, onChange]
   );
 
   const updatePosition = useCallback(() => {

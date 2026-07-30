@@ -89,7 +89,8 @@ function computeFloatingPos(trigger: HTMLElement, options?: FloatingPosOptions):
 
   const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
   const spaceAbove = rect.top - gap - margin;
-  const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+  // Abre para cima quando não cabe o painel completo abaixo.
+  const openUp = spaceBelow < preferred && spaceAbove > spaceBelow;
 
   let left = rect.left;
   if (options?.align === 'end') {
@@ -108,12 +109,11 @@ function computeFloatingPos(trigger: HTMLElement, options?: FloatingPosOptions):
     };
   }
 
-  // Abre para baixo sobrepondo o conteúdo; não limita à folga livre da viewport.
   return {
     left,
     width,
     top: rect.bottom + gap,
-    maxHeight: Math.max(160, preferred),
+    maxHeight: Math.max(160, Math.min(preferred, Math.max(spaceBelow, 160))),
     openUp: false,
   };
 }

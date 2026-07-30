@@ -36,7 +36,20 @@ export function formatDateValue(d: Date): string {
 }
 
 export function formatDateTimeValue(d: Date): string {
-  return `${formatDateValue(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const snapped = new Date(d);
+  const minute = snapped.getMinutes();
+  const steps = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  let best = steps[0];
+  let bestDist = Math.abs(minute - best);
+  for (const step of steps) {
+    const dist = Math.abs(minute - step);
+    if (dist < bestDist) {
+      best = step;
+      bestDist = dist;
+    }
+  }
+  snapped.setMinutes(best, 0, 0);
+  return `${formatDateValue(snapped)}T${pad(snapped.getHours())}:${pad(snapped.getMinutes())}`;
 }
 
 function parseValue(value: string, mode: Mode): Date {
