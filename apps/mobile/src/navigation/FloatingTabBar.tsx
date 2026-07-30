@@ -130,10 +130,12 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const activeRoute = state.routes[state.index]?.name ?? '';
   const showFab = FAB_TABS.has(activeRoute);
 
-  const barFill = isDark ? '#1C1C1E' : '#FFFFFF';
-  const selectFill = isDark ? '#3A3A3C' : '#E5E5EA';
+  // Segue a paleta do app (não o preto puro do sistema iOS)
+  const barFill = isDark ? colors.surface : '#FFFFFF';
+  const selectFill = isDark ? colors.card : '#E5E5EA';
+  const pillBorder = isDark ? colors.border : 'transparent';
   const activeColor = colors.primary;
-  const inactiveColor = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(60,60,67,0.55)';
+  const inactiveColor = isDark ? colors.textSecondary : 'rgba(60,60,67,0.55)';
 
   useEffect(() => {
     const to = layouts[state.index];
@@ -208,11 +210,21 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
       <Animated.View
         style={[
           styles.row,
-          isDark ? styles.shadowDark : styles.shadowLight,
+          !isDark && styles.shadowLight,
           { transform: [{ translateY: barY }] },
         ]}
       >
-        <View style={[styles.pill, { backgroundColor: barFill }]}>
+        <View
+          style={[
+            styles.pill,
+            {
+              backgroundColor: barFill,
+              borderColor: pillBorder,
+              borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+            },
+            isDark && styles.pillElevatedDark,
+          ]}
+        >
           <Animated.View
             pointerEvents="none"
             style={[
@@ -328,20 +340,20 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  shadowDark: {
+  pillElevatedDark: {
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.45,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
       },
-      android: { elevation: 14 },
+      android: { elevation: 6 },
       default: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.45,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
       },
     }),
   },
@@ -385,5 +397,15 @@ const styles = StyleSheet.create({
     borderRadius: BAR_HEIGHT / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
 });
