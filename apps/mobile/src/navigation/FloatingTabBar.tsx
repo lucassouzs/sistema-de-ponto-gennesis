@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Plus } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
@@ -130,12 +131,15 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const activeRoute = state.routes[state.index]?.name ?? '';
   const showFab = FAB_TABS.has(activeRoute);
 
-  // Segue a paleta do app (não o preto puro do sistema iOS)
-  const barFill = isDark ? colors.surface : '#FFFFFF';
-  const selectFill = isDark ? colors.card : '#E5E5EA';
-  const pillBorder = isDark ? colors.border : 'transparent';
+  // Liquid glass: blur + tint translúcido alinhado ao tema do app
+  const barTint = isDark ? 'rgba(31, 41, 55, 0.52)' : 'rgba(255, 255, 255, 0.55)';
+  const selectFill = isDark ? 'rgba(55, 65, 81, 0.72)' : 'rgba(229, 229, 234, 0.78)';
+  const pillBorder = isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.65)';
   const activeColor = colors.primary;
   const inactiveColor = isDark ? colors.textSecondary : 'rgba(60,60,67,0.55)';
+  const blurIntensity = Platform.OS === 'ios' ? 55 : 42;
+  const blurTint = isDark ? 'dark' : 'light';
+  const useBlur = Platform.OS !== 'web';
 
   useEffect(() => {
     const to = layouts[state.index];
@@ -210,7 +214,6 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
       <Animated.View
         style={[
           styles.row,
-          !isDark && styles.shadowLight,
           { transform: [{ translateY: barY }] },
         ]}
       >
@@ -218,13 +221,33 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
           style={[
             styles.pill,
             {
-              backgroundColor: barFill,
               borderColor: pillBorder,
-              borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+              borderWidth: StyleSheet.hairlineWidth * 1.5,
+              backgroundColor: useBlur ? 'transparent' : barTint,
             },
-            isDark && styles.pillElevatedDark,
+            isDark ? styles.pillElevatedDark : styles.shadowLight,
           ]}
         >
+          {useBlur ? (
+            <BlurView
+              intensity={blurIntensity}
+              tint={blurTint}
+              experimentalBlurMethod="dimezisBlurView"
+              style={StyleSheet.absoluteFillObject}
+            />
+          ) : null}
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: barTint }]}
+          />
+          <View
+            pointerEvents="none"
+            style={[
+              styles.glassHighlight,
+              { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.28)' },
+            ]}
+          />
+
           <Animated.View
             pointerEvents="none"
             style={[
@@ -233,6 +256,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
                 left: indicatorX,
                 width: indicatorW,
                 backgroundColor: selectFill,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)',
               },
             ]}
           />
@@ -373,6 +397,18 @@ const styles = StyleSheet.create({
     top: CONTENT_PADDING,
     bottom: CONTENT_PADDING,
     borderRadius: 999,
+    zIndex: 0,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  glassHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: '8%',
+    right: '22%',
+    height: '42%',
+    borderBottomLeftRadius: 999,
+    borderBottomRightRadius: 999,
+    opacity: 0.7,
     zIndex: 0,
   },
   item: {
