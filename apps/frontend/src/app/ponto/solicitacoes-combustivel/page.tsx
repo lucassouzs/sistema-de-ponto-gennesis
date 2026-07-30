@@ -683,7 +683,7 @@ export default function SolicitacoesCombustivelPage() {
                           <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Solicitante
                           </th>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Data abast.
                           </th>
                           <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
@@ -715,8 +715,19 @@ export default function SolicitacoesCombustivelPage() {
                             <td className="px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
                               {row.requester.name}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
-                              {format(new Date(row.refuelDate), 'dd/MM/yyyy', { locale: ptBR })}
+                            <td className="whitespace-nowrap px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
+                              <div className="leading-snug">
+                                <p>
+                                  {format(new Date(row.requestedAt || row.refuelDate), 'dd/MM/yyyy', {
+                                    locale: ptBR,
+                                  })}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {format(new Date(row.requestedAt || row.refuelDate), 'HH:mm', {
+                                    locale: ptBR,
+                                  })}
+                                </p>
+                              </div>
                             </td>
                             <td
                               className="max-w-[220px] truncate px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6"
