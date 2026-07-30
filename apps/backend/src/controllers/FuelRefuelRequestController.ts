@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { FuelRefuelRequestStatus, FuelVehicleType } from '@prisma/client';
+import { FuelRefuelRequestStatus, FuelTankLevelAfter, FuelVehicleType } from '@prisma/client';
 import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
@@ -86,6 +86,17 @@ const createSchema = z.object({
   observations: z.string().optional(),
   driverCpf: z.string().optional(),
   driverUserId: z.string().optional(),
+});
+
+const reportSchema = z.object({
+  odometerKm: z.coerce.number().int().positive('Informe o hodômetro em km'),
+  tankLevelAfter: z.enum(['RESERVE', 'QUARTER', 'HALF', 'THREE_QUARTERS', 'FULL'], {
+    required_error: 'Informe o nível do tanque',
+  }),
+  litersRefueled: z.coerce.number().positive('Informe os litros abastecidos'),
+  pricePerLiter: z.coerce.number().positive('Informe o valor por litro'),
+  receiptPhotoBase64: z.string().min(1, 'Envie a foto do cupom fiscal'),
+  observations: z.string().optional(),
 });
 
 async function resolveDriverContext(
@@ -523,6 +534,46 @@ export class FuelRefuelRequestController {
 
       const row = await fuelRefuelRequestService.cancel(req.params.id, userId);
       res.json({ success: true, data: row, message: 'Solicitação cancelada' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async submitReport(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw createError('Usuário não autenticado', 401);
+
+      const body = reportSchema.parse(req.body);
+      if (!body.receiptPhotoBase64.includes('base64,')) {
+        throw createError('Foto do cupom fiscal inválida', 400);
+      }
+
+      const upload = await photoService.uploadPhotoFromBase64(
+        body.receiptPhotoBase64,
+        user.id,
+        parseImageContentType(body.receiptPhotoBase64),
+      );
+
+      const row = await fuelRefuelRequestService.submitRefuelReport({
+        requesterId: user.id,
+        requestId: req.params.id,
+        odometerKm: body.odometerKm,
+        tankLevelAfter: body.tankLevelAfter as FuelTankLevelAfter,
+        litersRefueled: body.litersRefueled,
+        pricePerLiter: body.pricePerLiter,
+        receiptPhotoUrl: upload.url,
+        receiptPhotoKey: upload.key,
+        receiptPhotoName: 'cupom-fiscal.jpg',
+        observations: body.observations,
+      });
+
+      const presented = await fuelRefuelRequestService.getByIdForApi(row.id);
+      res.json({
+        success: true,
+        data: presented,
+        message: 'Abastecimento informado com sucesso',
+      });
     } catch (error) {
       next(error);
     }

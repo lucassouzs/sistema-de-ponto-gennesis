@@ -29,6 +29,7 @@ import {
   XCircle,
   ChevronDown,
   ImagePlus,
+  MapPin,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
@@ -50,6 +51,9 @@ type FuelRefuelStatus =
 
 type CardFilter = 'all' | 'pending' | 'concluded' | 'cancelled';
 
+type FuelRefuelDeadlineUnit = 'HOURS' | 'DAYS';
+type FuelTankLevelAfter = 'RESERVE' | 'QUARTER' | 'HALF' | 'THREE_QUARTERS' | 'FULL';
+
 type FuelRequestRow = {
   id: string;
   displayNumber: number;
@@ -61,6 +65,26 @@ type FuelRequestRow = {
   status: FuelRefuelStatus;
   satelliteCityName?: string | null;
   observations?: string | null;
+  gasStation?: {
+    id: string;
+    displayNumber?: number;
+    name: string;
+    address?: string | null;
+    cityCode?: string | null;
+  } | null;
+  refuelDeadlineAt?: string | null;
+  refuelDeadlineAmount?: number | null;
+  refuelDeadlineUnit?: FuelRefuelDeadlineUnit | null;
+  suppliesApprovalComment?: string | null;
+};
+
+type ReportFormState = {
+  odometerKm: string;
+  tankLevelAfter: FuelTankLevelAfter | '';
+  litersRefueled: string;
+  pricePerLiter: string;
+  receiptPhoto: string;
+  observations: string;
 };
 
 type SatelliteCity = { code: string; stateCode: string; name: string };
@@ -98,6 +122,14 @@ const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
   CANCELLED: 'Cancelada',
 };
 
+const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
+  { value: 'RESERVE', label: 'Reserva' },
+  { value: 'QUARTER', label: '1/4 do tanque' },
+  { value: 'HALF', label: '1/2 do tanque' },
+  { value: 'THREE_QUARTERS', label: '3/4 do tanque' },
+  { value: 'FULL', label: 'Tanque cheio' },
+];
+
 function todayInputValue() {
   const d = new Date();
   const y = d.getFullYear();
@@ -123,6 +155,28 @@ function EMPTY_FORM(): FormState {
   };
 }
 
+function EMPTY_REPORT_FORM(): ReportFormState {
+  return {
+    odometerKm: '',
+    tankLevelAfter: '',
+    litersRefueled: '',
+    pricePerLiter: '',
+    receiptPhoto: '',
+    observations: '',
+  };
+}
+
+function parseBrDecimal(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, '');
+  if (!cleaned) return null;
+  if (cleaned.includes(',')) {
+    const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
 function isPendingStatus(status: FuelRefuelStatus) {
   return (
     status === 'PENDING_MANAGER' ||
@@ -140,6 +194,31 @@ function formatDateLabel(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('pt-BR');
+}
+
+function formatDateTimeLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRefuelDeadline(
+  amount?: number | null,
+  unit?: FuelRefuelDeadlineUnit | null,
+  deadlineAt?: string | null,
+): string | null {
+  if (!amount || !unit) return null;
+  const unitLabel =
+    unit === 'HOURS' ? (amount === 1 ? 'hora' : 'horas') : amount === 1 ? 'dia' : 'dias';
+  const base = `${amount} ${unitLabel}`;
+  if (!deadlineAt) return base;
+  return `${base} (até ${formatDateTimeLabel(deadlineAt)})`;
 }
 
 function mapFrotaParticToFuelType(frotaPartic?: 'FROTA' | 'PARTICULAR' | null): FuelVehicleType {
@@ -245,6 +324,9 @@ export default function FuelRequestsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM());
+  const [reportTarget, setReportTarget] = useState<FuelRequestRow | null>(null);
+  const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM());
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const [states, setStates] = useState<string[]>([]);
   const [cities, setCities] = useState<SatelliteCity[]>([]);
@@ -406,6 +488,44 @@ export default function FuelRequestsScreen() {
     }
   };
 
+  const takeReceiptPhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão', 'Precisamos da câmera para a foto do cupom.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      setReportForm((f) => ({
+        ...f,
+        receiptPhoto: `data:image/jpeg;base64,${result.assets[0].base64}`,
+      }));
+    }
+  };
+
+  const pickReceiptPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão', 'Precisamos da galeria para anexar a foto.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]?.base64) {
+      setReportForm((f) => ({
+        ...f,
+        receiptPhoto: `data:image/jpeg;base64,${result.assets[0].base64}`,
+      }));
+    }
+  };
+
   const submitForm = async () => {
     if (!form.refuelDate) {
       Toast.show({ type: 'error', text1: 'Informe a data do abastecimento' });
@@ -464,6 +584,65 @@ export default function FuelRequestsScreen() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openReportForm = (row: FuelRequestRow) => {
+    setReportForm(EMPTY_REPORT_FORM());
+    setReportTarget(row);
+  };
+
+  const submitReportForm = async () => {
+    if (!reportTarget) return;
+    const odometerKm = Number(reportForm.odometerKm.replace(/\D/g, ''));
+    if (!Number.isFinite(odometerKm) || odometerKm <= 0) {
+      Toast.show({ type: 'error', text1: 'Informe o hodômetro em km' });
+      return;
+    }
+    if (!reportForm.tankLevelAfter) {
+      Toast.show({ type: 'error', text1: 'Selecione o nível do tanque' });
+      return;
+    }
+    const litersRefueled = parseBrDecimal(reportForm.litersRefueled);
+    if (litersRefueled == null || litersRefueled <= 0) {
+      Toast.show({ type: 'error', text1: 'Informe os litros abastecidos' });
+      return;
+    }
+    const pricePerLiter = parseBrDecimal(reportForm.pricePerLiter);
+    if (pricePerLiter == null || pricePerLiter <= 0) {
+      Toast.show({ type: 'error', text1: 'Informe o valor por litro' });
+      return;
+    }
+    if (!reportForm.receiptPhoto.startsWith('data:image/')) {
+      Toast.show({ type: 'error', text1: 'Envie a foto do cupom fiscal' });
+      return;
+    }
+
+    setReportSubmitting(true);
+    try {
+      const res = await api.post(`/api/fuel-refuel-requests/${reportTarget.id}/report`, {
+        odometerKm,
+        tankLevelAfter: reportForm.tankLevelAfter,
+        litersRefueled,
+        pricePerLiter,
+        receiptPhotoBase64: reportForm.receiptPhoto,
+        observations: reportForm.observations.trim() || undefined,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Erro ao informar');
+      Toast.show({ type: 'success', text1: data?.message || 'Abastecimento informado' });
+      setReportTarget(null);
+      setReportForm(EMPTY_REPORT_FORM());
+      setLoading(true);
+      void loadList();
+    } catch (e: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Erro',
+        text2: e?.message || 'Não foi possível informar o abastecimento',
+      });
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -568,7 +747,17 @@ export default function FuelRequestsScreen() {
           </View>
         ) : (
           <View style={styles.list}>
-            {filteredRows.map((row) => (
+            {filteredRows.map((row) => {
+              const deadlineLabel = formatRefuelDeadline(
+                row.refuelDeadlineAmount,
+                row.refuelDeadlineUnit,
+                row.refuelDeadlineAt,
+              );
+              const showReleaseInfo = Boolean(
+                row.gasStation || deadlineLabel || row.suppliesApprovalComment,
+              );
+
+              return (
               <View key={row.id} style={styles.card}>
                 <View style={styles.cardTop}>
                   <Text style={styles.cardNumber}>#{row.displayNumber}</Text>
@@ -598,8 +787,58 @@ export default function FuelRequestsScreen() {
                 <Text style={styles.cardSub} numberOfLines={1}>
                   {[row.driverName, row.satelliteCityName].filter(Boolean).join(' · ')}
                 </Text>
+                {showReleaseInfo ? (
+                  <View
+                    style={[
+                      styles.releaseBox,
+                      {
+                        backgroundColor: isDark
+                          ? 'rgba(5, 150, 105, 0.14)'
+                          : 'rgba(5, 150, 105, 0.08)',
+                        borderColor: isDark
+                          ? 'rgba(5, 150, 105, 0.35)'
+                          : 'rgba(5, 150, 105, 0.22)',
+                      },
+                    ]}
+                  >
+                    {row.gasStation ? (
+                      <View style={styles.releaseRow}>
+                        <MapPin size={15} color="#059669" strokeWidth={2.2} />
+                        <View style={styles.releaseTextCol}>
+                          <Text style={styles.releaseLabel}>Posto liberado</Text>
+                          <Text style={styles.releaseValue}>
+                            {row.gasStation.name}
+                            {row.gasStation.address ? ` — ${row.gasStation.address}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {deadlineLabel ? (
+                      <View style={styles.releaseRow}>
+                        <Clock size={15} color="#059669" strokeWidth={2.2} />
+                        <View style={styles.releaseTextCol}>
+                          <Text style={styles.releaseLabel}>Prazo para abastecer</Text>
+                          <Text style={styles.releaseValue}>{deadlineLabel}</Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    {row.suppliesApprovalComment ? (
+                      <Text style={styles.releaseComment}>{row.suppliesApprovalComment}</Text>
+                    ) : null}
+                  </View>
+                ) : null}
+                {row.status === 'AWAITING_REFUEL' ? (
+                  <TouchableOpacity
+                    style={styles.reportBtn}
+                    onPress={() => openReportForm(row)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.reportBtnText}>Informar abastecimento</Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -850,6 +1089,255 @@ export default function FuelRequestsScreen() {
                 </View>
               </>
             )}
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Informar abastecimento */}
+      <Modal
+        visible={Boolean(reportTarget)}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (reportSubmitting) return;
+          setReportTarget(null);
+        }}
+      >
+        <View
+          style={[
+            styles.safeArea,
+            {
+              backgroundColor: colors.background,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+            },
+          ]}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.formHeader}>
+              <View style={styles.formHeaderText}>
+                <Text style={styles.formTitle}>Informar abastecimento</Text>
+                <Text style={styles.formSubtitle}>
+                  {reportTarget ? `#${reportTarget.displayNumber}` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  if (reportSubmitting) return;
+                  setReportTarget(null);
+                }}
+                style={[styles.formCloseBtn, { backgroundColor: colors.card }]}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
+              >
+                <X size={20} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.formScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {reportTarget &&
+              (reportTarget.gasStation || reportTarget.refuelDeadlineAmount) ? (
+                <View
+                  style={[
+                    styles.releaseBox,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(5, 150, 105, 0.14)'
+                        : 'rgba(5, 150, 105, 0.08)',
+                      borderColor: isDark
+                        ? 'rgba(5, 150, 105, 0.35)'
+                        : 'rgba(5, 150, 105, 0.22)',
+                      marginBottom: 16,
+                    },
+                  ]}
+                >
+                  {reportTarget.gasStation ? (
+                    <View style={styles.releaseRow}>
+                      <MapPin size={15} color="#059669" strokeWidth={2.2} />
+                      <View style={styles.releaseTextCol}>
+                        <Text style={styles.releaseLabel}>Posto liberado</Text>
+                        <Text style={styles.releaseValue}>
+                          {reportTarget.gasStation.name}
+                          {reportTarget.gasStation.address
+                            ? ` — ${reportTarget.gasStation.address}`
+                            : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                  {reportTarget.refuelDeadlineAmount ? (
+                    <View style={styles.releaseRow}>
+                      <Clock size={15} color="#059669" strokeWidth={2.2} />
+                      <View style={styles.releaseTextCol}>
+                        <Text style={styles.releaseLabel}>Prazo para abastecer</Text>
+                        <Text style={styles.releaseValue}>
+                          {formatRefuelDeadline(
+                            reportTarget.refuelDeadlineAmount,
+                            reportTarget.refuelDeadlineUnit,
+                            reportTarget.refuelDeadlineAt,
+                          )}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <Text style={styles.sectionTitle}>Dados do abastecimento</Text>
+
+              <Text style={styles.fieldLabel}>Hodômetro (km) *</Text>
+              <TextInput
+                style={styles.input}
+                value={reportForm.odometerKm}
+                onChangeText={(odometerKm) =>
+                  setReportForm((f) => ({ ...f, odometerKm: odometerKm.replace(/\D/g, '') }))
+                }
+                placeholder="Ex.: 45230"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="number-pad"
+              />
+
+              <SelectField
+                label="Tanque após abastecimento *"
+                valueLabel={
+                  TANK_LEVEL_OPTIONS.find((o) => o.value === reportForm.tankLevelAfter)?.label ||
+                  ''
+                }
+                placeholder="Selecione o nível"
+                colors={colors}
+                isDark={isDark}
+                onPress={() => {
+                  setPickerSearch('');
+                  setPicker({
+                    title: 'Nível do tanque',
+                    options: TANK_LEVEL_OPTIONS.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                    })),
+                    onSelect: (value) => {
+                      setReportForm((f) => ({
+                        ...f,
+                        tankLevelAfter: value as FuelTankLevelAfter,
+                      }));
+                      setPicker(null);
+                    },
+                  });
+                }}
+              />
+
+              <Text style={styles.fieldLabel}>Litros abastecidos *</Text>
+              <TextInput
+                style={styles.input}
+                value={reportForm.litersRefueled}
+                onChangeText={(litersRefueled) =>
+                  setReportForm((f) => ({ ...f, litersRefueled }))
+                }
+                placeholder="Ex.: 45,500"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.fieldLabel}>Valor por litro (R$) *</Text>
+              <TextInput
+                style={styles.input}
+                value={reportForm.pricePerLiter}
+                onChangeText={(pricePerLiter) =>
+                  setReportForm((f) => ({ ...f, pricePerLiter }))
+                }
+                placeholder="Ex.: 5,89"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.sectionTitle}>Cupom fiscal</Text>
+              {reportForm.receiptPhoto ? (
+                <View style={styles.photoWrap}>
+                  <Image source={{ uri: reportForm.receiptPhoto }} style={styles.photoPreview} />
+                  <TouchableOpacity
+                    style={styles.photoClear}
+                    onPress={() => setReportForm((f) => ({ ...f, receiptPhoto: '' }))}
+                    accessibilityLabel="Remover foto"
+                  >
+                    <X size={16} color="#fff" strokeWidth={2.4} />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.photoEmpty}>
+                  <View
+                    style={[
+                      styles.photoEmptyIcon,
+                      { backgroundColor: isDark ? colors.card : '#EEF0F3' },
+                    ]}
+                  >
+                    <Camera size={22} color={colors.textSecondary} />
+                  </View>
+                  <Text style={styles.photoEmptyTitle}>Adicione a foto do cupom</Text>
+                  <Text style={styles.photoEmptyText}>Tire uma foto ou escolha da galeria</Text>
+                </View>
+              )}
+              <View style={styles.photoActions}>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={takeReceiptPhoto}
+                  activeOpacity={0.75}
+                >
+                  <Camera size={16} color={colors.primary} strokeWidth={2.2} />
+                  <Text style={styles.secondaryBtnText}>Câmera</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={pickReceiptPhoto}
+                  activeOpacity={0.75}
+                >
+                  <ImagePlus size={16} color={colors.primary} strokeWidth={2.2} />
+                  <Text style={styles.secondaryBtnText}>Galeria</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.fieldLabel}>Observações (opcional)</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline]}
+                value={reportForm.observations}
+                onChangeText={(observations) =>
+                  setReportForm((f) => ({ ...f, observations }))
+                }
+                placeholder="Alguma observação?"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+              />
+            </ScrollView>
+
+            <View
+              style={[
+                styles.formFooter,
+                { borderTopColor: isDark ? colors.border : 'rgba(0,0,0,0.06)' },
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  styles.formSubmitBtn,
+                  { backgroundColor: '#059669' },
+                  reportSubmitting && { opacity: 0.7 },
+                ]}
+                onPress={submitReportForm}
+                disabled={reportSubmitting}
+                activeOpacity={0.85}
+              >
+                {reportSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Confirmar abastecimento</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -1116,6 +1604,53 @@ const getStyles = (colors: any, isDark: boolean) =>
     },
     cardMeta: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
     cardSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    releaseBox: {
+      marginTop: 12,
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 10,
+    },
+    releaseRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    releaseTextCol: { flex: 1, gap: 2 },
+    releaseLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#059669',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    releaseValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+      lineHeight: 20,
+    },
+    releaseComment: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textSecondary,
+      lineHeight: 18,
+      marginTop: 2,
+    },
+    reportBtn: {
+      marginTop: 12,
+      backgroundColor: '#059669',
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    reportBtnText: {
+      color: '#fff',
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
     fieldLabel: {
       fontSize: 13,
       fontWeight: '600',

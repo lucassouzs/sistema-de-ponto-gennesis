@@ -71,5 +71,8 @@ router.post('/:id/reject', requireFuelApproverAccess, (req, res, next) =>
 router.post('/:id/cancel', (req, res, next) =>
   fuelRefuelRequestController.cancel(req, res, next),
 );
+router.post('/:id/report', (req, res, next) =>
+  fuelRefuelRequestController.submitReport(req, res, next),
+);
 
 export default router;

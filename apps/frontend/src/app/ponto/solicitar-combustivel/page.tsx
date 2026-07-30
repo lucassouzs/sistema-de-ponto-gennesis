@@ -8,6 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   CheckCircle,
   Clock,
+  Eye,
   Fuel,
   Plus,
   Search,
@@ -31,7 +32,13 @@ import {
   formatCadastroListId,
   getCadastroListRange,
 } from '@/components/ui/CadastroListSummary';
-import { cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
+import {
+  RowActionMenuCell,
+  RowActionMenuPortal,
+  cadastroListClasses,
+  listTableRowClasses,
+} from '@/components/ui/RowActionMenu';
+import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import {
@@ -52,10 +59,15 @@ type FuelRefuelStatus =
   | 'REJECTED'
   | 'CANCELLED';
 
+type FuelRefuelDeadlineUnit = 'HOURS' | 'DAYS';
+type FuelTankLevelAfter = 'RESERVE' | 'QUARTER' | 'HALF' | 'THREE_QUARTERS' | 'FULL';
+
 type FuelRequestRow = {
   id: string;
   displayNumber: number;
   refuelDate: string;
+  requestedAt?: string | null;
+  createdAt?: string | null;
   route: string;
   driverName: string;
   vehiclePlate: string;
@@ -65,6 +77,32 @@ type FuelRequestRow = {
   satelliteCityName?: string | null;
   costCenter?: string | null;
   observations?: string | null;
+  gasStation?: {
+    id: string;
+    name: string;
+    address?: string | null;
+  } | null;
+  refuelDeadlineAt?: string | null;
+  refuelDeadlineAmount?: number | null;
+  refuelDeadlineUnit?: FuelRefuelDeadlineUnit | null;
+  suppliesApprovalComment?: string | null;
+  odometerKm?: number | null;
+  tankLevelAfter?: FuelTankLevelAfter | null;
+  litersRefueled?: number | string | null;
+  pricePerLiter?: number | string | null;
+  refuelReportObservations?: string | null;
+  receiptPhotoViewUrl?: string | null;
+  receiptPhotoUrl?: string | null;
+  receiptPhotoName?: string | null;
+};
+
+type ReportFormState = {
+  odometerKm: string;
+  tankLevelAfter: FuelTankLevelAfter | '';
+  litersRefueled: string;
+  pricePerLiter: string;
+  receiptPhoto: string;
+  observations: string;
 };
 
 type SatelliteCity = {
@@ -137,6 +175,18 @@ const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   COMPANY: 'Frota / empresa',
 };
 
+const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
+  { value: 'RESERVE', label: 'Reserva' },
+  { value: 'QUARTER', label: '1/4 do tanque' },
+  { value: 'HALF', label: '1/2 do tanque' },
+  { value: 'THREE_QUARTERS', label: '3/4 do tanque' },
+  { value: 'FULL', label: 'Tanque cheio' },
+];
+
+const TANK_LEVEL_LABELS: Record<FuelTankLevelAfter, string> = Object.fromEntries(
+  TANK_LEVEL_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<FuelTankLevelAfter, string>;
+
 const fieldClassName =
   'w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
 
@@ -161,6 +211,28 @@ function EMPTY_FORM(): FormState {
     dashboardPhoto: '',
     observations: '',
   };
+}
+
+function EMPTY_REPORT_FORM(): ReportFormState {
+  return {
+    odometerKm: '',
+    tankLevelAfter: '',
+    litersRefueled: '',
+    pricePerLiter: '',
+    receiptPhoto: '',
+    observations: '',
+  };
+}
+
+function parseBrDecimal(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, '');
+  if (!cleaned) return null;
+  if (cleaned.includes(',')) {
+    const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
 }
 
 function formatVehicleLabel(vehicle: FleetVehicle): string {
@@ -222,6 +294,51 @@ function formatDateLabel(value: string): string {
   if (Number.isNaN(date.getTime())) return '—';
   return format(date, 'dd/MM/yyyy', { locale: ptBR });
 }
+
+function formatDateTimeParts(value?: string | null): { date: string; time: string } | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return {
+    date: format(date, 'dd/MM/yyyy', { locale: ptBR }),
+    time: format(date, 'HH:mm', { locale: ptBR }),
+  };
+}
+
+function formatRefuelDeadline(
+  amount?: number | null,
+  unit?: FuelRefuelDeadlineUnit | null,
+  deadlineAt?: string | null,
+): string {
+  if (!amount || !unit) return '—';
+  const unitLabel =
+    unit === 'HOURS' ? (amount === 1 ? 'hora' : 'horas') : amount === 1 ? 'dia' : 'dias';
+  const base = `${amount} ${unitLabel}`;
+  if (!deadlineAt) return base;
+  return `${base} (até ${format(new Date(deadlineAt), 'dd/MM/yyyy HH:mm', { locale: ptBR })})`;
+}
+
+function formatRefuelDeadlineLines(
+  amount?: number | null,
+  unit?: FuelRefuelDeadlineUnit | null,
+  deadlineAt?: string | null,
+): { amountLabel: string; dateLabel: string | null; timeLabel: string | null } | null {
+  if (!amount || !unit) return null;
+  const unitLabel =
+    unit === 'HOURS' ? (amount === 1 ? 'hora' : 'horas') : amount === 1 ? 'dia' : 'dias';
+  const parts = formatDateTimeParts(deadlineAt);
+  return {
+    amountLabel: `${amount} ${unitLabel}`,
+    dateLabel: parts?.date ?? null,
+    timeLabel: parts?.time ?? null,
+  };
+}
+
+/** Célula centralizada que quebra linha (evita overflow entre colunas com table-auto). */
+const tdCenterWrap =
+  'max-w-[11rem] px-2 py-3 text-center text-sm text-gray-900 dark:text-gray-100 sm:px-3';
+const thCenterCompact =
+  'px-2 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-3';
 
 function isPendingStatus(status: FuelRefuelStatus): boolean {
   return (
@@ -322,6 +439,9 @@ export default function SolicitarCombustivelPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
+  const [detailRequest, setDetailRequest] = useState<FuelRequestRow | null>(null);
+  const [reportTarget, setReportTarget] = useState<FuelRequestRow | null>(null);
+  const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -478,6 +598,14 @@ export default function SolicitarCombustivelPage() {
   const listHeader = CARD_LIST_CONFIG[cardFilter];
   const isListEmpty = !loadingList && pageRows.length === 0;
 
+  const {
+    rowActionMenu,
+    rowForActionMenu,
+    toggleRowActionMenu,
+    closeRowActionMenu,
+    isRowMenuOpen,
+  } = useRowActionMenu(pageRows);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, cardFilter]);
@@ -501,9 +629,81 @@ export default function SolicitarCombustivelPage() {
     },
   });
 
+  const reportMutation = useMutation({
+    mutationFn: async (payload: {
+      id: string;
+      body: Record<string, unknown>;
+    }) => {
+      const res = await api.post(`/fuel-refuel-requests/${payload.id}/report`, payload.body);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Abastecimento informado');
+      setReportTarget(null);
+      setReportForm(EMPTY_REPORT_FORM());
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests-mine'] });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Erro ao informar abastecimento';
+      toast.error(msg);
+    },
+  });
+
   const openCreateForm = () => {
     setFormData(EMPTY_FORM());
     setShowForm(true);
+  };
+
+  const openReportForm = (row: FuelRequestRow) => {
+    setDetailRequest(null);
+    setReportForm(EMPTY_REPORT_FORM());
+    setReportTarget(row);
+  };
+
+  const openDetail = (row: FuelRequestRow) => {
+    closeRowActionMenu();
+    setDetailRequest(row);
+  };
+
+  const submitReportForm = () => {
+    if (!reportTarget) return;
+    const odometerKm = Number(reportForm.odometerKm.replace(/\D/g, ''));
+    if (!Number.isFinite(odometerKm) || odometerKm <= 0) {
+      toast.error('Informe o hodômetro em km');
+      return;
+    }
+    if (!reportForm.tankLevelAfter) {
+      toast.error('Selecione o nível do tanque');
+      return;
+    }
+    const litersRefueled = parseBrDecimal(reportForm.litersRefueled);
+    if (litersRefueled == null || litersRefueled <= 0) {
+      toast.error('Informe os litros abastecidos');
+      return;
+    }
+    const pricePerLiter = parseBrDecimal(reportForm.pricePerLiter);
+    if (pricePerLiter == null || pricePerLiter <= 0) {
+      toast.error('Informe o valor por litro');
+      return;
+    }
+    if (isBlankVehiclePhoto(reportForm.receiptPhoto)) {
+      toast.error('Envie a foto do cupom fiscal');
+      return;
+    }
+
+    reportMutation.mutate({
+      id: reportTarget.id,
+      body: {
+        odometerKm,
+        tankLevelAfter: reportForm.tankLevelAfter,
+        litersRefueled,
+        pricePerLiter,
+        receiptPhotoBase64: reportForm.receiptPhoto,
+        observations: reportForm.observations.trim() || undefined,
+      },
+    });
   };
 
   const submitForm = () => {
@@ -656,48 +856,296 @@ export default function SolicitarCombustivelPage() {
                     totalPages={totalPages}
                   />
                   <div className="overflow-x-auto">
-                    <table className={cadastroListClasses.table}>
+                    <table className="w-full text-sm">
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className={cadastroListClasses.th}>ID</th>
-                          <th className={cadastroListClasses.th}>Data</th>
-                          <th className={cadastroListClasses.th}>Rota</th>
-                          <th className={cadastroListClasses.th}>Condutor</th>
-                          <th className={cadastroListClasses.thCenter}>Placa</th>
-                          <th className={cadastroListClasses.thCenter}>Tipo</th>
-                          <th className={cadastroListClasses.thCenter}>Status</th>
+                          <th className={`${cadastroListClasses.th} w-12 whitespace-nowrap`}>ID</th>
+                          <th className={`${cadastroListClasses.th} min-w-[7rem]`}>Rota</th>
+                          <th className={`${thCenterCompact} whitespace-nowrap`}>Data</th>
+                          <th className={thCenterCompact}>Condutor</th>
+                          <th className={`${thCenterCompact} whitespace-nowrap`}>Placa</th>
+                          <th className={`${thCenterCompact} whitespace-nowrap`}>Tipo</th>
+                          <th className={thCenterCompact}>Posto</th>
+                          <th className={thCenterCompact}>Prazo</th>
+                          <th className={`${thCenterCompact} whitespace-nowrap`}>Status</th>
+                          <th className={`${thCenterCompact} w-14`}>Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                        {pageRows.map((row, index) => (
+                        {pageRows.map((row, index) => {
+                          const deadlineLines = formatRefuelDeadlineLines(
+                            row.refuelDeadlineAmount,
+                            row.refuelDeadlineUnit,
+                            row.refuelDeadlineAt,
+                          );
+                          return (
                           <tr key={row.id} className={listTableRowClasses.tr}>
                             <td className={cadastroListClasses.tdMono}>
                               {formatCadastroListId(String(row.displayNumber), listRange.startItem + index)}
                             </td>
-                            <td className={cadastroListClasses.td}>{formatDateLabel(row.refuelDate)}</td>
-                            <td className={cadastroListClasses.td}>{row.route}</td>
-                            <td className={cadastroListClasses.td}>{row.driverName}</td>
-                            <td className={cadastroListClasses.tdCenter}>{row.vehiclePlate}</td>
-                            <td className={cadastroListClasses.tdCenter}>
+                            <td className={`${cadastroListClasses.td} break-words`}>{row.route}</td>
+                            <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
+                              {(() => {
+                                const dateSource =
+                                  row.requestedAt || row.createdAt || row.refuelDate;
+                                const parts = formatDateTimeParts(dateSource);
+                                if (!parts) return '—';
+                                return (
+                                  <div className="leading-snug">
+                                    <p>{parts.date}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {parts.time}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className={tdCenterWrap}>
+                              <span className="block break-words leading-snug">{row.driverName}</span>
+                            </td>
+                            <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
+                              {row.vehiclePlate}
+                            </td>
+                            <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
                               {VEHICLE_TYPE_LABELS[row.vehicleType] || row.vehicleType}
                             </td>
-                            <td className={cadastroListClasses.tdCenter}>
+                            <td className={tdCenterWrap}>
+                              {row.gasStation ? (
+                                <div className="space-y-0.5 break-words text-center leading-snug">
+                                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                                    {row.gasStation.name}
+                                  </p>
+                                  {row.gasStation.address ? (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {row.gasStation.address}
+                                    </p>
+                                  ) : null}
+                                  {row.suppliesApprovalComment ? (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {row.suppliesApprovalComment}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500">—</span>
+                              )}
+                            </td>
+                            <td className={tdCenterWrap}>
+                              {deadlineLines ? (
+                                <div className="leading-snug">
+                                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                                    {deadlineLines.amountLabel}
+                                  </p>
+                                  {deadlineLines.dateLabel ? (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {deadlineLines.dateLabel}
+                                    </p>
+                                  ) : null}
+                                  {deadlineLines.timeLabel ? (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {deadlineLines.timeLabel}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 dark:text-gray-500">—</span>
+                              )}
+                            </td>
+                            <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
                               <span
                                 className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[row.status]}`}
                               >
                                 {STATUS_LABELS[row.status] || row.status}
                               </span>
                             </td>
+                            <RowActionMenuCell
+                              isOpen={isRowMenuOpen(row.id)}
+                              onToggle={(e) => toggleRowActionMenu(row.id, e.currentTarget)}
+                              align="center"
+                            />
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
+                  {rowActionMenu && rowForActionMenu ? (
+                    <RowActionMenuPortal
+                      menu={rowActionMenu}
+                      onClose={closeRowActionMenu}
+                      onEdit={() => {}}
+                      hideDefaultActions
+                      extraItems={[
+                        {
+                          label: 'Ver detalhes',
+                          onClick: () => openDetail(rowForActionMenu),
+                          icon: (
+                            <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : null}
                 </>
               )}
             </CardContent>
           </Card>
         </div>
+
+        <Modal
+          isOpen={Boolean(detailRequest)}
+          onClose={() => setDetailRequest(null)}
+          title={
+            detailRequest
+              ? `Solicitação #${detailRequest.displayNumber}`
+              : 'Detalhes da solicitação'
+          }
+          size="lg"
+        >
+          {detailRequest ? (
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Status</span>
+                  <p className="mt-0.5">
+                    <span
+                      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[detailRequest.status]}`}
+                    >
+                      {STATUS_LABELS[detailRequest.status]}
+                    </span>
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Data</span>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {formatDateLabel(detailRequest.refuelDate)}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Rota</span>
+                  <p className="text-gray-900 dark:text-gray-100">{detailRequest.route}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Condutor</span>
+                  <p className="text-gray-900 dark:text-gray-100">{detailRequest.driverName}</p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Veículo</span>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {detailRequest.vehiclePlate}
+                    {detailRequest.vehicleType
+                      ? ` — ${VEHICLE_TYPE_LABELS[detailRequest.vehicleType]}`
+                      : ''}
+                  </p>
+                </div>
+                {detailRequest.gasStation ? (
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Posto liberado
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailRequest.gasStation.name}
+                      {detailRequest.gasStation.address
+                        ? ` — ${detailRequest.gasStation.address}`
+                        : ''}
+                    </p>
+                  </div>
+                ) : null}
+                {detailRequest.refuelDeadlineAmount ? (
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Prazo para abastecer
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {formatRefuelDeadline(
+                        detailRequest.refuelDeadlineAmount,
+                        detailRequest.refuelDeadlineUnit,
+                        detailRequest.refuelDeadlineAt,
+                      )}
+                    </p>
+                  </div>
+                ) : null}
+                {detailRequest.suppliesApprovalComment ? (
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Observação do Suprimentos
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailRequest.suppliesApprovalComment}
+                    </p>
+                  </div>
+                ) : null}
+                {detailRequest.observations ? (
+                  <div className="sm:col-span-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Observações
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {detailRequest.observations}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+
+              {detailRequest.status === 'COMPLETED' && detailRequest.tankLevelAfter ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800/50 dark:bg-green-950/20">
+                  <span className="font-medium text-green-800 dark:text-green-200">
+                    Dados do abastecimento
+                  </span>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {detailRequest.odometerKm != null ? (
+                      <div>
+                        <span className="text-xs text-gray-500">Hodômetro</span>
+                        <p>{detailRequest.odometerKm.toLocaleString('pt-BR')} km</p>
+                      </div>
+                    ) : null}
+                    <div>
+                      <span className="text-xs text-gray-500">Tanque</span>
+                      <p>{TANK_LEVEL_LABELS[detailRequest.tankLevelAfter]}</p>
+                    </div>
+                    {detailRequest.litersRefueled != null ? (
+                      <div>
+                        <span className="text-xs text-gray-500">Litros</span>
+                        <p>
+                          {Number(detailRequest.litersRefueled).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          })}
+                        </p>
+                      </div>
+                    ) : null}
+                    {detailRequest.pricePerLiter != null ? (
+                      <div>
+                        <span className="text-xs text-gray-500">Valor por litro</span>
+                        <p>
+                          {Number(detailRequest.pricePerLiter).toLocaleString('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          })}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  {detailRequest.refuelReportObservations ? (
+                    <p className="mt-2 text-sm">{detailRequest.refuelReportObservations}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {detailRequest.status === 'AWAITING_REFUEL' ? (
+                <div className="flex justify-end border-t border-gray-200 pt-4 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={() => openReportForm(detailRequest)}
+                    className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                  >
+                    Informar abastecimento
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Modal>
 
         <Modal
           isOpen={showForm}
@@ -927,6 +1375,169 @@ export default function SolicitarCombustivelPage() {
               </button>
             </div>
           </div>
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(reportTarget)}
+          onClose={() => {
+            if (reportMutation.isPending) return;
+            setReportTarget(null);
+          }}
+          title={
+            reportTarget
+              ? `Informar abastecimento — #${reportTarget.displayNumber}`
+              : 'Informar abastecimento'
+          }
+          size="lg"
+        >
+          {reportTarget ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-800/50 dark:bg-emerald-950/20">
+                {reportTarget.gasStation ? (
+                  <p className="text-gray-900 dark:text-gray-100">
+                    <span className="font-medium">Posto:</span> {reportTarget.gasStation.name}
+                    {reportTarget.gasStation.address
+                      ? ` — ${reportTarget.gasStation.address}`
+                      : ''}
+                  </p>
+                ) : null}
+                {reportTarget.refuelDeadlineAmount ? (
+                  <p className="mt-1 text-gray-800 dark:text-gray-200">
+                    <span className="font-medium">Prazo:</span>{' '}
+                    {formatRefuelDeadline(
+                      reportTarget.refuelDeadlineAmount,
+                      reportTarget.refuelDeadlineUnit,
+                      reportTarget.refuelDeadlineAt,
+                    )}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-gray-600 dark:text-gray-300">
+                  {reportTarget.vehiclePlate} · {reportTarget.route}
+                </p>
+              </div>
+
+              <FormSection title="Dados do abastecimento">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Hodômetro (km) *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={reportForm.odometerKm}
+                      onChange={(e) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          odometerKm: e.target.value.replace(/\D/g, ''),
+                        }))
+                      }
+                      className={fieldClassName}
+                      placeholder="Ex.: 45230"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Tanque após abastecimento *
+                    </label>
+                    <select
+                      value={reportForm.tankLevelAfter}
+                      onChange={(e) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          tankLevelAfter: e.target.value as FuelTankLevelAfter | '',
+                        }))
+                      }
+                      className={fieldClassName}
+                    >
+                      <option value="">Selecione…</option>
+                      {TANK_LEVEL_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Litros abastecidos *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={reportForm.litersRefueled}
+                      onChange={(e) =>
+                        setReportForm((f) => ({ ...f, litersRefueled: e.target.value }))
+                      }
+                      className={fieldClassName}
+                      placeholder="Ex.: 45,500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Valor por litro (R$) *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={reportForm.pricePerLiter}
+                      onChange={(e) =>
+                        setReportForm((f) => ({ ...f, pricePerLiter: e.target.value }))
+                      }
+                      className={fieldClassName}
+                      placeholder="Ex.: 5,89"
+                    />
+                  </div>
+                </div>
+              </FormSection>
+
+              <FormSection title="Cupom e observações">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Foto do cupom fiscal *
+                  </label>
+                  <VehicleReturnPhotoField
+                    value={reportForm.receiptPhoto}
+                    onChange={(receiptPhoto) => setReportForm((f) => ({ ...f, receiptPhoto }))}
+                    emptyLabel="Tocar para fotografar o cupom"
+                    photoAlt="Cupom fiscal"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Observações
+                  </label>
+                  <textarea
+                    value={reportForm.observations}
+                    onChange={(e) =>
+                      setReportForm((f) => ({ ...f, observations: e.target.value }))
+                    }
+                    className={`${fieldClassName} min-h-[80px]`}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </FormSection>
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  disabled={reportMutation.isPending}
+                  onClick={() => setReportTarget(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={reportMutation.isPending}
+                  onClick={submitReportForm}
+                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {reportMutation.isPending ? 'Enviando…' : 'Confirmar abastecimento'}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </Modal>
       </MainLayout>
     </ProtectedRoute>
