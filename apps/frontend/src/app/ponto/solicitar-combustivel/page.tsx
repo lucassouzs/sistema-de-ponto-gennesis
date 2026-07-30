@@ -36,7 +36,8 @@ import {
   RowActionMenuCell,
   RowActionMenuPortal,
   cadastroListClasses,
-  listTableRowClasses,
+  getListTableRowClassName,
+  ListRowNavigableLabel,
 } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { DatePickerField } from '@/components/ui/DatePickerField';
@@ -879,9 +880,15 @@ export default function SolicitarCombustivelPage() {
                             row.refuelDeadlineAt,
                           );
                           return (
-                          <tr key={row.id} className={listTableRowClasses.tr}>
+                          <tr
+                            key={row.id}
+                            onClick={() => openDetail(row)}
+                            className={getListTableRowClassName(true)}
+                          >
                             <td className={cadastroListClasses.tdMono}>
-                              {formatCadastroListId(String(row.displayNumber), listRange.startItem + index)}
+                              <ListRowNavigableLabel className="font-mono font-medium">
+                                {formatCadastroListId(String(row.displayNumber), listRange.startItem + index)}
+                              </ListRowNavigableLabel>
                             </td>
                             <td className={`${cadastroListClasses.td} break-words`}>{row.route}</td>
                             <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>

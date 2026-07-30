@@ -30,6 +30,7 @@ import {
   ChevronDown,
   ImagePlus,
   MapPin,
+  Info,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
@@ -327,6 +328,7 @@ export default function FuelRequestsScreen() {
   const [reportTarget, setReportTarget] = useState<FuelRequestRow | null>(null);
   const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM());
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [infoTarget, setInfoTarget] = useState<FuelRequestRow | null>(null);
 
   const [states, setStates] = useState<string[]>([]);
   const [cities, setCities] = useState<SatelliteCity[]>([]);
@@ -753,9 +755,9 @@ export default function FuelRequestsScreen() {
                 row.refuelDeadlineUnit,
                 row.refuelDeadlineAt,
               );
-              const showReleaseInfo = Boolean(
-                row.gasStation || deadlineLabel || row.suppliesApprovalComment,
-              );
+              const showReleaseInfo =
+                row.status === 'AWAITING_REFUEL' &&
+                Boolean(row.gasStation || deadlineLabel || row.suppliesApprovalComment);
 
               return (
               <View key={row.id} style={styles.card}>
@@ -787,54 +789,38 @@ export default function FuelRequestsScreen() {
                 <Text style={styles.cardSub} numberOfLines={1}>
                   {[row.driverName, row.satelliteCityName].filter(Boolean).join(' · ')}
                 </Text>
-                {showReleaseInfo ? (
-                  <View
-                    style={[
-                      styles.releaseBox,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(5, 150, 105, 0.14)'
-                          : 'rgba(5, 150, 105, 0.08)',
-                        borderColor: isDark
-                          ? 'rgba(5, 150, 105, 0.35)'
-                          : 'rgba(5, 150, 105, 0.22)',
-                      },
-                    ]}
-                  >
-                    {row.gasStation ? (
-                      <View style={styles.releaseRow}>
-                        <MapPin size={15} color="#059669" strokeWidth={2.2} />
-                        <View style={styles.releaseTextCol}>
-                          <Text style={styles.releaseLabel}>Posto liberado</Text>
-                          <Text style={styles.releaseValue}>
-                            {row.gasStation.name}
-                            {row.gasStation.address ? ` — ${row.gasStation.address}` : ''}
-                          </Text>
-                        </View>
-                      </View>
+                {showReleaseInfo || row.status === 'AWAITING_REFUEL' ? (
+                  <View style={styles.cardActions}>
+                    {showReleaseInfo ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.infoBtn,
+                          {
+                            backgroundColor: isDark
+                              ? 'rgba(5, 150, 105, 0.16)'
+                              : 'rgba(5, 150, 105, 0.1)',
+                            borderColor: isDark
+                              ? 'rgba(5, 150, 105, 0.4)'
+                              : 'rgba(5, 150, 105, 0.28)',
+                          },
+                        ]}
+                        onPress={() => setInfoTarget(row)}
+                        activeOpacity={0.85}
+                        accessibilityLabel="Informações"
+                      >
+                        <Info size={18} color="#059669" strokeWidth={2.4} />
+                      </TouchableOpacity>
                     ) : null}
-                    {deadlineLabel ? (
-                      <View style={styles.releaseRow}>
-                        <Clock size={15} color="#059669" strokeWidth={2.2} />
-                        <View style={styles.releaseTextCol}>
-                          <Text style={styles.releaseLabel}>Prazo para abastecer</Text>
-                          <Text style={styles.releaseValue}>{deadlineLabel}</Text>
-                        </View>
-                      </View>
-                    ) : null}
-                    {row.suppliesApprovalComment ? (
-                      <Text style={styles.releaseComment}>{row.suppliesApprovalComment}</Text>
+                    {row.status === 'AWAITING_REFUEL' ? (
+                      <TouchableOpacity
+                        style={styles.reportBtn}
+                        onPress={() => openReportForm(row)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.reportBtnText}>Informar abastecimento</Text>
+                      </TouchableOpacity>
                     ) : null}
                   </View>
-                ) : null}
-                {row.status === 'AWAITING_REFUEL' ? (
-                  <TouchableOpacity
-                    style={styles.reportBtn}
-                    onPress={() => openReportForm(row)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.reportBtnText}>Informar abastecimento</Text>
-                  </TouchableOpacity>
                 ) : null}
               </View>
               );
@@ -1090,6 +1076,122 @@ export default function FuelRequestsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Informações do posto / prazo */}
+      <Modal
+        visible={Boolean(infoTarget)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setInfoTarget(null)}
+      >
+        <View style={styles.infoOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setInfoTarget(null)}
+          />
+          <View style={[styles.infoSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.infoSheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.infoSheetTitle, { color: colors.text }]}>
+                  Informações da liberação
+                </Text>
+                <Text style={[styles.infoSheetSubtitle, { color: colors.textSecondary }]}>
+                  {infoTarget ? `#${infoTarget.displayNumber}` : ''}
+                  {infoTarget?.route ? ` · ${infoTarget.route}` : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setInfoTarget(null)}
+                style={[styles.formCloseBtn, { backgroundColor: isDark ? colors.background : '#EEF0F3' }]}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+
+            {infoTarget?.gasStation ? (
+              <View style={styles.infoBlock}>
+                <View style={styles.releaseRow}>
+                  <MapPin size={16} color="#059669" strokeWidth={2.2} />
+                  <View style={styles.releaseTextCol}>
+                    <Text style={styles.releaseLabel}>Posto liberado</Text>
+                    <Text style={[styles.releaseValue, { color: colors.text }]}>
+                      {infoTarget.gasStation.name}
+                    </Text>
+                    {infoTarget.gasStation.address ? (
+                      <Text style={[styles.releaseComment, { color: colors.textSecondary }]}>
+                        {infoTarget.gasStation.address}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              </View>
+            ) : null}
+
+            {infoTarget
+              ? (() => {
+                  const amount = infoTarget.refuelDeadlineAmount;
+                  const unit = infoTarget.refuelDeadlineUnit;
+                  if (!amount || !unit) return null;
+                  const unitLabel =
+                    unit === 'HOURS'
+                      ? amount === 1
+                        ? 'hora'
+                        : 'horas'
+                      : amount === 1
+                        ? 'dia'
+                        : 'dias';
+                  const until = infoTarget.refuelDeadlineAt
+                    ? formatDateTimeLabel(infoTarget.refuelDeadlineAt)
+                    : null;
+                  return (
+                    <View style={styles.infoBlock}>
+                      <View style={styles.releaseRow}>
+                        <Clock size={16} color="#059669" strokeWidth={2.2} />
+                        <View style={styles.releaseTextCol}>
+                          <Text style={styles.releaseLabel}>Prazo para abastecer</Text>
+                          <Text style={[styles.releaseValue, { color: colors.text }]}>
+                            {`${amount} ${unitLabel}`}
+                          </Text>
+                          {until ? (
+                            <Text style={[styles.releaseComment, { color: colors.textSecondary }]}>
+                              {until}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })()
+              : null}
+
+            {infoTarget?.suppliesApprovalComment ? (
+              <View style={styles.infoBlock}>
+                <Text style={styles.releaseLabel}>Observação</Text>
+                <Text style={[styles.releaseValue, { color: colors.text, marginTop: 4 }]}>
+                  {infoTarget.suppliesApprovalComment}
+                </Text>
+              </View>
+            ) : null}
+
+            {infoTarget?.status === 'AWAITING_REFUEL' ? (
+              <TouchableOpacity
+                style={[styles.reportBtn, styles.reportBtnInModal]}
+                onPress={() => {
+                  const row = infoTarget;
+                  setInfoTarget(null);
+                  openReportForm(row);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.reportBtnText}>Informar abastecimento</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </Modal>
 
@@ -1638,12 +1740,67 @@ const getStyles = (colors: any, isDark: boolean) =>
       lineHeight: 18,
       marginTop: 2,
     },
-    reportBtn: {
+    cardActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
       marginTop: 12,
+    },
+    infoBtn: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderRadius: 12,
+      flexShrink: 0,
+    },
+    infoOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'flex-end',
+      padding: 16,
+      paddingBottom: 28,
+    },
+    infoSheet: {
+      borderRadius: 20,
+      padding: 18,
+      gap: 12,
+    },
+    infoSheetHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 4,
+    },
+    infoSheetTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      letterSpacing: -0.3,
+    },
+    infoSheetSubtitle: {
+      fontSize: 13,
+      fontWeight: '500',
+      marginTop: 2,
+    },
+    infoBlock: {
+      borderRadius: 14,
+      padding: 12,
+      backgroundColor: isDark ? 'rgba(5, 150, 105, 0.12)' : 'rgba(5, 150, 105, 0.08)',
+    },
+    reportBtn: {
+      flex: 1,
       backgroundColor: '#059669',
       borderRadius: 12,
       paddingVertical: 12,
       alignItems: 'center',
+      justifyContent: 'center',
+    },
+    reportBtnInModal: {
+      flex: 0,
+      alignSelf: 'stretch',
+      marginTop: 8,
+      minHeight: 48,
     },
     reportBtnText: {
       color: '#fff',
