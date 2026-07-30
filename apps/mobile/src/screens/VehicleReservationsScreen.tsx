@@ -37,6 +37,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
+import { emitTabBarCollapse } from '../navigation/tabBarCollapseEvents';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
 type VehicleReservationStatus =
@@ -643,7 +644,13 @@ export default function VehicleReservationsScreen() {
       r.solicitante === user?.name);
 
   return (
-    <View style={styles.safeArea}>
+    <View
+      style={styles.safeArea}
+      onStartShouldSetResponderCapture={() => {
+        emitTabBarCollapse();
+        return false;
+      }}
+    >
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader />
 

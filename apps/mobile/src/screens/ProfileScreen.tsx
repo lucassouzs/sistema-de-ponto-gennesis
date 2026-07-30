@@ -11,6 +11,7 @@ import { User, Mail, Briefcase, Calendar, LogOut, MapPin, CreditCard } from 'luc
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
+import { emitTabBarCollapse } from '../navigation/tabBarCollapseEvents';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -26,7 +27,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={styles.safeArea}>
+    <View
+      style={styles.safeArea}
+      onStartShouldSetResponderCapture={() => {
+        emitTabBarCollapse();
+        return false;
+      }}
+    >
       <AppHeader />
       <ScrollView
         style={styles.container}

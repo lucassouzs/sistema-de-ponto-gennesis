@@ -35,6 +35,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
+import { emitTabBarCollapse } from '../navigation/tabBarCollapseEvents';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
@@ -484,7 +485,13 @@ export default function FuelRequestsScreen() {
   ];
 
   return (
-    <View style={styles.safeArea}>
+    <View
+      style={styles.safeArea}
+      onStartShouldSetResponderCapture={() => {
+        emitTabBarCollapse();
+        return false;
+      }}
+    >
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader
         showBack={!isTabScreen}
