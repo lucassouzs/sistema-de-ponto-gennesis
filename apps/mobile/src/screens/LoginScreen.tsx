@@ -16,6 +16,7 @@ import { Eye, EyeOff, Mail, Lock } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { API_CONFIG } from '../config/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -72,6 +73,9 @@ export default function LoginScreen() {
           <Text style={styles.title}>Entrar na sua conta</Text>
           <Text style={styles.subtitle}>
             Digite suas credenciais para acessar o sistema
+          </Text>
+          <Text style={{ textAlign: 'center', fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>
+            API: {API_CONFIG.BASE_URL}
           </Text>
 
           <View style={styles.form}>

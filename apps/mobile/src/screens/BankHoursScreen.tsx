@@ -457,6 +457,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 100,
   },
   cardsContainer: {
     paddingHorizontal: 20,

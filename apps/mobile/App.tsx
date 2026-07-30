@@ -12,6 +12,7 @@ import Toast from 'react-native-toast-message';
 import LoginScreen from './src/screens/LoginScreen';
 import PunchScreen from './src/screens/PunchScreen';
 import TimeRecordsScreen from './src/screens/TimeRecordsScreen';
+import FuelRequestsScreen from './src/screens/FuelRequestsScreen';
 
 // Navigation
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
@@ -26,6 +27,7 @@ export type RootStackParamList = {
   Main: undefined;
   Punch: undefined;
   TimeRecords: undefined;
+  FuelRequests: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -90,6 +92,7 @@ function AppNavigator() {
             <Stack.Screen name="Main" component={BottomTabNavigator} />
             <Stack.Screen name="Punch" component={PunchScreen} />
             <Stack.Screen name="TimeRecords" component={TimeRecordsScreen} />
+            <Stack.Screen name="FuelRequests" component={FuelRequestsScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

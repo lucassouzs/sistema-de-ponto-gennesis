@@ -34,6 +34,7 @@
         "backgroundColor": "#111827"
       },
       "package": "com.engenharia.sistemaponto",
+      "usesCleartextTraffic": true,
       "navigationBar": {
         "visible": "leanback",
         "backgroundColor": "#374151"
@@ -55,7 +56,7 @@
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
       },
-      "EXPO_PUBLIC_API_URL": "https://sistema-pontobackend-production.up.railway.app"
+      "EXPO_PUBLIC_API_URL": "http://192.168.1.84:5000"
     },
     "owner": "lucassouzss"
   }

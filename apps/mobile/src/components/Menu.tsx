@@ -9,8 +9,11 @@ import {
   Animated,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { X, Menu as MenuIcon } from 'lucide-react-native';
+import { X, Droplets, CalendarCheck } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
+import type { RootStackParamList } from '../../App';
 
 interface MenuProps {
   visible: boolean;
@@ -19,17 +22,16 @@ interface MenuProps {
 
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors } = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = React.useRef(new Animated.Value(-300)).current;
   const overlayOpacity = React.useRef(new Animated.Value(0)).current;
   const [isVisible, setIsVisible] = React.useState(false);
-  
-  // Versão do app
-  const APP_VERSION = '1.0.0';
+
+  const APP_VERSION = '1.0.3';
 
   React.useEffect(() => {
     if (visible) {
       setIsVisible(true);
-      // Animar overlay e menu simultaneamente
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
@@ -43,7 +45,6 @@ export default function Menu({ visible, onClose }: MenuProps) {
         }),
       ]).start();
     } else {
-      // Animar fechamento
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 0,
@@ -56,11 +57,17 @@ export default function Menu({ visible, onClose }: MenuProps) {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        // Só desmonta após a animação terminar
         setIsVisible(false);
       });
     }
-  }, [visible]);
+  }, [visible, overlayOpacity, slideAnim]);
+
+  const goTab = (name: 'Combustivel' | 'Reservas') => {
+    onClose();
+    setTimeout(() => {
+      navigation.navigate(name as never);
+    }, 280);
+  };
 
   const styles = StyleSheet.create({
     overlay: {
@@ -75,10 +82,7 @@ export default function Menu({ visible, onClose }: MenuProps) {
       paddingTop: 50,
       paddingHorizontal: 20,
       shadowColor: '#000',
-      shadowOffset: {
-        width: 2,
-        height: 0,
-      },
+      shadowOffset: { width: 2, height: 0 },
       shadowOpacity: 0.25,
       shadowRadius: 3.84,
       elevation: 5,
@@ -103,6 +107,9 @@ export default function Menu({ visible, onClose }: MenuProps) {
       flex: 1,
     },
     menuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
       paddingVertical: 15,
       paddingHorizontal: 10,
       borderBottomWidth: 1,
@@ -112,18 +119,6 @@ export default function Menu({ visible, onClose }: MenuProps) {
       fontSize: 16,
       color: colors.text,
       fontWeight: '500',
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-    },
-    emptyText: {
-      fontSize: 16,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 24,
     },
     versionContainer: {
       position: 'absolute',
@@ -150,50 +145,36 @@ export default function Menu({ visible, onClose }: MenuProps) {
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View 
-          style={[
-            styles.overlay,
-            {
-              opacity: overlayOpacity
-            }
-          ]}
-        >
-        <Animated.View 
-          style={[
-            styles.menuContainer,
-            {
-              transform: [{ translateX: slideAnim }]
-            }
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Menu</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-            >
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Menu Content */}
-          <ScrollView style={styles.menuContent}>
-            {/* Estado vazio */}
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-              </Text>
+        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
+          <Animated.View
+            style={[
+              styles.menuContainer,
+              { transform: [{ translateX: slideAnim }] },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.header}>
+              <Text style={styles.title}>Menu</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <X size={24} color={colors.text} />
+              </TouchableOpacity>
             </View>
-          </ScrollView>
 
-          {/* App Version */}
-          <View style={styles.versionContainer}>
-            <Text style={styles.versionText}>
-              App Version {APP_VERSION}
-            </Text>
-          </View>
-        </Animated.View>
+            <ScrollView style={styles.menuContent}>
+              <TouchableOpacity style={styles.menuItem} onPress={() => goTab('Combustivel')}>
+                <Droplets size={20} color={colors.primary} />
+                <Text style={styles.menuItemText}>Solicitar combustível</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} onPress={() => goTab('Reservas')}>
+                <CalendarCheck size={20} color={colors.primary} />
+                <Text style={styles.menuItemText}>Reserva de veículo</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            <View style={styles.versionContainer}>
+              <Text style={styles.versionText}>App Version {APP_VERSION}</Text>
+            </View>
+          </Animated.View>
         </Animated.View>
       </TouchableWithoutFeedback>
     </Modal>

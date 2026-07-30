@@ -28,7 +28,10 @@ export default function ProfileScreen() {
   return (
     <View style={styles.safeArea}>
       <SafeAreaView edges={['top']} style={styles.topSafeArea} />
-      <ScrollView style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.avatarContainer}>
@@ -177,6 +180,9 @@ const getStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  scrollContent: {
+    paddingBottom: 110,
   },
   header: {
     backgroundColor: colors.headerBackground,
