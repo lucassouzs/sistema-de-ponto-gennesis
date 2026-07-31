@@ -13,6 +13,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import PunchScreen from './src/screens/PunchScreen';
 import TimeRecordsScreen from './src/screens/TimeRecordsScreen';
 import FuelRequestsScreen from './src/screens/FuelRequestsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 
 // Navigation
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
@@ -20,6 +21,8 @@ import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 // Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { NotificationsProvider } from './src/notifications/NotificationsContext';
+import NotificationsSheet from './src/components/NotificationsSheet';
 
 // Tipagem opcional para o Stack
 export type RootStackParamList = {
@@ -28,6 +31,7 @@ export type RootStackParamList = {
   Punch: undefined;
   TimeRecords: undefined;
   FuelRequests: undefined;
+  Profile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -86,18 +90,26 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+          animation: 'slide_from_right',
+        }}
+      >
         {isAuthenticated ? (
           <>
             <Stack.Screen name="Main" component={BottomTabNavigator} />
             <Stack.Screen name="Punch" component={PunchScreen} />
             <Stack.Screen name="TimeRecords" component={TimeRecordsScreen} />
             <Stack.Screen name="FuelRequests" component={FuelRequestsScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>
+      {isAuthenticated ? <NotificationsSheet /> : null}
     </NavigationContainer>
   );
 }
@@ -121,9 +133,11 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <AppNavigator />
-            <StatusBarComponent />
-            <Toast />
+            <NotificationsProvider>
+              <AppNavigator />
+              <StatusBarComponent />
+              <Toast />
+            </NotificationsProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

@@ -8,11 +8,23 @@ import {
   ScrollView,
   Animated,
   TouchableWithoutFeedback,
+  Alert,
 } from 'react-native';
-import { X, Droplets, CalendarCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  X,
+  Droplets,
+  CalendarCheck,
+  Home,
+  User,
+  Moon,
+  Sun,
+  LogOut,
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../../App';
 
 interface MenuProps {
@@ -21,13 +33,13 @@ interface MenuProps {
 }
 
 export default function Menu({ visible, onClose }: MenuProps) {
-  const { colors } = useTheme();
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = React.useRef(new Animated.Value(-300)).current;
   const overlayOpacity = React.useRef(new Animated.Value(0)).current;
   const [isVisible, setIsVisible] = React.useState(false);
-
-  const APP_VERSION = '1.0.3';
 
   React.useEffect(() => {
     if (visible) {
@@ -35,12 +47,12 @@ export default function Menu({ visible, onClose }: MenuProps) {
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
-          duration: 300,
+          duration: 220,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 300,
+          duration: 260,
           useNativeDriver: true,
         }),
       ]).start();
@@ -48,131 +60,120 @@ export default function Menu({ visible, onClose }: MenuProps) {
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 0,
-          duration: 300,
+          duration: 180,
           useNativeDriver: true,
         }),
         Animated.timing(slideAnim, {
           toValue: -300,
-          duration: 300,
+          duration: 220,
           useNativeDriver: true,
         }),
-      ]).start(() => {
-        setIsVisible(false);
-      });
+      ]).start(() => setIsVisible(false));
     }
   }, [visible, overlayOpacity, slideAnim]);
 
-  const goTab = (name: 'Combustivel' | 'Reservas') => {
+  const go = (name: keyof RootStackParamList | 'Home' | 'Combustivel' | 'Reservas') => {
     onClose();
     setTimeout(() => {
+      if (name === 'Home' || name === 'Combustivel' || name === 'Reservas') {
+        navigation.navigate('Main' as never, { screen: name } as never);
+        return;
+      }
       navigation.navigate(name as never);
-    }, 280);
+    }, 200);
   };
 
-  const styles = StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-start',
-    },
-    menuContainer: {
-      backgroundColor: colors.card,
-      width: '80%',
-      height: '100%',
-      paddingTop: 50,
-      paddingHorizontal: 20,
-      shadowColor: '#000',
-      shadowOffset: { width: 2, height: 0 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 30,
-      paddingBottom: 20,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: colors.text,
-    },
-    closeButton: {
-      padding: 8,
-      borderRadius: 20,
-    },
-    menuContent: {
-      flex: 1,
-    },
-    menuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingVertical: 15,
-      paddingHorizontal: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    menuItemText: {
-      fontSize: 16,
-      color: colors.text,
-      fontWeight: '500',
-    },
-    versionContainer: {
-      position: 'absolute',
-      bottom: 20,
-      left: 20,
-      right: 20,
-      alignItems: 'center',
-      paddingVertical: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    versionText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
-  });
+  const handleLogout = () => {
+    Alert.alert('Sair', 'Tem certeza que deseja sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair',
+        style: 'destructive',
+        onPress: () => {
+          onClose();
+          setTimeout(() => {
+            void logout();
+          }, 200);
+        },
+      },
+    ]);
+  };
+
+  const styles = getStyles(colors);
+
+  const links = [
+    { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
+    { key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') },
+    { key: 'reservas', label: 'Reservas', icon: CalendarCheck, onPress: () => go('Reservas') },
+    { key: 'profile', label: 'Perfil', icon: User, onPress: () => go('Profile') },
+  ];
 
   return (
     <Modal
       visible={isVisible}
-      transparent={true}
+      transparent
       animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
           <Animated.View
             style={[
-              styles.menuContainer,
-              { transform: [{ translateX: slideAnim }] },
+              styles.panel,
+              {
+                backgroundColor: colors.background,
+                paddingTop: insets.top,
+                paddingBottom: Math.max(insets.bottom, 16),
+                transform: [{ translateX: slideAnim }],
+              },
             ]}
             onStartShouldSetResponder={() => true}
           >
             <View style={styles.header}>
-              <Text style={styles.title}>Menu</Text>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <X size={24} color={colors.text} />
+              <Text style={[styles.title, { color: colors.text }]}>Menu</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+                <X size={22} color={colors.text} strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.menuContent}>
-              <TouchableOpacity style={styles.menuItem} onPress={() => goTab('Combustivel')}>
-                <Droplets size={20} color={colors.primary} />
-                <Text style={styles.menuItemText}>Solicitar combustível</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={() => goTab('Reservas')}>
-                <CalendarCheck size={20} color={colors.primary} />
-                <Text style={styles.menuItemText}>Reserva de veículo</Text>
-              </TouchableOpacity>
+            <ScrollView
+              style={styles.content}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.contentInner}
+            >
+              {links.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={styles.item}
+                    onPress={item.onPress}
+                    activeOpacity={0.65}
+                  >
+                    <Icon size={20} color={colors.text} strokeWidth={2} />
+                    <Text style={[styles.itemLabel, { color: colors.text }]}>{item.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
-            <View style={styles.versionContainer}>
-              <Text style={styles.versionText}>App Version {APP_VERSION}</Text>
+            <View style={[styles.footer, { borderTopColor: colors.border }]}>
+              <TouchableOpacity style={styles.themeRow} onPress={toggleTheme} activeOpacity={0.65}>
+                {isDark ? (
+                  <Sun size={20} color={colors.text} strokeWidth={2} />
+                ) : (
+                  <Moon size={20} color={colors.text} strokeWidth={2} />
+                )}
+                <Text style={[styles.itemLabel, { color: colors.text }]}>
+                  {isDark ? 'Tema claro' : 'Tema escuro'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.themeRow} onPress={handleLogout} activeOpacity={0.65}>
+                <LogOut size={20} color={colors.primary} strokeWidth={2} />
+                <Text style={[styles.itemLabel, { color: colors.primary }]}>Sair</Text>
+              </TouchableOpacity>
             </View>
           </Animated.View>
         </Animated.View>
@@ -180,3 +181,63 @@ export default function Menu({ visible, onClose }: MenuProps) {
     </Modal>
   );
 }
+
+const getStyles = (colors: any) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      flexDirection: 'row',
+    },
+    panel: {
+      width: '78%',
+      maxWidth: 320,
+      height: '100%',
+      paddingHorizontal: 20,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+      paddingHorizontal: 4,
+      height: 44,
+    },
+    title: {
+      fontSize: 22,
+      fontWeight: '700',
+      letterSpacing: -0.4,
+    },
+    closeBtn: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    content: { flex: 1 },
+    contentInner: { paddingBottom: 16 },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 4,
+    },
+    itemLabel: {
+      fontSize: 16,
+      fontWeight: '500',
+      letterSpacing: -0.2,
+    },
+    footer: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      paddingTop: 8,
+      gap: 4,
+    },
+    themeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 4,
+    },
+  });

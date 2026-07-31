@@ -29,7 +29,7 @@ interface ThemeContextData {
 }
 
 const lightColors: ThemeColors = {
-  background: '#f9fafb',
+  background: '#f2f2f7',
   surface: '#ffffff',
   card: '#ffffff',
   text: '#111827',

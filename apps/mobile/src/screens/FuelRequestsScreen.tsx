@@ -37,7 +37,6 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
-import { emitTabBarCollapse } from '../navigation/tabBarCollapseEvents';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
@@ -719,17 +718,12 @@ export default function FuelRequestsScreen() {
   };
 
   return (
-    <View
-      style={styles.safeArea}
-      onStartShouldSetResponderCapture={() => {
-        emitTabBarCollapse();
-        return false;
-      }}
-    >
+    <View style={styles.safeArea}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader
         showBack={!isTabScreen}
         onBack={() => navigation.goBack()}
+        title={!isTabScreen ? 'Combustível' : undefined}
       />
 
       <ScrollView
@@ -746,10 +740,18 @@ export default function FuelRequestsScreen() {
           />
         }
       >
-        <Text style={styles.pageTitle}>Combustível</Text>
-        <Text style={styles.pageSubtitle}>
-          {counts.total} {counts.total === 1 ? 'solicitação' : 'solicitações'}
-        </Text>
+        {isTabScreen ? (
+          <>
+            <Text style={styles.pageTitle}>Combustível</Text>
+            <Text style={styles.pageSubtitle}>
+              {counts.total} {counts.total === 1 ? 'solicitação' : 'solicitações'}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.pageSubtitle}>
+            {counts.total} {counts.total === 1 ? 'solicitação' : 'solicitações'}
+          </Text>
+        )}
 
         <ScrollView
           horizontal

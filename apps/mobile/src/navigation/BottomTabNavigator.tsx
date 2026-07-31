@@ -2,14 +2,14 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import FloatingTabBar from './FloatingTabBar';
 
+import HomeScreen from '../screens/HomeScreen';
 import FuelRequestsScreen from '../screens/FuelRequestsScreen';
 import VehicleReservationsScreen from '../screens/VehicleReservationsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
 
 export type BottomTabParamList = {
+  Home: undefined;
   Combustivel: undefined;
   Reservas: undefined;
-  Perfil: undefined;
 };
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -17,7 +17,7 @@ const Tab = createBottomTabNavigator<BottomTabParamList>();
 export default function BottomTabNavigator() {
   return (
     <Tab.Navigator
-      initialRouteName="Combustivel"
+      initialRouteName="Home"
       tabBar={(props) => <FloatingTabBar {...props} />}
       sceneContainerStyle={{
         backgroundColor: 'transparent',
@@ -40,6 +40,11 @@ export default function BottomTabNavigator() {
       }}
     >
       <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ title: 'Início' }}
+      />
+      <Tab.Screen
         name="Combustivel"
         component={FuelRequestsScreen}
         options={{ title: 'Combustível' }}
@@ -48,11 +53,6 @@ export default function BottomTabNavigator() {
         name="Reservas"
         component={VehicleReservationsScreen}
         options={{ title: 'Reservas' }}
-      />
-      <Tab.Screen
-        name="Perfil"
-        component={ProfileScreen}
-        options={{ title: 'Perfil' }}
       />
     </Tab.Navigator>
   );
