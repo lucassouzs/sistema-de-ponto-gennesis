@@ -12,6 +12,7 @@ import {
   CalendarCheck,
   User,
   ChevronRight,
+  ClipboardList,
 } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -19,7 +20,7 @@ import AppHeader from '../components/AppHeader';
 import LiveActivitySection from '../components/LiveActivitySection';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 
-type ShortcutKey = 'all' | 'combustivel' | 'reservas';
+type ShortcutKey = 'all' | 'combustivel' | 'reservas' | 'pncp';
 
 type QuickAction = {
   key: string;
@@ -47,7 +48,7 @@ export default function HomeScreen() {
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'colaborador';
 
-  const goTab = (name: 'Combustivel' | 'Reservas') => {
+  const goTab = (name: 'Combustivel' | 'Reservas' | 'Pncp') => {
     navigation.navigate(name);
   };
 
@@ -82,6 +83,14 @@ export default function HomeScreen() {
         onPress: () => goTab('Reservas'),
       },
       {
+        key: 'pncp',
+        group: 'pncp',
+        title: 'Licitações PNCP',
+        description: 'Consultar e enviar para análise',
+        icon: ClipboardList,
+        onPress: () => goTab('Pncp'),
+      },
+      {
         key: 'profile',
         group: 'perfil',
         title: 'Meu perfil',
@@ -98,6 +107,7 @@ export default function HomeScreen() {
     { key: 'all', label: 'Todos' },
     { key: 'combustivel', label: 'Combustível' },
     { key: 'reservas', label: 'Reservas' },
+    { key: 'pncp', label: 'PNCP' },
   ];
 
   const visibleActions =

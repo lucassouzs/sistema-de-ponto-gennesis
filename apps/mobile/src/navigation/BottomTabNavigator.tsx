@@ -5,11 +5,13 @@ import FloatingTabBar from './FloatingTabBar';
 import HomeScreen from '../screens/HomeScreen';
 import FuelRequestsScreen from '../screens/FuelRequestsScreen';
 import VehicleReservationsScreen from '../screens/VehicleReservationsScreen';
+import PncpLicitacoesScreen from '../screens/PncpLicitacoesScreen';
 
 export type BottomTabParamList = {
   Home: undefined;
   Combustivel: undefined;
   Reservas: undefined;
+  Pncp: undefined;
 };
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -53,6 +55,11 @@ export default function BottomTabNavigator() {
         name="Reservas"
         component={VehicleReservationsScreen}
         options={{ title: 'Reservas' }}
+      />
+      <Tab.Screen
+        name="Pncp"
+        component={PncpLicitacoesScreen}
+        options={{ title: 'PNCP' }}
       />
     </Tab.Navigator>
   );

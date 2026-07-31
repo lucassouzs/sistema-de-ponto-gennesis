@@ -14,6 +14,7 @@ import PunchScreen from './src/screens/PunchScreen';
 import TimeRecordsScreen from './src/screens/TimeRecordsScreen';
 import FuelRequestsScreen from './src/screens/FuelRequestsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import PncpLicitacoesScreen from './src/screens/PncpLicitacoesScreen';
 
 // Navigation
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
@@ -32,6 +33,7 @@ export type RootStackParamList = {
   TimeRecords: undefined;
   FuelRequests: undefined;
   Profile: undefined;
+  Pncp: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -104,6 +106,7 @@ function AppNavigator() {
             <Stack.Screen name="TimeRecords" component={TimeRecordsScreen} />
             <Stack.Screen name="FuelRequests" component={FuelRequestsScreen} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Pncp" component={PncpLicitacoesScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

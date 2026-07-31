@@ -30,6 +30,7 @@ const ICONS: Record<string, TabIcon> = {
   Home: { set: 'ion', name: 'home' },
   Combustivel: { set: 'mci', name: 'gas-station' },
   Reservas: { set: 'ion', name: 'calendar' },
+  Pncp: { set: 'mci', name: 'gavel' },
   Fuel: { set: 'mci', name: 'gas-station' },
   Vehicle: { set: 'ion', name: 'calendar' },
 };
@@ -38,6 +39,7 @@ const SHORT_LABELS: Record<string, string> = {
   Home: 'Início',
   Combustivel: 'Combustível',
   Reservas: 'Reservas',
+  Pncp: 'PNCP',
   Fuel: 'Combustível',
   Vehicle: 'Reservas',
 };

@@ -20,6 +20,7 @@ import {
   Moon,
   Sun,
   LogOut,
+  ClipboardList,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -72,10 +73,10 @@ export default function Menu({ visible, onClose }: MenuProps) {
     }
   }, [visible, overlayOpacity, slideAnim]);
 
-  const go = (name: keyof RootStackParamList | 'Home' | 'Combustivel' | 'Reservas') => {
+  const go = (name: keyof RootStackParamList | 'Home' | 'Combustivel' | 'Reservas' | 'Pncp') => {
     onClose();
     setTimeout(() => {
-      if (name === 'Home' || name === 'Combustivel' || name === 'Reservas') {
+      if (name === 'Home' || name === 'Combustivel' || name === 'Reservas' || name === 'Pncp') {
         navigation.navigate('Main' as never, { screen: name } as never);
         return;
       }
@@ -105,6 +106,7 @@ export default function Menu({ visible, onClose }: MenuProps) {
     { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
     { key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') },
     { key: 'reservas', label: 'Reservas', icon: CalendarCheck, onPress: () => go('Reservas') },
+    { key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') },
     { key: 'profile', label: 'Perfil', icon: User, onPress: () => go('Profile') },
   ];
 
