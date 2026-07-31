@@ -63,7 +63,7 @@ export class FuelGasStationController {
           cityCode: { in: cityCodes },
           ...(includeInactive ? {} : { isActive: true }),
         },
-        orderBy: [{ cityCode: 'asc' }, { sortOrder: 'asc' }, { displayNumber: 'asc' }],
+        orderBy: [{ displayNumber: 'asc' }],
         include: { _count: { select: { requests: true } } },
       });
 

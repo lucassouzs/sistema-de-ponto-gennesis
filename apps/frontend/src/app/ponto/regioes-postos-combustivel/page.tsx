@@ -297,7 +297,7 @@ export default function RegioesPostosCombustivelPage() {
               Postos de Combustível
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Cadastre os postos credenciados por cidade satélite (DF/GO). O código é gerado automaticamente.
+              Gerencie os postos credenciados para abastecimento.
             </p>
           </div>
 

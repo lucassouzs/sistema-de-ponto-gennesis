@@ -201,7 +201,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/veiculos'), name: 'Veículos', href: '/ponto/veiculos', category: 'Cadastros' },
   {
     key: pathToModuleKey('/ponto/regioes-postos-combustivel'),
-    name: 'Regiões e Postos — Combustível',
+    name: 'Postos de Combustível',
     href: '/ponto/regioes-postos-combustivel',
     category: 'Cadastros',
   },

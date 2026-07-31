@@ -14,6 +14,10 @@ const EXTRA_PAGE_TITLES: Record<string, { title: string; category?: string; href
   },
   '/ponto/conversas': { title: 'Conversas', category: 'Principal' },
   '/ponto/gestao-solicitacoes': { title: 'Gestão de Solicitações', category: 'Principal' },
+  '/ponto/regioes-postos-combustivel': {
+    title: 'Postos de Combustível',
+    category: 'Cadastros',
+  },
   '/auth/login': { title: 'Login' },
 };
 
