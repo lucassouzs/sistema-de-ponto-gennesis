@@ -3786,10 +3786,18 @@ function KanbanPage() {
 
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div
-                className="inline-flex h-10 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
+                className="relative inline-flex h-10 w-20 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
                 role="group"
                 aria-label="Versão de visualização dos cards"
               >
+                <span
+                  aria-hidden
+                  className={clsx(
+                    'pointer-events-none absolute inset-y-0 left-0 w-1/2 rounded-[7px] bg-red-600',
+                    'transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
+                    cardViewMode === 'checklist' ? 'translate-x-full' : 'translate-x-0',
+                  )}
+                />
                 <button
                   type="button"
                   onClick={() => setCardViewModePersist('classic')}
@@ -3797,10 +3805,10 @@ function KanbanPage() {
                   aria-label="Versão clássica"
                   aria-pressed={cardViewMode === 'classic'}
                   className={clsx(
-                    'inline-flex h-full w-10 items-center justify-center transition-colors',
+                    'relative z-[1] inline-flex h-full w-10 items-center justify-center transition-colors duration-300',
                     cardViewMode === 'classic'
-                      ? 'bg-red-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700',
+                      ? 'text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
                   )}
                 >
                   <LayoutGrid className="h-4 w-4" />
@@ -3812,10 +3820,10 @@ function KanbanPage() {
                   aria-label="Versão nova"
                   aria-pressed={cardViewMode === 'checklist'}
                   className={clsx(
-                    'inline-flex h-full w-10 items-center justify-center border-l border-gray-300 transition-colors dark:border-gray-600',
+                    'relative z-[1] inline-flex h-full w-10 items-center justify-center transition-colors duration-300',
                     cardViewMode === 'checklist'
-                      ? 'bg-red-600 text-white'
-                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700',
+                      ? 'text-white'
+                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
                   )}
                 >
                   <ListChecks className="h-4 w-4" />
@@ -3986,7 +3994,7 @@ function KanbanPage() {
           className={clsx(
             'overflow-x-auto bg-[#F3F4F6] px-4 dark:bg-gray-900/40',
             isChecklistBoard
-              ? 'min-h-0 flex-1 overflow-y-hidden rounded-t-2xl pt-5 pb-0 [scrollbar-gutter:stable] [scrollbar-width:thin]'
+              ? 'min-h-0 flex-1 overflow-y-hidden rounded-t-2xl pt-5 pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
               : 'scrollbar-hide rounded-2xl py-5 pb-4',
           )}
         >
