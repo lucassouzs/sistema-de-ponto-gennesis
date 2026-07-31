@@ -168,6 +168,22 @@ export async function fetchKanbanBoard(departmentKey?: string): Promise<KanbanBo
   return res.data.data;
 }
 
+export type KanbanArchivedCard = KanbanCard & {
+  columnId: string;
+  columnTitle: string;
+  columnColor?: string;
+  archivedAt: string | null;
+};
+
+export async function fetchKanbanArchivedCards(
+  departmentKey?: string,
+): Promise<KanbanArchivedCard[]> {
+  const res = await api.get('/kanban/board/archived-cards', {
+    params: departmentKey ? { departmentKey } : undefined,
+  });
+  return (res.data.data ?? []) as KanbanArchivedCard[];
+}
+
 /** Baixa o quadro atual como JSON compatível com Trello. */
 export async function exportKanbanBoardTrello(departmentKey?: string): Promise<{
   filename: string;
@@ -644,6 +660,8 @@ export async function updateKanbanCard(
     attachmentsEnabled?: boolean;
     position?: number;
     workHours?: number | null;
+    completedAt?: string | null;
+    archivedAt?: string | null;
   },
   options?: { timeout?: number },
 ) {

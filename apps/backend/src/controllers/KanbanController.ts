@@ -182,6 +182,23 @@ export class KanbanController {
     }
   }
 
+  async listArchivedCards(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = requireUserId(req, next);
+      if (!userId) return;
+      const departmentKey =
+        typeof req.query.departmentKey === 'string' ? req.query.departmentKey : undefined;
+      const cards = await kanbanService.listArchivedCards(userId, departmentKey);
+      res.json({ success: true, data: cards });
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : '';
+      if (msg === 'Quadro não encontrado para este setor') {
+        return next(createError(msg, 404));
+      }
+      handleKanbanError(error, next);
+    }
+  }
+
   async updateBoardLabelPresets(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const userId = requireUserId(req, next);
@@ -404,6 +421,8 @@ export class KanbanController {
         attachmentsEnabled,
         position,
         workHours,
+        completedAt,
+        archivedAt,
       } = req.body;
 
       const card = await kanbanService.updateCard(userId, id, {
@@ -429,6 +448,18 @@ export class KanbanController {
               ? null
               : Number(workHours)
             : undefined,
+        completedAt:
+          completedAt === undefined
+            ? undefined
+            : completedAt === null || completedAt === ''
+              ? null
+              : String(completedAt),
+        archivedAt:
+          archivedAt === undefined
+            ? undefined
+            : archivedAt === null || archivedAt === ''
+              ? null
+              : String(archivedAt),
       });
 
       res.json({ success: true, data: card });
