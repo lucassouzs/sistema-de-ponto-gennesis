@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
-  Text,
   Pressable,
   StyleSheet,
   Platform,
@@ -63,13 +62,33 @@ function TabIconView({
   return <Ionicons name={icon.name} size={size} color={color} />;
 }
 
+function tabHighlight(
+  indicatorIndex: Animated.Value,
+  index: number,
+  tabCount: number,
+) {
+  if (tabCount <= 1) {
+    return indicatorIndex.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 1],
+    });
+  }
+  const inputRange = Array.from({ length: tabCount }, (_, i) => i);
+  const outputRange = inputRange.map((i) => (i === index ? 1 : 0));
+  return indicatorIndex.interpolate({
+    inputRange,
+    outputRange,
+    extrapolate: 'clamp',
+  });
+}
+
 function TabItem({
   focused,
   label,
   icon,
   activeColor,
   inactiveColor,
-  selectFill,
+  highlight,
   onPress,
   onLongPress,
   accessibilityLabel,
@@ -80,24 +99,22 @@ function TabItem({
   icon: TabIcon;
   activeColor: string;
   inactiveColor: string;
-  selectFill: string;
+  highlight: Animated.AnimatedInterpolation<number>;
   onPress: () => void;
   onLongPress: () => void;
   accessibilityLabel?: string;
   width: number | Animated.AnimatedInterpolation<number>;
 }) {
   const pressScale = useRef(new Animated.Value(1)).current;
-  const selectAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
-  const tint = focused ? activeColor : inactiveColor;
-
-  useEffect(() => {
-    Animated.timing(selectAnim, {
-      toValue: focused ? 1 : 0,
-      duration: focused ? 280 : 160,
-      easing: SLIDE_EASE,
-      useNativeDriver: false,
-    }).start();
-  }, [focused, selectAnim]);
+  const tint = highlight.interpolate({
+    inputRange: [0, 1],
+    outputRange: [inactiveColor, activeColor],
+  });
+  const activeOpacity = highlight;
+  const inactiveOpacity = highlight.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
 
   return (
     <Animated.View style={[styles.item, { width }]}>
@@ -124,29 +141,18 @@ function TabItem({
         onLongPress={onLongPress}
         style={styles.itemPress}
       >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.select,
-            {
-              backgroundColor: selectFill,
-              opacity: selectAnim,
-              transform: [
-                {
-                  scale: selectAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.92, 1],
-                  }),
-                },
-              ],
-            },
-          ]}
-        />
         <Animated.View style={[styles.tabInner, { transform: [{ scale: pressScale }] }]}>
-          <TabIconView icon={icon} color={tint} />
-          <Text style={[styles.label, { color: tint }]} numberOfLines={1}>
+          <View style={styles.iconStack}>
+            <Animated.View style={{ opacity: inactiveOpacity }}>
+              <TabIconView icon={icon} color={inactiveColor} />
+            </Animated.View>
+            <Animated.View style={[styles.iconOverlay, { opacity: activeOpacity }]}>
+              <TabIconView icon={icon} color={activeColor} />
+            </Animated.View>
+          </View>
+          <Animated.Text style={[styles.label, { color: tint }]} numberOfLines={1}>
             {label}
-          </Text>
+          </Animated.Text>
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -195,6 +201,8 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
 
   const tabSwitchScale = useRef(new Animated.Value(1)).current;
   const fabPressScale = useRef(new Animated.Value(1)).current;
+  const indicatorIndex = useRef(new Animated.Value(state.index)).current;
+  const indicatorStretch = useRef(new Animated.Value(1)).current;
   const prevIndex = useRef(state.index);
   const centeringRef = useRef<Animated.CompositeAnimation | null>(null);
   const switchRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -215,26 +223,79 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
 
   useEffect(() => {
     if (prevIndex.current === state.index) return;
-    prevIndex.current = state.index;
+    const from = prevIndex.current;
+    const to = state.index;
+    const jump = Math.abs(to - from);
+    prevIndex.current = to;
 
     switchRef.current?.stop();
     tabSwitchScale.setValue(1);
-    switchRef.current = Animated.sequence([
-      Animated.timing(tabSwitchScale, {
-        toValue: 1.025,
-        duration: 90,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: false,
-      }),
-      Animated.timing(tabSwitchScale, {
-        toValue: 1,
-        duration: 140,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: false,
-      }),
-    ]);
+    indicatorStretch.setValue(1);
+
+    if (jump > 1) {
+      // Salto sobre a aba do meio: indicador alonga e viaja
+      switchRef.current = Animated.parallel([
+        Animated.timing(indicatorIndex, {
+          toValue: to,
+          duration: 480,
+          easing: Easing.bezier(0.22, 1, 0.36, 1),
+          useNativeDriver: false,
+        }),
+        Animated.sequence([
+          Animated.timing(indicatorStretch, {
+            toValue: 1.55,
+            duration: 180,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+          }),
+          Animated.timing(indicatorStretch, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.bezier(0.22, 1, 0.36, 1),
+            useNativeDriver: false,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(tabSwitchScale, {
+            toValue: 1.03,
+            duration: 120,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }),
+          Animated.timing(tabSwitchScale, {
+            toValue: 1,
+            duration: 280,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: false,
+          }),
+        ]),
+      ]);
+    } else {
+      switchRef.current = Animated.parallel([
+        Animated.timing(indicatorIndex, {
+          toValue: to,
+          duration: 280,
+          easing: SLIDE_EASE,
+          useNativeDriver: false,
+        }),
+        Animated.sequence([
+          Animated.timing(tabSwitchScale, {
+            toValue: 1.025,
+            duration: 90,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: false,
+          }),
+          Animated.timing(tabSwitchScale, {
+            toValue: 1,
+            duration: 140,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: false,
+          }),
+        ]),
+      ]);
+    }
     switchRef.current.start();
-  }, [state.index, tabSwitchScale]);
+  }, [state.index, tabSwitchScale, indicatorIndex, indicatorStretch]);
 
   useEffect(() => {
     centeringRef.current?.stop();
@@ -302,6 +363,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const chrome = CONTENT_PADDING * 2 + PILL_BORDER * 2;
   const innerW = Animated.subtract(pillW, chrome);
   const tabW = Animated.divide(innerW, tabCount);
+  const indicatorTX = Animated.multiply(tabW, indicatorIndex);
 
   const fabWidth = centerProgress.interpolate({
     inputRange: [0, 1],
@@ -390,6 +452,17 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
               />
 
               <Animated.View style={[styles.track, { width: innerW }]}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.slidingSelect,
+                    {
+                      width: tabW,
+                      backgroundColor: selectFill,
+                      transform: [{ translateX: indicatorTX }, { scaleX: indicatorStretch }],
+                    },
+                  ]}
+                />
                 {state.routes.map((route, index) => {
                   const { options } = descriptors[route.key];
                   const focused = state.index === index;
@@ -406,7 +479,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
                       icon={icon}
                       activeColor={activeColor}
                       inactiveColor={inactiveColor}
-                      selectFill={selectFill}
+                      highlight={tabHighlight(indicatorIndex, index, tabCount)}
                       accessibilityLabel={options.tabBarAccessibilityLabel}
                       width={tabW}
                       onPress={() => {
@@ -523,14 +596,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     height: '100%',
+    position: 'relative',
   },
-  select: {
-    ...StyleSheet.absoluteFillObject,
+  slidingSelect: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
     borderRadius: 999,
     zIndex: 0,
   },
   item: {
     height: '100%',
+    zIndex: 2,
   },
   itemPress: {
     flex: 1,
@@ -544,6 +622,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
     zIndex: 2,
+  },
+  iconStack: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
     fontSize: 10,
