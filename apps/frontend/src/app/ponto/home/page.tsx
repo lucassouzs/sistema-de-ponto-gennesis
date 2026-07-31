@@ -20,7 +20,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -568,8 +567,6 @@ export default function HomePage() {
 
   const pncpWeekFriday =
     pncpSemanaCompare?.atual?.friday || shiftDateInputValue(pncpWeekMonday, 4);
-  const pncpWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.atual, 0);
-  const pncpPrevWeekTotal = pncpWeekChartData.reduce((sum, d) => sum + d.anterior, 0);
   const { isDark } = useTheme();
   const chartBarAtual = '#10b981';
   const chartBarAnterior = isDark ? '#6b7280' : '#d1d5db';
@@ -577,7 +574,6 @@ export default function HomePage() {
   const chartFontFamily =
     'inherit, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
   const chartTick = isDark ? '#9ca3af' : '#6b7280'; // gray-400 / gray-500
-  const chartValueFill = isDark ? '#f3f4f6' : '#111827'; // gray-100 / gray-900
   const chartMuted = isDark ? '#6b7280' : '#9ca3af'; // gray-500 / gray-400
   const chartGrid = isDark ? '#374151' : '#e5e7eb';
   const chartTooltipBg = isDark ? 'rgba(31, 41, 55, 0.96)' : 'rgba(255, 255, 255, 0.96)';
@@ -587,12 +583,6 @@ export default function HomePage() {
     fill: chartTick,
     fontSize: 12,
     fontWeight: 500 as const,
-    fontFamily: chartFontFamily,
-  };
-  const chartValueLabel = {
-    fill: chartValueFill,
-    fontSize: 12,
-    fontWeight: 600 as const,
     fontFamily: chartFontFamily,
   };
 
@@ -782,7 +772,7 @@ export default function HomePage() {
                           Captações
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {pncpWeekTotal} esta semana e {pncpPrevWeekTotal} na anterior
+                          Envios para análise · semana vs. anterior
                         </p>
                       </div>
                     </div>
@@ -950,16 +940,7 @@ export default function HomePage() {
                             radius={[6, 6, 0, 0]}
                             maxBarSize={48}
                             minPointSize={2}
-                          >
-                            <LabelList
-                              dataKey="anterior"
-                              position="top"
-                              offset={6}
-                              {...chartValueLabel}
-                              fontSize={11}
-                              formatter={(value: number) => (value > 0 ? value : '')}
-                            />
-                          </Bar>
+                          />
                           <Bar
                             dataKey="atual"
                             name="atual"
@@ -967,16 +948,7 @@ export default function HomePage() {
                             radius={[6, 6, 0, 0]}
                             maxBarSize={48}
                             minPointSize={2}
-                          >
-                            <LabelList
-                              dataKey="atual"
-                              position="top"
-                              offset={6}
-                              {...chartValueLabel}
-                              fontSize={11}
-                              formatter={(value: number) => (value > 0 ? value : '')}
-                            />
-                          </Bar>
+                          />
                         </BarChart>
                       </ResponsiveContainer>
                     )}

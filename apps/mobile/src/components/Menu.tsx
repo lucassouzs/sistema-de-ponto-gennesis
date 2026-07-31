@@ -26,6 +26,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 import type { RootStackParamList } from '../../App';
 
 interface MenuProps {
@@ -36,6 +37,7 @@ interface MenuProps {
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors, isDark, toggleTheme } = useTheme();
   const { logout } = useAuth();
+  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = React.useRef(new Animated.Value(-300)).current;
@@ -104,9 +106,22 @@ export default function Menu({ visible, onClose }: MenuProps) {
 
   const links = [
     { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
-    { key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') },
-    { key: 'reservas', label: 'Reservas', icon: CalendarCheck, onPress: () => go('Reservas') },
-    { key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') },
+    ...(canSeeCombustivel
+      ? [{ key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') }]
+      : []),
+    ...(canSeeReservas
+      ? [
+          {
+            key: 'reservas',
+            label: 'Reservas',
+            icon: CalendarCheck,
+            onPress: () => go('Reservas'),
+          },
+        ]
+      : []),
+    ...(canSeePncp
+      ? [{ key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') }]
+      : []),
     { key: 'profile', label: 'Perfil', icon: User, onPress: () => go('Profile') },
   ];
 

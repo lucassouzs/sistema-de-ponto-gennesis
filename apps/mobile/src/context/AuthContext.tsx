@@ -54,9 +54,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const token = await storage.getItem('token');
       const userData = await storage.getItem('user');
-      
+
       if (token && userData) {
         setUser(JSON.parse(userData));
+        // Atualiza perfil (inclui foto) em background
+        try {
+          const res = await fetch(buildApiUrl('/api/auth/me'), {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const fresh = (json?.data ?? json) as User;
+            if (fresh?.id) {
+              setUser(fresh);
+              await storage.setItem('user', JSON.stringify(fresh));
+            }
+          }
+        } catch {
+          // mantém usuário do storage
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados de autenticação:', error);

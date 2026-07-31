@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -7,29 +7,15 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import {
-  Droplets,
-  CalendarCheck,
-  User,
-  ChevronRight,
-  ClipboardList,
-} from 'lucide-react-native';
+import { Droplets, CalendarCheck } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
+import UserAvatar from '../components/UserAvatar';
 import LiveActivitySection from '../components/LiveActivitySection';
+import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
-
-type ShortcutKey = 'all' | 'combustivel' | 'reservas' | 'pncp';
-
-type QuickAction = {
-  key: string;
-  group: Exclude<ShortcutKey, 'all'> | 'perfil';
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-  onPress: () => void;
-};
+import { usePermissions } from '../hooks/usePermissions';
 
 function greetingPrefix() {
   const hour = new Date().getHours();
@@ -42,13 +28,14 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
-  const [filter, setFilter] = useState<ShortcutKey>('all');
+  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
   const { items: liveItems } = useLiveActivities();
   const styles = getStyles(colors, isDark);
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'colaborador';
+  const showHero = canSeeCombustivel || canSeeReservas;
 
-  const goTab = (name: 'Combustivel' | 'Reservas' | 'Pncp') => {
+  const goTab = (name: 'Combustivel' | 'Reservas') => {
     navigation.navigate(name);
   };
 
@@ -58,60 +45,11 @@ export default function HomeScreen() {
 
   const openLiveActivity = (item: LiveActivity) => {
     if (item.kind === 'fuel') {
-      navigation.navigate('Combustivel');
+      if (canSeeCombustivel) navigation.navigate('Combustivel');
       return;
     }
-    navigation.navigate('Reservas');
+    if (canSeeReservas) navigation.navigate('Reservas');
   };
-
-  const actions: QuickAction[] = useMemo(
-    () => [
-      {
-        key: 'fuel',
-        group: 'combustivel',
-        title: 'Combustível',
-        description: 'Solicitar ou acompanhar abastecimento',
-        icon: Droplets,
-        onPress: () => goTab('Combustivel'),
-      },
-      {
-        key: 'vehicles',
-        group: 'reservas',
-        title: 'Reserva de veículo',
-        description: 'Solicitar e gerenciar reservas',
-        icon: CalendarCheck,
-        onPress: () => goTab('Reservas'),
-      },
-      {
-        key: 'pncp',
-        group: 'pncp',
-        title: 'Licitações PNCP',
-        description: 'Consultar e enviar para análise',
-        icon: ClipboardList,
-        onPress: () => goTab('Pncp'),
-      },
-      {
-        key: 'profile',
-        group: 'perfil',
-        title: 'Meu perfil',
-        description: 'Dados pessoais e da empresa',
-        icon: User,
-        onPress: goProfile,
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const chips: { key: ShortcutKey; label: string }[] = [
-    { key: 'all', label: 'Todos' },
-    { key: 'combustivel', label: 'Combustível' },
-    { key: 'reservas', label: 'Reservas' },
-    { key: 'pncp', label: 'PNCP' },
-  ];
-
-  const visibleActions =
-    filter === 'all' ? actions : actions.filter((item) => item.group === filter);
 
   return (
     <View style={styles.safeArea}>
@@ -135,88 +73,76 @@ export default function HomeScreen() {
             activeOpacity={0.8}
             accessibilityLabel="Abrir perfil"
           >
-            <User size={22} color="#fff" strokeWidth={2.2} />
+            <UserAvatar
+              uri={user?.profilePhotoUrl}
+              size={48}
+              backgroundColor={colors.primary}
+              iconColor="#fff"
+            />
           </TouchableOpacity>
         </View>
 
         <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
 
-        <View style={styles.hero}>
-          <Text style={styles.heroEyebrow}>Frota Gennesis</Text>
-          <Text style={styles.heroTitle}>Combustível e reservas em um só lugar</Text>
-          <Text style={styles.heroSubtitle}>
-            Solicite abastecimento e reserve veículos de forma rápida pelo app.
-          </Text>
-          <View style={styles.heroActions}>
-            <TouchableOpacity
-              style={styles.heroCta}
-              onPress={() => goTab('Combustivel')}
-              activeOpacity={0.85}
-            >
-              <Droplets size={18} color={colors.primary} strokeWidth={2.4} />
-              <Text style={styles.heroCtaText}>Combustível</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.heroCtaSecondary}
-              onPress={() => goTab('Reservas')}
-              activeOpacity={0.85}
-            >
-              <CalendarCheck size={18} color="#fff" strokeWidth={2.4} />
-              <Text style={styles.heroCtaSecondaryText}>Reservas</Text>
-            </TouchableOpacity>
+        {canSeePncp ? <PncpCaptacoesCard /> : null}
+
+        {showHero ? (
+          <View style={styles.hero}>
+            <Text style={styles.heroEyebrow}>Frota Gennesis</Text>
+            <Text style={styles.heroTitle}>
+              {canSeeCombustivel && canSeeReservas
+                ? 'Combustível e reservas em um só lugar'
+                : canSeeCombustivel
+                  ? 'Abasteça com praticidade'
+                  : 'Reserve veículos com praticidade'}
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              {canSeeCombustivel && canSeeReservas
+                ? 'Solicite abastecimento e reserve veículos pelo app.'
+                : canSeeCombustivel
+                  ? 'Solicite abastecimento de forma rápida pelo app.'
+                  : 'Reserve veículos de forma rápida pelo app.'}
+            </Text>
+            <View style={styles.heroActions}>
+              {canSeeCombustivel ? (
+                <TouchableOpacity
+                  style={styles.heroCta}
+                  onPress={() => goTab('Combustivel')}
+                  activeOpacity={0.85}
+                >
+                  <Droplets size={18} color={colors.primary} strokeWidth={2.4} />
+                  <Text style={styles.heroCtaText}>Combustível</Text>
+                </TouchableOpacity>
+              ) : null}
+              {canSeeReservas ? (
+                <TouchableOpacity
+                  style={canSeeCombustivel ? styles.heroCtaSecondary : styles.heroCta}
+                  onPress={() => goTab('Reservas')}
+                  activeOpacity={0.85}
+                >
+                  <CalendarCheck
+                    size={18}
+                    color={canSeeCombustivel ? '#fff' : colors.primary}
+                    strokeWidth={2.4}
+                  />
+                  <Text
+                    style={
+                      canSeeCombustivel ? styles.heroCtaSecondaryText : styles.heroCtaText
+                    }
+                  >
+                    Reservas
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}
-        >
-          {chips.map(({ key, label }) => {
-            const active = filter === key;
-            return (
-              <TouchableOpacity
-                key={key}
-                onPress={() => setFilter(key)}
-                style={[styles.chip, active && styles.chipActive]}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <Text style={styles.sectionTitle}>Acesso rápido</Text>
-
-        <View style={styles.list}>
-          {visibleActions.map((item) => {
-            const Icon = item.icon;
-            return (
-              <TouchableOpacity
-                key={item.key}
-                style={styles.card}
-                onPress={item.onPress}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardIcon}>
-                  <Icon size={22} color={colors.primary} strokeWidth={2.1} />
-                </View>
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardDescription}>{item.description}</Text>
-                </View>
-                <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2.2} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        ) : null}
       </ScrollView>
     </View>
   );
 }
 
-const getStyles = (colors: any, isDark: boolean) =>
+const getStyles = (colors: any, _isDark: boolean) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: colors.background },
     container: { flex: 1, backgroundColor: colors.background },
@@ -248,9 +174,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       width: 48,
       height: 48,
       borderRadius: 24,
-      backgroundColor: colors.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      overflow: 'hidden',
     },
     hero: {
       backgroundColor: colors.primary,
@@ -296,8 +220,8 @@ const getStyles = (colors: any, isDark: boolean) =>
     },
     heroCtaText: {
       color: colors.primary,
-      fontSize: 14,
       fontWeight: '700',
+      fontSize: 14,
     },
     heroCtaSecondary: {
       flexDirection: 'row',
@@ -307,75 +231,12 @@ const getStyles = (colors: any, isDark: boolean) =>
       paddingHorizontal: 16,
       paddingVertical: 11,
       borderRadius: 999,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
       borderColor: 'rgba(255,255,255,0.35)',
     },
     heroCtaSecondaryText: {
       color: '#fff',
+      fontWeight: '700',
       fontSize: 14,
-      fontWeight: '700',
-    },
-    chipsRow: {
-      gap: 8,
-      paddingBottom: 4,
-      marginBottom: 18,
-    },
-    chip: {
-      paddingHorizontal: 14,
-      paddingVertical: 9,
-      borderRadius: 999,
-      backgroundColor: isDark ? colors.card : colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? colors.border : 'transparent',
-    },
-    chipActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    chipText: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    chipTextActive: { color: '#fff' },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: '700',
-      letterSpacing: -0.3,
-      color: colors.text,
-      marginBottom: 12,
-    },
-    list: { gap: 10 },
-    card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: colors.card,
-      borderRadius: 18,
-      padding: 14,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? colors.border : 'rgba(15,23,42,0.06)',
-    },
-    cardIcon: {
-      width: 46,
-      height: 46,
-      borderRadius: 14,
-      backgroundColor: isDark ? 'rgba(239,68,68,0.14)' : colors.iconBackground,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cardBody: { flex: 1, minWidth: 0 },
-    cardTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.text,
-      letterSpacing: -0.2,
-      marginBottom: 2,
-    },
-    cardDescription: {
-      fontSize: 12.5,
-      fontWeight: '500',
-      color: colors.textSecondary,
-      lineHeight: 17,
     },
   });

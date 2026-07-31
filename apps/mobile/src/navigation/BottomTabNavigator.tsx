@@ -6,6 +6,7 @@ import HomeScreen from '../screens/HomeScreen';
 import FuelRequestsScreen from '../screens/FuelRequestsScreen';
 import VehicleReservationsScreen from '../screens/VehicleReservationsScreen';
 import PncpLicitacoesScreen from '../screens/PncpLicitacoesScreen';
+import { usePermissions } from '../hooks/usePermissions';
 
 export type BottomTabParamList = {
   Home: undefined;
@@ -17,6 +18,8 @@ export type BottomTabParamList = {
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 export default function BottomTabNavigator() {
+  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
+
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -46,21 +49,27 @@ export default function BottomTabNavigator() {
         component={HomeScreen}
         options={{ title: 'Início' }}
       />
-      <Tab.Screen
-        name="Combustivel"
-        component={FuelRequestsScreen}
-        options={{ title: 'Combustível' }}
-      />
-      <Tab.Screen
-        name="Reservas"
-        component={VehicleReservationsScreen}
-        options={{ title: 'Reservas' }}
-      />
-      <Tab.Screen
-        name="Pncp"
-        component={PncpLicitacoesScreen}
-        options={{ title: 'PNCP' }}
-      />
+      {canSeeCombustivel ? (
+        <Tab.Screen
+          name="Combustivel"
+          component={FuelRequestsScreen}
+          options={{ title: 'Combustível' }}
+        />
+      ) : null}
+      {canSeeReservas ? (
+        <Tab.Screen
+          name="Reservas"
+          component={VehicleReservationsScreen}
+          options={{ title: 'Reservas' }}
+        />
+      ) : null}
+      {canSeePncp ? (
+        <Tab.Screen
+          name="Pncp"
+          component={PncpLicitacoesScreen}
+          options={{ title: 'PNCP' }}
+        />
+      ) : null}
     </Tab.Navigator>
   );
 }

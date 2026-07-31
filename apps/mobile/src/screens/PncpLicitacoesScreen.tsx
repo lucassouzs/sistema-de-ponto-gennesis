@@ -34,6 +34,7 @@ import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
+import { usePermissions } from '../hooks/usePermissions';
 
 type StatusFiltro = 'disponivel' | 'enviada' | 'rejeitada' | 'vencida' | 'all';
 type ValorFiltroModo = '' | 'gt' | 'lt' | 'between';
@@ -242,9 +243,20 @@ export default function PncpLicitacoesScreen() {
   const navState = navigation.getState?.();
   const isTabScreen = navState?.type === 'tab';
   const { colors, isDark } = useTheme();
+  const { canSeePncp, isLoading: permissionsLoading } = usePermissions();
   const insets = useSafeAreaInsets();
   const styles = getStyles(colors, isDark);
   const defaults = useMemo(() => defaultRange(), []);
+
+  useEffect(() => {
+    if (!permissionsLoading && !canSeePncp) {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        (navigation as any).navigate('Main', { screen: 'Home' });
+      }
+    }
+  }, [permissionsLoading, canSeePncp, navigation]);
 
   const [rows, setRows] = useState<PncpItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -548,6 +560,14 @@ export default function PncpLicitacoesScreen() {
           .split('-')
           .reverse()
           .join('/')}`;
+
+  if (permissionsLoading || !canSeePncp) {
+    return (
+      <View style={[styles.safeArea, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.safeArea}>

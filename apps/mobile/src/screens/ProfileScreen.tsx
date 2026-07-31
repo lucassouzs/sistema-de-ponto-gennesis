@@ -24,6 +24,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../notifications/NotificationsContext';
+import UserAvatar from '../components/UserAvatar';
 
 type InfoRow = {
   key: string;
@@ -155,9 +156,13 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.heroProfile}>
-            <View style={styles.avatar}>
-              <User size={40} color="#fff" strokeWidth={2} />
-            </View>
+            <UserAvatar
+              uri={user?.profilePhotoUrl}
+              size={96}
+              backgroundColor="rgba(255,255,255,0.18)"
+              iconColor="#fff"
+              style={{ marginBottom: 14 }}
+            />
             <Text style={styles.name} numberOfLines={2}>
               {user?.name || 'Colaborador'}
             </Text>
@@ -288,17 +293,6 @@ const getStyles = (colors: any, isDark: boolean) =>
     heroProfile: {
       alignItems: 'center',
       marginBottom: 18,
-    },
-    avatar: {
-      width: 96,
-      height: 96,
-      borderRadius: 48,
-      backgroundColor: 'rgba(255,255,255,0.18)',
-      borderWidth: 3,
-      borderColor: 'rgba(255,255,255,0.9)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 14,
     },
     name: {
       color: '#fff',
