@@ -2895,6 +2895,30 @@ function KanbanPage() {
   const isKanbanDragging = Boolean(dragState.draggingCardId || columnDrag.draggingColumnId);
   useKanbanDragScrollAssist(isKanbanDragging, boardScrollRef);
   useRightClickPanScroll(boardScrollRef);
+  // Shift+roda (e gesto horizontal do trackpad) sobre a coluna → scroll X do board
+  useEffect(() => {
+    const board = boardScrollRef.current;
+    if (!board) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (board.scrollWidth <= board.clientWidth + 1) return;
+
+      const shiftHorizontal = e.shiftKey && (e.deltaY !== 0 || e.deltaX !== 0);
+      const trackpadHorizontal =
+        !e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) && e.deltaX !== 0;
+      if (!shiftHorizontal && !trackpadHorizontal) return;
+
+      e.preventDefault();
+      board.scrollLeft += e.shiftKey
+        ? e.deltaY !== 0
+          ? e.deltaY
+          : e.deltaX
+        : e.deltaX;
+    };
+
+    board.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    return () => board.removeEventListener('wheel', onWheel, true);
+  }, []);
   useEffect(() => {
     columnDragRef.current = columnDrag;
   }, [columnDrag]);
