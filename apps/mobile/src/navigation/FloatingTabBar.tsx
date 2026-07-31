@@ -45,7 +45,8 @@ const SHORT_LABELS: Record<string, string> = {
 
 const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle']);
 const SLIDE_EASE = Easing.bezier(0.32, 0.72, 0, 1);
-const CENTER_EASE = Easing.bezier(0.33, 1, 0.68, 1);
+const FAB_SHOW_EASE = Easing.bezier(0.22, 1, 0.36, 1);
+const FAB_HIDE_EASE = Easing.bezier(0.4, 0, 0.7, 0.2);
 
 function TabIconView({
   icon,
@@ -201,6 +202,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const activeRoute = state.routes[state.index]?.name ?? '';
   const showFab = FAB_TABS.has(activeRoute);
   const centerProgress = useRef(new Animated.Value(showFab ? 0 : 1)).current;
+  const fabPop = useRef(new Animated.Value(showFab ? 1 : 0)).current;
   const tabCount = Math.max(state.routes.length, 1);
 
   const barFill = isDark ? 'rgba(31, 41, 55, 0.52)' : '#FFFFFF';
@@ -236,14 +238,43 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
 
   useEffect(() => {
     centeringRef.current?.stop();
-    centeringRef.current = Animated.timing(centerProgress, {
-      toValue: showFab ? 0 : 1,
-      duration: 480,
-      easing: CENTER_EASE,
-      useNativeDriver: false,
-    });
+    if (showFab) {
+      fabPop.setValue(0);
+      centeringRef.current = Animated.parallel([
+        Animated.timing(centerProgress, {
+          toValue: 0,
+          duration: 480,
+          easing: FAB_SHOW_EASE,
+          useNativeDriver: false,
+        }),
+        Animated.sequence([
+          Animated.delay(40),
+          Animated.spring(fabPop, {
+            toValue: 1,
+            friction: 5.2,
+            tension: 160,
+            useNativeDriver: false,
+          }),
+        ]),
+      ]);
+    } else {
+      centeringRef.current = Animated.parallel([
+        Animated.timing(centerProgress, {
+          toValue: 1,
+          duration: 360,
+          easing: FAB_HIDE_EASE,
+          useNativeDriver: false,
+        }),
+        Animated.timing(fabPop, {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: false,
+        }),
+      ]);
+    }
     centeringRef.current.start();
-  }, [showFab, centerProgress]);
+  }, [showFab, centerProgress, fabPop]);
 
   const handleFabPress = () => {
     const name = activeRoute as FabBarTabName;
@@ -272,18 +303,46 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const fabWidth = centerProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [BAR_HEIGHT, 0],
+    extrapolate: 'clamp',
   });
   const fabGap = centerProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [FAB_SPACING, 0],
+    extrapolate: 'clamp',
   });
-  const fabOpacity = centerProgress.interpolate({
-    inputRange: [0, 0.4, 1],
-    outputRange: [1, 0.15, 0],
-  });
-  const fabScale = centerProgress.interpolate({
+  const fabOpacity = Animated.multiply(
+    centerProgress.interpolate({
+      inputRange: [0, 0.35, 0.75, 1],
+      outputRange: [1, 1, 0.25, 0],
+      extrapolate: 'clamp',
+    }),
+    fabPop.interpolate({
+      inputRange: [0, 0.2, 1],
+      outputRange: [0, 0.6, 1],
+      extrapolate: 'clamp',
+    }),
+  );
+  const fabScale = Animated.multiply(
+    centerProgress.interpolate({
+      inputRange: [0, 0.55, 1],
+      outputRange: [1, 0.72, 0.4],
+      extrapolate: 'clamp',
+    }),
+    fabPop.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.55, 1],
+      extrapolate: 'clamp',
+    }),
+  );
+  const fabRotate = fabPop.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.6],
+    outputRange: ['-55deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+  const fabTranslateY = fabPop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 0],
+    extrapolate: 'clamp',
   });
 
   const bottomPad = Math.max(insets.bottom, BOTTOM_PADDING);
@@ -385,7 +444,11 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
             overflow: 'hidden',
             alignItems: 'center',
             justifyContent: 'center',
-            transform: [{ scale: fabScale }],
+            transform: [
+              { scale: fabScale },
+              { translateY: fabTranslateY },
+              { rotate: fabRotate },
+            ],
           }}
         >
           <Pressable

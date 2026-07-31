@@ -884,7 +884,7 @@ export default function FuelRequestsScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => setShowForm(false)}
-                style={[styles.formCloseBtn, { backgroundColor: colors.card }]}
+                style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
               >
@@ -1131,10 +1131,7 @@ export default function FuelRequestsScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => setDetailTarget(null)}
-                style={[
-                  styles.formCloseBtn,
-                  { backgroundColor: isDark ? colors.background : '#EEF0F3' },
-                ]}
+                style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
               >
@@ -1332,7 +1329,7 @@ export default function FuelRequestsScreen() {
                   if (reportSubmitting) return;
                   setReportTarget(null);
                 }}
-                style={[styles.formCloseBtn, { backgroundColor: colors.card }]}
+                style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
               >
@@ -1560,7 +1557,7 @@ export default function FuelRequestsScreen() {
               <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker?.title}</Text>
               <TouchableOpacity
                 onPress={() => setPicker(null)}
-                style={[styles.formCloseBtn, { backgroundColor: colors.card, width: 36, height: 36, borderRadius: 18 }]}
+                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
               >
                 <X size={18} color={colors.text} strokeWidth={2.2} />
               </TouchableOpacity>
@@ -1644,7 +1641,6 @@ const getStyles = (colors: any, isDark: boolean) =>
     formCloseBtn: {
       width: 40,
       height: 40,
-      borderRadius: 20,
       alignItems: 'center',
       justifyContent: 'center',
     },

@@ -61,7 +61,7 @@ export default function NotificationsSheet() {
             </View>
             <TouchableOpacity
               onPress={closeSheet}
-              style={[styles.closeBtn, { backgroundColor: colors.card }]}
+              style={styles.closeBtn}
               hitSlop={8}
             >
               <X size={18} color={colors.text} strokeWidth={2.2} />
@@ -169,7 +169,6 @@ const getStyles = (colors: any, isDark: boolean) =>
     closeBtn: {
       width: 36,
       height: 36,
-      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
     },
