@@ -239,36 +239,39 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   useEffect(() => {
     centeringRef.current?.stop();
     if (showFab) {
+      // Aparece: espaço abre e o + “pop” com spring
       fabPop.setValue(0);
       centeringRef.current = Animated.parallel([
         Animated.timing(centerProgress, {
           toValue: 0,
-          duration: 480,
+          duration: 440,
           easing: FAB_SHOW_EASE,
           useNativeDriver: false,
         }),
         Animated.sequence([
-          Animated.delay(40),
+          Animated.delay(90),
           Animated.spring(fabPop, {
             toValue: 1,
-            friction: 5.2,
-            tension: 160,
+            friction: 7.5,
+            tension: 140,
             useNativeDriver: false,
           }),
         ]),
       ]);
     } else {
+      // Some: + encolhe/gira primeiro, depois o espaço fecha
       centeringRef.current = Animated.parallel([
-        Animated.timing(centerProgress, {
-          toValue: 1,
-          duration: 360,
-          easing: FAB_HIDE_EASE,
-          useNativeDriver: false,
-        }),
         Animated.timing(fabPop, {
           toValue: 0,
-          duration: 220,
-          easing: Easing.in(Easing.cubic),
+          duration: 200,
+          easing: Easing.bezier(0.55, 0.05, 0.8, 0.2),
+          useNativeDriver: false,
+        }),
+        Animated.timing(centerProgress, {
+          toValue: 1,
+          duration: 400,
+          delay: 50,
+          easing: FAB_HIDE_EASE,
           useNativeDriver: false,
         }),
       ]);
@@ -310,30 +313,17 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
     outputRange: [FAB_SPACING, 0],
     extrapolate: 'clamp',
   });
-  const fabOpacity = Animated.multiply(
-    centerProgress.interpolate({
-      inputRange: [0, 0.35, 0.75, 1],
-      outputRange: [1, 1, 0.25, 0],
-      extrapolate: 'clamp',
-    }),
-    fabPop.interpolate({
-      inputRange: [0, 0.2, 1],
-      outputRange: [0, 0.6, 1],
-      extrapolate: 'clamp',
-    }),
-  );
-  const fabScale = Animated.multiply(
-    centerProgress.interpolate({
-      inputRange: [0, 0.55, 1],
-      outputRange: [1, 0.72, 0.4],
-      extrapolate: 'clamp',
-    }),
-    fabPop.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.55, 1],
-      extrapolate: 'clamp',
-    }),
-  );
+  // Visual do + controlado só pelo fabPop (mais limpo e com overshoot do spring)
+  const fabOpacity = fabPop.interpolate({
+    inputRange: [0, 0.18, 1],
+    outputRange: [0, 1, 1],
+    extrapolate: 'clamp',
+  });
+  const fabScale = fabPop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 1],
+    extrapolate: 'clamp',
+  });
   const fabRotate = fabPop.interpolate({
     inputRange: [0, 1],
     outputRange: ['-55deg', '0deg'],
@@ -342,6 +332,11 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const fabTranslateY = fabPop.interpolate({
     inputRange: [0, 1],
     outputRange: [10, 0],
+    extrapolate: 'clamp',
+  });
+  const fabTranslateX = fabPop.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 0],
     extrapolate: 'clamp',
   });
 
@@ -440,49 +435,55 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
           style={{
             width: fabWidth,
             marginLeft: fabGap,
-            opacity: fabOpacity,
-            overflow: 'hidden',
+            overflow: 'visible',
             alignItems: 'center',
             justifyContent: 'center',
-            transform: [
-              { scale: fabScale },
-              { translateY: fabTranslateY },
-              { rotate: fabRotate },
-            ],
           }}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Nova"
-            onPress={handleFabPress}
-            onPressIn={() => {
-              Animated.timing(fabPressScale, {
-                toValue: 0.9,
-                duration: 80,
-                useNativeDriver: false,
-              }).start();
-            }}
-            onPressOut={() => {
-              Animated.spring(fabPressScale, {
-                toValue: 1,
-                friction: 6,
-                tension: 160,
-                useNativeDriver: false,
-              }).start();
+          <Animated.View
+            style={{
+              opacity: fabOpacity,
+              transform: [
+                { translateX: fabTranslateX },
+                { translateY: fabTranslateY },
+                { scale: fabScale },
+                { rotate: fabRotate },
+              ],
             }}
           >
-            <Animated.View
-              style={[
-                styles.fab,
-                {
-                  backgroundColor: colors.primary,
-                  transform: [{ scale: fabPressScale }],
-                },
-              ]}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Nova"
+              onPress={handleFabPress}
+              onPressIn={() => {
+                Animated.timing(fabPressScale, {
+                  toValue: 0.88,
+                  duration: 70,
+                  useNativeDriver: false,
+                }).start();
+              }}
+              onPressOut={() => {
+                Animated.spring(fabPressScale, {
+                  toValue: 1,
+                  friction: 5,
+                  tension: 180,
+                  useNativeDriver: false,
+                }).start();
+              }}
             >
-              <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
-            </Animated.View>
-          </Pressable>
+              <Animated.View
+                style={[
+                  styles.fab,
+                  {
+                    backgroundColor: colors.primary,
+                    transform: [{ scale: fabPressScale }],
+                  },
+                ]}
+              >
+                <Plus size={22} color="#FFFFFF" strokeWidth={2.5} />
+              </Animated.View>
+            </Pressable>
+          </Animated.View>
         </Animated.View>
       </Animated.View>
     </View>
