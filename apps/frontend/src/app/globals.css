@@ -355,6 +355,20 @@
   display: none !important;
 }
 
+/* Depois das regras globais de scrollbar — esconde de verdade. */
+.scrollbar-hide {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
   /* Fix definitivo para linha branca nas modais */
   .fixed.inset-0 {
     top: 0 !important;

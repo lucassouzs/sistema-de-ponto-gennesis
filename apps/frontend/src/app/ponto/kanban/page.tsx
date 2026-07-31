@@ -999,12 +999,18 @@ function KanbanCardItem({
   isDragging,
 }: KanbanCardItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [suppressHoverPad, setSuppressHoverPad] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const suppressClickRef = useRef(false);
   const isCompleted = Boolean(card.completedAt);
   const showCompleteCheck = true;
   const showArchiveAction =
     isCompleted && !readOnly && Boolean(onArchiveCard);
+  const titleIndented =
+    showCompleteCheck && (isCompleted || (hovered && !suppressHoverPad));
+  const showCompleteBall =
+    showCompleteCheck && (isCompleted || (hovered && !suppressHoverPad));
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1043,7 +1049,14 @@ function KanbanCardItem({
               }, 150);
             }
       }
-      onMouseEnter={() => onPrefetch?.(card.id)}
+      onMouseEnter={() => {
+        setHovered(true);
+        onPrefetch?.(card.id);
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+        setSuppressHoverPad(false);
+      }}
       onFocus={() => onPrefetch?.(card.id)}
       onClick={handleCardClick}
       onKeyDown={(e) => {
@@ -1072,32 +1085,16 @@ function KanbanCardItem({
       {!readOnly && (
         <div
           className={clsx(
-            'absolute top-3 right-3 z-[2] flex items-center gap-1',
-            !showArchiveAction && 'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
+            'absolute top-3 right-3 z-[2] flex items-center gap-1 transition-opacity duration-150',
+            menuOpen
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100',
           )}
           ref={menuRef}
         >
-          {showArchiveAction ? (
-            <button
-              type="button"
-              title="Arquivar cartão"
-              aria-label="Arquivar cartão"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchiveCard?.(card, columnId);
-              }}
-              className="rounded-full bg-black/45 p-1.5 text-white shadow-sm transition-colors hover:bg-black/60"
-            >
-              <Archive className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
           <button
             onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            className={clsx(
-              'rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-700',
-              showArchiveAction &&
-                'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
-            )}
+            className="rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
           >
             <MoreHorizontal className="w-4 h-4 text-gray-400" />
           </button>
@@ -1121,6 +1118,18 @@ function KanbanCardItem({
               >
                 <Copy className="w-4 h-4" /> Copiar
               </button>
+              {showArchiveAction ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onArchiveCard?.(card, columnId);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <Archive className="w-4 h-4" /> Arquivar
+                </button>
+              ) : null}
               <button
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(card.id, columnId); }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -1139,15 +1148,9 @@ function KanbanCardItem({
 
       <div
         className={clsx(
-          'relative mb-1.5',
-          showArchiveAction ? 'pr-14' : 'pr-6',
-          showCompleteCheck &&
-            !isCompleted &&
-            'pl-0 transition-[padding] duration-200 ease-out motion-reduce:transition-none',
-          showCompleteCheck &&
-            (isCompleted
-              ? 'pl-[26px]'
-              : 'group-hover:pl-[26px] focus-within:pl-[26px]'),
+          'relative mb-1.5 pr-6 motion-reduce:transition-none',
+          'transition-[padding] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
+          titleIndented ? 'pl-[26px]' : 'pl-0',
         )}
       >
         {showCompleteCheck ? (
@@ -1158,19 +1161,23 @@ function KanbanCardItem({
             aria-label={isCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
             onClick={(e) => {
               e.stopPropagation();
+              if (isCompleted) setSuppressHoverPad(true);
+              else setSuppressHoverPad(false);
               onToggleCardComplete?.(card);
             }}
             className={clsx(
               'absolute left-0 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px]',
-              'transition-[opacity,transform,border-color,background-color] duration-200 ease-out',
+              'transition-[opacity,transform,border-color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
               'motion-reduce:transition-none',
               isCompleted
                 ? 'scale-100 border-[#61BD4F] bg-[#61BD4F] text-white opacity-100'
                 : [
-                    'scale-90 border-gray-400 bg-transparent opacity-0',
-                    'group-hover:scale-100 group-hover:opacity-100 hover:border-[#61BD4F]',
+                    'border-gray-400 bg-transparent',
+                    showCompleteBall
+                      ? 'scale-100 opacity-100'
+                      : 'scale-90 opacity-0',
+                    'hover:border-[#61BD4F]',
                     'dark:border-gray-500 dark:hover:border-[#61BD4F]',
-                    'focus-visible:scale-100 focus-visible:opacity-100',
                   ],
               (readOnly || !onToggleCardComplete) && 'cursor-default',
             )}
@@ -1181,6 +1188,7 @@ function KanbanCardItem({
         <h4
           className={clsx(
             'min-w-0 text-[15px] font-semibold leading-snug',
+            'transition-colors duration-200 ease-out',
             isCompleted && showCompleteCheck
               ? 'text-gray-500 dark:text-gray-400'
               : 'text-gray-900 dark:text-gray-100',
@@ -1350,14 +1358,46 @@ function KanbanColumnComponent({
   const [menuView, setMenuView] = useState<'main' | 'sort'>('main');
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [visibleCount, setVisibleCount] = useState(KANBAN_COLUMN_VISIBLE_BATCH);
+  const [showBottomFade, setShowBottomFade] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const columnRootRef = useRef<HTMLDivElement>(null);
+  const cardsScrollRef = useRef<HTMLDivElement>(null);
   const isTarget = dragState.overColumnId === column.id;
   const overIndex = isTarget ? dragState.overIndex : null;
   const cardDnDDisabled = readOnly || isColumnDragActive || disableCardDnD;
-  const visibleCards = column.cards.slice(0, visibleCount);
-  const hasMoreCards = column.cards.length > visibleCount;
   const isChecklistView = cardViewMode === 'checklist';
+  const visibleCards = isChecklistView
+    ? column.cards
+    : column.cards.slice(0, visibleCount);
+  const hasMoreCards = !isChecklistView && column.cards.length > visibleCount;
+
+  const updateBottomFade = useCallback(() => {
+    const el = cardsScrollRef.current;
+    if (!el || !isChecklistView) {
+      setShowBottomFade(false);
+      return;
+    }
+    const canScroll = el.scrollHeight > el.clientHeight + 2;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 6;
+    setShowBottomFade(canScroll && !atBottom);
+  }, [isChecklistView]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => updateBottomFade());
+    return () => cancelAnimationFrame(id);
+  }, [updateBottomFade, visibleCards.length, column.cards.length, hasMoreCards]);
+
+  useEffect(() => {
+    const el = cardsScrollRef.current;
+    if (!el || !isChecklistView) return;
+    el.addEventListener('scroll', updateBottomFade, { passive: true });
+    const ro = new ResizeObserver(() => updateBottomFade());
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateBottomFade);
+      ro.disconnect();
+    };
+  }, [updateBottomFade, isChecklistView]);
 
   function resolveColumnCardDropIndex(clientY: number): number {
     if (!columnRootRef.current) return visibleCards.length;
@@ -1507,7 +1547,7 @@ function KanbanColumnComponent({
       onDragEnd={onColumnDragEnd}
       className={clsx(
         'relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl',
-        isChecklistView && 'h-full max-h-full min-h-0',
+        isChecklistView && 'h-full max-h-full min-h-0 overflow-hidden',
         'bg-[#F9FAFB] dark:bg-gray-800/60',
         'transition-[opacity,box-shadow] duration-200 ease-out motion-reduce:transition-none',
         onColumnDragStart && 'cursor-grab active:cursor-grabbing [&_[data-kanban-card]]:cursor-pointer',
@@ -1709,11 +1749,20 @@ function KanbanColumnComponent({
 
       <div
         className={clsx(
-          isChecklistView
-            ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-2 pb-1 [scrollbar-width:thin]'
-            : 'flex flex-col px-3 pt-2 pb-3',
+          isChecklistView && 'relative flex min-h-0 flex-1 flex-col overflow-hidden',
         )}
       >
+        <div
+          ref={cardsScrollRef}
+          className={clsx(
+            isChecklistView
+              ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain scrollbar-hide px-3 pt-2 pb-4'
+              : 'flex flex-col px-3 pt-2 pb-3',
+            isChecklistView &&
+              showBottomFade &&
+              '[mask-image:linear-gradient(to_bottom,black_0%,black_calc(100%-3.25rem),transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,black_0%,black_calc(100%-3.25rem),transparent_100%)]',
+          )}
+        >
         {visibleCards.map((card, index) => {
           const showLineBefore =
             !cardDnDDisabled &&
@@ -1840,6 +1889,7 @@ function KanbanColumnComponent({
             Adicionar card
           </button>
         )}
+        </div>
       </div>
       {!readOnly && !hasMoreCards && isChecklistView && (
         <div className="shrink-0 px-3 pb-3 pt-1">
