@@ -19,71 +19,43 @@ type AppHeaderProps = {
   title?: string;
 };
 
-function IconChip({
+function HeaderIconButton({
   onPress,
   accessibilityLabel,
   children,
-  chipBg,
 }: {
   onPress?: () => void;
   accessibilityLabel: string;
   children: React.ReactNode;
-  chipBg: string;
 }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      hitSlop={6}
+      hitSlop={8}
       accessibilityLabel={accessibilityLabel}
-      style={[styles.iconChip, { backgroundColor: chipBg }]}
-      activeOpacity={0.75}
+      style={styles.iconBtn}
+      activeOpacity={0.7}
     >
       {children}
     </TouchableOpacity>
   );
 }
 
-function NotificationBell({
-  iconColor,
-  chipBg,
-  withChip,
-}: {
-  iconColor: string;
-  chipBg: string;
-  withChip: boolean;
-}) {
+function NotificationBell({ iconColor }: { iconColor: string }) {
   const { unreadCount, openSheet } = useNotifications();
   const badge = unreadCount > 9 ? '9+' : String(unreadCount);
 
-  const content = (
-    <View>
-      <Bell size={withChip ? 20 : 22} color={iconColor} strokeWidth={2.1} />
-      {unreadCount > 0 ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-
-  if (withChip) {
-    return (
-      <IconChip onPress={openSheet} accessibilityLabel="Notificações" chipBg={chipBg}>
-        {content}
-      </IconChip>
-    );
-  }
-
   return (
-    <TouchableOpacity
-      onPress={openSheet}
-      hitSlop={8}
-      accessibilityLabel="Notificações"
-      style={styles.stackRightBtn}
-      activeOpacity={0.7}
-    >
-      {content}
-    </TouchableOpacity>
+    <HeaderIconButton onPress={openSheet} accessibilityLabel="Notificações">
+      <View>
+        <Bell size={22} color={iconColor} strokeWidth={2.1} />
+        {unreadCount > 0 ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        ) : null}
+      </View>
+    </HeaderIconButton>
   );
 }
 
@@ -92,7 +64,6 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
   const [showMenu, setShowMenu] = useState(false);
 
   const iconColor = colors.text;
-  const chipBg = colors.card;
 
   if (showBack) {
     return (
@@ -102,7 +73,7 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
             onPress={onBack}
             hitSlop={8}
             accessibilityLabel="Voltar"
-            style={styles.backBtn}
+            style={styles.iconBtn}
             activeOpacity={0.7}
           >
             <ArrowLeft size={24} color={iconColor} strokeWidth={2.2} />
@@ -116,7 +87,7 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
             <View style={styles.stackTitleSpacer} />
           )}
 
-          <NotificationBell iconColor={iconColor} chipBg={chipBg} withChip={false} />
+          <NotificationBell iconColor={iconColor} />
         </View>
       </SafeAreaView>
     );
@@ -127,13 +98,12 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
       <SafeAreaView edges={['top']} style={styles.topSafe}>
         <View style={styles.header}>
           <View style={styles.side}>
-            <IconChip
+            <HeaderIconButton
               onPress={() => setShowMenu(true)}
               accessibilityLabel="Menu"
-              chipBg={chipBg}
             >
               <MenuIcon size={22} color={iconColor} strokeWidth={2.2} />
-            </IconChip>
+            </HeaderIconButton>
           </View>
 
           <View style={styles.center} pointerEvents="none">
@@ -149,7 +119,7 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
           </View>
 
           <View style={[styles.side, styles.sideRight]}>
-            <NotificationBell iconColor={iconColor} chipBg={chipBg} withChip />
+            <NotificationBell iconColor={iconColor} />
           </View>
         </View>
       </SafeAreaView>
@@ -182,7 +152,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     gap: 4,
   },
-  backBtn: {
+  iconBtn: {
     width: 44,
     height: 44,
     alignItems: 'center',
@@ -196,12 +166,6 @@ const styles = StyleSheet.create({
   },
   stackTitleSpacer: {
     flex: 1,
-  },
-  stackRightBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   side: {
     width: 48,
@@ -218,13 +182,6 @@ const styles = StyleSheet.create({
   logo: {
     width: 168,
     height: 44,
-  },
-  iconChip: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   badge: {
     position: 'absolute',
