@@ -16,6 +16,8 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
+import LiveActivitySection from '../components/LiveActivitySection';
+import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 
 type ShortcutKey = 'all' | 'combustivel' | 'reservas';
 
@@ -40,6 +42,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const [filter, setFilter] = useState<ShortcutKey>('all');
+  const { items: liveItems } = useLiveActivities();
   const styles = getStyles(colors, isDark);
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'colaborador';
@@ -50,6 +53,14 @@ export default function HomeScreen() {
 
   const goProfile = () => {
     navigation.navigate('Profile');
+  };
+
+  const openLiveActivity = (item: LiveActivity) => {
+    if (item.kind === 'fuel') {
+      navigation.navigate('Combustivel');
+      return;
+    }
+    navigation.navigate('Reservas');
   };
 
   const actions: QuickAction[] = useMemo(
@@ -117,6 +128,8 @@ export default function HomeScreen() {
             <User size={22} color="#fff" strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
+
+        <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
 
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>Frota Gennesis</Text>
