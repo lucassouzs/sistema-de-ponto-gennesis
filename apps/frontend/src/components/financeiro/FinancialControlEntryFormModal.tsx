@@ -21,6 +21,7 @@ import {
 } from '@/lib/financialControlEntry';
 import {
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO,
   buildQuickLaunchPayload,
 } from '@/components/financeiro/financialControlEntry';
 import { FinancialControlOcQuickLaunch } from '@/components/financeiro/FinancialControlOcQuickLaunch';
@@ -199,11 +200,21 @@ export function FinancialControlEntryFormModal({
     if (editingEntry) {
       setForm(entryToForm(editingEntry));
     } else if (initialForm) {
-      setForm(initialForm);
+      setForm(
+        showQuickLaunch
+          ? { ...initialForm, consorcio: FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO }
+          : initialForm
+      );
     } else {
-      setForm(buildInitialForm(now.getMonth() + 1, now.getFullYear()));
+      setForm(
+        buildInitialForm(
+          now.getMonth() + 1,
+          now.getFullYear(),
+          showQuickLaunch ? FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO : ''
+        )
+      );
     }
-  }, [isOpen, editingEntry, initialForm]);
+  }, [isOpen, editingEntry, initialForm, showQuickLaunch]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof formToPayload>) => {
@@ -254,15 +265,19 @@ export function FinancialControlEntryFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingEntry && form.consorcio !== 'brasilia' && form.consorcio !== 'hub') {
+    const formForPayload =
+      showQuickLaunch && !editingEntry
+        ? { ...form, consorcio: FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO }
+        : form;
+    if (!editingEntry && formForPayload.consorcio !== 'brasilia' && formForPayload.consorcio !== 'hub') {
       toast.error('Selecione o consórcio do lançamento');
       return;
     }
     try {
       const payload =
         showQuickLaunch && !editingEntry
-          ? buildQuickLaunchPayload(form, interestValue)
-          : formToPayload(form);
+          ? buildQuickLaunchPayload(formForPayload, interestValue)
+          : formToPayload(formForPayload);
       if (editingEntry) {
         updateMutation.mutate({ id: editingEntry.id, payload });
       } else {
@@ -282,7 +297,6 @@ export function FinancialControlEntryFormModal({
           form={form}
           interestValue={interestValue}
           onInterestChange={setInterestValue}
-          onConsorcioChange={(consorcio) => setForm((prev) => ({ ...prev, consorcio }))}
           onClose={onClose}
           onSubmit={handleSubmit}
           isSaving={isSaving}

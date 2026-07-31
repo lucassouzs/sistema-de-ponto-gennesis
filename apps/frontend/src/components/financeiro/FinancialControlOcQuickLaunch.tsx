@@ -3,22 +3,20 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 import {
-  FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  FINANCIAL_CONTROL_OC_CONSORCIO_FIELD_LABEL,
+  FINANCIAL_CONTROL_OC_CONSORCIO_LABEL,
   MONTHS_PT,
   formatCurrencyValue,
   formatDateDisplayPtBr,
   parseCurrencyInput,
   type EntryFormState,
-  type FinancialControlConsorcio,
 } from '@/components/financeiro/financialControlEntry';
 import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
-import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 
 type FinancialControlOcQuickLaunchProps = {
   form: EntryFormState;
   interestValue: string;
   onInterestChange: (value: string) => void;
-  onConsorcioChange: (value: FinancialControlConsorcio) => void;
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
   isSaving: boolean;
@@ -89,7 +87,6 @@ export function FinancialControlOcQuickLaunch({
   form,
   interestValue,
   onInterestChange,
-  onConsorcioChange,
   onClose,
   onSubmit,
   isSaving,
@@ -102,23 +99,8 @@ export function FinancialControlOcQuickLaunch({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" autoComplete="off">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Consórcio <span className="text-red-500">*</span>
-        </label>
-        <div className="flex gap-2">
-          {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((opt) => (
-            <ButtonSeg
-              key={opt.value}
-              active={form.consorcio === opt.value}
-              onClick={() => onConsorcioChange(opt.value)}
-              label={opt.label}
-            />
-          ))}
-        </div>
-      </div>
-
       <dl className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/40 px-4 py-1">
+        <SummaryRow label={FINANCIAL_CONTROL_OC_CONSORCIO_FIELD_LABEL} value={FINANCIAL_CONTROL_OC_CONSORCIO_LABEL} />
         <SummaryRow
           label="OC"
           value={form.ocNumber ? formatOcListDisplayId(form.ocNumber) : '—'}

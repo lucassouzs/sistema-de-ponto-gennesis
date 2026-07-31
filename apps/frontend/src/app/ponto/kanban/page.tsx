@@ -61,6 +61,9 @@ import {
   kanbanCardQueryKey,
   exportKanbanBoardTrello,
   importKanbanBoardTrello,
+  updateKanbanCard,
+  fetchKanbanArchivedCards,
+  type KanbanArchivedCard,
 } from '@/lib/kanban';
 import {
   resolveKanbanDefaultBoard,
@@ -107,6 +110,7 @@ import {
   CheckCircle2,
   XCircle,
   Loader,
+  Loader2,
   LayoutGrid,
   ChevronUp,
   Eye,
@@ -117,6 +121,8 @@ import {
   Download,
   Upload,
   ArrowUpDown,
+  Check,
+  Archive,
 } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { clsx } from 'clsx';
@@ -935,10 +941,26 @@ function kanbanCardBoardSnapshot(card: KanbanCard): string {
     card.attachments,
     card.endDate ?? '',
     card.startDate ?? '',
+    card.completedAt ?? '',
     card.labels.map((l) => `${l.color}:${l.text}`).join(','),
     (card.members ?? []).map((m) => m.userId).join(','),
     card.assignee,
   ].join('|');
+}
+
+type KanbanCardViewMode = 'classic' | 'checklist';
+
+const KANBAN_CARD_VIEW_MODE_KEY = 'kanban:cardViewMode';
+
+function readKanbanCardViewMode(): KanbanCardViewMode {
+  if (typeof window === 'undefined') return 'classic';
+  try {
+    return localStorage.getItem(KANBAN_CARD_VIEW_MODE_KEY) === 'checklist'
+      ? 'checklist'
+      : 'classic';
+  } catch {
+    return 'classic';
+  }
 }
 
 interface KanbanCardItemProps {
@@ -946,6 +968,9 @@ interface KanbanCardItemProps {
   columnId: string;
   labelPresets?: readonly KanbanLabelPreset[];
   readOnly?: boolean;
+  cardViewMode?: KanbanCardViewMode;
+  onToggleCardComplete?: (card: KanbanCard) => void;
+  onArchiveCard?: (card: KanbanCard, columnId: string) => void;
   onEdit: (card: KanbanCard, columnId: string) => void;
   onMove: (card: KanbanCard, columnId: string) => void;
   onCopy: (card: KanbanCard, columnId: string) => void;
@@ -961,6 +986,9 @@ function KanbanCardItem({
   columnId,
   labelPresets,
   readOnly = false,
+  cardViewMode = 'classic',
+  onToggleCardComplete,
+  onArchiveCard,
   onEdit,
   onMove,
   onCopy,
@@ -973,6 +1001,10 @@ function KanbanCardItem({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const suppressClickRef = useRef(false);
+  const isCompleted = Boolean(card.completedAt);
+  const showCompleteCheck = true;
+  const showArchiveAction =
+    isCompleted && !readOnly && Boolean(onArchiveCard);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -1039,12 +1071,33 @@ function KanbanCardItem({
     >
       {!readOnly && (
         <div
-          className="absolute top-3 right-3 z-[2] opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          className={clsx(
+            'absolute top-3 right-3 z-[2] flex items-center gap-1',
+            !showArchiveAction && 'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
+          )}
           ref={menuRef}
         >
+          {showArchiveAction ? (
+            <button
+              type="button"
+              title="Arquivar cartão"
+              aria-label="Arquivar cartão"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchiveCard?.(card, columnId);
+              }}
+              className="rounded-full bg-black/45 p-1.5 text-white shadow-sm transition-colors hover:bg-black/60"
+            >
+              <Archive className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
           <button
             onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
-            className="p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+            className={clsx(
+              'rounded-md p-1 hover:bg-gray-100 dark:hover:bg-gray-700',
+              showArchiveAction &&
+                'opacity-0 transition-opacity duration-150 group-hover:opacity-100',
+            )}
           >
             <MoreHorizontal className="w-4 h-4 text-gray-400" />
           </button>
@@ -1084,13 +1137,62 @@ function KanbanCardItem({
         <CardLabelsRow labels={card.labels} labelPresets={labelPresets} />
       )}
 
-      <h4 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 leading-snug pr-6 mb-1.5">
-        {card.title.trim() ? (
-          card.title
-        ) : (
-          <span className="font-medium text-gray-400 dark:text-gray-500">Sem título</span>
+      <div
+        className={clsx(
+          'relative mb-1.5',
+          showArchiveAction ? 'pr-14' : 'pr-6',
+          showCompleteCheck &&
+            !isCompleted &&
+            'pl-0 transition-[padding] duration-200 ease-out motion-reduce:transition-none',
+          showCompleteCheck &&
+            (isCompleted
+              ? 'pl-[26px]'
+              : 'group-hover:pl-[26px] focus-within:pl-[26px]'),
         )}
-      </h4>
+      >
+        {showCompleteCheck ? (
+          <button
+            type="button"
+            disabled={readOnly || !onToggleCardComplete}
+            title={isCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
+            aria-label={isCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCardComplete?.(card);
+            }}
+            className={clsx(
+              'absolute left-0 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px]',
+              'transition-[opacity,transform,border-color,background-color] duration-200 ease-out',
+              'motion-reduce:transition-none',
+              isCompleted
+                ? 'scale-100 border-[#61BD4F] bg-[#61BD4F] text-white opacity-100'
+                : [
+                    'scale-90 border-gray-400 bg-transparent opacity-0',
+                    'group-hover:scale-100 group-hover:opacity-100 hover:border-[#61BD4F]',
+                    'dark:border-gray-500 dark:hover:border-[#61BD4F]',
+                    'focus-visible:scale-100 focus-visible:opacity-100',
+                  ],
+              (readOnly || !onToggleCardComplete) && 'cursor-default',
+            )}
+          >
+            {isCompleted ? <Check className="h-2.5 w-2.5 stroke-[3]" aria-hidden /> : null}
+          </button>
+        ) : null}
+        <h4
+          className={clsx(
+            'min-w-0 text-[15px] font-semibold leading-snug',
+            isCompleted && showCompleteCheck
+              ? 'text-gray-500 dark:text-gray-400'
+              : 'text-gray-900 dark:text-gray-100',
+          )}
+        >
+          {card.title.trim() ? (
+            card.title
+          ) : (
+            <span className="font-medium text-gray-400 dark:text-gray-500">Sem título</span>
+          )}
+        </h4>
+      </div>
 
       {card.description?.trim() ? (
         <p className="text-sm text-gray-500 dark:text-gray-400 truncate mb-3">
@@ -1128,6 +1230,9 @@ const KanbanCardItemMemo = React.memo(
     prev.columnId === next.columnId &&
     prev.isDragging === next.isDragging &&
     prev.readOnly === next.readOnly &&
+    prev.cardViewMode === next.cardViewMode &&
+    prev.onToggleCardComplete === next.onToggleCardComplete &&
+    prev.onArchiveCard === next.onArchiveCard &&
     prev.labelPresets === next.labelPresets &&
     kanbanCardBoardSnapshot(prev.card) === kanbanCardBoardSnapshot(next.card),
 );
@@ -1196,6 +1301,9 @@ interface KanbanColumnProps {
   onCopyCard: (card: KanbanCard, columnId: string) => void;
   onDeleteCard: (cardId: string, columnId: string) => void;
   onPrefetchCard?: (cardId: string) => void;
+  cardViewMode?: KanbanCardViewMode;
+  onToggleCardComplete?: (card: KanbanCard) => void;
+  onArchiveCard?: (card: KanbanCard, columnId: string) => void;
   onColumnDragStart?: (e: React.DragEvent, columnId: string) => void;
   onColumnDragEnd?: () => void;
   onDragStart: (e: React.DragEvent, cardId: string, columnId: string) => void;
@@ -1223,6 +1331,9 @@ function KanbanColumnComponent({
   onCopyCard,
   onDeleteCard,
   onPrefetchCard,
+  cardViewMode = 'classic',
+  onToggleCardComplete,
+  onArchiveCard,
   onColumnDragStart,
   onColumnDragEnd,
   onDragStart,
@@ -1246,6 +1357,7 @@ function KanbanColumnComponent({
   const cardDnDDisabled = readOnly || isColumnDragActive || disableCardDnD;
   const visibleCards = column.cards.slice(0, visibleCount);
   const hasMoreCards = column.cards.length > visibleCount;
+  const isChecklistView = cardViewMode === 'checklist';
 
   function resolveColumnCardDropIndex(clientY: number): number {
     if (!columnRootRef.current) return visibleCards.length;
@@ -1394,7 +1506,8 @@ function KanbanColumnComponent({
       }
       onDragEnd={onColumnDragEnd}
       className={clsx(
-        'relative flex flex-col rounded-2xl w-[340px] flex-shrink-0',
+        'relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl',
+        isChecklistView && 'h-full max-h-full min-h-0',
         'bg-[#F9FAFB] dark:bg-gray-800/60',
         'transition-[opacity,box-shadow] duration-200 ease-out motion-reduce:transition-none',
         onColumnDragStart && 'cursor-grab active:cursor-grabbing [&_[data-kanban-card]]:cursor-pointer',
@@ -1424,7 +1537,12 @@ function KanbanColumnComponent({
             }
       }
     >
-      <div className="flex items-center justify-between px-4 pt-4 pb-2 select-none">
+      <div
+        className={clsx(
+          'flex items-center justify-between px-4 pt-4 pb-2 select-none',
+          isChecklistView && 'shrink-0',
+        )}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             className="w-2 h-2 rounded-full flex-shrink-0"
@@ -1589,7 +1707,13 @@ function KanbanColumnComponent({
         </div>
       </div>
 
-      <div className="px-3 pt-2 pb-3 flex flex-col">
+      <div
+        className={clsx(
+          isChecklistView
+            ? 'flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-2 pb-1 [scrollbar-width:thin]'
+            : 'flex flex-col px-3 pt-2 pb-3',
+        )}
+      >
         {visibleCards.map((card, index) => {
           const showLineBefore =
             !cardDnDDisabled &&
@@ -1647,6 +1771,9 @@ function KanbanColumnComponent({
                 columnId={column.id}
                 labelPresets={labelPresets}
                 readOnly={readOnly}
+                cardViewMode={cardViewMode}
+                onToggleCardComplete={onToggleCardComplete}
+                onArchiveCard={onArchiveCard}
                 onEdit={onEditCard}
                 onMove={onMoveCard}
                 onCopy={onCopyCard}
@@ -1670,14 +1797,14 @@ function KanbanColumnComponent({
                 Math.min(current + KANBAN_COLUMN_VISIBLE_BATCH, column.cards.length),
               )
             }
-            className="mt-1 w-full rounded-xl border border-gray-200/80 bg-white/70 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-white hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            className="mt-1 w-full shrink-0 rounded-xl border border-gray-200/80 bg-white/70 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-white hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
             Ver mais
           </button>
         )}
         {column.cards.length === 0 && !cardDnDDisabled && (
           <div
-            className="relative min-h-[12px]"
+            className={clsx('relative min-h-[12px]', isChecklistView && 'flex-1')}
             onDragOver={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -1698,7 +1825,7 @@ function KanbanColumnComponent({
               )}
           </div>
         )}
-        {!readOnly && !hasMoreCards && (
+        {!readOnly && !hasMoreCards && !isChecklistView && (
           <button
             type="button"
             onClick={() => onAddCard(column.id, 'bottom')}
@@ -1714,6 +1841,22 @@ function KanbanColumnComponent({
           </button>
         )}
       </div>
+      {!readOnly && !hasMoreCards && isChecklistView && (
+        <div className="shrink-0 px-3 pb-3 pt-1">
+          <button
+            type="button"
+            onClick={() => onAddCard(column.id, 'bottom')}
+            className={clsx(
+              'flex w-full items-center gap-2 rounded-xl px-2 py-2.5 text-left text-sm font-medium transition-colors',
+              'text-gray-500 hover:bg-white/80 hover:text-gray-800',
+              'dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-gray-200',
+            )}
+          >
+            <Plus className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
+            Adicionar card
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2485,6 +2628,7 @@ function KanbanPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchExpanded = searchOpen || search.trim().length > 0;
+  const [cardViewMode, setCardViewMode] = useState<KanbanCardViewMode>(() => readKanbanCardViewMode());
   const [filterPriorities, setFilterPriorities] = useState<string[]>([]);
   const [filterLabelColors, setFilterLabelColors] = useState<string[]>([]);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
@@ -2513,6 +2657,8 @@ function KanbanPage() {
   }>({ title: 'Etiquetas', showBack: false });
   const [exportingBoard, setExportingBoard] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [archivedModalOpen, setArchivedModalOpen] = useState(false);
+  const [unarchivingCardId, setUnarchivingCardId] = useState<string | null>(null);
   const [importFileName, setImportFileName] = useState('');
   const [importPayload, setImportPayload] = useState<unknown>(null);
   const [importReplace, setImportReplace] = useState(true);
@@ -2755,6 +2901,138 @@ function KanbanPage() {
       );
     },
     [queryClient, kanbanBoardQueryKey],
+  );
+
+  const setCardViewModePersist = useCallback((mode: KanbanCardViewMode) => {
+    setCardViewMode(mode);
+    try {
+      localStorage.setItem(KANBAN_CARD_VIEW_MODE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleToggleCardComplete = useCallback(
+    async (card: KanbanCard) => {
+      if (boardReadOnly || isOptimisticKanbanCardId(card.id)) return;
+      const nextCompletedAt = card.completedAt ? null : new Date().toISOString();
+      const previousCompletedAt = card.completedAt ?? null;
+      queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          columns: old.columns.map((col) => ({
+            ...col,
+            cards: col.cards.map((c) =>
+              c.id === card.id ? { ...c, completedAt: nextCompletedAt } : c,
+            ),
+          })),
+        };
+      });
+      try {
+        const updated = await updateKanbanCard(card.id, { completedAt: nextCompletedAt });
+        queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            columns: old.columns.map((col) => ({
+              ...col,
+              cards: col.cards.map((c) =>
+                c.id === card.id
+                  ? { ...c, completedAt: updated.completedAt ?? nextCompletedAt }
+                  : c,
+              ),
+            })),
+          };
+        });
+      } catch {
+        queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            columns: old.columns.map((col) => ({
+              ...col,
+              cards: col.cards.map((c) =>
+                c.id === card.id ? { ...c, completedAt: previousCompletedAt } : c,
+              ),
+            })),
+          };
+        });
+        toast.error('Não foi possível atualizar o status do card');
+      }
+    },
+    [boardReadOnly, queryClient, kanbanBoardQueryKey],
+  );
+
+  const handleArchiveCard = useCallback(
+    async (card: KanbanCard, _columnId: string) => {
+      if (boardReadOnly || isOptimisticKanbanCardId(card.id)) return;
+      const previousBoard = queryClient.getQueryData<KanbanBoard>(kanbanBoardQueryKey);
+      const mutationGen = beginBoardMutation();
+      queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) =>
+        removeCardFromBoardCache(old, card.id),
+      );
+      setCardModal((prev) =>
+        prev?.mode === 'detail' && prev.cardId === card.id ? null : prev,
+      );
+      toast.success('Cartão arquivado — abra Arquivados para ver de novo', { duration: 2500 });
+      try {
+        await updateKanbanCard(card.id, { archivedAt: new Date().toISOString() });
+        void queryClient.invalidateQueries({
+          queryKey: ['kanban-archived', boardScopeKey ?? 'own'],
+        });
+      } catch {
+        rollbackBoardMutation(mutationGen, previousBoard);
+        toast.error('Erro ao arquivar cartão');
+      }
+    },
+    [
+      beginBoardMutation,
+      boardReadOnly,
+      boardScopeKey,
+      kanbanBoardQueryKey,
+      queryClient,
+      rollbackBoardMutation,
+    ],
+  );
+
+  const {
+    data: archivedCards = [],
+    isLoading: loadingArchived,
+    isFetching: fetchingArchived,
+  } = useQuery({
+    queryKey: ['kanban-archived', boardScopeKey ?? 'own'] as const,
+    queryFn: () => fetchKanbanArchivedCards(boardScopeKey || undefined),
+    enabled: archivedModalOpen && canLoadBoard,
+    staleTime: 30_000,
+  });
+
+  const handleUnarchiveCard = useCallback(
+    async (card: KanbanArchivedCard) => {
+      if (boardReadOnly) return;
+      setUnarchivingCardId(card.id);
+      try {
+        const updated = await updateKanbanCard(card.id, { archivedAt: null });
+        const restored: KanbanCard = {
+          ...card,
+          ...updated,
+          completedAt: updated.completedAt ?? card.completedAt ?? null,
+        };
+        queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) =>
+          insertCardIntoBoardCache(old, card.columnId, restored, true),
+        );
+        queryClient.setQueryData<KanbanArchivedCard[]>(
+          ['kanban-archived', boardScopeKey ?? 'own'],
+          (old) => (old ?? []).filter((c) => c.id !== card.id),
+        );
+        toast.success('Cartão restaurado no quadro');
+      } catch {
+        toast.error('Erro ao desarquivar cartão');
+      } finally {
+        setUnarchivingCardId(null);
+      }
+    },
+    [boardReadOnly, boardScopeKey, kanbanBoardQueryKey, queryClient],
   );
 
   const handleBoardCardSync = useCallback(
@@ -3461,6 +3739,7 @@ function KanbanPage() {
 
   const user = meUser;
   const showBoardSkeleton = !board && !boardError;
+  const isChecklistBoard = cardViewMode === 'checklist';
 
   if (boardError && !board) {
     return (
@@ -3474,7 +3753,13 @@ function KanbanPage() {
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <div className="flex flex-col -mx-2 sm:-mx-4">
+      <div
+        className={clsx(
+          'flex flex-col -mx-2 sm:-mx-4',
+          isChecklistBoard &&
+            'mb-[-1rem] h-[calc(100dvh-5rem)] overflow-hidden lg:mb-[-2rem] lg:h-[calc(100dvh-6rem)]',
+        )}
+      >
         {/* ── Page Header ── */}
         <div className="mb-4 flex-shrink-0 space-y-4 px-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -3500,6 +3785,42 @@ function KanbanPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <div
+                className="inline-flex h-10 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
+                role="group"
+                aria-label="Versão de visualização dos cards"
+              >
+                <button
+                  type="button"
+                  onClick={() => setCardViewModePersist('classic')}
+                  title="Versão clássica"
+                  aria-label="Versão clássica"
+                  aria-pressed={cardViewMode === 'classic'}
+                  className={clsx(
+                    'inline-flex h-full w-10 items-center justify-center transition-colors',
+                    cardViewMode === 'classic'
+                      ? 'bg-red-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700',
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCardViewModePersist('checklist')}
+                  title="Versão nova"
+                  aria-label="Versão nova"
+                  aria-pressed={cardViewMode === 'checklist'}
+                  className={clsx(
+                    'inline-flex h-full w-10 items-center justify-center border-l border-gray-300 transition-colors dark:border-gray-600',
+                    cardViewMode === 'checklist'
+                      ? 'bg-red-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700',
+                  )}
+                >
+                  <ListChecks className="h-4 w-4" />
+                </button>
+              </div>
               {/* Search — colapsável com animação de largura */}
               <div
                 className={clsx(
@@ -3587,6 +3908,15 @@ function KanbanPage() {
                 }
                 onDeleteBoard={setBoardDeleteTarget}
               />
+              <button
+                type="button"
+                onClick={() => setArchivedModalOpen(true)}
+                title="Cartões arquivados"
+                aria-label="Cartões arquivados"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
               {/* Filter */}
               <button
                 type="button"
@@ -3653,11 +3983,21 @@ function KanbanPage() {
         {/* ── Board ── */}
         <div
           ref={boardScrollRef}
-          className="scrollbar-hide overflow-x-auto pb-4 rounded-2xl bg-[#F3F4F6] dark:bg-gray-900/40 px-4 py-5"
+          className={clsx(
+            'overflow-x-auto bg-[#F3F4F6] px-4 dark:bg-gray-900/40',
+            isChecklistBoard
+              ? 'min-h-0 flex-1 overflow-y-hidden rounded-t-2xl pt-5 pb-0 [scrollbar-gutter:stable] [scrollbar-width:thin]'
+              : 'scrollbar-hide rounded-2xl py-5 pb-4',
+          )}
         >
           <div
             ref={boardCardsRef}
-            className="flex gap-5 items-start"
+            className={clsx(
+              'flex gap-5',
+              isChecklistBoard
+                ? 'h-full min-h-0 items-stretch'
+                : 'items-start',
+            )}
             style={{ minWidth: 'max-content' }}
             onDragOver={
               boardReadOnly || showBoardSkeleton ? undefined : handleBoardColumnDragOver
@@ -3680,7 +4020,10 @@ function KanbanPage() {
                 )}
                 <div
                   data-kanban-column-id={column.id}
-                  className="kanban-column-slot flex shrink-0"
+                  className={clsx(
+                    'kanban-column-slot flex shrink-0',
+                    isChecklistBoard && 'h-full min-h-0',
+                  )}
                   onDragOver={
                     boardReadOnly || !columnDrag.draggingColumnId
                       ? undefined
@@ -3724,6 +4067,13 @@ function KanbanPage() {
                     onCopyCard={openCopyCard}
                     onDeleteCard={handleDeleteCard}
                     onPrefetchCard={prefetchKanbanCard}
+                    cardViewMode={cardViewMode}
+                    onToggleCardComplete={
+                      boardReadOnly ? undefined : handleToggleCardComplete
+                    }
+                    onArchiveCard={
+                      boardReadOnly ? undefined : handleArchiveCard
+                    }
                     onColumnDragStart={boardReadOnly ? undefined : handleColumnDragStart}
                     onColumnDragEnd={handleColumnDragEnd}
                     onDragStart={handleDragStart}
@@ -3754,7 +4104,7 @@ function KanbanPage() {
               <button
                 type="button"
                 onClick={() => setColModal({ mode: 'create' })}
-                className="flex-shrink-0 self-start flex w-[340px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-300/80 dark:border-gray-600 py-8 text-gray-400 dark:text-gray-500 transition-all hover:border-gray-400 hover:bg-white/50 hover:text-gray-600 dark:hover:bg-gray-800/40 dark:hover:text-gray-300 group"
+                className="group flex w-[340px] flex-shrink-0 flex-col items-center justify-center gap-2 self-start rounded-2xl border-2 border-dashed border-gray-300/80 py-8 text-gray-400 transition-all hover:border-gray-400 hover:bg-white/50 hover:text-gray-600 dark:border-gray-600 dark:hover:bg-gray-800/40 dark:hover:text-gray-300 dark:text-gray-500"
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800 transition-colors group-hover:bg-red-50 dark:group-hover:bg-red-900/20">
                   <Plus className="h-5 w-5" />
@@ -3821,6 +4171,72 @@ function KanbanPage() {
           </div>
         </div>
       </Modal>
+
+      {archivedModalOpen && (
+        <Modal
+          isOpen
+          onClose={() => setArchivedModalOpen(false)}
+          size="md"
+          title="Cartões arquivados"
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Cards arquivados somem do quadro, mas ficam aqui. Restaure para colocá-los de volta na
+              coluna original.
+            </p>
+            {loadingArchived || fetchingArchived ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-500 dark:text-gray-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando…
+              </div>
+            ) : archivedCards.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                Nenhum cartão arquivado neste quadro.
+              </p>
+            ) : (
+              <ul className="max-h-[min(60vh,420px)] space-y-2 overflow-y-auto pr-1">
+                {archivedCards.map((card) => (
+                  <li
+                    key={card.id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/60"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {card.title.trim() || 'Sem título'}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                        Coluna: {card.columnTitle}
+                        {card.archivedAt
+                          ? ` · ${new Date(card.archivedAt).toLocaleString('pt-BR', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}`
+                          : null}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={boardReadOnly || unarchivingCardId === card.id}
+                      onClick={() => {
+                        void handleUnarchiveCard(card);
+                      }}
+                      className="shrink-0"
+                    >
+                      {unarchivingCardId === card.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        'Restaurar'
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {importModalOpen && (
         <Modal
@@ -4059,6 +4475,8 @@ function KanbanPage() {
           onBoardCardPatch={patchBoardCard}
           onBoardCardSync={handleBoardCardSync}
           onCreateOpenDetail={openCreateCardDetail}
+          showCompleteCheck
+          completeCheckDisabled={boardReadOnly}
         />
       )}
 

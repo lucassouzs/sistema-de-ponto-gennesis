@@ -27,6 +27,11 @@ export const FINANCIAL_CONTROL_CONSORCIO_LABELS: Record<FinancialControlConsorci
   hub: 'Consórcio Predial HUB',
 };
 
+/** Consórcio fixo no lançamento rápido a partir da OC (aba Pagamento). */
+export const FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO: FinancialControlConsorcio = 'brasilia';
+export const FINANCIAL_CONTROL_OC_CONSORCIO_LABEL = 'Consórcio Predial Brasília';
+export const FINANCIAL_CONTROL_OC_CONSORCIO_FIELD_LABEL = 'Contrato';
+
 export interface FinancialControlEntry {
   id: string;
   consorcio: FinancialControlConsorcio;
@@ -400,7 +405,7 @@ export function buildFormFromPurchaseOrder(
   return {
     paymentMonth: now.getMonth() + 1,
     paymentYear: now.getFullYear(),
-    consorcio: '',
+    consorcio: FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO,
     status: 'LANCADO',
     osCode,
     supplierName: (order.supplier?.name || '').trim(),

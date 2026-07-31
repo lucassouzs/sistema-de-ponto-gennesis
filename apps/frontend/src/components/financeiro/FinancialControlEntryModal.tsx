@@ -13,6 +13,7 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   FINANCIAL_CONTROL_CONSORCIO_LABELS,
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO,
   MONTHS_PT,
   STATUS_OPTIONS,
   type EntryFormState,
@@ -219,9 +220,11 @@ export function FinancialControlEntryModal({
     setForm({
       ...buildInitialForm(month, year),
       ...initialValues,
-      consorcio: initialValues?.consorcio ?? '',
+      consorcio: showQuickLaunch
+        ? FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO
+        : (initialValues?.consorcio ?? ''),
     });
-  }, [isOpen, editingEntry, initialValues, defaultPaymentMonth, defaultPaymentYear]);
+  }, [isOpen, editingEntry, initialValues, defaultPaymentMonth, defaultPaymentYear, showQuickLaunch]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: ReturnType<typeof buildFinancialEntryPayload>) => {
@@ -326,10 +329,14 @@ export function FinancialControlEntryModal({
 
   const submitPayload = () => {
     try {
+      const formForPayload =
+        showQuickLaunch && !editingEntry
+          ? { ...form, consorcio: FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO }
+          : form;
       const payload =
         showQuickLaunch && !editingEntry
-          ? buildQuickLaunchPayload(form, interestValue)
-          : buildFinancialEntryPayload(form);
+          ? buildQuickLaunchPayload(formForPayload, interestValue)
+          : buildFinancialEntryPayload(formForPayload);
       if (editingEntry) {
         updateMutation.mutate({ id: editingEntry.id, payload });
       } else {
@@ -348,9 +355,6 @@ export function FinancialControlEntryModal({
         toast.error(validationError);
         return;
       }
-    } else if (form.consorcio !== 'brasilia' && form.consorcio !== 'hub') {
-      toast.error('Selecione o consórcio do lançamento');
-      return;
     }
     if (editingEntry) {
       submitPayload();
@@ -373,7 +377,6 @@ export function FinancialControlEntryModal({
             form={form}
             interestValue={interestValue}
             onInterestChange={setInterestValue}
-            onConsorcioChange={(consorcio) => setForm((prev) => ({ ...prev, consorcio }))}
             onClose={onClose}
             onSubmit={handleSubmit}
             isSaving={isSaving}

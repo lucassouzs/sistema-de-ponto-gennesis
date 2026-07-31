@@ -345,13 +345,24 @@ function formatChecklistItem(item: {
 
 const memberUserSelect = { id: true, name: true, profilePhotoUrl: true } as const;
 
-/** Include da listagem do quadro (membros leves para avatares no card).
- * Checklist completa fica no GET do card — evita payload pesado no board. */
+/** Include da listagem do quadro (membros leves + checklist para visão expandida nos cards). */
 const boardListCardInclude = {
   assignee: { select: memberUserSelect },
   members: {
     orderBy: { createdAt: 'asc' as const },
     include: { user: { select: memberUserSelect } },
+  },
+  checklistItems: {
+    orderBy: { position: 'asc' as const },
+    select: {
+      id: true,
+      cardId: true,
+      title: true,
+      isDone: true,
+      position: true,
+      dueDate: true,
+      assigneeUserId: true,
+    },
   },
   _count: { select: { comments: true, attachments: true } },
 } as const;
@@ -369,11 +380,17 @@ const cardInclude = {
   _count: { select: { comments: true, attachments: true } },
 } as const;
 
+const activeBoardCards = {
+  where: { archivedAt: null },
+  orderBy: { position: 'asc' as const },
+  include: boardListCardInclude,
+} as const;
+
 const boardListInclude = {
   columns: {
     orderBy: { position: 'asc' as const },
     include: {
-      cards: { orderBy: { position: 'asc' as const }, include: boardListCardInclude },
+      cards: activeBoardCards,
     },
   },
 } as const;
@@ -1249,6 +1266,46 @@ export class KanbanService {
     });
   }
 
+  async listArchivedCards(userId: string, departmentKeyParam?: string) {
+    const { key: ownKey } = await this.getUserDepartment(userId);
+    const targetKey = departmentKeyParam
+      ? resolveKanbanBoardKeyParam(departmentKeyParam)
+      : ownKey;
+
+    if (targetKey === KANBAN_LEGACY_DEPARTMENT_KEY) {
+      throw new Error('Quadro não encontrado para este setor');
+    }
+
+    const board = await prisma.kanbanBoard.findUnique({
+      where: { departmentKey: targetKey },
+      select: this.boardAccessSelect,
+    });
+    if (!board) {
+      throw new Error('Quadro não encontrado para este setor');
+    }
+    await this.assertBoardAccess(userId, board, 'read');
+
+    const cards = await prisma.kanbanCard.findMany({
+      where: {
+        archivedAt: { not: null },
+        column: { boardId: board.id },
+      },
+      orderBy: { archivedAt: 'desc' },
+      include: {
+        ...boardListCardInclude,
+        column: { select: { id: true, title: true, color: true } },
+      },
+    });
+
+    return cards.map((card) => ({
+      ...formatCard(card),
+      columnId: card.column.id,
+      columnTitle: card.column.title,
+      columnColor: card.column.color,
+      archivedAt: card.archivedAt?.toISOString() ?? null,
+    }));
+  }
+
   async updateBoardLabelPresets(
     userId: string,
     presetsInput: unknown,
@@ -1403,7 +1460,11 @@ export class KanbanService {
     const column = await prisma.kanbanColumn.findUnique({
       where: { id },
       include: {
-        cards: { orderBy: { position: 'asc' }, include: cardInclude },
+        cards: {
+          where: { archivedAt: null },
+          orderBy: { position: 'asc' },
+          include: cardInclude,
+        },
       },
     });
     if (!column) throw new Error(KANBAN_FORBIDDEN);
@@ -1580,6 +1641,10 @@ export class KanbanService {
       attachmentsEnabled?: boolean;
       position?: number;
       workHours?: number | null;
+      /** ISO ou null — marca/desmarca conclusão estilo Trello. */
+      completedAt?: string | null;
+      /** ISO ou null — arquiva/desarquiva o card (some do quadro). */
+      archivedAt?: string | null;
     },
   ) {
     const existing = await prisma.kanbanCard.findUnique({
@@ -1600,7 +1665,15 @@ export class KanbanService {
     }
 
     let completedAt: Date | null | undefined;
-    if (data.columnId && data.columnId !== existing.columnId) {
+    if (data.completedAt !== undefined) {
+      completedAt =
+        data.completedAt === null || data.completedAt === ''
+          ? null
+          : new Date(data.completedAt);
+      if (completedAt && Number.isNaN(completedAt.getTime())) {
+        throw new Error('Data de conclusão inválida');
+      }
+    } else if (data.columnId && data.columnId !== existing.columnId) {
       const targetColumn = await prisma.kanbanColumn.findUnique({
         where: { id: data.columnId },
         select: { title: true },
@@ -1609,6 +1682,17 @@ export class KanbanService {
         completedAt = new Date();
       } else {
         completedAt = null;
+      }
+    }
+
+    let archivedAt: Date | null | undefined;
+    if (data.archivedAt !== undefined) {
+      archivedAt =
+        data.archivedAt === null || data.archivedAt === ''
+          ? null
+          : new Date(data.archivedAt);
+      if (archivedAt && Number.isNaN(archivedAt.getTime())) {
+        throw new Error('Data de arquivamento inválida');
       }
     }
 
@@ -1667,6 +1751,7 @@ export class KanbanService {
         ? { attachmentsEnabled: data.attachmentsEnabled }
         : {}),
       ...(completedAt !== undefined ? { completedAt } : {}),
+      ...(archivedAt !== undefined ? { archivedAt } : {}),
       ...(data.workHours !== undefined
         ? { workHours: data.workHours == null ? null : data.workHours }
         : {}),

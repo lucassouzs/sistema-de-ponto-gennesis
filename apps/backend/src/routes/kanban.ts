@@ -21,6 +21,9 @@ router.delete('/boards/:boardId/shares/:userId', (req, res, next) =>
 );
 router.get('/picker-users', (req, res, next) => controller.listPickerUsers(req, res, next));
 router.get('/board', (req, res, next) => controller.getBoard(req, res, next));
+router.get('/board/archived-cards', (req, res, next) =>
+  controller.listArchivedCards(req, res, next),
+);
 router.get('/board/export-trello', (req, res, next) =>
   controller.exportBoardTrello(req, res, next),
 );

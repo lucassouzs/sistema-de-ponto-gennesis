@@ -13,6 +13,7 @@ import {
   Pencil,
   ChevronLeft,
   Sparkles,
+  Check,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -221,6 +222,10 @@ export interface KanbanCardModalProps {
   onBoardCardSync?: (card: KanbanCard, columnId: string) => void;
   /** Abre o card em modo detalhe logo após criar (otimista). */
   onCreateOpenDetail?: (card: KanbanCard, columnId: string) => void;
+  /** Mostra o check estilo Trello antes do título (modo checklist do board). */
+  showCompleteCheck?: boolean;
+  /** Impede marcar concluído (quadro só leitura). */
+  completeCheckDisabled?: boolean;
 }
 
 export function KanbanCardModal({
@@ -241,6 +246,8 @@ export function KanbanCardModal({
   onBoardCardPatch,
   onBoardCardSync,
   onCreateOpenDetail,
+  showCompleteCheck = false,
+  completeCheckDisabled = false,
 }: KanbanCardModalProps) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<'create' | 'detail'>(initialMode);
@@ -486,6 +493,27 @@ export function KanbanCardModal({
     },
     [onBoardCardPatch],
   );
+
+  const handleToggleCardComplete = useCallback(async () => {
+    if (!card || !cardId || completeCheckDisabled || isOptimisticKanbanCardId(cardId)) return;
+    const previousCompletedAt = card.completedAt ?? null;
+    const nextCompletedAt = previousCompletedAt ? null : new Date().toISOString();
+    const optimistic = { ...kanbanDetailToBoardCard(card), completedAt: nextCompletedAt };
+    syncCardFromApi(optimistic, columnId);
+    try {
+      const updated = await updateKanbanCard(cardId, { completedAt: nextCompletedAt });
+      syncCardFromApi(
+        { ...updated, completedAt: updated.completedAt ?? nextCompletedAt },
+        columnId,
+      );
+    } catch {
+      syncCardFromApi(
+        { ...kanbanDetailToBoardCard(card), completedAt: previousCompletedAt },
+        columnId,
+      );
+      toast.error('Erro ao atualizar conclusão do card');
+    }
+  }, [card, cardId, columnId, completeCheckDisabled, syncCardFromApi]);
 
   const syncChecklistFromApi = useCallback(
     (detail: KanbanCardDetail) => {
@@ -1082,34 +1110,63 @@ export function KanbanCardModal({
     endDate,
   ]);
 
+  const isCardCompleted = Boolean(card?.completedAt);
   const modalTitle =
     mode === 'create' ? (
       'Novo card'
     ) : (
-      <input
-        type="text"
-        value={title}
-        onFocus={() => {
-          titleFocusedRef.current = true;
-        }}
-        onChange={(e) => {
-          const nextTitle = e.target.value;
-          titleLiveRef.current = nextTitle;
-          setTitle(nextTitle);
-          if (!isDetail || !card) return;
-          onBoardCardSync?.(
-            kanbanDetailToBoardCard({ ...card, title: nextTitle }),
-            columnId,
-          );
-          scheduleTitleSave(nextTitle);
-        }}
-        onBlur={() => {
-          titleFocusedRef.current = false;
-          flushTitleSave();
-        }}
-        placeholder="Título do card"
-        className="w-full min-w-0 text-lg font-semibold text-gray-900 dark:text-gray-100 bg-transparent border-0 px-0 py-0.5 placeholder-gray-400 focus:outline-none focus:ring-0 focus-visible:ring-0 border-b-2 border-transparent focus:border-gray-400 dark:focus:border-gray-500 hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
-      />
+      <div className="flex w-full min-w-0 items-start gap-2.5">
+        {showCompleteCheck ? (
+          <button
+            type="button"
+            disabled={completeCheckDisabled || !cardId || isOptimisticKanbanCardId(cardId)}
+            title={isCardCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
+            aria-label={isCardCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
+            onClick={() => {
+              void handleToggleCardComplete();
+            }}
+            className={clsx(
+              'mt-1.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all',
+              isCardCompleted
+                ? 'border-[#61BD4F] bg-[#61BD4F] text-white'
+                : 'border-gray-400 bg-transparent hover:border-[#61BD4F] dark:border-gray-500 dark:hover:border-[#61BD4F]',
+              (completeCheckDisabled || !cardId || isOptimisticKanbanCardId(cardId)) &&
+                'cursor-default opacity-60',
+            )}
+          >
+            {isCardCompleted ? <Check className="h-2.5 w-2.5 stroke-[3]" aria-hidden /> : null}
+          </button>
+        ) : null}
+        <input
+          type="text"
+          value={title}
+          onFocus={() => {
+            titleFocusedRef.current = true;
+          }}
+          onChange={(e) => {
+            const nextTitle = e.target.value;
+            titleLiveRef.current = nextTitle;
+            setTitle(nextTitle);
+            if (!isDetail || !card) return;
+            onBoardCardSync?.(
+              kanbanDetailToBoardCard({ ...card, title: nextTitle }),
+              columnId,
+            );
+            scheduleTitleSave(nextTitle);
+          }}
+          onBlur={() => {
+            titleFocusedRef.current = false;
+            flushTitleSave();
+          }}
+          placeholder="Título do card"
+          className={clsx(
+            'w-full min-w-0 text-lg font-semibold bg-transparent border-0 px-0 py-0.5 placeholder-gray-400 focus:outline-none focus:ring-0 focus-visible:ring-0 border-b-2 border-transparent focus:border-gray-400 dark:focus:border-gray-500 hover:border-gray-300 dark:hover:border-gray-600 transition-colors',
+            isCardCompleted && showCompleteCheck
+              ? 'text-gray-500 dark:text-gray-400'
+              : 'text-gray-900 dark:text-gray-100',
+          )}
+        />
+      </div>
     );
 
   const subModals = (
