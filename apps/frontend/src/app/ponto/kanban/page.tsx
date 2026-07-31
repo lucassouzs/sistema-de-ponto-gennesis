@@ -96,6 +96,8 @@ import {
   Paperclip,
   BarChart2,
   ListChecks,
+  Columns,
+  List,
   Tag,
   Trash2,
   Edit3,
@@ -2323,7 +2325,7 @@ function KanbanBoardPicker({
         <LayoutGrid className="h-4 w-4 shrink-0" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[16rem] w-max max-w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
+        <div className="absolute left-0 top-full z-50 mt-1 min-w-[16rem] w-max max-w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
           <div className="max-h-72 overflow-y-auto overscroll-contain p-1.5 [scrollbar-width:thin]">
             {boards.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
@@ -3812,29 +3814,9 @@ function KanbanPage() {
       >
         {/* ── Page Header ── */}
         <div className="mb-4 flex-shrink-0 space-y-4 px-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                Tasks
-              </h1>
-              {board?.department && (
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <p className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                    <span>{board.department}</span>
-                    {boardReadOnly && (
-                      <span title="Somente leitura" className="inline-flex">
-                        <Eye
-                          className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
-                          aria-hidden
-                        />
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr] sm:gap-4">
+            {/* Esquerda: visão + quadros */}
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-self-start">
               <div
                 className="relative inline-flex h-10 w-20 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
                 role="group"
@@ -3861,7 +3843,7 @@ function KanbanPage() {
                       : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
                   )}
                 >
-                  <LayoutGrid className="h-4 w-4" />
+                  <Columns className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
@@ -3876,9 +3858,51 @@ function KanbanPage() {
                       : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
                   )}
                 >
-                  <ListChecks className="h-4 w-4" />
+                  <List className="h-4 w-4" />
                 </button>
               </div>
+              <KanbanBoardPicker
+                boards={boardsList ?? []}
+                currentDepartmentKey={board?.departmentKey}
+                defaultDepartmentKey={defaultDepartmentKey}
+                canCreateBoard={!isAdministrator}
+                onSelect={openBoard}
+                onSetDefault={setAsDefaultBoard}
+                onCreateBoard={() => setCreateBoardOpen(true)}
+                onShare={(b) =>
+                  setShareTarget({ boardId: b.id, boardName: b.department })
+                }
+                onEditName={(b) =>
+                  setRenameBoardTarget({ boardId: b.id, name: b.department })
+                }
+                onDeleteBoard={setBoardDeleteTarget}
+              />
+            </div>
+
+            {/* Centro: título */}
+            <div className="min-w-0 text-center sm:justify-self-center">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                Tasks
+              </h1>
+              {board?.department && (
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+                  <p className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                    <span>{board.department}</span>
+                    {boardReadOnly && (
+                      <span title="Somente leitura" className="inline-flex">
+                        <Eye
+                          className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
+                          aria-hidden
+                        />
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Direita: busca + filtro + arquivo + export/import + etiquetas */}
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-self-end">
               {/* Search — colapsável com animação de largura */}
               <div
                 className={clsx(
@@ -3950,32 +3974,6 @@ function KanbanPage() {
                   ) : null}
                 </div>
               </div>
-              <KanbanBoardPicker
-                boards={boardsList ?? []}
-                currentDepartmentKey={board?.departmentKey}
-                defaultDepartmentKey={defaultDepartmentKey}
-                canCreateBoard={!isAdministrator}
-                onSelect={openBoard}
-                onSetDefault={setAsDefaultBoard}
-                onCreateBoard={() => setCreateBoardOpen(true)}
-                onShare={(b) =>
-                  setShareTarget({ boardId: b.id, boardName: b.department })
-                }
-                onEditName={(b) =>
-                  setRenameBoardTarget({ boardId: b.id, name: b.department })
-                }
-                onDeleteBoard={setBoardDeleteTarget}
-              />
-              <button
-                type="button"
-                onClick={() => setArchivedModalOpen(true)}
-                title="Cartões arquivados"
-                aria-label="Cartões arquivados"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                <Archive className="h-4 w-4" />
-              </button>
-              {/* Filter */}
               <button
                 type="button"
                 onClick={() => setIsFiltersModalOpen(true)}
@@ -3992,6 +3990,15 @@ function KanbanPage() {
                 {hasActiveKanbanFilters && (
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setArchivedModalOpen(true)}
+                title="Cartões arquivados"
+                aria-label="Cartões arquivados"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                <Archive className="h-4 w-4" />
               </button>
               <button
                 type="button"
