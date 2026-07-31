@@ -273,7 +273,7 @@ function SelectField({
         onPress={onPress}
         activeOpacity={0.75}
         style={{
-          backgroundColor: isDark ? colors.card : '#EEF0F3',
+          backgroundColor: isDark ? colors.card : colors.surface,
           borderRadius: 14,
           paddingHorizontal: 14,
           paddingVertical: 15,
@@ -281,6 +281,8 @@ function SelectField({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 10,
+          borderWidth: StyleSheet.hairlineWidth * 1.5,
+          borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
         }}
       >
         <Text
@@ -1057,7 +1059,7 @@ export default function FuelRequestsScreen() {
                     </View>
                   ) : (
                     <View style={styles.photoEmpty}>
-                      <View style={[styles.photoEmptyIcon, { backgroundColor: isDark ? colors.card : '#EEF0F3' }]}>
+                      <View style={[styles.photoEmptyIcon, { backgroundColor: colors.background }]}>
                         <ImagePlus size={22} color={colors.textSecondary} strokeWidth={2} />
                       </View>
                       <Text style={styles.photoEmptyTitle}>Adicione a foto do painel</Text>
@@ -1473,7 +1475,7 @@ export default function FuelRequestsScreen() {
                   <View
                     style={[
                       styles.photoEmptyIcon,
-                      { backgroundColor: isDark ? colors.card : '#EEF0F3' },
+                      { backgroundColor: colors.background },
                     ]}
                   >
                     <Camera size={22} color={colors.textSecondary} />
@@ -1579,7 +1581,7 @@ export default function FuelRequestsScreen() {
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : '#EEF0F3' }]}
+                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : colors.surface }]}
                   onPress={() => {
                     picker?.onSelect(item.value);
                     setPicker(null);
@@ -1707,10 +1709,13 @@ const getStyles = (colors: any, isDark: boolean) =>
       paddingHorizontal: 14,
       paddingVertical: 9,
       borderRadius: 999,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     chipActive: {
       backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     chipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     chipTextActive: { color: '#fff' },
@@ -1725,10 +1730,12 @@ const getStyles = (colors: any, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
       marginBottom: 20,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     searchInput: {
       flex: 1,
@@ -1754,7 +1761,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 8,
@@ -1930,8 +1937,9 @@ const getStyles = (colors: any, isDark: boolean) =>
       letterSpacing: -0.1,
     },
     input: {
-      borderWidth: 0,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
       paddingVertical: 15,
@@ -1989,9 +1997,11 @@ const getStyles = (colors: any, isDark: boolean) =>
       paddingVertical: 28,
       paddingHorizontal: 20,
       borderRadius: 18,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       marginBottom: 10,
       gap: 6,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     photoEmptyIcon: {
       width: 52,
@@ -2016,8 +2026,10 @@ const getStyles = (colors: any, isDark: boolean) =>
     photoActions: { flexDirection: 'row', gap: 10, marginBottom: 14 },
     secondaryBtn: {
       flex: 1,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
       paddingVertical: 13,
       alignItems: 'center',
       justifyContent: 'center',

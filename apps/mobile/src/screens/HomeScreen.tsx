@@ -314,7 +314,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       paddingHorizontal: 14,
       paddingVertical: 9,
       borderRadius: 999,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: isDark ? colors.border : 'transparent',
     },

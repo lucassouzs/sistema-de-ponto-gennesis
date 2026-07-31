@@ -230,7 +230,7 @@ function SelectField({
         onPress={onPress}
         activeOpacity={0.75}
         style={{
-          backgroundColor: isDark ? colors.card : '#EEF0F3',
+          backgroundColor: isDark ? colors.card : colors.surface,
           borderRadius: 14,
           paddingHorizontal: 14,
           paddingVertical: 15,
@@ -238,6 +238,8 @@ function SelectField({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 10,
+          borderWidth: StyleSheet.hairlineWidth * 1.5,
+          borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
         }}
       >
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -1001,7 +1003,7 @@ export default function VehicleReservationsScreen() {
                   <View
                     style={[
                       styles.releaseBlock,
-                      { backgroundColor: isDark ? colors.background : '#EEF0F3' },
+                      { backgroundColor: colors.background },
                     ]}
                   >
                     <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
@@ -1037,7 +1039,7 @@ export default function VehicleReservationsScreen() {
                   <View
                     style={[
                       styles.releaseBlock,
-                      { backgroundColor: isDark ? colors.background : '#EEF0F3' },
+                      { backgroundColor: colors.background },
                     ]}
                   >
                     <Text style={styles.releaseLabel}>Baixa do veículo</Text>
@@ -1496,7 +1498,7 @@ export default function VehicleReservationsScreen() {
               showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : '#EEF0F3' }]}
+                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : colors.surface }]}
                   onPress={() => {
                     picker?.onSelect(item.value);
                     setPicker(null);
@@ -1618,9 +1620,11 @@ const getStyles = (colors: any, isDark: boolean) =>
       paddingHorizontal: 14,
       paddingVertical: 9,
       borderRadius: 999,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
-    chipActive: { backgroundColor: colors.primary },
+    chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
     chipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
     chipTextActive: { color: '#fff' },
     chipCount: {
@@ -1634,10 +1638,12 @@ const getStyles = (colors: any, isDark: boolean) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
       marginBottom: 20,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     searchInput: {
       flex: 1,
@@ -1663,7 +1669,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       width: 64,
       height: 64,
       borderRadius: 32,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 8,
@@ -1811,8 +1817,9 @@ const getStyles = (colors: any, isDark: boolean) =>
       letterSpacing: -0.1,
     },
     input: {
-      borderWidth: 0,
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
       paddingVertical: 15,
@@ -1835,7 +1842,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       backgroundColor: colors.border,
     },
     secondaryBtn: {
-      backgroundColor: isDark ? colors.card : '#EEF0F3',
+      backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingVertical: 13,
       alignItems: 'center',
@@ -1843,6 +1850,8 @@ const getStyles = (colors: any, isDark: boolean) =>
       flexDirection: 'row',
       gap: 6,
       marginBottom: 8,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     secondaryBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
     pickerOverlay: {

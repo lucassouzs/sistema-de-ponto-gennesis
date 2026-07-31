@@ -77,7 +77,7 @@ export default function NotificationsSheet() {
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <View style={[styles.emptyIcon, { backgroundColor: isDark ? colors.card : '#EEF0F3' }]}>
+                <View style={[styles.emptyIcon, { backgroundColor: isDark ? colors.card : colors.surface }]}>
                   <Bell size={22} color={colors.textSecondary} strokeWidth={2} />
                 </View>
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>Tudo em dia</Text>

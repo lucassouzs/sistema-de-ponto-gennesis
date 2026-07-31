@@ -152,7 +152,7 @@ export default function DateField({
     if (selected) setTemp(selected);
   };
 
-  const fieldBg = isDark ? colors.card : '#EEF0F3';
+  const fieldBg = isDark ? colors.card : colors.surface;
   const chipBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
 
   return (
@@ -161,7 +161,13 @@ export default function DateField({
       <TouchableOpacity
         onPress={openPicker}
         activeOpacity={0.75}
-        style={[styles.field, { backgroundColor: fieldBg }]}
+        style={[
+          styles.field,
+          {
+            backgroundColor: fieldBg,
+            borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+          },
+        ]}
       >
         <View style={[styles.iconChip, { backgroundColor: chipBg }]}>
           <Calendar size={16} color={colors.primary} strokeWidth={2.2} />
@@ -266,6 +272,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    borderWidth: StyleSheet.hairlineWidth * 1.5,
+    borderColor: 'rgba(15, 23, 42, 0.08)',
   },
   iconChip: {
     width: 28,
