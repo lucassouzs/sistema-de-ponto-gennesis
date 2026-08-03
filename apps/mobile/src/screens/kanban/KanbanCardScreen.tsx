@@ -57,6 +57,24 @@ import type { RootStackParamList } from '../../../App';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'critical'];
 
+function labelTextColor(background: string): string {
+  const hex = background.replace('#', '').trim();
+  const full =
+    hex.length === 3
+      ? hex
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : hex;
+  if (full.length !== 6) return '#FFFFFF';
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if ([r, g, b].some((n) => Number.isNaN(n))) return '#FFFFFF';
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.62 ? '#1F2937' : '#FFFFFF';
+}
+
 function toYmd(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -904,31 +922,99 @@ export default function KanbanCardScreen() {
         />
       ) : null}
 
-      <Modal visible={labelsOpen} transparent animationType="fade" onRequestClose={() => setLabelsOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+      <Modal
+        visible={labelsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setLabelsOpen(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setLabelsOpen(false)}
+          />
+          <View style={styles.sheetCard}>
+            <View style={styles.sheetHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Etiquetas</Text>
-              <TouchableOpacity onPress={() => setLabelsOpen(false)}>
-                <X size={22} color={colors.text} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Etiquetas</Text>
+                <Text style={styles.sheetSubtitle}>
+                  Toque para adicionar ou remover do card
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.sheetClose}
+                onPress={() => setLabelsOpen(false)}
+                hitSlop={8}
+              >
+                <X size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            {labelPresets.map((preset) => {
-              const active = labels.some(
-                (l) => l.color.toLowerCase() === preset.color.toLowerCase(),
-              );
-              return (
-                <TouchableOpacity
-                  key={preset.color}
-                  style={[styles.presetRow, active && styles.presetRowActive]}
-                  onPress={() => void toggleLabel(preset)}
-                >
-                  <View style={[styles.presetSwatch, { backgroundColor: preset.color }]} />
-                  <Text style={styles.presetName}>{preset.name}</Text>
-                  {active ? <Check size={16} color={colors.primary} strokeWidth={3} /> : null}
-                </TouchableOpacity>
-              );
-            })}
+
+            <ScrollView
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {labelPresets.map((preset) => {
+                const active = labels.some(
+                  (l) => l.color.toLowerCase() === preset.color.toLowerCase(),
+                );
+                const fg = labelTextColor(preset.color);
+                return (
+                  <TouchableOpacity
+                    key={preset.color}
+                    activeOpacity={0.85}
+                    style={[styles.labelOption, { backgroundColor: preset.color }]}
+                    onPress={() => void toggleLabel(preset)}
+                  >
+                    <Text
+                      style={[styles.labelOptionText, { color: fg }]}
+                      numberOfLines={1}
+                    >
+                      {preset.name}
+                    </Text>
+                    <View
+                      style={[
+                        styles.labelOptionCheck,
+                        {
+                          borderColor: fg,
+                          backgroundColor: active ? fg : 'transparent',
+                        },
+                      ]}
+                    >
+                      {active ? (
+                        <Check
+                          size={12}
+                          color={preset.color}
+                          strokeWidth={3}
+                        />
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {labels.length > 0 ? (
+              <TouchableOpacity
+                style={styles.sheetSecondaryBtn}
+                onPress={() => void clearAllLabels()}
+              >
+                <Text style={[styles.sheetSecondaryText, { color: colors.error }]}>
+                  Remover todas
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => setLabelsOpen(false)}
+            >
+              <Text style={styles.primaryBtnText}>Concluído</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1335,11 +1421,88 @@ function getStyles(colors: any, _isDark: boolean) {
       padding: 18,
       maxHeight: '80%',
     },
-    modalHeader: {
+    sheetOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+    },
+    sheetCard: {
+      backgroundColor: colors.surface,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 18,
+      paddingTop: 8,
+      paddingBottom: Platform.OS === 'ios' ? 28 : 18,
+      maxHeight: '78%',
+      borderTopWidth: 1,
+      borderColor: colors.border,
+    },
+    sheetHandle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      marginBottom: 12,
+    },
+    sheetClose: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sheetSubtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    sheetScroll: {
+      maxHeight: 360,
+      marginBottom: 8,
+    },
+    sheetScrollContent: {
+      gap: 8,
+      paddingBottom: 4,
+    },
+    labelOption: {
+      minHeight: 44,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 10,
+    },
+    labelOptionText: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    labelOptionCheck: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sheetSecondaryBtn: {
+      alignItems: 'center',
+      paddingVertical: 10,
+      marginBottom: 4,
+    },
+    sheetSecondaryText: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
-      marginBottom: 12,
+      gap: 12,
+      marginBottom: 14,
     },
     modalTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
     modalInput: {
@@ -1351,17 +1514,6 @@ function getStyles(colors: any, _isDark: boolean) {
       fontSize: 15,
       marginBottom: 10,
     },
-    presetRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingVertical: 12,
-      paddingHorizontal: 8,
-      borderRadius: 10,
-    },
-    presetRowActive: { backgroundColor: colors.background },
-    presetSwatch: { width: 28, height: 16, borderRadius: 4 },
-    presetName: { flex: 1, fontSize: 14, fontWeight: '600', color: colors.text },
     moveRow: {
       flexDirection: 'row',
       alignItems: 'center',
