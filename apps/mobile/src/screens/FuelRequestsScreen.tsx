@@ -31,6 +31,7 @@ import {
   ImagePlus,
   MapPin,
   Trash2,
+  Filter,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useTheme } from '../context/ThemeContext';
@@ -328,6 +329,8 @@ export default function FuelRequestsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardFilter>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | FuelRefuelStatus>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM());
@@ -435,6 +438,7 @@ export default function FuelRequestsScreen() {
     if (cardFilter === 'pending') list = list.filter((r) => isPendingStatus(r.status));
     if (cardFilter === 'concluded') list = list.filter((r) => r.status === 'COMPLETED');
     if (cardFilter === 'cancelled') list = list.filter((r) => isCancelledStatus(r.status));
+    if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
     const q = searchTerm.trim().toLowerCase();
     if (q) {
       list = list.filter((r) =>
@@ -452,7 +456,7 @@ export default function FuelRequestsScreen() {
       );
     }
     return list;
-  }, [rows, cardFilter, searchTerm]);
+  }, [rows, cardFilter, searchTerm, statusFilter]);
 
   const citiesForState = useMemo(
     () => cities.filter((c) => !form.stateCode || c.stateCode === form.stateCode),
@@ -746,12 +750,12 @@ export default function FuelRequestsScreen() {
           <>
             <Text style={styles.pageTitle}>Combustível</Text>
             <Text style={styles.pageSubtitle}>
-              {counts.total} {counts.total === 1 ? 'solicitação' : 'solicitações'}
+              Solicite e acompanhe abastecimentos
             </Text>
           </>
         ) : (
           <Text style={styles.pageSubtitle}>
-            {counts.total} {counts.total === 1 ? 'solicitação' : 'solicitações'}
+            Solicite e acompanhe abastecimentos
           </Text>
         )}
 
@@ -780,19 +784,51 @@ export default function FuelRequestsScreen() {
           })}
         </ScrollView>
 
-        <View style={styles.searchBox}>
-          <Search size={16} color={colors.textSecondary} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar placa, rota, status..."
-            placeholderTextColor={colors.textSecondary}
-            value={searchTerm}
-            onChangeText={setSearchTerm}
-          />
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Search size={16} color={colors.textSecondary} strokeWidth={2} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar placa, rota, status..."
+              placeholderTextColor={colors.textSecondary}
+              value={searchTerm}
+              onChangeText={setSearchTerm}
+              returnKeyType="search"
+            />
+            {searchTerm.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearchTerm('')} hitSlop={8}>
+                <X size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <TouchableOpacity
+            style={[styles.filterBtn, statusFilter !== 'all' && styles.filterBtnActive]}
+            onPress={() => setFilterOpen(true)}
+            activeOpacity={0.75}
+            accessibilityLabel="Filtrar status"
+          >
+            <Filter
+              size={18}
+              color={statusFilter !== 'all' ? '#fff' : colors.primary}
+              strokeWidth={2.2}
+            />
+            {statusFilter !== 'all' ? <View style={styles.filterDot} /> : null}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.listHeader}>
+          <Text style={styles.listHeading}>
+            {statusFilter !== 'all'
+              ? STATUS_LABELS[statusFilter]
+              : cardFilter === 'all'
+                ? 'Solicitações'
+                : filterChips.find((c) => c.key === cardFilter)?.label || 'Solicitações'}
+          </Text>
+          <Text style={styles.listHeadingMeta}>{filteredRows.length}</Text>
         </View>
 
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} />
+          <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
         ) : filteredRows.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
@@ -857,6 +893,61 @@ export default function FuelRequestsScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Filtro de status */}
+      <Modal
+        visible={filterOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterOpen(false)}
+      >
+        <View style={styles.filterOverlay}>
+          <View style={[styles.filterSheet, { backgroundColor: colors.card }]}>
+            <Text style={[styles.filterSheetTitle, { color: colors.text }]}>
+              Filtro de status
+            </Text>
+            <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity
+                style={styles.filterOptionRow}
+                onPress={() => {
+                  setStatusFilter('all');
+                  setFilterOpen(false);
+                }}
+              >
+                <Text style={[styles.filterOptionText, { color: colors.text }]}>Todos</Text>
+                {statusFilter === 'all' ? (
+                  <CheckCircle size={16} color={colors.primary} strokeWidth={2.4} />
+                ) : null}
+              </TouchableOpacity>
+              {(Object.keys(STATUS_LABELS) as FuelRefuelStatus[]).map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={styles.filterOptionRow}
+                  onPress={() => {
+                    setStatusFilter(s);
+                    setFilterOpen(false);
+                  }}
+                >
+                  <Text style={[styles.filterOptionText, { color: colors.text }]}>
+                    {STATUS_LABELS[s]}
+                  </Text>
+                  {statusFilter === s ? (
+                    <CheckCircle size={16} color={colors.primary} strokeWidth={2.4} />
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              onPress={() => setFilterOpen(false)}
+              style={{ marginTop: 8, paddingVertical: 8 }}
+            >
+              <Text style={{ textAlign: 'center', color: colors.textSecondary, fontWeight: '600' }}>
+                Fechar
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Formulário */}
       <Modal
@@ -1630,7 +1721,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       fontWeight: '500',
       marginBottom: 18,
     },
-    chipsRow: { gap: 8, paddingBottom: 14 },
+    chipsRow: { gap: 8, paddingBottom: 12 },
     iconBtn: { padding: 8, width: 40, alignItems: 'center' },
     formHeader: {
       flexDirection: 'row',
@@ -1726,22 +1817,94 @@ const getStyles = (colors: any, isDark: boolean) =>
       opacity: 0.7,
     },
     chipCountActive: { color: 'rgba(255,255,255,0.85)', opacity: 1 },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 10,
+      marginBottom: 16,
+    },
     searchBox: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
-      marginBottom: 20,
+      minHeight: 48,
       borderWidth: StyleSheet.hairlineWidth * 1.5,
       borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     searchInput: {
       flex: 1,
-      paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+      paddingVertical: Platform.OS === 'ios' ? 12 : 8,
       color: colors.text,
       fontSize: 15,
+    },
+    filterBtn: {
+      width: 48,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    filterBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    filterDot: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: '#fff',
+    },
+    filterOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'flex-end',
+    },
+    filterSheet: {
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      padding: 18,
+      paddingBottom: 28,
+    },
+    filterSheetTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      marginBottom: 12,
+    },
+    filterOptionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+    },
+    filterOptionText: { fontSize: 15, fontWeight: '500', flex: 1, paddingRight: 12 },
+    listHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    listHeading: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.3,
+    },
+    listHeadingMeta: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
     },
     list: { gap: 10 },
     primaryBtn: {

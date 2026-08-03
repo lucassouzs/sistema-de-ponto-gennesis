@@ -15,17 +15,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   X,
-  Droplets,
-  CalendarCheck,
   Home,
-  User,
   Moon,
   Sun,
   LogOut,
   ClipboardList,
   Calendar,
   LayoutGrid,
-  MailPlus,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -84,7 +80,7 @@ function MenuItemRow({
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors, isDark, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
-  const { canSeeCombustivel, canSeeReservas, canSeePncp, canSeeDpRequests } = usePermissions();
+  const { canSeePncp } = usePermissions();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const queryClient = useQueryClient();
@@ -103,22 +99,10 @@ export default function Menu({ visible, onClose }: MenuProps) {
   );
 
   const go = useCallback(
-    (
-      name:
-        | keyof RootStackParamList
-        | 'Home'
-        | 'Combustivel'
-        | 'Reservas'
-        | 'DpRequests',
-    ) => {
+    (name: keyof RootStackParamList | 'Home') => {
       closeThen(() => {
-        if (
-          name === 'Home' ||
-          name === 'Combustivel' ||
-          name === 'Reservas' ||
-          name === 'DpRequests'
-        ) {
-          (navigation as any).navigate('Main', { screen: name });
+        if (name === 'Home') {
+          (navigation as any).navigate('Main', { screen: 'Home' });
           return;
         }
         navigation.navigate(name as never);
@@ -140,33 +124,9 @@ export default function Menu({ visible, onClose }: MenuProps) {
         });
       },
     },
-    ...(canSeeDpRequests
-      ? [
-          {
-            key: 'dp',
-            label: 'Solicitações DP/ADM/TST',
-            icon: MailPlus,
-            onPress: () => go('DpRequests'),
-          },
-        ]
-      : []),
-    ...(canSeeCombustivel
-      ? [{ key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') }]
-      : []),
-    ...(canSeeReservas
-      ? [
-          {
-            key: 'reservas',
-            label: 'Reservas',
-            icon: CalendarCheck,
-            onPress: () => go('Reservas'),
-          },
-        ]
-      : []),
     ...(canSeePncp
       ? [{ key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') }]
       : []),
-    { key: 'profile', label: 'Perfil', icon: User, onPress: () => go('Profile') },
   ];
 
   useEffect(() => {

@@ -654,9 +654,7 @@ export default function DpRequestsScreen() {
           <Text style={styles.pageTitle}>Solicitações</Text>
         ) : null}
         <Text style={styles.pageSubtitle}>
-          {filtered.length}{' '}
-          {filtered.length === 1 ? 'solicitação' : 'solicitações'}
-          {statusFilter !== 'all' ? ` · ${STATUS_LABELS[statusFilter]}` : ''}
+          Crie e acompanhe pedidos ao DP e ADM/TST
         </Text>
 
         <ScrollView
@@ -670,44 +668,59 @@ export default function DpRequestsScreen() {
               <TouchableOpacity
                 key={key}
                 onPress={() => setDestFilter(key)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
+                style={[styles.chip, active && styles.chipActive]}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
-                  {label}
-                </Text>
-                <Text style={[styles.filterChipCount, active && styles.filterChipCountActive]}>
-                  {count}
-                </Text>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                <Text style={[styles.chipCount, active && styles.chipCountActive]}>{count}</Text>
               </TouchableOpacity>
             );
           })}
         </ScrollView>
 
-        <View style={styles.searchBox}>
-          <Search size={16} color={colors.textSecondary} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Buscar tipo, nº, contrato..."
-            placeholderTextColor={colors.textSecondary}
-            value={search}
-            onChangeText={setSearch}
-          />
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <Search size={16} color={colors.textSecondary} strokeWidth={2} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar tipo, nº, contrato..."
+              placeholderTextColor={colors.textSecondary}
+              value={search}
+              onChangeText={setSearch}
+              returnKeyType="search"
+            />
+            {search.length > 0 ? (
+              <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+                <X size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <TouchableOpacity
+            style={[styles.filterBtn, statusFilter !== 'all' && styles.filterBtnActive]}
             onPress={() => setFilterOpen(true)}
-            hitSlop={8}
+            activeOpacity={0.75}
             accessibilityLabel="Filtrar status"
           >
             <Filter
               size={18}
-              color={statusFilter !== 'all' ? colors.primary : colors.textSecondary}
+              color={statusFilter !== 'all' ? '#fff' : colors.primary}
               strokeWidth={2.2}
             />
+            {statusFilter !== 'all' ? <View style={styles.filterDot} /> : null}
           </TouchableOpacity>
         </View>
 
+        <View style={styles.listHeader}>
+          <Text style={styles.listHeading}>
+            {destFilter === 'all'
+              ? 'Solicitações'
+              : filterChips.find((c) => c.key === destFilter)?.label || 'Solicitações'}
+          </Text>
+          <Text style={styles.listHeadingMeta}>{filtered.length}</Text>
+        </View>
+
         {listQuery.isLoading ? (
-          <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} />
+          <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
         ) : filtered.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
@@ -1341,8 +1354,8 @@ function getStyles(colors: any, isDark: boolean) {
       fontWeight: '500',
       marginBottom: 18,
     },
-    chipsRow: { gap: 8, paddingBottom: 14 },
-    filterChip: {
+    chipsRow: { gap: 8, paddingBottom: 12 },
+    chip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
@@ -1353,35 +1366,82 @@ function getStyles(colors: any, isDark: boolean) {
       borderWidth: StyleSheet.hairlineWidth * 1.5,
       borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
-    filterChipActive: {
+    chipActive: {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
     },
-    filterChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-    filterChipTextActive: { color: '#fff' },
-    filterChipCount: {
+    chipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+    chipTextActive: { color: '#fff' },
+    chipCount: {
       fontSize: 12,
       fontWeight: '700',
       color: colors.textSecondary,
       opacity: 0.7,
     },
-    filterChipCountActive: { color: 'rgba(255,255,255,0.85)', opacity: 1 },
+    chipCountActive: { color: 'rgba(255,255,255,0.85)', opacity: 1 },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 10,
+      marginBottom: 16,
+    },
     searchBox: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       backgroundColor: isDark ? colors.card : colors.surface,
       borderRadius: 14,
       paddingHorizontal: 14,
-      marginBottom: 20,
+      minHeight: 48,
       borderWidth: StyleSheet.hairlineWidth * 1.5,
       borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
     searchInput: {
       flex: 1,
-      paddingVertical: Platform.OS === 'ios' ? 13 : 10,
+      paddingVertical: Platform.OS === 'ios' ? 12 : 8,
       color: colors.text,
       fontSize: 15,
+    },
+    filterBtn: {
+      width: 48,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    filterBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    filterDot: {
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: '#fff',
+    },
+    listHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    listHeading: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.3,
+    },
+    listHeadingMeta: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
     },
     list: { gap: 10 },
     empty: { alignItems: 'center', paddingVertical: 56, gap: 8, paddingHorizontal: 24 },
@@ -1516,15 +1576,6 @@ function getStyles(colors: any, isDark: boolean) {
       marginTop: 4,
     },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
-    chip: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
-      backgroundColor: colors.surface,
-    },
-    chipActive: { backgroundColor: colors.primary },
-    chipText: { fontSize: 13, fontWeight: '600', color: colors.text },
-    chipTextActive: { color: '#fff' },
     select: {
       flexDirection: 'row',
       alignItems: 'center',

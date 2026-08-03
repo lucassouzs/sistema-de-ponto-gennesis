@@ -553,13 +553,6 @@ export default function PncpLicitacoesScreen() {
 
   const detailStatus = detail ? itemStatus(detail) : null;
   const canAct = detailStatus === 'disponivel';
-  const periodLabel =
-    applied.dataInicial === defaults.dataInicial && applied.dataFinal === defaults.dataFinal
-      ? 'últimos 30 dias'
-      : `${applied.dataInicial.split('-').reverse().join('/')} – ${applied.dataFinal
-          .split('-')
-          .reverse()
-          .join('/')}`;
 
   if (permissionsLoading || !canSeePncp) {
     return (
@@ -593,18 +586,8 @@ export default function PncpLicitacoesScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
-        {isTabScreen ? (
-          <>
-            <Text style={styles.pageTitle}>Licitações PNCP</Text>
-            <Text style={styles.pageSubtitle}>
-              {totalRegistros} {totalRegistros === 1 ? 'contratação' : 'contratações'} · {periodLabel}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.pageSubtitle}>
-            {totalRegistros} {totalRegistros === 1 ? 'contratação' : 'contratações'} · {periodLabel}
-          </Text>
-        )}
+        <Text style={styles.pageTitle}>Licitações</Text>
+        <Text style={styles.pageSubtitle}>Consulte contratações do PNCP</Text>
 
         <ScrollView
           horizontal
@@ -676,8 +659,15 @@ export default function PncpLicitacoesScreen() {
           </Text>
         ) : null}
 
+        <View style={styles.listHeader}>
+          <Text style={styles.listHeading}>
+            {filterChips.find((c) => c.id === applied.statusAnalise)?.label || 'Licitações'}
+          </Text>
+          <Text style={styles.listHeadingMeta}>{totalRegistros}</Text>
+        </View>
+
         {loading ? (
-          <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} />
+          <ActivityIndicator style={{ marginTop: 24 }} color={colors.primary} />
         ) : rows.length === 0 ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
@@ -1205,6 +1195,23 @@ const getStyles = (colors: any, isDark: boolean) =>
       fontSize: 12,
       fontWeight: '500',
       marginBottom: 14,
+    },
+    listHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    listHeading: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.3,
+    },
+    listHeadingMeta: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
     },
     list: { gap: 10 },
     card: {
