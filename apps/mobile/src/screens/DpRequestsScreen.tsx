@@ -127,6 +127,8 @@ async function pickAttachment(): Promise<Attachment | null> {
 
 export default function DpRequestsScreen() {
   const navigation = useNavigation();
+  const navState = navigation.getState?.() as { type?: string } | undefined;
+  const isTabScreen = navState?.type === 'tab';
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -606,13 +608,13 @@ export default function DpRequestsScreen() {
   return (
     <View style={styles.safe}>
       <AppHeader
-        showBack
-        title="Solicitações DP/ADM/TST"
+        showBack={!isTabScreen}
+        title={!isTabScreen ? 'Solicitações DP/ADM/TST' : undefined}
         onBack={() => navigation.goBack()}
       />
 
       <ScrollView
-        contentContainerStyle={styles.pad}
+        contentContainerStyle={[styles.pad, isTabScreen && { paddingBottom: 110 }]}
         refreshControl={
           <RefreshControl
             refreshing={listQuery.isRefetching}
@@ -622,9 +624,18 @@ export default function DpRequestsScreen() {
         }
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.subtitle}>
-          Crie e acompanhe solicitações ao DP e ADM/TST.
-        </Text>
+        {isTabScreen ? (
+          <>
+            <Text style={styles.pageTitle}>Solicitações DP/ADM/TST</Text>
+            <Text style={styles.subtitle}>
+              Crie e acompanhe solicitações ao DP e ADM/TST.
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.subtitle}>
+            Crie e acompanhe solicitações ao DP e ADM/TST.
+          </Text>
+        )}
 
         <View style={styles.statRow}>
           {(
@@ -1269,6 +1280,12 @@ function getStyles(colors: any, _isDark: boolean) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.background },
     pad: { padding: 16, paddingBottom: 48 },
+    pageTitle: {
+      fontSize: 26,
+      fontWeight: '800',
+      color: colors.text,
+      marginBottom: 4,
+    },
     subtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
     statRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     statCard: {

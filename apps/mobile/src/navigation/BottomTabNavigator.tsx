@@ -5,20 +5,20 @@ import FloatingTabBar from './FloatingTabBar';
 import HomeScreen from '../screens/HomeScreen';
 import FuelRequestsScreen from '../screens/FuelRequestsScreen';
 import VehicleReservationsScreen from '../screens/VehicleReservationsScreen';
-import PncpLicitacoesScreen from '../screens/PncpLicitacoesScreen';
+import DpRequestsScreen from '../screens/DpRequestsScreen';
 import { usePermissions } from '../hooks/usePermissions';
 
 export type BottomTabParamList = {
   Home: undefined;
   Combustivel: undefined;
   Reservas: undefined;
-  Pncp: undefined;
+  DpRequests: undefined;
 };
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 export default function BottomTabNavigator() {
-  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
+  const { canSeeCombustivel, canSeeReservas, canSeeDpRequests } = usePermissions();
 
   return (
     <Tab.Navigator
@@ -63,11 +63,11 @@ export default function BottomTabNavigator() {
           options={{ title: 'Reservas' }}
         />
       ) : null}
-      {canSeePncp ? (
+      {canSeeDpRequests ? (
         <Tab.Screen
-          name="Pncp"
-          component={PncpLicitacoesScreen}
-          options={{ title: 'PNCP' }}
+          name="DpRequests"
+          component={DpRequestsScreen}
+          options={{ title: 'Solicitações' }}
         />
       ) : null}
     </Tab.Navigator>

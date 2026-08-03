@@ -103,9 +103,21 @@ export default function Menu({ visible, onClose }: MenuProps) {
   );
 
   const go = useCallback(
-    (name: keyof RootStackParamList | 'Home' | 'Combustivel' | 'Reservas' | 'Pncp') => {
+    (
+      name:
+        | keyof RootStackParamList
+        | 'Home'
+        | 'Combustivel'
+        | 'Reservas'
+        | 'DpRequests',
+    ) => {
       closeThen(() => {
-        if (name === 'Home' || name === 'Combustivel' || name === 'Reservas' || name === 'Pncp') {
+        if (
+          name === 'Home' ||
+          name === 'Combustivel' ||
+          name === 'Reservas' ||
+          name === 'DpRequests'
+        ) {
           (navigation as any).navigate('Main', { screen: name });
           return;
         }

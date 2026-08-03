@@ -9,7 +9,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
-import { Droplets, CalendarCheck, Calendar, LayoutGrid, MailPlus } from 'lucide-react-native';
+import { Calendar, LayoutGrid, MailPlus } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
@@ -38,11 +38,6 @@ export default function HomeScreen() {
   const styles = getStyles(colors, isDark);
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'colaborador';
-  const showHero = canSeeCombustivel || canSeeReservas;
-
-  const goTab = (name: 'Combustivel' | 'Reservas') => {
-    (navigation as any).navigate(name);
-  };
 
   const goProfile = () => {
     (navigation as any).navigate('Profile');
@@ -97,90 +92,48 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.quickCard}
             onPress={() => navigation.navigate('Agenda')}
-            activeOpacity={0.8}
+            activeOpacity={0.75}
           >
-            <Calendar size={20} color={colors.primary} strokeWidth={2.2} />
-            <Text style={styles.quickTitle}>Agenda</Text>
-            <Text style={styles.quickSub}>Calendário e tarefas</Text>
+            <View style={styles.quickIconWrap}>
+              <Calendar size={20} color={colors.primary} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.quickTitle} numberOfLines={1}>
+              Agenda
+            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.quickCard}
             onPress={openTasks}
-            activeOpacity={0.8}
+            activeOpacity={0.75}
           >
-            <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />
-            <Text style={styles.quickTitle}>Tasks</Text>
-            <Text style={styles.quickSub}>Quadros estilo Trello</Text>
+            <View style={styles.quickIconWrap}>
+              <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.quickTitle} numberOfLines={1}>
+              Tasks
+            </Text>
           </TouchableOpacity>
+
+          {canSeeDpRequests ? (
+            <TouchableOpacity
+              style={styles.quickCard}
+              onPress={() =>
+                (navigation as any).navigate('Main', { screen: 'DpRequests' })
+              }
+              activeOpacity={0.75}
+            >
+              <View style={styles.quickIconWrap}>
+                <MailPlus size={20} color={colors.primary} strokeWidth={2.2} />
+              </View>
+              <Text style={styles.quickTitle} numberOfLines={1}>
+                Solicitações
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
-        {canSeeDpRequests ? (
-          <TouchableOpacity
-            style={styles.dpCard}
-            onPress={() => navigation.navigate('DpRequests')}
-            activeOpacity={0.8}
-          >
-            <MailPlus size={20} color={colors.primary} strokeWidth={2.2} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.quickTitle}>Solicitações DP/ADM/TST</Text>
-              <Text style={styles.quickSub}>Crie e acompanhe pedidos ao DP e ADM/TST</Text>
-            </View>
-          </TouchableOpacity>
-        ) : null}
-
         {canSeePncp ? <PncpCaptacoesCard /> : null}
-
-        {showHero ? (
-          <View style={styles.hero}>
-            <Text style={styles.heroEyebrow}>Frota Gennesis</Text>
-            <Text style={styles.heroTitle}>
-              {canSeeCombustivel && canSeeReservas
-                ? 'Combustível e reservas em um só lugar'
-                : canSeeCombustivel
-                  ? 'Abasteça com praticidade'
-                  : 'Reserve veículos com praticidade'}
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              {canSeeCombustivel && canSeeReservas
-                ? 'Solicite abastecimento e reserve veículos pelo app.'
-                : canSeeCombustivel
-                  ? 'Solicite abastecimento de forma rápida pelo app.'
-                  : 'Reserve veículos de forma rápida pelo app.'}
-            </Text>
-            <View style={styles.heroActions}>
-              {canSeeCombustivel ? (
-                <TouchableOpacity
-                  style={styles.heroCta}
-                  onPress={() => goTab('Combustivel')}
-                  activeOpacity={0.85}
-                >
-                  <Droplets size={18} color={colors.primary} strokeWidth={2.4} />
-                  <Text style={styles.heroCtaText}>Combustível</Text>
-                </TouchableOpacity>
-              ) : null}
-              {canSeeReservas ? (
-                <TouchableOpacity
-                  style={canSeeCombustivel ? styles.heroCtaSecondary : styles.heroCta}
-                  onPress={() => goTab('Reservas')}
-                  activeOpacity={0.85}
-                >
-                  <CalendarCheck
-                    size={18}
-                    color={canSeeCombustivel ? '#fff' : colors.primary}
-                    strokeWidth={2.4}
-                  />
-                  <Text
-                    style={
-                      canSeeCombustivel ? styles.heroCtaSecondaryText : styles.heroCtaText
-                    }
-                  >
-                    Reservas
-                  </Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          </View>
-        ) : null}
       </ScrollView>
     </View>
   );
@@ -222,96 +175,35 @@ const getStyles = (colors: any, _isDark: boolean) =>
     },
     quickRow: {
       flexDirection: 'row',
-      gap: 10,
+      gap: 8,
       marginBottom: 16,
     },
     quickCard: {
       flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.surface,
-      borderRadius: 14,
-      padding: 14,
-      gap: 4,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      paddingVertical: 16,
+      paddingHorizontal: 8,
+      gap: 10,
+    },
+    quickIconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: `${colors.primary}14`,
     },
     quickTitle: {
-      fontSize: 15,
+      fontSize: 12,
       fontWeight: '700',
       color: colors.text,
-      marginTop: 6,
-    },
-    quickSub: {
-      fontSize: 12,
-      color: colors.textSecondary,
-    },
-    dpCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: colors.surface,
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 16,
-    },
-    hero: {
-      backgroundColor: colors.primary,
-      borderRadius: 22,
-      padding: 20,
-      marginBottom: 18,
-    },
-    heroEyebrow: {
-      color: 'rgba(255,255,255,0.78)',
-      fontSize: 12,
-      fontWeight: '700',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
-      marginBottom: 8,
-    },
-    heroTitle: {
-      color: '#fff',
-      fontSize: 22,
-      fontWeight: '700',
-      letterSpacing: -0.4,
-      marginBottom: 8,
-    },
-    heroSubtitle: {
-      color: 'rgba(255,255,255,0.88)',
-      fontSize: 14,
-      lineHeight: 20,
-      fontWeight: '500',
-      marginBottom: 16,
-    },
-    heroActions: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    heroCta: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: '#fff',
-      paddingHorizontal: 16,
-      paddingVertical: 11,
-      borderRadius: 999,
-    },
-    heroCtaText: {
-      color: colors.primary,
-      fontWeight: '700',
-      fontSize: 14,
-    },
-    heroCtaSecondary: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      backgroundColor: 'rgba(255,255,255,0.16)',
-      paddingHorizontal: 16,
-      paddingVertical: 11,
-      borderRadius: 999,
-      borderWidth: StyleSheet.hairlineWidth * 1.5,
-      borderColor: 'rgba(255,255,255,0.35)',
-    },
-    heroCtaSecondaryText: {
-      color: '#fff',
-      fontWeight: '700',
-      fontSize: 14,
+      textAlign: 'center',
+      letterSpacing: -0.2,
     },
   });
