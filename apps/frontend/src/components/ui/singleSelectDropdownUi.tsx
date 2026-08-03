@@ -9,7 +9,7 @@ export const SINGLE_SELECT_PANEL_CLS =
 export function singleSelectOptionClassName(active: boolean) {
   return `flex w-full min-h-[2.75rem] items-start justify-between gap-2 rounded-md px-3 py-2.5 text-left text-sm transition-colors ${
     active
-      ? 'bg-gray-100 font-medium text-gray-900 dark:bg-gray-700/90 dark:text-white'
+      ? 'bg-gray-100 text-gray-900 dark:bg-gray-700/90 dark:text-white'
       : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/50'
   }`;
 }

@@ -30,9 +30,9 @@ export type MultiSelectSearchOption = {
 
 function OptionLabelContent({ opt }: { opt: MultiSelectSearchOption }) {
   const label = opt.labelClassName ? (
-    <span className={`truncate font-semibold tracking-tight ${opt.labelClassName}`}>{opt.label}</span>
+    <span className={`truncate font-normal tracking-tight ${opt.labelClassName}`}>{opt.label}</span>
   ) : (
-    <span className="truncate font-semibold tracking-tight text-gray-900 dark:text-gray-100">{opt.label}</span>
+    <span className="truncate font-normal tracking-tight text-gray-900 dark:text-gray-100">{opt.label}</span>
   );
 
   const primary = opt.swatchColor ? (

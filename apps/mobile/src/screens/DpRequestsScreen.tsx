@@ -93,6 +93,7 @@ const DEPARTMENTS_LIST = [
   'Engenharia',
   'Administrativo',
   'Financeiro',
+  'Operacional',
 ];
 
 const MOTIVO_CONTRATACAO_OPTIONS = [

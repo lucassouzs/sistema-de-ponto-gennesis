@@ -2,19 +2,15 @@
 
 // Página padrão de entrada para todos os usuários autenticados (home minimalista).
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  FileCheck,
   CalendarClock,
-  ListTodo,
   Gavel,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  type LucideIcon,
 } from 'lucide-react';
 import {
   Bar,
@@ -27,21 +23,11 @@ import {
 } from 'recharts';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
-import {
-  DATE_PICKER_FOOTER_ACTION_CLS,
-  DATE_PICKER_FOOTER_CLS,
-  DATE_PICKER_NAV_BTN_CLS,
-  DATE_PICKER_POPOVER_CLS,
-  DATE_PICKER_WEEKDAY_ROW_CLS,
-  DATE_PICKER_WEEKDAYS,
-  datePickerDayButtonCls,
-} from '@/components/ui/datePickerDropdownUi';
 import { useTheme } from '@/context/ThemeContext';
 import api from '@/lib/api';
 import { authService } from '@/lib/auth';
 import { useLogout } from '@/hooks/useLogout';
 import { usePermissions } from '@/hooks/usePermissions';
-import { useApprovalNotificationCounts } from '@/hooks/useApprovalNotificationCounts';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import { fetchPlannerEvents, type PlannerEvent } from '@/lib/plannerEvents';
 import {
@@ -49,23 +35,6 @@ import {
   toTimeInputValue,
   type PlannerTask,
 } from '@/lib/plannerTasks';
-
-type StatCard = {
-  id: string;
-  label: string;
-  value: number;
-  href: string;
-  icon: LucideIcon;
-  accent: 'red' | 'blue' | 'yellow' | 'green';
-  visible: boolean;
-};
-
-const STAT_CARD_ACCENT_CLASSES: Record<StatCard['accent'], { bg: string; icon: string }> = {
-  red: { bg: 'bg-red-100 dark:bg-red-900/30', icon: 'text-red-600 dark:text-red-400' },
-  blue: { bg: 'bg-blue-100 dark:bg-blue-900/30', icon: 'text-blue-600 dark:text-blue-400' },
-  yellow: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', icon: 'text-yellow-600 dark:text-yellow-400' },
-  green: { bg: 'bg-green-100 dark:bg-green-900/30', icon: 'text-green-600 dark:text-green-400' },
-};
 
 function getGreeting(date: Date): string {
   const hour = date.getHours();
@@ -174,201 +143,6 @@ function formatWeekRangeLabel(monday: string, friday: string): string {
 
 function formatDayMonthShort(ymd: string): string {
   return formatDayLabelPt(ymd);
-}
-
-function parseYmdLocal(s: string): Date | null {
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function CompactDayPicker({
-  value,
-  max,
-  onChange,
-}: {
-  value: string;
-  max: string;
-  onChange: (ymd: string) => void;
-}) {
-  const listboxId = useId();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => parseYmdLocal(value) ?? new Date());
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 280 });
-
-  const updatePosition = useCallback(() => {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const popoverH = 340;
-    const gap = 6;
-    let top = rect.bottom + gap;
-    if (top + popoverH > window.innerHeight - 8) {
-      top = Math.max(8, rect.top - popoverH - gap);
-    }
-    const width = 280;
-    let left = rect.left;
-    if (left + width > window.innerWidth - 8) {
-      left = window.innerWidth - width - 8;
-    }
-    setCoords({ top, left: Math.max(8, left), width });
-  }, []);
-
-  useEffect(() => {
-    const parsed = parseYmdLocal(value);
-    if (parsed) setViewDate(parsed);
-  }, [value]);
-
-  useEffect(() => {
-    if (!open) return;
-    updatePosition();
-    const onScrollOrResize = () => updatePosition();
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
-    return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
-    };
-  }, [open, updatePosition]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t) || popoverRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const monthLabel = viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  const firstDay = new Date(year, month, 1);
-  const startWeekday = firstDay.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-
-  const pickDay = (day: number) => {
-    const ymd = toDateInputValue(new Date(year, month, day, 12, 0, 0, 0));
-    if (ymd > max) return;
-    onChange(ymd);
-    setOpen(false);
-  };
-
-  const popover = open ? (
-    <div
-      ref={popoverRef}
-      id={listboxId}
-      role="dialog"
-      aria-label="Calendário"
-      className={DATE_PICKER_POPOVER_CLS}
-      style={{ top: coords.top, left: coords.left, width: coords.width }}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setViewDate(new Date(year, month - 1, 1))}
-          className={DATE_PICKER_NAV_BTN_CLS}
-          aria-label="Mês anterior"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">
-          {monthLabel}
-        </span>
-        <button
-          type="button"
-          onClick={() => setViewDate(new Date(year, month + 1, 1))}
-          className={DATE_PICKER_NAV_BTN_CLS}
-          aria-label="Próximo mês"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
-        {DATE_PICKER_WEEKDAYS.map((d) => (
-          <span key={d} className="py-1">
-            {d}
-          </span>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((day, i) => {
-          if (day === null) return <span key={`e-${i}`} aria-hidden />;
-          const ymd = toDateInputValue(new Date(year, month, day, 12, 0, 0, 0));
-          const selected = value === ymd;
-          const isToday = ymd === max;
-          const disabled = ymd > max;
-          return (
-            <button
-              key={day}
-              type="button"
-              disabled={disabled}
-              onClick={() => pickDay(day)}
-              className={`${datePickerDayButtonCls(selected, isToday)} disabled:pointer-events-none disabled:opacity-30`}
-            >
-              {day}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className={DATE_PICKER_FOOTER_CLS}>
-        <span />
-        <button
-          type="button"
-          onClick={() => {
-            onChange(max);
-            setViewDate(parseYmdLocal(max) ?? new Date());
-            setOpen(false);
-          }}
-          className={DATE_PICKER_FOOTER_ACTION_CLS}
-        >
-          Hoje
-        </button>
-      </div>
-    </div>
-  ) : null;
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label="Escolher data"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-controls={open ? listboxId : undefined}
-        title="Escolher data"
-        onClick={() => {
-          if (!open) updatePosition();
-          setOpen((v) => !v);
-        }}
-        className="min-w-[4.25rem] select-none rounded px-1 py-0 text-center text-[10px] font-medium leading-5 tabular-nums text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-      >
-        {formatDayLabelPt(value)}
-      </button>
-      {typeof document !== 'undefined' && popover
-        ? createPortal(popover, document.body)
-        : null}
-    </>
-  );
 }
 
 function startOfDay(date: Date): Date {
@@ -492,36 +266,17 @@ export default function HomePage() {
 
   const agendaLoading = loadingEvents || loadingTasks;
 
-  const { isAdministrator, can, canAccessDpApproverPages, canApproveEspelhoNf, canApproveFuel, canApproveOc, canApproveMaterialRequests } = usePermissions();
-  const { counts: approvalCounts } = useApprovalNotificationCounts();
-
-  const canSeeApprovals =
-    canAccessDpApproverPages || canApproveEspelhoNf || canApproveFuel || canApproveOc || canApproveMaterialRequests;
+  const { isAdministrator, can } = usePermissions();
 
   const canSeePncp =
     isAdministrator ||
     can(pathToModuleKey('/ponto/licitacoes-pncp')) ||
     can(pathToModuleKey('/ponto/licitacoes'));
 
-  const [pncpCaptacaoDay, setPncpCaptacaoDay] = useState(() => toDateInputValue(new Date()));
   const todayInputValue = toDateInputValue(now);
-  const canGoNextPncpDay = pncpCaptacaoDay < todayInputValue;
   const currentWeekMonday = resolveMondayYmd(todayInputValue);
   const [pncpWeekMonday, setPncpWeekMonday] = useState(currentWeekMonday);
   const canGoNextPncpWeek = pncpWeekMonday < currentWeekMonday;
-
-  const { data: pncpEnviosData } = useQuery({
-    queryKey: ['pncp-meus-envios-count', pncpCaptacaoDay],
-    queryFn: async () => {
-      const res = await api.get('/pncp/meus-envios-count', {
-        params: { date: pncpCaptacaoDay },
-      });
-      return res.data?.data as { total?: number } | undefined;
-    },
-    enabled: canSeePncp && Boolean(pncpCaptacaoDay),
-    staleTime: 30_000,
-  });
-  const pncpEnviadosCount = Number(pncpEnviosData?.total || 0);
 
   const pncpPrevWeekMonday = shiftDateInputValue(pncpWeekMonday, -7);
 
@@ -586,46 +341,6 @@ export default function HomePage() {
     fontFamily: chartFontFamily,
   };
 
-  const allStatCards: StatCard[] = [
-    {
-      id: 'aprovacoes',
-      label: 'Aprovações pendentes',
-      value: approvalCounts.total,
-      href: '/ponto/aprovacoes',
-      icon: FileCheck,
-      accent: 'red',
-      visible: canSeeApprovals,
-    },
-    {
-      id: 'eventos-hoje',
-      label: 'Eventos hoje',
-      value: todayEvents.length,
-      href: '/ponto/agenda',
-      icon: CalendarClock,
-      accent: 'blue',
-      visible: true,
-    },
-    {
-      id: 'tarefas-hoje',
-      label: 'Tarefas pendentes',
-      value: todayTasks.length,
-      href: '/ponto/agenda',
-      icon: ListTodo,
-      accent: 'yellow',
-      visible: true,
-    },
-    {
-      id: 'pncp-enviados',
-      label: 'Licitações captadas',
-      value: pncpEnviadosCount,
-      href: '/ponto/licitacoes-pncp',
-      icon: Gavel,
-      accent: 'green',
-      visible: canSeePncp,
-    },
-  ];
-  const statCards = allStatCards.filter((card) => card.visible);
-
   useEffect(() => {
     // Atualiza o relógio a cada minuto (suficiente para a home)
     const timer = setInterval(() => setNow(new Date()), 60_000);
@@ -653,110 +368,19 @@ export default function HomePage() {
       <div className="relative min-h-[calc(100vh-6rem)]">
         <div className="w-full">
           {/* Cabeçalho de boas-vindas */}
-          <div className="animate-home-fade-in flex flex-col gap-4 text-left sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+          <div className="animate-home-fade-in flex flex-col gap-4 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-8">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
                 {greeting}, <span className="text-red-600 dark:text-red-500">{firstName}</span>!
               </h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{formattedDate}</p>
             </div>
-            <blockquote className="max-w-xl shrink-0 border-l-2 border-red-500/70 pl-4 sm:mt-1 sm:max-w-md sm:border-l-0 sm:border-r-2 sm:pl-0 sm:pr-4 md:max-w-lg lg:max-w-xl">
+            <blockquote className="max-w-xl shrink-0 border-l-2 border-red-500/70 pl-4 sm:max-w-md sm:border-l-0 sm:border-r-2 sm:pl-0 sm:pr-4 md:max-w-lg lg:max-w-xl">
               <p className="text-base font-medium leading-snug text-gray-700 dark:text-gray-200 sm:text-right sm:text-lg">
                 “{dailyQuote}”
               </p>
             </blockquote>
           </div>
-
-          {/* Cards de status */}
-          {statCards.length > 0 && (
-            <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
-              {statCards.map((card) => {
-                const Icon = card.icon;
-                const colors = STAT_CARD_ACCENT_CLASSES[card.accent];
-
-                if (card.id === 'pncp-enviados') {
-                  return (
-                    <Card key={card.id} className="h-full">
-                      <CardContent className="flex h-full items-center p-4 sm:p-6">
-                        <div className="flex w-full items-center">
-                          <Link
-                            href={card.href}
-                            className={`p-2 sm:p-3 rounded-lg flex-shrink-0 ${colors.bg} transition-opacity hover:opacity-90`}
-                            aria-label="Abrir PNCP"
-                          >
-                            <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.icon}`} />
-                          </Link>
-                          <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                            <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-normal">
-                              {card.label}
-                            </p>
-                            <div className="mt-1 flex items-baseline gap-1.5">
-                              <p className="shrink-0 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
-                                {card.value}
-                              </p>
-                              <div className="flex min-w-0 items-center gap-0">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPncpCaptacaoDay((day) => shiftDateInputValue(day, -1))
-                                  }
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                                  aria-label="Dia anterior"
-                                >
-                                  <ChevronLeft className="h-3 w-3" />
-                                </button>
-                                <CompactDayPicker
-                                  value={pncpCaptacaoDay}
-                                  max={todayInputValue}
-                                  onChange={setPncpCaptacaoDay}
-                                />
-                                <button
-                                  type="button"
-                                  disabled={!canGoNextPncpDay}
-                                  onClick={() =>
-                                    setPncpCaptacaoDay((day) => {
-                                      const next = shiftDateInputValue(day, 1);
-                                      return next > todayInputValue ? todayInputValue : next;
-                                    })
-                                  }
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 disabled:pointer-events-none disabled:opacity-30 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                                  aria-label="Próximo dia"
-                                >
-                                  <ChevronRight className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                }
-
-                return (
-                  <Link key={card.id} href={card.href} className="block h-full">
-                    <Card className="h-full">
-                      <CardContent className="flex h-full items-center p-4 sm:p-6">
-                        <div className="flex w-full items-center">
-                          <div className={`p-2 sm:p-3 rounded-lg flex-shrink-0 ${colors.bg}`}>
-                            <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${colors.icon}`} />
-                          </div>
-                          <div className="ml-3 sm:ml-4 min-w-0 flex-1">
-                            <p className="text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 whitespace-normal">
-                              {card.label}
-                            </p>
-                            <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
-                              {card.value}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
             {canSeePncp && (

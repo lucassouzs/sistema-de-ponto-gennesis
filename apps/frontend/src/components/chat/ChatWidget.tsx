@@ -40,6 +40,7 @@ const DEPARTMENTS = [
   { value: 'Engenharia', label: 'Engenharia' },
   { value: 'Administrativo', label: 'Administrativo' },
   { value: 'Financeiro', label: 'Financeiro' },
+  { value: 'Operacional', label: 'Operacional' },
 ];
 
 const departmentSelectOptions = labeledToSelectOptions(DEPARTMENTS);

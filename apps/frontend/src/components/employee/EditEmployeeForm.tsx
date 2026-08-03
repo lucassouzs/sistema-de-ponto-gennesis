@@ -135,7 +135,8 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
     'Departamento Pessoal',
     'Engenharia',
     'Administrativo',
-    'Financeiro'
+    'Financeiro',
+    'Operacional',
   ];
 
   // Lista de cargos disponíveis (sem Administrador e sem Diretor)

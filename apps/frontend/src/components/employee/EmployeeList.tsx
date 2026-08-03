@@ -229,6 +229,7 @@ export function EmployeeList({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedRecords, setParsedRecords] = useState<Array<{date: string; time: string; type: 'ENTRY' | 'LUNCH_START' | 'LUNCH_END' | 'EXIT'; observation?: string}>>([]);
   const [isParsing, setIsParsing] = useState(false);
+  const [isExportingEmployees, setIsExportingEmployees] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -1167,6 +1168,122 @@ export function EmployeeList({
     });
   }, [employees, costCenterFilter, clientFilter, companyFilter, poloFilter, categoriaFinanceiraFilter, modalityFilter]);
 
+  const exportEmployeesToExcel = async () => {
+    if (filteredEmployees.length === 0) {
+      toast.error('Nenhum funcionário para exportar');
+      return;
+    }
+
+    const formatExportDate = (value?: string | null) => {
+      if (!value) return '';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const matchesClientFilters = (emp: Employee) => {
+      if (emp.role !== 'EMPLOYEE') return false;
+      if (isGennecyBotUser(emp)) return false;
+      if (
+        costCenterFilter !== 'all' &&
+        (!emp.employee?.costCenter ||
+          !emp.employee.costCenter.toLowerCase().includes(costCenterFilter.toLowerCase()))
+      ) {
+        return false;
+      }
+      if (
+        clientFilter !== 'all' &&
+        (!emp.employee?.client ||
+          !emp.employee.client.toLowerCase().includes(clientFilter.toLowerCase()))
+      ) {
+        return false;
+      }
+      if (companyFilter !== 'all' && emp.employee?.company !== companyFilter) return false;
+      if (poloFilter !== 'all' && emp.employee?.polo !== poloFilter) return false;
+      if (
+        categoriaFinanceiraFilter !== 'all' &&
+        emp.employee?.categoriaFinanceira !== categoriaFinanceiraFilter
+      ) {
+        return false;
+      }
+      if (modalityFilter !== 'all' && emp.employee?.modality !== modalityFilter) return false;
+      return true;
+    };
+
+    setIsExportingEmployees(true);
+    const loadingToast = toast.loading('Preparando exportação completa...');
+
+    try {
+      // Lista da tela é light (sem salário/banco). Busca completa só no export.
+      const res = await api.get('/users', {
+        params: {
+          page: 1,
+          limit: 1000,
+          excludeAdmin: 1,
+          status: statusFilter === 'all' ? 'all' : statusFilter,
+          ...(deferredSearchTerm ? { search: deferredSearchTerm } : {}),
+          ...(departmentFilter !== 'all' ? { department: departmentFilter } : {}),
+          ...(positionFilter !== 'all' ? { position: positionFilter } : {}),
+        },
+      });
+
+      const fullEmployees: Employee[] = (res.data?.data || []).filter(matchesClientFilters);
+
+      if (fullEmployees.length === 0) {
+        toast.error('Nenhum funcionário para exportar', { id: loadingToast });
+        return;
+      }
+
+      const rows = fullEmployees.map((emp) => ({
+        Nome: emp.name || '',
+        Email: emp.email || '',
+        CPF: formatCPF(emp.cpf || ''),
+        Matrícula: emp.employee?.employeeId || '',
+        Setor: emp.employee?.department || '',
+        Cargo: emp.employee?.position || '',
+        'Data de Admissão': formatExportDate(emp.employee?.hireDate),
+        'Data de Nascimento': formatExportDate(emp.employee?.birthDate),
+        Salário: emp.employee?.salary ?? '',
+        'Centro de Custo': emp.employee?.costCenter || '',
+        Tomador: emp.employee?.client || '',
+        Empresa: emp.employee?.company || '',
+        Banco: emp.employee?.bank || '',
+        'Tipo de Conta': emp.employee?.accountType || '',
+        Agência: emp.employee?.agency || '',
+        Operação: emp.employee?.operation || '',
+        Conta: emp.employee?.account || '',
+        Dígito: emp.employee?.digit || '',
+        'Tipo Chave PIX': emp.employee?.pixKeyType || '',
+        'Chave PIX': emp.employee?.pixKey || '',
+        Modalidade: emp.employee?.modality || '',
+        'Salário Família': emp.employee?.familySalary ?? '',
+        Periculosidade: emp.employee?.dangerPay ?? '',
+        Insalubridade: emp.employee?.unhealthyPay ?? '',
+        Polo: emp.employee?.polo || '',
+        'Categoria Financeira': emp.employee?.categoriaFinanceira || '',
+        'VA Diário': emp.employee?.dailyFoodVoucher ?? '',
+        'VT Diário': emp.employee?.dailyTransportVoucher ?? '',
+        Status: emp.isActive ? 'Ativo' : 'Inativo',
+        'Adicionado Em': formatExportDate(emp.createdAt),
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const colWidths = Object.keys(rows[0] || {}).map((key) => ({
+        wch: Math.min(28, Math.max(12, key.length + 2)),
+      }));
+      ws['!cols'] = colWidths;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Funcionários');
+      const stamp = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `funcionarios-${stamp}.xlsx`);
+      toast.success(`${rows.length} funcionário(s) exportado(s)`, { id: loadingToast });
+    } catch {
+      toast.error('Erro ao exportar funcionários', { id: loadingToast });
+    } finally {
+      setIsExportingEmployees(false);
+    }
+  };
+
   const departmentFilterSelectOptions = useMemo(
     () => filterOptionsWithAll(['Todos', ...DEPARTMENTS_LIST], 'Todos'),
     []
@@ -1567,59 +1684,72 @@ export function EmployeeList({
               </p>
             </div>
           </div>
-          {(onImportEmployees || onCreateEmployee) && (
-            <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-              <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  placeholder="Pesquisar funcionário..."
-                  className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                />
-                {searchTerm && (
-                  <button
-                    type="button"
-                    onClick={() => handleSearch('')}
-                    aria-label="Limpar busca"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsFiltersModalOpen(true)}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                aria-label="Abrir filtro"
-                title="Filtro"
-              >
-                <Filter className="h-4 w-4" />
-              </button>
-              {onImportEmployees && (
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+            <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Pesquisar funcionário..."
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+              {searchTerm && (
                 <button
                   type="button"
-                  onClick={onImportEmployees}
-                  className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                  onClick={() => handleSearch('')}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
                 >
-                  <Upload className="h-4 w-4 shrink-0" />
-                  <span>Importar</span>
-                </button>
-              )}
-              {onCreateEmployee && (
-                <button
-                  type="button"
-                  onClick={onCreateEmployee}
-                  className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                >
-                  <Plus className="h-4 w-4 shrink-0" />
-                  <span>Novo Funcionário</span>
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-          )}
+            <button
+              type="button"
+              onClick={() => setIsFiltersModalOpen(true)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              aria-label="Abrir filtro"
+              title="Filtro"
+            >
+              <Filter className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportEmployeesToExcel()}
+              disabled={filteredEmployees.length === 0 || isExportingEmployees}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              aria-label="Exportar funcionários"
+              title="Exportar Excel"
+            >
+              {isExportingEmployees ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+            </button>
+            {onImportEmployees && (
+              <button
+                type="button"
+                onClick={onImportEmployees}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                aria-label="Importar funcionários"
+                title="Importar"
+              >
+                <Upload className="h-4 w-4" />
+              </button>
+            )}
+            {onCreateEmployee && (
+              <button
+                type="button"
+                onClick={onCreateEmployee}
+                className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span>Novo Funcionário</span>
+              </button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent>

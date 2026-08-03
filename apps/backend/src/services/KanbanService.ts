@@ -1077,7 +1077,10 @@ export class KanbanService {
       select: { id: true, isCustom: true, createdById: true, departmentKey: true },
     });
     if (!board || !board.isCustom) throw new Error('Quadro não encontrado');
-    if (board.createdById !== userId) throw new Error(KANBAN_FORBIDDEN);
+    const isOwner = board.createdById === userId;
+    if (!isOwner && !(await userIsAdministrator(userId))) {
+      throw new Error(KANBAN_FORBIDDEN);
+    }
 
     await prisma.kanbanBoard.delete({ where: { id: boardId } });
     return { departmentKey: board.departmentKey };

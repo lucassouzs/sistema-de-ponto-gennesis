@@ -121,9 +121,9 @@ function computeFloatingPos(trigger: HTMLElement, options?: FloatingPosOptions):
 function OptionLabelContent({ opt, noTruncate = false }: { opt: MultiSelectSearchOption; noTruncate?: boolean }) {
   const labelClass = noTruncate ? 'whitespace-nowrap' : 'truncate';
   const label = opt.labelClassName ? (
-    <span className={`${labelClass} font-semibold tracking-tight ${opt.labelClassName}`}>{opt.label}</span>
+    <span className={`${labelClass} font-normal tracking-tight ${opt.labelClassName}`}>{opt.label}</span>
   ) : (
-    <span className={`${labelClass} font-semibold tracking-tight text-gray-900 dark:text-gray-100`}>
+    <span className={`${labelClass} font-normal tracking-tight text-gray-900 dark:text-gray-100`}>
       {opt.label}
     </span>
   );

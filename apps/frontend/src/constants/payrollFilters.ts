@@ -8,7 +8,8 @@ export const DEPARTMENTS_LIST = [
   'Departamento Pessoal',
   'Engenharia',
   'Administrativo',
-  'Financeiro'
+  'Financeiro',
+  'Operacional',
 ];
 
 export const COMPANIES_LIST = [

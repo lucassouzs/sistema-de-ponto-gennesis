@@ -2133,6 +2133,7 @@ function StatsBar({ columns }: { columns: KanbanColumn[] }) {
 function KanbanBoardRowActions({
   board,
   active,
+  isAdministrator,
   onShare,
   onEditName,
   onDeleteBoard,
@@ -2140,12 +2141,16 @@ function KanbanBoardRowActions({
 }: {
   board: KanbanBoardSummary;
   active: boolean;
+  isAdministrator?: boolean;
   onShare: (board: KanbanBoardSummary) => void;
   onEditName: (board: KanbanBoardSummary) => void;
   onDeleteBoard: (board: KanbanBoardSummary) => void;
   onClosePicker: () => void;
 }) {
   const canManage = Boolean(board.isCustom && board.isOwner && board.id);
+  const canDelete = Boolean(
+    board.isCustom && board.id && (board.isOwner || isAdministrator),
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -2171,12 +2176,12 @@ function KanbanBoardRowActions({
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!canManage) return;
+    if (!canManage && !canDelete) return;
     const rect = btnRef.current?.getBoundingClientRect();
     if (!rect) return;
 
     const menuWidth = 176;
-    const menuHeight = 140;
+    const menuHeight = canManage ? 140 : 56;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUp = spaceBelow < menuHeight + 8 && rect.top > menuHeight + 8;
 
@@ -2190,7 +2195,7 @@ function KanbanBoardRowActions({
     setMenuOpen((v) => !v);
   };
 
-  if (!canManage) {
+  if (!canManage && !canDelete) {
     return <span className="inline-block h-8 w-8 shrink-0" aria-hidden />;
   }
 
@@ -2211,43 +2216,49 @@ function KanbanBoardRowActions({
             className="overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              role="menuitem"
-              onMouseDown={runMenuAction(() => {
-                onShare(board);
-                onClosePicker();
-              })}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-            >
-              <Users className="h-4 w-4 shrink-0" />
-              Compartilhar
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onMouseDown={runMenuAction(() => {
-                onEditName(board);
-                onClosePicker();
-              })}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-            >
-              <Edit3 className="h-4 w-4 shrink-0" />
-              Editar
-            </button>
-            <hr className="my-1 border-gray-200 dark:border-gray-700" />
-            <button
-              type="button"
-              role="menuitem"
-              onMouseDown={runMenuAction(() => {
-                onDeleteBoard(board);
-                onClosePicker();
-              })}
-              className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-            >
-              <Trash2 className="h-4 w-4 shrink-0" />
-              Excluir
-            </button>
+            {canManage ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onMouseDown={runMenuAction(() => {
+                    onShare(board);
+                    onClosePicker();
+                  })}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  <Users className="h-4 w-4 shrink-0" />
+                  Compartilhar
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onMouseDown={runMenuAction(() => {
+                    onEditName(board);
+                    onClosePicker();
+                  })}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                >
+                  <Edit3 className="h-4 w-4 shrink-0" />
+                  Editar
+                </button>
+                <hr className="my-1 border-gray-200 dark:border-gray-700" />
+              </>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                role="menuitem"
+                onMouseDown={runMenuAction(() => {
+                  onDeleteBoard(board);
+                  onClosePicker();
+                })}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <Trash2 className="h-4 w-4 shrink-0" />
+                Excluir
+              </button>
+            ) : null}
           </div>,
           document.body,
         )
@@ -2278,6 +2289,7 @@ function KanbanBoardPicker({
   currentDepartmentKey,
   defaultDepartmentKey,
   canCreateBoard,
+  isAdministrator,
   onSelect,
   onSetDefault,
   onCreateBoard,
@@ -2289,6 +2301,7 @@ function KanbanBoardPicker({
   currentDepartmentKey?: string;
   defaultDepartmentKey?: string | null;
   canCreateBoard?: boolean;
+  isAdministrator?: boolean;
   onSelect: (departmentKey: string) => void;
   onSetDefault: (departmentKey: string) => void;
   onCreateBoard: () => void;
@@ -2365,6 +2378,7 @@ function KanbanBoardPicker({
                       <KanbanBoardRowActions
                         board={b}
                         active={active}
+                        isAdministrator={isAdministrator}
                         onShare={onShare}
                         onEditName={onEditName}
                         onDeleteBoard={onDeleteBoard}
@@ -3890,6 +3904,7 @@ function KanbanPage() {
                 currentDepartmentKey={board?.departmentKey}
                 defaultDepartmentKey={defaultDepartmentKey}
                 canCreateBoard={!isAdministrator}
+                isAdministrator={isAdministrator}
                 onSelect={openBoard}
                 onSetDefault={setAsDefaultBoard}
                 onCreateBoard={() => setCreateBoardOpen(true)}
