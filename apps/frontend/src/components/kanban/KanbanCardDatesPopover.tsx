@@ -5,8 +5,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-r
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 import { Button } from '@/components/ui/Button';
-import { DatePickerField } from '@/components/ui/DatePickerField';
-import { TimePickerField } from '@/components/ui/TimePickerField';
+import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 import { kanbanLabel } from './kanbanFormStyles';
 import { splitDateTime, toYmd } from './kanbanDateTime';
 
@@ -43,19 +42,6 @@ function pickerDatePart(value: string): string {
 function setPickerDate(value: string, ymd: string): string {
   const time = value.includes('T') ? (value.split('T')[1] ?? '09:00').slice(0, 5) : '09:00';
   return `${ymd}T${time || '09:00'}`;
-}
-
-function pickerTimePart(value: string): string {
-  if (!value.includes('T')) return '09:00';
-  const time = value.split('T')[1] ?? '09:00';
-  return time.slice(0, 5) || '09:00';
-}
-
-function setPickerTime(value: string, time: string): string {
-  const date = pickerDatePart(value);
-  if (!date) return '';
-  const safe = /^\d{2}:\d{2}$/.test(time) ? time : '09:00';
-  return `${date}T${safe}`;
 }
 
 export interface KanbanCardDatesPanelProps {
@@ -290,64 +276,33 @@ export function KanbanCardDatesPanel({
       <div className="mt-5 space-y-4 border-t border-gray-200 pt-5 dark:border-gray-700">
         <div>
           <label className={kanbanLabel}>Data de início *</label>
-          <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-2">
-            <DatePickerField
-              value={startDate}
-              onChange={(ymd) => {
-                if (!ymd) {
-                  setStartValue('');
-                  setPickPhase('start');
-                  return;
-                }
-                setStartValue(setPickerDate(startValue || `${ymd}T09:00`, ymd));
-                if (!endDate) setPickPhase('end');
-              }}
-              placeholder="dd/mm/aaaa"
-              noFocusRing
-              aria-label="Data de início"
-            />
-            <TimePickerField
-              value={startDate ? pickerTimePart(startValue) : ''}
-              disabled={!startDate}
-              onChange={(time) => {
-                if (!startDate) return;
-                setStartValue(setPickerTime(startValue, time || '09:00'));
-              }}
-              noFocusRing
-              aria-label="Hora de início"
-            />
-          </div>
+          <DateTimePickerField
+            value={startValue}
+            onChange={(next) => {
+              setStartValue(next);
+              if (next && !endDate) setPickPhase('end');
+              if (!next) setPickPhase('start');
+            }}
+            placeholder="dd/mm/aaaa hh:mm"
+            noFocusRing
+            aria-label="Data de início"
+          />
         </div>
 
         <div>
           <label className={kanbanLabel}>Data de término *</label>
-          <div className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-center gap-2">
-            <DatePickerField
-              value={endDate}
-              onChange={(ymd) => {
-                if (!ymd) {
-                  setEndValue('');
-                  setPickPhase(startDate ? 'end' : 'start');
-                  return;
-                }
-                setEndValue(setPickerDate(endValue || `${ymd}T09:00`, ymd));
-                setPickPhase('start');
-              }}
-              placeholder="dd/mm/aaaa"
-              noFocusRing
-              aria-label="Data de término"
-            />
-            <TimePickerField
-              value={endDate ? pickerTimePart(endValue) : ''}
-              disabled={!endDate}
-              onChange={(time) => {
-                if (!endDate) return;
-                setEndValue(setPickerTime(endValue, time || '09:00'));
-              }}
-              noFocusRing
-              aria-label="Hora de término"
-            />
-          </div>
+          <DateTimePickerField
+            value={endValue}
+            onChange={(next) => {
+              setEndValue(next);
+              if (next) setPickPhase('start');
+              else setPickPhase(startDate ? 'end' : 'start');
+            }}
+            min={startValue || undefined}
+            placeholder="dd/mm/aaaa hh:mm"
+            noFocusRing
+            aria-label="Data de término"
+          />
         </div>
       </div>
 
