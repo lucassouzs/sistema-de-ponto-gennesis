@@ -9,7 +9,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
-import { Calendar, LayoutGrid, MailPlus } from 'lucide-react-native';
+import { Calendar, LayoutGrid } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
@@ -33,7 +33,7 @@ export default function HomeScreen() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
-  const { canSeeCombustivel, canSeeReservas, canSeePncp, canSeeDpRequests } = usePermissions();
+  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
   const { items: liveItems } = useLiveActivities();
   const styles = getStyles(colors, isDark);
 
@@ -114,23 +114,6 @@ export default function HomeScreen() {
               Tasks
             </Text>
           </TouchableOpacity>
-
-          {canSeeDpRequests ? (
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() =>
-                (navigation as any).navigate('Main', { screen: 'DpRequests' })
-              }
-              activeOpacity={0.75}
-            >
-              <View style={styles.quickIconWrap}>
-                <MailPlus size={20} color={colors.primary} strokeWidth={2.2} />
-              </View>
-              <Text style={styles.quickTitle} numberOfLines={1}>
-                Solicitações
-              </Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
 
         {canSeePncp ? <PncpCaptacoesCard /> : null}
