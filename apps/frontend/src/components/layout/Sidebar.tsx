@@ -978,7 +978,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores'))
           },
           {
-            name: 'Veículos',
+            name: 'Frota',
             href: '/ponto/veiculos',
             icon: Car,
             description: 'Cadastro de veículos da frota',
