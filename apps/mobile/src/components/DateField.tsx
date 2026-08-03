@@ -11,7 +11,7 @@ import {
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { Calendar, ChevronDown } from 'lucide-react-native';
+import { Calendar, ChevronDown, X } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 
 type Mode = 'date' | 'datetime';
@@ -213,28 +213,16 @@ export default function DateField({
             >
               <View style={styles.sheetHandle} />
               <View style={styles.sheetHeader}>
-                <TouchableOpacity onPress={() => setOpen(false)} hitSlop={8}>
-                  <Text style={[styles.sheetAction, styles.sheetActionLeft, { color: colors.textSecondary }]}>
-                    Cancelar
-                  </Text>
-                </TouchableOpacity>
-                <Text style={[styles.sheetTitle, { color: colors.text }]}>{label}</Text>
+                <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>
+                  {label}
+                </Text>
                 <TouchableOpacity
-                  onPress={() => {
-                    commit(temp);
-                    setOpen(false);
-                  }}
-                  hitSlop={8}
+                  onPress={() => setOpen(false)}
+                  style={styles.sheetCloseBtn}
+                  hitSlop={6}
+                  accessibilityLabel="Fechar"
                 >
-                  <Text
-                    style={[
-                      styles.sheetAction,
-                      styles.sheetActionRight,
-                      { color: colors.primary, fontWeight: '700' },
-                    ]}
-                  >
-                    OK
-                  </Text>
+                  <X size={18} color={colors.text} strokeWidth={2.2} />
                 </TouchableOpacity>
               </View>
               <DateTimePicker
@@ -249,6 +237,16 @@ export default function DateField({
                 accentColor={colors.primary}
                 style={{ alignSelf: 'center' }}
               />
+              <TouchableOpacity
+                style={[styles.sheetConfirm, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  commit(temp);
+                  setOpen(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.sheetConfirmText}>Confirmar</Text>
+              </TouchableOpacity>
             </Pressable>
           </Pressable>
         </Modal>
@@ -312,21 +310,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 18,
     paddingBottom: 4,
+    gap: 12,
   },
   sheetTitle: {
-    fontSize: 16,
+    flex: 1,
+    fontSize: 20,
     fontWeight: '700',
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
-  sheetAction: {
-    fontSize: 16,
-    fontWeight: '600',
-    minWidth: 72,
+  sheetCloseBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sheetActionLeft: {
-    textAlign: 'left',
+  sheetConfirm: {
+    marginHorizontal: 18,
+    marginTop: 8,
+    marginBottom: 4,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sheetActionRight: {
-    textAlign: 'right',
+  sheetConfirmText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

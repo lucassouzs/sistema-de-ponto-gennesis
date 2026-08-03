@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,6 +25,8 @@ import {
   MailPlus,
   X,
   ChevronDown,
+  ChevronRight,
+  ArrowLeft,
   Filter,
   Paperclip,
   Search,
@@ -80,6 +83,42 @@ const ADM_TYPES: DpRequestType[] = [
   'ADM_ASOS',
 ];
 
+const COMPANIES_LIST = ['ABRASIL', 'GÊNNESIS', 'MÉTRICA'];
+const DEPARTMENTS_LIST = [
+  'Projetos',
+  'Contratos e Licitações',
+  'Suprimentos',
+  'Jurídico',
+  'Departamento Pessoal',
+  'Engenharia',
+  'Administrativo',
+  'Financeiro',
+];
+
+const MOTIVO_CONTRATACAO_OPTIONS = [
+  { value: 'AUMENTO_QUADRO', label: 'Aumento de quadro' },
+  { value: 'SUBSTITUICAO', label: 'Substituição' },
+  { value: 'DEMANDA_TEMPORARIA', label: 'Demanda temporária / obra' },
+  { value: 'OUTRO', label: 'Outro' },
+] as const;
+
+const TIPO_AVISO_OPTIONS = [
+  { value: 'TRABALHADO', label: 'Trabalhado' },
+  { value: 'INDENIZADO', label: 'Indenizado' },
+  { value: 'PEDIDO_DEMISSAO', label: 'Pedido de demissão' },
+  { value: 'OUTRO', label: 'Outro' },
+] as const;
+
+const TIPO_RESCISAO_OPTIONS = [
+  { value: 'SEM_JUSTA_CAUSA', label: 'Sem justa causa' },
+  { value: 'COM_JUSTA_CAUSA', label: 'Com justa causa' },
+  { value: 'ACORDO', label: 'Acordo' },
+  { value: 'CONTRATO_EXPERIENCIA', label: 'Contrato de experiência' },
+  { value: 'OUTRO', label: 'Outro' },
+] as const;
+
+type PickerOption = { value: string; label: string; subtitle?: string };
+
 function mapPolo(raw?: string | null): string {
   const s = (raw ?? '').trim();
   if (!s) return '';
@@ -87,9 +126,118 @@ function mapPolo(raw?: string | null): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase();
-  if (u === 'DF' || u.includes('BRASILIA')) return 'DF';
-  if (u === 'GO' || u.includes('GOIAS')) return 'GO';
+  if (u === 'DF' || u === 'BRASILIA' || u.includes('BRASILIA')) return 'DF';
+  if (u === 'GO' || u === 'GOIAS' || u.includes('GOIAS')) return 'GO';
   return '';
+}
+
+function resolveCostCenterPoloRegion(costCenter?: {
+  polo?: string | null;
+  name?: string | null;
+  code?: string | null;
+}): 'DF' | 'GO' | null {
+  const fromPolo = mapPolo(costCenter?.polo);
+  if (fromPolo === 'DF' || fromPolo === 'GO') return fromPolo;
+
+  const combined = [costCenter?.name, costCenter?.code]
+    .map((v) =>
+      (v ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
+    )
+    .filter(Boolean)
+    .join(' ');
+
+  if (!combined) return null;
+  if (/\bDF\b/.test(combined) || combined.includes('BRASILIA') || combined.includes('DISTRITO FEDERAL')) {
+    return 'DF';
+  }
+  if (/\bGO\b/.test(combined) || combined.includes('GOIAS')) {
+    return 'GO';
+  }
+  return null;
+}
+
+function optionLabel(
+  options: readonly { value: string; label: string }[],
+  value: string
+) {
+  return options.find((o) => o.value === value)?.label || value;
+}
+
+function SelectField({
+  label,
+  valueLabel,
+  placeholder,
+  onPress,
+  colors,
+  isDark,
+}: {
+  label: string;
+  valueLabel: string;
+  placeholder: string;
+  onPress: () => void;
+  colors: any;
+  isDark: boolean;
+}) {
+  const filled = !!valueLabel;
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '600',
+          color: colors.textSecondary,
+          marginBottom: 8,
+          letterSpacing: -0.1,
+        }}
+      >
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.75}
+        style={{
+          backgroundColor: isDark ? colors.card : colors.surface,
+          borderRadius: 14,
+          paddingHorizontal: 14,
+          paddingVertical: 15,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          borderWidth: StyleSheet.hairlineWidth * 1.5,
+          borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+        }}
+      >
+        <Text
+          style={{
+            flex: 1,
+            fontSize: 15,
+            fontWeight: filled ? '600' : '500',
+            color: filled ? colors.text : colors.textSecondary,
+            letterSpacing: -0.2,
+          }}
+          numberOfLines={1}
+        >
+          {valueLabel || placeholder}
+        </Text>
+        <View
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 14,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ChevronDown size={16} color={colors.textSecondary} strokeWidth={2.2} />
+        </View>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 function statusColor(status: DpRequestStatus, colors: any) {
@@ -102,6 +250,98 @@ function statusColor(status: DpRequestStatus, colors: any) {
 }
 
 type Attachment = { fileName: string; mimeType: string; dataBase64: string };
+
+const MAX_SOLICITACAO_ITENS = 20;
+const MAX_ADMISSAO_CANDIDATOS = 30;
+
+type FormRow = {
+  employeeId: string;
+  nome: string;
+  funcao: string;
+  contato: string;
+  setor: string;
+  motivoContratacao: string;
+  observacao: string;
+  detalhes: string;
+  motivo: string;
+  dataInicial: string;
+  dataFinal: string;
+  numeroDias: string;
+  justificativa: string;
+  datas: string;
+  tipoSolicitacao: string;
+  situacao: string;
+  valores: string;
+  observacoes: string;
+  punicao: 'ADVERTENCIA' | 'SUSPENSAO';
+  tipoAviso: string;
+  tipoRescisao: string;
+  funcaoAntigo: string;
+  funcaoNovo: string;
+  tipoAlteracao: 'FUNCAO' | 'SALARIO';
+  cidade: string;
+  pedagio: 'SIM' | 'NAO';
+  diasHotel: string;
+  asoTipo: 'ADMISSIONAL' | 'DEMISSIONAL' | 'PERIODICO' | 'ALTERACAO_FUNCAO';
+  asoCpf: string;
+  asoNascimento: string;
+  asoSetor: string;
+  asoCargo: string;
+  asoNovoCargo: string;
+  asoCentroCusto: string;
+  asoLocal: string;
+  asoEmpresa: string;
+  seguirPcmso: 'SIM' | 'NAO';
+  attachment: Attachment | null;
+};
+
+function emptyFormRow(employeeId = ''): FormRow {
+  return {
+    employeeId,
+    nome: '',
+    funcao: '',
+    contato: '',
+    setor: '',
+    motivoContratacao: '',
+    observacao: '',
+    detalhes: '',
+    motivo: '',
+    dataInicial: '',
+    dataFinal: '',
+    numeroDias: '',
+    justificativa: '',
+    datas: '',
+    tipoSolicitacao: '',
+    situacao: '',
+    valores: '',
+    observacoes: '',
+    punicao: 'ADVERTENCIA',
+    tipoAviso: '',
+    tipoRescisao: '',
+    funcaoAntigo: '',
+    funcaoNovo: '',
+    tipoAlteracao: 'FUNCAO',
+    cidade: '',
+    pedagio: 'NAO',
+    diasHotel: '',
+    asoTipo: 'ADMISSIONAL',
+    asoCpf: '',
+    asoNascimento: '',
+    asoSetor: '',
+    asoCargo: '',
+    asoNovoCargo: '',
+    asoCentroCusto: '',
+    asoLocal: '',
+    asoEmpresa: '',
+    seguirPcmso: 'SIM',
+    attachment: null,
+  };
+}
+
+function itemCardTitle(requestType: DpRequestType | '', index: number) {
+  if (requestType === 'ADMISSAO') return `Pessoa ${index + 1}`;
+  return `Item ${index + 1}`;
+}
 
 async function pickAttachment(): Promise<Attachment | null> {
   const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -135,6 +375,7 @@ export default function DpRequestsScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const myEmployeeId = user?.employee?.id || '';
@@ -161,51 +402,14 @@ export default function DpRequestsScreen() {
   const [prazoInicio, setPrazoInicio] = useState('');
   const [prazoFim, setPrazoFim] = useState('');
   const [saving, setSaving] = useState(false);
+  const [rows, setRows] = useState<FormRow[]>(() => [emptyFormRow(myEmployeeId)]);
 
-  // Shared detail fields
-  const [employeeId, setEmployeeId] = useState(myEmployeeId);
-  const [detalhes, setDetalhes] = useState('');
-  const [motivo, setMotivo] = useState('');
-  const [dataInicial, setDataInicial] = useState('');
-  const [dataFinal, setDataFinal] = useState('');
-  const [numeroDias, setNumeroDias] = useState('');
-  const [justificativa, setJustificativa] = useState('');
-  const [datas, setDatas] = useState('');
-  const [tipoSolicitacao, setTipoSolicitacao] = useState('');
-  const [situacao, setSituacao] = useState('');
-  const [valores, setValores] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [punicao, setPunicao] = useState<'ADVERTENCIA' | 'SUSPENSAO'>('ADVERTENCIA');
-  const [tipoAviso, setTipoAviso] = useState('');
-  const [tipoRescisao, setTipoRescisao] = useState('');
-  const [funcaoAntigo, setFuncaoAntigo] = useState('');
-  const [funcaoNovo, setFuncaoNovo] = useState('');
-  const [tipoAlteracao, setTipoAlteracao] = useState<'FUNCAO' | 'SALARIO'>('FUNCAO');
-  const [cidade, setCidade] = useState('');
-  const [pedagio, setPedagio] = useState<'SIM' | 'NAO'>('NAO');
-  const [candidatoNome, setCandidatoNome] = useState('');
-  const [candidatoFuncao, setCandidatoFuncao] = useState('');
-  const [candidatoContato, setCandidatoContato] = useState('');
-  const [candidatoSetor, setCandidatoSetor] = useState('');
-  const [motivoContratacao, setMotivoContratacao] = useState('');
-  const [asoTipo, setAsoTipo] = useState<
-    'ADMISSIONAL' | 'DEMISSIONAL' | 'PERIODICO' | 'ALTERACAO_FUNCAO'
-  >('ADMISSIONAL');
-  const [asoCpf, setAsoCpf] = useState('');
-  const [asoNascimento, setAsoNascimento] = useState('');
-  const [asoSetor, setAsoSetor] = useState('');
-  const [asoCargo, setAsoCargo] = useState('');
-  const [asoNovoCargo, setAsoNovoCargo] = useState('');
-  const [asoCentroCusto, setAsoCentroCusto] = useState('');
-  const [asoLocal, setAsoLocal] = useState('');
-  const [asoEmpresa, setAsoEmpresa] = useState('');
-  const [seguirPcmso, setSeguirPcmso] = useState<'SIM' | 'NAO'>('SIM');
-  const [attachment, setAttachment] = useState<Attachment | null>(null);
-
-  const [empPickerOpen, setEmpPickerOpen] = useState(false);
-  const [empSearch, setEmpSearch] = useState('');
-  const [contractPickerOpen, setContractPickerOpen] = useState(false);
-  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [picker, setPicker] = useState<{
+    title: string;
+    options: PickerOption[];
+    onSelect: (value: string) => void;
+  } | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   const listQuery = useQuery({
     queryKey: ['dp-my-requests'],
@@ -268,8 +472,10 @@ export default function DpRequestsScreen() {
     return DP_TYPES;
   }, [createTarget, isDepartamentoPessoal]);
 
-  const selectedEmployee = employees.find((e) => e.id === employeeId);
   const selectedContract = contracts.find((c) => c.id === contractId);
+
+  const maxRows =
+    requestType === 'ADMISSAO' ? MAX_ADMISSAO_CANDIDATOS : MAX_SOLICITACAO_ITENS;
 
   const resetCreateFields = () => {
     setUrgency('MEDIUM');
@@ -279,42 +485,39 @@ export default function DpRequestsScreen() {
     setPolo('');
     setPrazoInicio('');
     setPrazoFim('');
-    setEmployeeId(myEmployeeId);
-    setDetalhes('');
-    setMotivo('');
-    setDataInicial('');
-    setDataFinal('');
-    setNumeroDias('');
-    setJustificativa('');
-    setDatas('');
-    setTipoSolicitacao('');
-    setSituacao('');
-    setValores('');
-    setObservacoes('');
-    setPunicao('ADVERTENCIA');
-    setTipoAviso('');
-    setTipoRescisao('');
-    setFuncaoAntigo('');
-    setFuncaoNovo('');
-    setTipoAlteracao('FUNCAO');
-    setCidade('');
-    setPedagio('NAO');
-    setCandidatoNome('');
-    setCandidatoFuncao('');
-    setCandidatoContato('');
-    setCandidatoSetor('');
-    setMotivoContratacao('');
-    setAsoTipo('ADMISSIONAL');
-    setAsoCpf('');
-    setAsoNascimento('');
-    setAsoSetor('');
-    setAsoCargo('');
-    setAsoNovoCargo('');
-    setAsoCentroCusto('');
-    setAsoLocal('');
-    setAsoEmpresa('');
-    setSeguirPcmso('SIM');
-    setAttachment(null);
+    setRows([emptyFormRow(myEmployeeId)]);
+  };
+
+  const updateRow = (index: number, patch: Partial<FormRow>) => {
+    setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const addRow = () => {
+    setRows((prev) => {
+      if (prev.length >= maxRows) return prev;
+      return [
+        ...prev,
+        emptyFormRow(requestType === 'ADMISSAO' ? '' : myEmployeeId),
+      ];
+    });
+  };
+
+  const removeRow = (index: number) => {
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  const employeeOptionsForRow = (index: number): PickerOption[] => {
+    const used = rows
+      .map((row, i) => (i !== index ? row.employeeId : ''))
+      .filter(Boolean);
+    const current = rows[index]?.employeeId ?? '';
+    return employees
+      .filter((e) => e.id === current || !used.includes(e.id))
+      .map((e) => ({
+        value: e.id,
+        label: e.name,
+        subtitle: e.department || undefined,
+      }));
   };
 
   const openCreate = () => {
@@ -330,231 +533,289 @@ export default function DpRequestsScreen() {
 
   const onPickContract = (c: DpEligibleContract) => {
     setContractId(c.id);
-    setCompany(c.costCenter?.company || c.name || '');
-    setPolo(mapPolo(c.costCenter?.polo));
-    setContractPickerOpen(false);
+    setCompany(c.costCenter?.company?.trim() || '');
+    setPolo(resolveCostCenterPoloRegion(c.costCenter) ?? '');
   };
 
+  const showPoloField = useMemo(
+    () => resolveCostCenterPoloRegion(selectedContract?.costCenter) !== null,
+    [selectedContract]
+  );
+
+  const companyOptions = useMemo(() => {
+    const items = COMPANIES_LIST.map((c) => ({ value: c, label: c }));
+    if (company && !COMPANIES_LIST.includes(company)) {
+      return [{ value: company, label: company }, ...items];
+    }
+    return items;
+  }, [company]);
+
+  const openPicker = (
+    title: string,
+    options: PickerOption[],
+    onSelect: (value: string) => void
+  ) => {
+    setPickerSearch('');
+    setPicker({ title, options, onSelect });
+  };
+
+  const pickerFiltered = useMemo(() => {
+    if (!picker) return [];
+    const q = pickerSearch.trim().toLowerCase();
+    if (!q) return picker.options;
+    return picker.options.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        (o.subtitle || '').toLowerCase().includes(q)
+    );
+  }, [picker, pickerSearch]);
+
   const buildDetails = (): Record<string, unknown> => {
-    const emp = employeeId || myEmployeeId;
     if (!requestType) throw new Error('Selecione o tipo');
-    if (!emp && requestType !== 'ADMISSAO') throw new Error('Selecione o colaborador');
+    if (!rows.length) throw new Error('Adicione ao menos um item');
 
     if (requestType === 'ADMISSAO') {
-      if (!candidatoNome.trim() || !candidatoFuncao.trim() || !candidatoContato.trim()) {
-        throw new Error('Preencha nome, função e contato do candidato');
-      }
-      if (!motivoContratacao.trim() || !candidatoSetor.trim()) {
-        throw new Error('Informe motivo e setor da contratação');
-      }
+      const candidatos = rows.map((row, i) => {
+        if (!row.nome.trim() || !row.funcao.trim() || !row.contato.trim()) {
+          throw new Error(`Pessoa ${i + 1}: preencha nome, função e contato`);
+        }
+        if (!row.motivoContratacao.trim() || !row.setor.trim()) {
+          throw new Error(`Pessoa ${i + 1}: informe motivo e setor`);
+        }
+        return {
+          nome: row.nome.trim(),
+          funcao: row.funcao.trim(),
+          contato: row.contato.trim(),
+          motivoContratacao: row.motivoContratacao.trim(),
+          setor: row.setor.trim(),
+          observacao: row.observacao.trim() || undefined,
+        };
+      });
+      return { candidatos };
+    }
+
+    const requireEmp = (row: FormRow, i: number) => {
+      const emp = row.employeeId || myEmployeeId;
+      if (!emp) throw new Error(`Item ${i + 1}: selecione o colaborador`);
+      return emp;
+    };
+
+    if ((ADM_SIMPLE_TYPES as readonly string[]).includes(requestType)) {
       return {
-        candidatos: [
-          {
-            nome: candidatoNome.trim(),
-            funcao: candidatoFuncao.trim(),
-            contato: candidatoContato.trim(),
-            motivoContratacao: motivoContratacao.trim(),
-            setor: candidatoSetor.trim(),
-            observacao: observacoes.trim() || undefined,
-          },
-        ],
+        itens: rows.map((row, i) => {
+          if (!row.detalhes.trim()) throw new Error(`Item ${i + 1}: descreva os detalhes`);
+          return { employeeId: requireEmp(row, i), detalhes: row.detalhes.trim() };
+        }),
       };
     }
 
-    if ((ADM_SIMPLE_TYPES as readonly string[]).includes(requestType)) {
-      if (!detalhes.trim()) throw new Error('Descreva os detalhes');
-      return { itens: [{ employeeId: emp, detalhes: detalhes.trim() }] };
-    }
-
     if (requestType === 'ADM_VIAGENS') {
-      if (!dataInicial || !dataFinal || !cidade.trim() || !motivo.trim() || !numeroDias.trim()) {
-        throw new Error('Preencha datas, cidade, motivo e nº de dias');
-      }
       return {
-        viagens: [
-          {
-            employeeId: emp,
-            dataIda: dataInicial,
-            dataVolta: dataFinal,
-            cidade: cidade.trim(),
-            motivoViagem: motivo.trim(),
-            numeroDias: numeroDias.trim(),
-            pedagio,
-            observacoes: observacoes.trim() || undefined,
-          },
-        ],
+        viagens: rows.map((row, i) => {
+          if (
+            !row.dataInicial ||
+            !row.dataFinal ||
+            !row.cidade.trim() ||
+            !row.motivo.trim() ||
+            !row.numeroDias.trim()
+          ) {
+            throw new Error(`Item ${i + 1}: preencha datas, cidade, motivo e nº de dias`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            dataIda: row.dataInicial,
+            dataVolta: row.dataFinal,
+            cidade: row.cidade.trim(),
+            motivoViagem: row.motivo.trim(),
+            numeroDias: row.numeroDias.trim(),
+            pedagio: row.pedagio,
+            observacoes: row.observacoes.trim() || undefined,
+          };
+        }),
       };
     }
 
     if (requestType === 'ADM_ASOS') {
-      if (
-        !asoCpf.trim() ||
-        !asoNascimento ||
-        !asoSetor.trim() ||
-        !asoCargo.trim() ||
-        !asoCentroCusto.trim() ||
-        !asoLocal.trim() ||
-        !asoEmpresa.trim()
-      ) {
-        throw new Error('Preencha todos os campos do ASO');
-      }
-      if (asoTipo === 'ALTERACAO_FUNCAO' && !asoNovoCargo.trim()) {
-        throw new Error('Informe o novo cargo');
-      }
       return {
-        asos: [
-          {
-            asoTipo,
-            employeeId: emp,
-            dataNascimento: asoNascimento,
-            cpf: asoCpf.trim(),
-            setor: asoSetor.trim(),
-            cargo: asoCargo.trim(),
-            novoCargo: asoNovoCargo.trim() || undefined,
-            centroCusto: asoCentroCusto.trim(),
-            localTrabalho: asoLocal.trim(),
-            empresa: asoEmpresa.trim(),
-            seguirPcmso,
-          },
-        ],
+        asos: rows.map((row, i) => {
+          if (
+            !row.asoCpf.trim() ||
+            !row.asoNascimento ||
+            !row.asoSetor.trim() ||
+            !row.asoCargo.trim() ||
+            !row.asoCentroCusto.trim() ||
+            !row.asoLocal.trim() ||
+            !row.asoEmpresa.trim()
+          ) {
+            throw new Error(`Item ${i + 1}: preencha todos os campos do ASO`);
+          }
+          if (row.asoTipo === 'ALTERACAO_FUNCAO' && !row.asoNovoCargo.trim()) {
+            throw new Error(`Item ${i + 1}: informe o novo cargo`);
+          }
+          return {
+            asoTipo: row.asoTipo,
+            employeeId: requireEmp(row, i),
+            dataNascimento: row.asoNascimento,
+            cpf: row.asoCpf.trim(),
+            setor: row.asoSetor.trim(),
+            cargo: row.asoCargo.trim(),
+            novoCargo: row.asoNovoCargo.trim() || undefined,
+            centroCusto: row.asoCentroCusto.trim(),
+            localTrabalho: row.asoLocal.trim(),
+            empresa: row.asoEmpresa.trim(),
+            seguirPcmso: row.seguirPcmso,
+          };
+        }),
       };
     }
 
     if (requestType === 'FERIAS') {
-      if (!dataInicial || !dataFinal) throw new Error('Informe o período de férias');
       return {
-        ferias: [
-          {
-            employeeId: emp,
-            dataInicial,
-            dataFinal,
-            observacao: observacoes.trim() || undefined,
-          },
-        ],
+        ferias: rows.map((row, i) => {
+          if (!row.dataInicial || !row.dataFinal) {
+            throw new Error(`Item ${i + 1}: informe o período de férias`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            dataInicial: row.dataInicial,
+            dataFinal: row.dataFinal,
+            observacao: row.observacoes.trim() || undefined,
+          };
+        }),
       };
     }
 
     if (requestType === 'ADVERTENCIA_SUSPENSAO') {
-      if (!motivo.trim()) throw new Error('Informe o motivo');
       return {
-        medidas: [{ employeeId: emp, punicao, motivo: motivo.trim() }],
+        medidas: rows.map((row, i) => {
+          if (!row.motivo.trim()) throw new Error(`Item ${i + 1}: informe o motivo`);
+          return {
+            employeeId: requireEmp(row, i),
+            punicao: row.punicao,
+            motivo: row.motivo.trim(),
+          };
+        }),
       };
     }
 
     if (requestType === 'ALTERACAO_FUNCAO_SALARIO') {
-      if (!funcaoAntigo.trim() || !funcaoNovo.trim() || !justificativa.trim()) {
-        throw new Error('Preencha valores antigo/novo e justificativa');
-      }
       return {
-        alteracoes: [
-          {
-            employeeId: emp,
-            tipoAlteracaoFuncaoOuSalario: tipoAlteracao,
-            funcaoSalarioAntigo: funcaoAntigo.trim(),
-            funcaoSalarioNovo: funcaoNovo.trim(),
-            justificativa: justificativa.trim(),
-          },
-        ],
+        alteracoes: rows.map((row, i) => {
+          if (!row.funcaoAntigo.trim() || !row.funcaoNovo.trim() || !row.justificativa.trim()) {
+            throw new Error(`Item ${i + 1}: preencha valores antigo/novo e justificativa`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            tipoAlteracaoFuncaoOuSalario: row.tipoAlteracao,
+            funcaoSalarioAntigo: row.funcaoAntigo.trim(),
+            funcaoSalarioNovo: row.funcaoNovo.trim(),
+            justificativa: row.justificativa.trim(),
+          };
+        }),
       };
     }
 
     if (requestType === 'ATESTADO_MEDICO') {
-      if (!dataInicial || !dataFinal || !numeroDias.trim()) {
-        throw new Error('Informe o período e o nº de dias');
-      }
-      if (!attachment) throw new Error('Anexe o atestado (imagem)');
       return {
-        atestados: [
-          {
-            employeeId: emp,
-            dataInicial,
-            dataFinal,
-            numeroDias: numeroDias.trim(),
-            anexoAtestado: attachment,
-          },
-        ],
+        atestados: rows.map((row, i) => {
+          if (!row.dataInicial || !row.dataFinal || !row.numeroDias.trim()) {
+            throw new Error(`Item ${i + 1}: informe o período e o nº de dias`);
+          }
+          if (!row.attachment) throw new Error(`Item ${i + 1}: anexe o atestado`);
+          return {
+            employeeId: requireEmp(row, i),
+            dataInicial: row.dataInicial,
+            dataFinal: row.dataFinal,
+            numeroDias: row.numeroDias.trim(),
+            anexoAtestado: row.attachment,
+          };
+        }),
       };
     }
 
     if (requestType === 'HORA_EXTRA') {
-      if (!justificativa.trim() || !datas.trim()) {
-        throw new Error('Informe justificativa e datas');
-      }
-      if (!attachment) throw new Error('Anexe a autorização (imagem)');
       return {
-        horasExtras: [
-          {
-            employeeId: emp,
-            justificativa: justificativa.trim(),
-            datas: datas.trim(),
-            anexoAutorizacao: attachment,
-          },
-        ],
+        horasExtras: rows.map((row, i) => {
+          if (!row.justificativa.trim() || !row.dataInicial || !row.dataFinal) {
+            throw new Error(`Item ${i + 1}: informe justificativa e o período`);
+          }
+          if (!row.attachment) throw new Error(`Item ${i + 1}: anexe a autorização`);
+          return {
+            employeeId: requireEmp(row, i),
+            justificativa: row.justificativa.trim(),
+            datas: `${row.dataInicial} - ${row.dataFinal}`,
+            anexoAutorizacao: row.attachment,
+          };
+        }),
       };
     }
 
     if (requestType === 'BENEFICIOS_VIAGEM') {
-      if (!dataInicial || !dataFinal || !numeroDias.trim() || !motivo.trim()) {
-        throw new Error('Preencha período, dias e motivo');
-      }
       return {
-        viagensBeneficio: [
-          {
-            employeeId: emp,
-            dataInicial,
-            dataFinal,
-            numeroDias: numeroDias.trim(),
-            motivoViagem: motivo.trim(),
-            diasHotel: numeroDias.trim(),
-          },
-        ],
+        viagensBeneficio: rows.map((row, i) => {
+          if (!row.dataInicial || !row.dataFinal || !row.numeroDias.trim() || !row.motivo.trim()) {
+            throw new Error(`Item ${i + 1}: preencha período, dias e motivo`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            dataInicial: row.dataInicial,
+            dataFinal: row.dataFinal,
+            numeroDias: row.numeroDias.trim(),
+            motivoViagem: row.motivo.trim(),
+            diasHotel: row.diasHotel.trim() || undefined,
+          };
+        }),
       };
     }
 
     if (requestType === 'RESCISAO') {
-      if (!tipoAviso.trim() || !tipoRescisao.trim() || !motivo.trim()) {
-        throw new Error('Preencha tipo de aviso, rescisão e motivo');
-      }
       return {
-        rescisoes: [
-          {
-            employeeId: emp,
-            tipoAviso: tipoAviso.trim(),
-            tipoRescisao: tipoRescisao.trim(),
-            motivo: motivo.trim(),
-            observacoes: observacoes.trim() || undefined,
-          },
-        ],
+        rescisoes: rows.map((row, i) => {
+          if (!row.tipoAviso.trim() || !row.tipoRescisao.trim() || !row.motivo.trim()) {
+            throw new Error(`Item ${i + 1}: preencha tipo de aviso, rescisão e motivo`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            tipoAviso: row.tipoAviso.trim(),
+            tipoRescisao: row.tipoRescisao.trim(),
+            motivo: row.motivo.trim(),
+            observacoes: row.observacoes.trim() || undefined,
+          };
+        }),
       };
     }
 
     if (requestType === 'RETIFICACAO_ALOCACAO') {
-      if (!dataInicial || !justificativa.trim()) {
-        throw new Error('Informe a data e a justificativa');
-      }
       return {
-        retificacoes: [
-          { employeeId: emp, data: dataInicial, justificativa: justificativa.trim() },
-        ],
+        retificacoes: rows.map((row, i) => {
+          if (!row.dataInicial || !row.justificativa.trim()) {
+            throw new Error(`Item ${i + 1}: informe a data e a justificativa`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            data: row.dataInicial,
+            justificativa: row.justificativa.trim(),
+          };
+        }),
       };
     }
 
     if (requestType === 'OUTRAS_SOLICITACOES') {
-      if (!tipoSolicitacao.trim() || !situacao.trim() || !justificativa.trim()) {
-        throw new Error('Preencha tipo, situação e justificativa');
-      }
       return {
-        itens: [
-          {
-            employeeId: emp,
-            tipoSolicitacao: tipoSolicitacao.trim(),
-            situacao: situacao.trim(),
-            justificativa: justificativa.trim(),
-            datas: datas.trim() || undefined,
-            valores: valores.trim() || undefined,
-            observacoes: observacoes.trim() || undefined,
-          },
-        ],
+        itens: rows.map((row, i) => {
+          if (!row.tipoSolicitacao.trim() || !row.situacao.trim() || !row.justificativa.trim()) {
+            throw new Error(`Item ${i + 1}: preencha tipo, situação e justificativa`);
+          }
+          return {
+            employeeId: requireEmp(row, i),
+            tipoSolicitacao: row.tipoSolicitacao.trim(),
+            situacao: row.situacao.trim(),
+            justificativa: row.justificativa.trim(),
+            datas: row.datas.trim() || undefined,
+            valores: row.valores.trim() || undefined,
+            observacoes: row.observacoes.trim() || undefined,
+          };
+        }),
       };
     }
 
@@ -608,18 +869,6 @@ export default function DpRequestsScreen() {
       setReturning(false);
     }
   };
-
-  const filteredEmployees = useMemo(() => {
-    const q = empSearch.trim().toLowerCase();
-    if (!q) return employees.slice(0, 80);
-    return employees
-      .filter(
-        (e) =>
-          e.name.toLowerCase().includes(q) ||
-          (e.department || '').toLowerCase().includes(q),
-      )
-      .slice(0, 80);
-  }, [employees, empSearch]);
 
   return (
     <View style={styles.safeArea}>
@@ -848,415 +1097,1063 @@ export default function DpRequestsScreen() {
       </Modal>
 
       {/* Filter */}
-      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <Text style={styles.modalTitle}>Filtro de status</Text>
-            <ScrollView style={{ maxHeight: 360 }}>
+      <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
+        <View style={styles.pickerOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setFilterOpen(false)}
+          />
+          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Filtro de status</Text>
               <TouchableOpacity
-                style={styles.optionRow}
+                onPress={() => setFilterOpen(false)}
+                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={{ maxHeight: 420 }}
+              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.pickerItem,
+                  { backgroundColor: isDark ? colors.card : colors.surface },
+                ]}
                 onPress={() => {
                   setStatusFilter('all');
                   setFilterOpen(false);
                 }}
               >
-                <Text style={styles.optionText}>Todos</Text>
+                <Text style={styles.pickerItemLabel}>Todos</Text>
               </TouchableOpacity>
               {(Object.keys(STATUS_LABELS) as DpRequestStatus[]).map((s) => (
                 <TouchableOpacity
                   key={s}
-                  style={styles.optionRow}
+                  style={[
+                    styles.pickerItem,
+                    { backgroundColor: isDark ? colors.card : colors.surface },
+                  ]}
                   onPress={() => {
                     setStatusFilter(s);
                     setFilterOpen(false);
                   }}
                 >
-                  <Text style={styles.optionText}>{STATUS_LABELS[s]}</Text>
+                  <Text style={styles.pickerItemLabel}>{STATUS_LABELS[s]}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <TouchableOpacity onPress={() => setFilterOpen(false)} style={{ marginTop: 8 }}>
-              <Text style={{ textAlign: 'center', color: colors.textSecondary }}>Fechar</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
       {/* Create */}
-      <Modal visible={createOpen} animationType="slide" onRequestClose={() => setCreateOpen(false)}>
-        <KeyboardAvoidingView
-          style={styles.safeArea}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <Modal
+        visible={createOpen}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        onRequestClose={() => setCreateOpen(false)}
+      >
+        <View
+          style={[
+            styles.safeArea,
+            {
+              backgroundColor: colors.background,
+              paddingTop: insets.top,
+              paddingBottom: insets.bottom,
+            },
+          ]}
         >
-          <View style={styles.modalHeaderBar}>
-            <Text style={styles.modalTitle}>Nova solicitação</Text>
-            <TouchableOpacity onPress={() => setCreateOpen(false)}>
-              <X size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.formHeader}>
+              <View style={styles.formHeaderText}>
+                {createTarget ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setCreateTarget(null);
+                      setRequestType('');
+                      setRows([emptyFormRow(myEmployeeId)]);
+                    }}
+                    style={styles.formBackRow}
+                    hitSlop={6}
+                  >
+                    <ArrowLeft size={18} color={colors.primary} strokeWidth={2.2} />
+                    <Text style={styles.formBackText}>Trocar destino</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <Text style={styles.formTitle}>Nova solicitação</Text>
+                <Text style={styles.formSubtitle}>
+                  {!createTarget
+                    ? 'Selecione o destino da solicitação'
+                    : createTarget === 'DP'
+                      ? 'Departamento Pessoal'
+                      : 'ADM/TST'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setCreateOpen(false)}
+                style={styles.formCloseBtn}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
+              >
+                <X size={20} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
 
-          <ScrollView contentContainerStyle={styles.pad} keyboardShouldPersistTaps="handled">
             {!createTarget ? (
-              <View style={{ gap: 12 }}>
-                <Text style={styles.fieldLabel}>Para qual setor?</Text>
+              <ScrollView
+                contentContainerStyle={styles.formScroll}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.sectionTitle}>Destino</Text>
                 <TouchableOpacity
                   style={styles.targetCard}
-                  onPress={() => setCreateTarget('DP')}
+                  onPress={() => {
+                    setCreateTarget('DP');
+                    setRequestType('');
+                    setRows([emptyFormRow(myEmployeeId)]);
+                  }}
+                  activeOpacity={0.75}
                 >
-                  <Users size={22} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
+                  <View style={[styles.targetIcon, { backgroundColor: `${colors.primary}14` }]}>
+                    <Users size={20} color={colors.primary} strokeWidth={2.2} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.targetTitle}>Departamento Pessoal</Text>
                     <Text style={styles.targetSub}>Admissão, férias, atestado, etc.</Text>
                   </View>
+                  <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2.2} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.targetCard}
-                  onPress={() => setCreateTarget('ADM_TST')}
+                  onPress={() => {
+                    setCreateTarget('ADM_TST');
+                    setRequestType('');
+                    setRows([emptyFormRow(myEmployeeId)]);
+                  }}
+                  activeOpacity={0.75}
                 >
-                  <ClipboardList size={22} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.targetTitle}>ADM/TST</Text>
-                    <Text style={styles.targetSub}>Viagens, EPI, material, informática...</Text>
+                  <View style={[styles.targetIcon, { backgroundColor: `${colors.primary}14` }]}>
+                    <ClipboardList size={20} color={colors.primary} strokeWidth={2.2} />
                   </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={styles.targetTitle}>ADM/TST</Text>
+                    <Text style={styles.targetSub}>Viagens, EPI, material, informática…</Text>
+                  </View>
+                  <ChevronRight size={18} color={colors.textSecondary} strokeWidth={2.2} />
                 </TouchableOpacity>
-              </View>
+              </ScrollView>
             ) : (
               <>
-                <TouchableOpacity onPress={() => setCreateTarget(null)} style={{ marginBottom: 10 }}>
-                  <Text style={{ color: colors.primary, fontWeight: '600' }}>
-                    ← Trocar destino ({createTarget === 'DP' ? 'DP' : 'ADM/TST'})
-                  </Text>
-                </TouchableOpacity>
-
-                <Text style={styles.fieldLabel}>Urgência</Text>
-                <View style={styles.chipRow}>
-                  {(['MEDIUM', 'URGENT'] as DpUrgency[]).map((u) => (
-                    <TouchableOpacity
-                      key={u}
-                      style={[styles.chip, urgency === u && styles.chipActive]}
-                      onPress={() => setUrgency(u)}
-                    >
-                      <Text style={[styles.chipText, urgency === u && styles.chipTextActive]}>
-                        {URGENCY_LABELS[u]}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                <Text style={styles.fieldLabel}>Tipo</Text>
-                <TouchableOpacity style={styles.select} onPress={() => setTypePickerOpen(true)}>
-                  <Text style={styles.selectText}>
-                    {requestType ? DP_TYPE_LABELS[requestType] : 'Selecionar tipo'}
-                  </Text>
-                  <ChevronDown size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-
-                <Text style={styles.fieldLabel}>Contrato</Text>
-                <TouchableOpacity style={styles.select} onPress={() => setContractPickerOpen(true)}>
-                  <Text style={styles.selectText} numberOfLines={1}>
-                    {selectedContract?.name || 'Selecionar contrato'}
-                  </Text>
-                  <ChevronDown size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-
-                <DateField label="Prazo início (retorno)" value={prazoInicio} onChange={setPrazoInicio} />
-                <DateField label="Prazo fim (retorno)" value={prazoFim} onChange={setPrazoFim} />
-
-                {requestType && requestType !== 'ADMISSAO' ? (
-                  <>
-                    <Text style={styles.fieldLabel}>Colaborador</Text>
-                    <TouchableOpacity style={styles.select} onPress={() => setEmpPickerOpen(true)}>
-                      <Text style={styles.selectText} numberOfLines={1}>
-                        {selectedEmployee?.name ||
-                          (employeeId ? 'Colaborador selecionado' : 'Selecionar colaborador')}
-                      </Text>
-                      <ChevronDown size={18} color={colors.textSecondary} />
-                    </TouchableOpacity>
-                  </>
-                ) : null}
-
-                {requestType === 'ADMISSAO' ? (
-                  <>
-                    <Field label="Nome do candidato" value={candidatoNome} onChange={setCandidatoNome} styles={styles} colors={colors} />
-                    <Field label="Função" value={candidatoFuncao} onChange={setCandidatoFuncao} styles={styles} colors={colors} />
-                    <Field label="Contato" value={candidatoContato} onChange={setCandidatoContato} styles={styles} colors={colors} />
-                    <Field label="Setor" value={candidatoSetor} onChange={setCandidatoSetor} styles={styles} colors={colors} />
-                    <Field label="Motivo da contratação" value={motivoContratacao} onChange={setMotivoContratacao} styles={styles} colors={colors} />
-                    <Field label="Observação" value={observacoes} onChange={setObservacoes} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {(ADM_SIMPLE_TYPES as readonly string[]).includes(requestType) ? (
-                  <Field label="Detalhes" value={detalhes} onChange={setDetalhes} styles={styles} colors={colors} multiline />
-                ) : null}
-
-                {requestType === 'ADM_VIAGENS' ? (
-                  <>
-                    <DateField label="Data ida" value={dataInicial} onChange={setDataInicial} />
-                    <DateField label="Data volta" value={dataFinal} onChange={setDataFinal} />
-                    <Field label="Cidade" value={cidade} onChange={setCidade} styles={styles} colors={colors} />
-                    <Field label="Motivo" value={motivo} onChange={setMotivo} styles={styles} colors={colors} />
-                    <Field label="Nº de dias" value={numeroDias} onChange={setNumeroDias} styles={styles} colors={colors} />
-                    <Text style={styles.fieldLabel}>Pedágio</Text>
-                    <View style={styles.chipRow}>
-                      {(['SIM', 'NAO'] as const).map((p) => (
-                        <TouchableOpacity
-                          key={p}
-                          style={[styles.chip, pedagio === p && styles.chipActive]}
-                          onPress={() => setPedagio(p)}
-                        >
-                          <Text style={[styles.chipText, pedagio === p && styles.chipTextActive]}>{p}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </>
-                ) : null}
-
-                {requestType === 'FERIAS' ? (
-                  <>
-                    <DateField label="Data inicial" value={dataInicial} onChange={setDataInicial} />
-                    <DateField label="Data final" value={dataFinal} onChange={setDataFinal} />
-                    <Field label="Observação" value={observacoes} onChange={setObservacoes} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {requestType === 'ADVERTENCIA_SUSPENSAO' ? (
-                  <>
-                    <Text style={styles.fieldLabel}>Punição</Text>
-                    <View style={styles.chipRow}>
-                      {(['ADVERTENCIA', 'SUSPENSAO'] as const).map((p) => (
-                        <TouchableOpacity
-                          key={p}
-                          style={[styles.chip, punicao === p && styles.chipActive]}
-                          onPress={() => setPunicao(p)}
-                        >
-                          <Text style={[styles.chipText, punicao === p && styles.chipTextActive]}>
-                            {p === 'ADVERTENCIA' ? 'Advertência' : 'Suspensão'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Field label="Motivo" value={motivo} onChange={setMotivo} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {requestType === 'ALTERACAO_FUNCAO_SALARIO' ? (
-                  <>
-                    <View style={styles.chipRow}>
-                      {(['FUNCAO', 'SALARIO'] as const).map((p) => (
-                        <TouchableOpacity
-                          key={p}
-                          style={[styles.chip, tipoAlteracao === p && styles.chipActive]}
-                          onPress={() => setTipoAlteracao(p)}
-                        >
-                          <Text style={[styles.chipText, tipoAlteracao === p && styles.chipTextActive]}>
-                            {p === 'FUNCAO' ? 'Função' : 'Salário'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Field label="Valor antigo" value={funcaoAntigo} onChange={setFuncaoAntigo} styles={styles} colors={colors} />
-                    <Field label="Valor novo" value={funcaoNovo} onChange={setFuncaoNovo} styles={styles} colors={colors} />
-                    <Field label="Justificativa" value={justificativa} onChange={setJustificativa} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {requestType === 'ATESTADO_MEDICO' ? (
-                  <>
-                    <DateField label="Data inicial" value={dataInicial} onChange={setDataInicial} />
-                    <DateField label="Data final" value={dataFinal} onChange={setDataFinal} />
-                    <Field label="Nº de dias" value={numeroDias} onChange={setNumeroDias} styles={styles} colors={colors} />
-                    <AttachButton
-                      label={attachment ? attachment.fileName : 'Anexar atestado'}
-                      attached={!!attachment}
-                      onPress={async () => setAttachment(await pickAttachment())}
-                      styles={styles}
-                      colors={colors}
-                    />
-                  </>
-                ) : null}
-
-                {requestType === 'HORA_EXTRA' ? (
-                  <>
-                    <Field label="Justificativa" value={justificativa} onChange={setJustificativa} styles={styles} colors={colors} multiline />
-                    <Field label="Datas" value={datas} onChange={setDatas} styles={styles} colors={colors} />
-                    <AttachButton
-                      label={attachment ? attachment.fileName : 'Anexar autorização'}
-                      attached={!!attachment}
-                      onPress={async () => setAttachment(await pickAttachment())}
-                      styles={styles}
-                      colors={colors}
-                    />
-                  </>
-                ) : null}
-
-                {requestType === 'BENEFICIOS_VIAGEM' ? (
-                  <>
-                    <DateField label="Data inicial" value={dataInicial} onChange={setDataInicial} />
-                    <DateField label="Data final" value={dataFinal} onChange={setDataFinal} />
-                    <Field label="Nº de dias" value={numeroDias} onChange={setNumeroDias} styles={styles} colors={colors} />
-                    <Field label="Motivo" value={motivo} onChange={setMotivo} styles={styles} colors={colors} />
-                  </>
-                ) : null}
-
-                {requestType === 'RESCISAO' ? (
-                  <>
-                    <Field label="Tipo de aviso" value={tipoAviso} onChange={setTipoAviso} styles={styles} colors={colors} />
-                    <Field label="Tipo de rescisão" value={tipoRescisao} onChange={setTipoRescisao} styles={styles} colors={colors} />
-                    <Field label="Motivo" value={motivo} onChange={setMotivo} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {requestType === 'RETIFICACAO_ALOCACAO' ? (
-                  <>
-                    <DateField label="Data" value={dataInicial} onChange={setDataInicial} />
-                    <Field label="Justificativa" value={justificativa} onChange={setJustificativa} styles={styles} colors={colors} multiline />
-                  </>
-                ) : null}
-
-                {requestType === 'OUTRAS_SOLICITACOES' ? (
-                  <>
-                    <Field label="Tipo de solicitação" value={tipoSolicitacao} onChange={setTipoSolicitacao} styles={styles} colors={colors} />
-                    <Field label="Situação" value={situacao} onChange={setSituacao} styles={styles} colors={colors} />
-                    <Field label="Justificativa" value={justificativa} onChange={setJustificativa} styles={styles} colors={colors} multiline />
-                    <Field label="Datas (opcional)" value={datas} onChange={setDatas} styles={styles} colors={colors} />
-                    <Field label="Valores (opcional)" value={valores} onChange={setValores} styles={styles} colors={colors} />
-                  </>
-                ) : null}
-
-                {requestType === 'ADM_ASOS' ? (
-                  <>
-                    <Text style={styles.fieldLabel}>Tipo ASO</Text>
-                    <View style={styles.chipRow}>
-                      {(
-                        [
-                          ['ADMISSIONAL', 'Admissional'],
-                          ['DEMISSIONAL', 'Demissional'],
-                          ['PERIODICO', 'Periódico'],
-                          ['ALTERACAO_FUNCAO', 'Alt. função'],
-                        ] as const
-                      ).map(([v, label]) => (
-                        <TouchableOpacity
-                          key={v}
-                          style={[styles.chip, asoTipo === v && styles.chipActive]}
-                          onPress={() => setAsoTipo(v)}
-                        >
-                          <Text style={[styles.chipText, asoTipo === v && styles.chipTextActive]}>
-                            {label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <Field label="CPF" value={asoCpf} onChange={setAsoCpf} styles={styles} colors={colors} />
-                    <DateField label="Nascimento" value={asoNascimento} onChange={setAsoNascimento} />
-                    <Field label="Setor" value={asoSetor} onChange={setAsoSetor} styles={styles} colors={colors} />
-                    <Field label="Cargo" value={asoCargo} onChange={setAsoCargo} styles={styles} colors={colors} />
-                    {asoTipo === 'ALTERACAO_FUNCAO' ? (
-                      <Field label="Novo cargo" value={asoNovoCargo} onChange={setAsoNovoCargo} styles={styles} colors={colors} />
-                    ) : null}
-                    <Field label="Centro de custo" value={asoCentroCusto} onChange={setAsoCentroCusto} styles={styles} colors={colors} />
-                    <Field label="Local de trabalho" value={asoLocal} onChange={setAsoLocal} styles={styles} colors={colors} />
-                    <Field label="Empresa" value={asoEmpresa} onChange={setAsoEmpresa} styles={styles} colors={colors} />
-                  </>
-                ) : null}
-
-                <TouchableOpacity
-                  style={[styles.primaryBtn, { marginTop: 16, marginBottom: 40 }]}
-                  onPress={() => void submitCreate()}
-                  disabled={saving}
+                <ScrollView
+                  contentContainerStyle={styles.formScroll}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
                 >
-                  {saving ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.primaryBtnText}>Enviar solicitação</Text>
-                  )}
-                </TouchableOpacity>
+                  <Text style={styles.sectionTitle}>Dados gerais</Text>
+
+                  <Text style={styles.fieldLabel}>Urgência</Text>
+                  <View style={styles.segRow}>
+                    {(['MEDIUM', 'URGENT'] as DpUrgency[]).map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={[styles.segBtn, urgency === u && styles.segBtnActive]}
+                        onPress={() => setUrgency(u)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.segText, urgency === u && styles.segTextActive]}>
+                          {URGENCY_LABELS[u]}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <SelectField
+                    label="Tipo"
+                    valueLabel={requestType ? DP_TYPE_LABELS[requestType] : ''}
+                    placeholder="Selecionar tipo"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() =>
+                      openPicker(
+                        'Tipo de solicitação',
+                        typeOptions.map((t) => ({
+                          value: t,
+                          label: DP_TYPE_LABELS[t],
+                        })),
+                        (v) => {
+                          setRequestType(v as DpRequestType);
+                          setRows([
+                            emptyFormRow(v === 'ADMISSAO' ? '' : myEmployeeId),
+                          ]);
+                        }
+                      )
+                    }
+                  />
+
+                  <SelectField
+                    label="Contrato"
+                    valueLabel={selectedContract?.name || ''}
+                    placeholder="Selecionar contrato"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() =>
+                      openPicker(
+                        'Contrato',
+                        contracts.map((c) => ({
+                          value: c.id,
+                          label: c.name,
+                          subtitle: c.number || undefined,
+                        })),
+                        (id) => {
+                          const c = contracts.find((x) => x.id === id);
+                          if (c) onPickContract(c);
+                        }
+                      )
+                    }
+                  />
+
+                  <SelectField
+                    label="Empresa"
+                    valueLabel={company}
+                    placeholder="Selecionar empresa"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() =>
+                      openPicker('Empresa', companyOptions, (v) => setCompany(v))
+                    }
+                  />
+
+                  {showPoloField ? (
+                    <SelectField
+                      label="Polo"
+                      valueLabel={polo}
+                      placeholder="Selecionar polo"
+                      colors={colors}
+                      isDark={isDark}
+                      onPress={() =>
+                        openPicker(
+                          'Polo',
+                          [
+                            {
+                              value: resolveCostCenterPoloRegion(selectedContract?.costCenter) || polo || 'DF',
+                              label:
+                                resolveCostCenterPoloRegion(selectedContract?.costCenter) ||
+                                polo ||
+                                'DF',
+                            },
+                          ],
+                          (v) => setPolo(v)
+                        )
+                      }
+                    />
+                  ) : null}
+
+                  <DateField
+                    label="Prazo início (retorno)"
+                    value={prazoInicio}
+                    onChange={setPrazoInicio}
+                    placeholder="Selecionar data"
+                  />
+                  <DateField
+                    label="Prazo fim (retorno)"
+                    value={prazoFim}
+                    onChange={setPrazoFim}
+                    placeholder="Selecionar data"
+                  />
+
+                  {requestType ? (
+                    <Text style={styles.sectionTitle}>Detalhes da solicitação</Text>
+                  ) : null}
+
+                  {requestType
+                    ? rows.map((row, index) => {
+                        const empLabel =
+                          employees.find((e) => e.id === row.employeeId)?.name ||
+                          (row.employeeId ? 'Colaborador selecionado' : '');
+                        return (
+                          <View key={`row-${index}`} style={styles.itemCard}>
+                            <View style={styles.itemCardHeader}>
+                              <Text style={styles.itemCardTitle}>
+                                {itemCardTitle(requestType, index)}
+                              </Text>
+                              {rows.length > 1 ? (
+                                <TouchableOpacity
+                                  onPress={() => removeRow(index)}
+                                  hitSlop={8}
+                                  accessibilityLabel="Remover item"
+                                >
+                                  <X size={18} color={colors.error || '#ef4444'} strokeWidth={2.2} />
+                                </TouchableOpacity>
+                              ) : null}
+                            </View>
+
+                            {requestType !== 'ADMISSAO' ? (
+                              <SelectField
+                                label="Colaborador"
+                                valueLabel={empLabel}
+                                placeholder="Selecionar colaborador"
+                                colors={colors}
+                                isDark={isDark}
+                                onPress={() =>
+                                  openPicker(
+                                    'Colaborador',
+                                    employeeOptionsForRow(index),
+                                    (id) => {
+                                      const item = employees.find((e) => e.id === id);
+                                      const patch: Partial<FormRow> = { employeeId: id };
+                                      if (item && requestType === 'ADM_ASOS') {
+                                        patch.asoCpf = item.cpf || '';
+                                        patch.asoNascimento = item.birthDate
+                                          ? String(item.birthDate).slice(0, 10)
+                                          : '';
+                                        patch.asoSetor = item.department || '';
+                                        patch.asoCargo = item.position || '';
+                                        patch.asoCentroCusto = item.costCenter || '';
+                                        patch.asoEmpresa = item.company || company || '';
+                                        patch.asoLocal = item.polo || polo || '';
+                                      }
+                                      updateRow(index, patch);
+                                    }
+                                  )
+                                }
+                              />
+                            ) : null}
+
+                            {requestType === 'ADMISSAO' ? (
+                              <>
+                                <Field
+                                  label="Nome do candidato"
+                                  value={row.nome}
+                                  onChange={(nome) => updateRow(index, { nome })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Função"
+                                  value={row.funcao}
+                                  onChange={(funcao) => updateRow(index, { funcao })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Contato"
+                                  value={row.contato}
+                                  onChange={(contato) => updateRow(index, { contato })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <SelectField
+                                  label="Setor"
+                                  valueLabel={row.setor}
+                                  placeholder="Selecionar setor"
+                                  colors={colors}
+                                  isDark={isDark}
+                                  onPress={() =>
+                                    openPicker(
+                                      'Setor',
+                                      DEPARTMENTS_LIST.map((d) => ({ value: d, label: d })),
+                                      (setor) => updateRow(index, { setor })
+                                    )
+                                  }
+                                />
+                                <SelectField
+                                  label="Motivo da contratação"
+                                  valueLabel={optionLabel(
+                                    MOTIVO_CONTRATACAO_OPTIONS,
+                                    row.motivoContratacao
+                                  )}
+                                  placeholder="Selecionar motivo"
+                                  colors={colors}
+                                  isDark={isDark}
+                                  onPress={() =>
+                                    openPicker(
+                                      'Motivo da contratação',
+                                      MOTIVO_CONTRATACAO_OPTIONS.map((o) => ({
+                                        value: o.value,
+                                        label: o.label,
+                                      })),
+                                      (motivoContratacao) =>
+                                        updateRow(index, { motivoContratacao })
+                                    )
+                                  }
+                                />
+                                <Field
+                                  label="Observação"
+                                  value={row.observacao}
+                                  onChange={(observacao) => updateRow(index, { observacao })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {(ADM_SIMPLE_TYPES as readonly string[]).includes(requestType) ? (
+                              <Field
+                                label="Detalhes"
+                                value={row.detalhes}
+                                onChange={(detalhes) => updateRow(index, { detalhes })}
+                                styles={styles}
+                                colors={colors}
+                                isDark={isDark}
+                                multiline
+                              />
+                            ) : null}
+
+                            {requestType === 'ADM_VIAGENS' ? (
+                              <>
+                                <DateField
+                                  label="Data ida"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <DateField
+                                  label="Data volta"
+                                  value={row.dataFinal}
+                                  onChange={(dataFinal) => updateRow(index, { dataFinal })}
+                                />
+                                <Field
+                                  label="Cidade"
+                                  value={row.cidade}
+                                  onChange={(cidade) => updateRow(index, { cidade })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Motivo"
+                                  value={row.motivo}
+                                  onChange={(motivo) => updateRow(index, { motivo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Nº de dias"
+                                  value={row.numeroDias}
+                                  onChange={(numeroDias) => updateRow(index, { numeroDias })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  keyboardType="number-pad"
+                                />
+                                <Text style={styles.fieldLabel}>Pedágio</Text>
+                                <View style={styles.segRow}>
+                                  {(['SIM', 'NAO'] as const).map((p) => (
+                                    <TouchableOpacity
+                                      key={p}
+                                      style={[styles.segBtn, row.pedagio === p && styles.segBtnActive]}
+                                      onPress={() => updateRow(index, { pedagio: p })}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.segText,
+                                          row.pedagio === p && styles.segTextActive,
+                                        ]}
+                                      >
+                                        {p === 'SIM' ? 'Sim' : 'Não'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </>
+                            ) : null}
+
+                            {requestType === 'FERIAS' ? (
+                              <>
+                                <DateField
+                                  label="Data inicial"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <DateField
+                                  label="Data final"
+                                  value={row.dataFinal}
+                                  onChange={(dataFinal) => updateRow(index, { dataFinal })}
+                                />
+                                <Field
+                                  label="Observação"
+                                  value={row.observacoes}
+                                  onChange={(observacoes) => updateRow(index, { observacoes })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'ADVERTENCIA_SUSPENSAO' ? (
+                              <>
+                                <Text style={styles.fieldLabel}>Punição</Text>
+                                <View style={styles.segRow}>
+                                  {(['ADVERTENCIA', 'SUSPENSAO'] as const).map((p) => (
+                                    <TouchableOpacity
+                                      key={p}
+                                      style={[styles.segBtn, row.punicao === p && styles.segBtnActive]}
+                                      onPress={() => updateRow(index, { punicao: p })}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.segText,
+                                          row.punicao === p && styles.segTextActive,
+                                        ]}
+                                      >
+                                        {p === 'ADVERTENCIA' ? 'Advertência' : 'Suspensão'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                <Field
+                                  label="Motivo"
+                                  value={row.motivo}
+                                  onChange={(motivo) => updateRow(index, { motivo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'ALTERACAO_FUNCAO_SALARIO' ? (
+                              <>
+                                <Text style={styles.fieldLabel}>Tipo de alteração</Text>
+                                <View style={styles.segRow}>
+                                  {(['FUNCAO', 'SALARIO'] as const).map((p) => (
+                                    <TouchableOpacity
+                                      key={p}
+                                      style={[
+                                        styles.segBtn,
+                                        row.tipoAlteracao === p && styles.segBtnActive,
+                                      ]}
+                                      onPress={() => updateRow(index, { tipoAlteracao: p })}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.segText,
+                                          row.tipoAlteracao === p && styles.segTextActive,
+                                        ]}
+                                      >
+                                        {p === 'FUNCAO' ? 'Função' : 'Salário'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                <Field
+                                  label="Valor antigo"
+                                  value={row.funcaoAntigo}
+                                  onChange={(funcaoAntigo) => updateRow(index, { funcaoAntigo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Valor novo"
+                                  value={row.funcaoNovo}
+                                  onChange={(funcaoNovo) => updateRow(index, { funcaoNovo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Justificativa"
+                                  value={row.justificativa}
+                                  onChange={(justificativa) => updateRow(index, { justificativa })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'ATESTADO_MEDICO' ? (
+                              <>
+                                <DateField
+                                  label="Data inicial"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <DateField
+                                  label="Data final"
+                                  value={row.dataFinal}
+                                  onChange={(dataFinal) => updateRow(index, { dataFinal })}
+                                />
+                                <Field
+                                  label="Nº de dias"
+                                  value={row.numeroDias}
+                                  onChange={(numeroDias) => updateRow(index, { numeroDias })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  keyboardType="number-pad"
+                                />
+                                <AttachButton
+                                  label={
+                                    row.attachment
+                                      ? row.attachment.fileName
+                                      : 'Anexar atestado'
+                                  }
+                                  attached={!!row.attachment}
+                                  onPress={async () => {
+                                    const file = await pickAttachment();
+                                    if (file) updateRow(index, { attachment: file });
+                                  }}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'HORA_EXTRA' ? (
+                              <>
+                                <Field
+                                  label="Justificativa"
+                                  value={row.justificativa}
+                                  onChange={(justificativa) => updateRow(index, { justificativa })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                                <DateField
+                                  label="Início do período"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <DateField
+                                  label="Fim do período"
+                                  value={row.dataFinal}
+                                  onChange={(dataFinal) => updateRow(index, { dataFinal })}
+                                />
+                                <AttachButton
+                                  label={
+                                    row.attachment
+                                      ? row.attachment.fileName
+                                      : 'Anexar autorização'
+                                  }
+                                  attached={!!row.attachment}
+                                  onPress={async () => {
+                                    const file = await pickAttachment();
+                                    if (file) updateRow(index, { attachment: file });
+                                  }}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'BENEFICIOS_VIAGEM' ? (
+                              <>
+                                <DateField
+                                  label="Data inicial"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <DateField
+                                  label="Data final"
+                                  value={row.dataFinal}
+                                  onChange={(dataFinal) => updateRow(index, { dataFinal })}
+                                />
+                                <Field
+                                  label="Nº de dias"
+                                  value={row.numeroDias}
+                                  onChange={(numeroDias) => updateRow(index, { numeroDias })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  keyboardType="number-pad"
+                                />
+                                <Field
+                                  label="Hotel (opcional)"
+                                  value={row.diasHotel}
+                                  onChange={(diasHotel) => updateRow(index, { diasHotel })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  keyboardType="number-pad"
+                                  placeholder="Nº de diárias"
+                                />
+                                <Field
+                                  label="Motivo"
+                                  value={row.motivo}
+                                  onChange={(motivo) => updateRow(index, { motivo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'RESCISAO' ? (
+                              <>
+                                <SelectField
+                                  label="Tipo de aviso"
+                                  valueLabel={optionLabel(TIPO_AVISO_OPTIONS, row.tipoAviso)}
+                                  placeholder="Selecionar tipo de aviso"
+                                  colors={colors}
+                                  isDark={isDark}
+                                  onPress={() =>
+                                    openPicker(
+                                      'Tipo de aviso',
+                                      TIPO_AVISO_OPTIONS.map((o) => ({
+                                        value: o.value,
+                                        label: o.label,
+                                      })),
+                                      (tipoAviso) => updateRow(index, { tipoAviso })
+                                    )
+                                  }
+                                />
+                                <SelectField
+                                  label="Tipo de rescisão"
+                                  valueLabel={optionLabel(TIPO_RESCISAO_OPTIONS, row.tipoRescisao)}
+                                  placeholder="Selecionar tipo de rescisão"
+                                  colors={colors}
+                                  isDark={isDark}
+                                  onPress={() =>
+                                    openPicker(
+                                      'Tipo de rescisão',
+                                      TIPO_RESCISAO_OPTIONS.map((o) => ({
+                                        value: o.value,
+                                        label: o.label,
+                                      })),
+                                      (tipoRescisao) => updateRow(index, { tipoRescisao })
+                                    )
+                                  }
+                                />
+                                <Field
+                                  label="Motivo"
+                                  value={row.motivo}
+                                  onChange={(motivo) => updateRow(index, { motivo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                                <Field
+                                  label="Observações"
+                                  value={row.observacoes}
+                                  onChange={(observacoes) => updateRow(index, { observacoes })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'RETIFICACAO_ALOCACAO' ? (
+                              <>
+                                <DateField
+                                  label="Data"
+                                  value={row.dataInicial}
+                                  onChange={(dataInicial) => updateRow(index, { dataInicial })}
+                                />
+                                <Field
+                                  label="Justificativa"
+                                  value={row.justificativa}
+                                  onChange={(justificativa) => updateRow(index, { justificativa })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'OUTRAS_SOLICITACOES' ? (
+                              <>
+                                <Field
+                                  label="Tipo de solicitação"
+                                  value={row.tipoSolicitacao}
+                                  onChange={(tipoSolicitacao) =>
+                                    updateRow(index, { tipoSolicitacao })
+                                  }
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Situação"
+                                  value={row.situacao}
+                                  onChange={(situacao) => updateRow(index, { situacao })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Justificativa"
+                                  value={row.justificativa}
+                                  onChange={(justificativa) => updateRow(index, { justificativa })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  multiline
+                                />
+                                <Field
+                                  label="Datas (opcional)"
+                                  value={row.datas}
+                                  onChange={(datas) => updateRow(index, { datas })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Valores (opcional)"
+                                  value={row.valores}
+                                  onChange={(valores) => updateRow(index, { valores })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                              </>
+                            ) : null}
+
+                            {requestType === 'ADM_ASOS' ? (
+                              <>
+                                <Text style={styles.fieldLabel}>Tipo ASO</Text>
+                                <View style={styles.chipRow}>
+                                  {(
+                                    [
+                                      ['ADMISSIONAL', 'Admissional'],
+                                      ['DEMISSIONAL', 'Demissional'],
+                                      ['PERIODICO', 'Periódico'],
+                                      ['ALTERACAO_FUNCAO', 'Alt. função'],
+                                    ] as const
+                                  ).map(([v, label]) => (
+                                    <TouchableOpacity
+                                      key={v}
+                                      style={[styles.chip, row.asoTipo === v && styles.chipActive]}
+                                      onPress={() => updateRow(index, { asoTipo: v })}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.chipText,
+                                          row.asoTipo === v && styles.chipTextActive,
+                                        ]}
+                                      >
+                                        {label}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                                <Field
+                                  label="CPF"
+                                  value={row.asoCpf}
+                                  onChange={(asoCpf) => updateRow(index, { asoCpf })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                  keyboardType="number-pad"
+                                />
+                                <DateField
+                                  label="Nascimento"
+                                  value={row.asoNascimento}
+                                  onChange={(asoNascimento) =>
+                                    updateRow(index, { asoNascimento })
+                                  }
+                                />
+                                <Field
+                                  label="Setor"
+                                  value={row.asoSetor}
+                                  onChange={(asoSetor) => updateRow(index, { asoSetor })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Cargo"
+                                  value={row.asoCargo}
+                                  onChange={(asoCargo) => updateRow(index, { asoCargo })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                {row.asoTipo === 'ALTERACAO_FUNCAO' ? (
+                                  <Field
+                                    label="Novo cargo"
+                                    value={row.asoNovoCargo}
+                                    onChange={(asoNovoCargo) =>
+                                      updateRow(index, { asoNovoCargo })
+                                    }
+                                    styles={styles}
+                                    colors={colors}
+                                    isDark={isDark}
+                                  />
+                                ) : null}
+                                <Field
+                                  label="Centro de custo"
+                                  value={row.asoCentroCusto}
+                                  onChange={(asoCentroCusto) =>
+                                    updateRow(index, { asoCentroCusto })
+                                  }
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Local de trabalho"
+                                  value={row.asoLocal}
+                                  onChange={(asoLocal) => updateRow(index, { asoLocal })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Field
+                                  label="Empresa"
+                                  value={row.asoEmpresa}
+                                  onChange={(asoEmpresa) => updateRow(index, { asoEmpresa })}
+                                  styles={styles}
+                                  colors={colors}
+                                  isDark={isDark}
+                                />
+                                <Text style={styles.fieldLabel}>Seguir PCMSO</Text>
+                                <View style={styles.segRow}>
+                                  {(['SIM', 'NAO'] as const).map((p) => (
+                                    <TouchableOpacity
+                                      key={p}
+                                      style={[
+                                        styles.segBtn,
+                                        row.seguirPcmso === p && styles.segBtnActive,
+                                      ]}
+                                      onPress={() => updateRow(index, { seguirPcmso: p })}
+                                    >
+                                      <Text
+                                        style={[
+                                          styles.segText,
+                                          row.seguirPcmso === p && styles.segTextActive,
+                                        ]}
+                                      >
+                                        {p === 'SIM' ? 'Sim' : 'Não'}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </>
+                            ) : null}
+                          </View>
+                        );
+                      })
+                    : null}
+
+                  {requestType && rows.length < maxRows ? (
+                    <TouchableOpacity
+                      style={styles.addMoreBtn}
+                      onPress={addRow}
+                      activeOpacity={0.75}
+                    >
+                      <Plus size={16} color={colors.primary} strokeWidth={2.4} />
+                      <Text style={styles.addMoreText}>Adicionar mais</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                </ScrollView>
+
+                <View
+                  style={[
+                    styles.formFooter,
+                    { borderTopColor: isDark ? colors.border : 'rgba(0,0,0,0.06)' },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, styles.formSubmitBtn, saving && { opacity: 0.7 }]}
+                    onPress={() => void submitCreate()}
+                    disabled={saving}
+                    activeOpacity={0.85}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.primaryBtnText}>Enviar solicitação</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </>
             )}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Type picker */}
-      <Modal visible={typePickerOpen} transparent animationType="fade" onRequestClose={() => setTypePickerOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <Text style={styles.modalTitle}>Tipo de solicitação</Text>
-            <FlatList
-              data={typeOptions}
-              keyExtractor={(t) => t}
-              style={{ maxHeight: 400 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.optionRow}
-                  onPress={() => {
-                    setRequestType(item);
-                    setAttachment(null);
-                    setTypePickerOpen(false);
-                  }}
-                >
-                  <Text style={styles.optionText}>{DP_TYPE_LABELS[item]}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
-      {/* Contract picker */}
-      <Modal visible={contractPickerOpen} transparent animationType="fade" onRequestClose={() => setContractPickerOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <Text style={styles.modalTitle}>Contrato</Text>
-            {contractsQuery.isLoading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <FlatList
-                data={contracts}
-                keyExtractor={(c) => c.id}
-                style={{ maxHeight: 400 }}
-                ListEmptyComponent={<Text style={styles.empty}>Nenhum contrato elegível.</Text>}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.optionRow} onPress={() => onPickContract(item)}>
-                    <Text style={styles.optionText}>{item.name}</Text>
-                  </TouchableOpacity>
-                )}
+      {/* Generic option picker */}
+      <Modal
+        visible={!!picker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPicker(null)}
+      >
+        <View style={styles.pickerOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setPicker(null)}
+          />
+          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
+            <View style={styles.pickerHandle} />
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>{picker?.title}</Text>
+              <TouchableOpacity
+                onPress={() => setPicker(null)}
+                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.searchBox, { marginBottom: 12 }]}>
+              <Search size={18} color={colors.textSecondary} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Buscar..."
+                placeholderTextColor={colors.textSecondary}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
               />
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Employee picker */}
-      <Modal visible={empPickerOpen} transparent animationType="fade" onRequestClose={() => setEmpPickerOpen(false)}>
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
-            <Text style={styles.modalTitle}>Colaborador</Text>
-            <TextInput
-              value={empSearch}
-              onChangeText={setEmpSearch}
-              placeholder="Buscar nome..."
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
-            />
+            </View>
             <FlatList
-              data={filteredEmployees}
-              keyExtractor={(e) => e.id}
-              style={{ maxHeight: 360 }}
+              data={pickerFiltered}
+              keyExtractor={(item) => item.value}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.optionRow}
+                  style={[
+                    styles.pickerItem,
+                    { backgroundColor: isDark ? colors.card : colors.surface },
+                  ]}
                   onPress={() => {
-                    setEmployeeId(item.id);
-                    setEmpPickerOpen(false);
+                    picker?.onSelect(item.value);
+                    setPicker(null);
                   }}
+                  activeOpacity={0.75}
                 >
-                  <Text style={styles.optionText}>{item.name}</Text>
-                  {item.department ? (
-                    <Text style={styles.optionSub}>{item.department}</Text>
+                  <Text style={styles.pickerItemLabel}>{item.label}</Text>
+                  {item.subtitle ? (
+                    <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
                   ) : null}
                 </TouchableOpacity>
               )}
+              ListEmptyComponent={
+                <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
+              }
+              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
             />
           </View>
         </View>
@@ -1288,27 +2185,42 @@ function Field({
   onChange,
   styles,
   colors,
+  isDark,
   multiline,
+  keyboardType,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   styles: ReturnType<typeof getStyles>;
   colors: any;
+  isDark: boolean;
   multiline?: boolean;
+  keyboardType?: 'default' | 'number-pad' | 'email-address' | 'phone-pad';
+  placeholder?: string;
 }) {
   return (
-    <>
+    <View style={{ marginBottom: 14 }}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChange}
-        placeholder={label}
+        placeholder={placeholder || label}
         placeholderTextColor={colors.textSecondary}
-        style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: isDark ? colors.card : colors.surface,
+            borderWidth: StyleSheet.hairlineWidth * 1.5,
+            borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+          },
+          multiline && styles.inputMultiline,
+        ]}
         multiline={multiline}
+        keyboardType={keyboardType}
       />
-    </>
+    </View>
   );
 }
 
@@ -1318,17 +2230,40 @@ function AttachButton({
   onPress,
   styles,
   colors,
+  isDark,
 }: {
   label: string;
   attached: boolean;
   onPress: () => void;
   styles: ReturnType<typeof getStyles>;
   colors: any;
+  isDark: boolean;
 }) {
   return (
-    <TouchableOpacity style={styles.attachBtn} onPress={onPress}>
-      <Paperclip size={16} color={attached ? colors.success : colors.primary} />
-      <Text style={[styles.attachText, attached && { color: colors.success }]} numberOfLines={1}>
+    <TouchableOpacity
+      style={[
+        styles.attachBtn,
+        {
+          backgroundColor: isDark ? colors.card : colors.surface,
+          borderWidth: StyleSheet.hairlineWidth * 1.5,
+          borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View
+        style={[
+          styles.attachIcon,
+          { backgroundColor: attached ? `${colors.success}18` : `${colors.primary}14` },
+        ]}
+      >
+        <Paperclip size={16} color={attached ? colors.success : colors.primary} strokeWidth={2.2} />
+      </View>
+      <Text
+        style={[styles.attachText, attached && { color: colors.success }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
     </TouchableOpacity>
@@ -1531,13 +2466,19 @@ function getStyles(colors: any, isDark: boolean) {
     },
     returnTitle: { fontWeight: '700', color: colors.warning, marginBottom: 10 },
     input: {
-      borderRadius: 12,
+      borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingVertical: 15,
       backgroundColor: colors.surface,
       color: colors.text,
       fontSize: 15,
-      marginBottom: 10,
+      fontWeight: '500',
+      letterSpacing: -0.2,
+    },
+    inputMultiline: {
+      minHeight: 96,
+      textAlignVertical: 'top',
+      paddingTop: 14,
     },
     primaryBtn: {
       backgroundColor: colors.primary,
@@ -1549,6 +2490,94 @@ function getStyles(colors: any, isDark: boolean) {
       marginBottom: 8,
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+    formHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 16,
+    },
+    formHeaderText: { flex: 1 },
+    formTitle: {
+      color: colors.text,
+      fontSize: 24,
+      fontWeight: '700',
+      letterSpacing: -0.5,
+    },
+    formSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+      marginTop: 2,
+    },
+    formBackRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginBottom: 8,
+    },
+    formBackText: {
+      color: colors.primary,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    formCloseBtn: {
+      width: 40,
+      height: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    formScroll: {
+      paddingHorizontal: 20,
+      paddingTop: 4,
+      paddingBottom: 28,
+    },
+    formFooter: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    formSubmitBtn: {
+      marginTop: 0,
+      marginBottom: 0,
+    },
+    sectionTitle: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      marginTop: 10,
+      marginBottom: 12,
+      opacity: 0.55,
+    },
+    segRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 14,
+    },
+    segBtn: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    segBtnActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    segText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    segTextActive: { color: '#fff' },
     overlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.45)',
@@ -1569,13 +2598,13 @@ function getStyles(colors: any, isDark: boolean) {
     optionText: { fontSize: 15, color: colors.text, fontWeight: '500' },
     optionSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
     fieldLabel: {
-      fontSize: 12,
-      fontWeight: '700',
+      fontSize: 13,
+      fontWeight: '600',
       color: colors.textSecondary,
-      marginBottom: 6,
-      marginTop: 4,
+      marginBottom: 8,
+      letterSpacing: -0.1,
     },
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
     select: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1592,21 +2621,134 @@ function getStyles(colors: any, isDark: boolean) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      backgroundColor: colors.surface,
-      borderRadius: 14,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 16,
       padding: 16,
+      marginBottom: 10,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
-    targetTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-    targetSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+    targetIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    targetTitle: { fontSize: 15, fontWeight: '700', color: colors.text, letterSpacing: -0.2 },
+    targetSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2, fontWeight: '500' },
     attachBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
+      gap: 12,
+      borderRadius: 14,
       padding: 14,
-      marginBottom: 10,
+      marginBottom: 14,
     },
-    attachText: { flex: 1, color: colors.primary, fontWeight: '600' },
+    attachIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    attachText: { flex: 1, color: colors.primary, fontWeight: '600', fontSize: 14 },
+    itemCard: {
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    itemCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+      gap: 8,
+    },
+    itemCardTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    addMoreBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: isDark ? colors.border : 'rgba(15, 23, 42, 0.18)',
+      backgroundColor: isDark ? colors.card : colors.surface,
+      paddingVertical: 14,
+      marginBottom: 8,
+    },
+    addMoreText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    pickerOverlay: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    pickerSheet: {
+      maxHeight: '78%',
+      borderTopLeftRadius: 22,
+      borderTopRightRadius: 22,
+      paddingHorizontal: 16,
+      paddingBottom: 12,
+    },
+    pickerHandle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)',
+      marginTop: 10,
+      marginBottom: 6,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 8,
+      marginBottom: 4,
+    },
+    pickerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: -0.4,
+      flex: 1,
+    },
+    pickerItem: {
+      borderRadius: 14,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+    pickerItemLabel: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+      letterSpacing: -0.2,
+    },
+    pickerItemSub: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginTop: 3,
+      fontWeight: '500',
+    },
+    pickerEmpty: {
+      textAlign: 'center',
+      color: colors.textSecondary,
+      padding: 28,
+      fontWeight: '500',
+    },
   });
 }

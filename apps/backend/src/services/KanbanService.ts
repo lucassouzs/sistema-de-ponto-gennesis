@@ -749,6 +749,9 @@ export class KanbanService {
           isOwner: false,
         };
       }
+      if (await userIsAdministrator(userId)) {
+        return { canRead: true, canWrite: true, isOwner: false };
+      }
       return { canRead: false, canWrite: false, isOwner: false };
     }
 
@@ -920,6 +923,13 @@ export class KanbanService {
         });
         if (ownBoard) pushBoard(ownBoard);
       }
+
+      const customBoards = await prisma.kanbanBoard.findMany({
+        where: { isCustom: true },
+        orderBy: { departmentLabel: 'asc' },
+        select: boardSelect,
+      });
+      customBoards.forEach(pushBoard);
     } else {
       const ownBoard = await prisma.kanbanBoard.findUnique({
         where: { departmentKey: ownKey },
