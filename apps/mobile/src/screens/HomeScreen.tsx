@@ -8,18 +8,16 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
-import { LayoutGrid } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
 import UserAvatar from '../components/UserAvatar';
 import LiveActivitySection from '../components/LiveActivitySection';
 import HomeAgendaCard from '../components/HomeAgendaCard';
+import HomeTasksCard from '../components/HomeTasksCard';
 import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 import { usePermissions } from '../hooks/usePermissions';
-import { openFavoriteKanbanBoard } from '../lib/openFavoriteKanbanBoard';
 import type { RootStackParamList } from '../../App';
 
 function greetingPrefix() {
@@ -31,7 +29,6 @@ function greetingPrefix() {
 
 export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
@@ -42,10 +39,6 @@ export default function HomeScreen() {
 
   const goProfile = () => {
     (navigation as any).navigate('Profile');
-  };
-
-  const openTasks = () => {
-    void openFavoriteKanbanBoard(navigation as any, user?.id, queryClient);
   };
 
   const openLiveActivity = (item: LiveActivity) => {
@@ -87,24 +80,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.quickRow}>
-          <TouchableOpacity
-            style={styles.quickCard}
-            onPress={openTasks}
-            activeOpacity={0.75}
-          >
-            <View style={styles.quickIconWrap}>
-              <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />
-            </View>
-            <Text style={styles.quickTitle} numberOfLines={1}>
-              Tasks
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
 
         <HomeAgendaCard />
+
+        <HomeTasksCard />
 
         {canSeePncp ? <PncpCaptacoesCard /> : null}
       </ScrollView>
@@ -145,39 +125,5 @@ const getStyles = (colors: any, _isDark: boolean) =>
       height: 48,
       borderRadius: 24,
       overflow: 'hidden',
-    },
-    quickRow: {
-      flexDirection: 'row',
-      gap: 8,
-      marginBottom: 16,
-    },
-    quickCard: {
-      flex: 1,
-      maxWidth: '50%',
-      minWidth: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 16,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      paddingVertical: 16,
-      paddingHorizontal: 8,
-      gap: 10,
-    },
-    quickIconWrap: {
-      width: 42,
-      height: 42,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: `${colors.primary}14`,
-    },
-    quickTitle: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.text,
-      textAlign: 'center',
-      letterSpacing: -0.2,
     },
   });
