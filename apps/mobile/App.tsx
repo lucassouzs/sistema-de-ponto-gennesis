@@ -38,7 +38,7 @@ export type RootStackParamList = {
   Pncp: undefined;
   Agenda: undefined;
   KanbanBoards: undefined;
-  KanbanBoard: { departmentKey?: string };
+  KanbanBoard: { departmentKey?: string; title?: string };
   KanbanCard: { cardId: string; departmentKey?: string };
   DpRequests: undefined;
 };

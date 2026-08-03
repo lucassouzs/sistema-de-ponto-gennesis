@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 import { Droplets, CalendarCheck, Calendar, LayoutGrid, MailPlus } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -16,6 +18,8 @@ import LiveActivitySection from '../components/LiveActivitySection';
 import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 import { usePermissions } from '../hooks/usePermissions';
+import { openFavoriteKanbanBoard } from '../lib/openFavoriteKanbanBoard';
+import type { RootStackParamList } from '../../App';
 
 function greetingPrefix() {
   const hour = new Date().getHours();
@@ -25,7 +29,8 @@ function greetingPrefix() {
 }
 
 export default function HomeScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const { canSeeCombustivel, canSeeReservas, canSeePncp, canSeeDpRequests } = usePermissions();
@@ -36,19 +41,23 @@ export default function HomeScreen() {
   const showHero = canSeeCombustivel || canSeeReservas;
 
   const goTab = (name: 'Combustivel' | 'Reservas') => {
-    navigation.navigate(name);
+    (navigation as any).navigate(name);
   };
 
   const goProfile = () => {
-    navigation.navigate('Profile');
+    (navigation as any).navigate('Profile');
+  };
+
+  const openTasks = () => {
+    void openFavoriteKanbanBoard(navigation as any, user?.id, queryClient);
   };
 
   const openLiveActivity = (item: LiveActivity) => {
     if (item.kind === 'fuel') {
-      if (canSeeCombustivel) navigation.navigate('Combustivel');
+      if (canSeeCombustivel) (navigation as any).navigate('Combustivel');
       return;
     }
-    if (canSeeReservas) navigation.navigate('Reservas');
+    if (canSeeReservas) (navigation as any).navigate('Reservas');
   };
 
   return (
@@ -96,7 +105,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.quickCard}
-            onPress={() => navigation.navigate('KanbanBoard', {})}
+            onPress={openTasks}
             activeOpacity={0.8}
           >
             <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />

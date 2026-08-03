@@ -33,6 +33,19 @@ export type KanbanColumn = {
   limit?: number;
 };
 
+export type KanbanLabelPreset = { color: string; name: string };
+
+export const DEFAULT_KANBAN_LABEL_PRESETS: KanbanLabelPreset[] = [
+  { color: '#FF78CB', name: 'DP/RH' },
+  { color: '#00C2E0', name: 'Sistema' },
+  { color: '#FF9F1A', name: 'Engenharia' },
+  { color: '#F2D600', name: 'Suprimentos' },
+  { color: '#C377E0', name: 'Contratos e Licitações' },
+  { color: '#51E898', name: 'Projetos' },
+  { color: '#EB5A46', name: 'Diretoria/Auditoria' },
+  { color: '#344563', name: 'Geral' },
+];
+
 export type KanbanBoard = {
   id: string;
   name: string;
@@ -42,6 +55,7 @@ export type KanbanBoard = {
   isCustom?: boolean;
   isOwner?: boolean;
   canWrite?: boolean;
+  labelPresets?: KanbanLabelPreset[];
   columns: KanbanColumn[];
 };
 
@@ -74,12 +88,29 @@ export type KanbanCardComment = {
   author: { id: string; name: string };
 };
 
+export type KanbanCardAttachment = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  createdAt: string;
+  uploader?: { id: string; name: string };
+};
+
+export const KANBAN_LINK_MIME_TYPE = 'text/x-kanban-link';
+
+export function isKanbanLinkAttachment(mimeType: string): boolean {
+  return mimeType === KANBAN_LINK_MIME_TYPE;
+}
+
 export type KanbanCardDetail = KanbanCard & {
   columnId: string;
   columnTitle: string;
   columnColor: string;
   checklistItems: KanbanChecklistItem[];
   commentsList: KanbanCardComment[];
+  attachmentsList: KanbanCardAttachment[];
 };
 
 export async function fetchKanbanBoards(): Promise<KanbanBoardSummary[]> {
@@ -97,7 +128,14 @@ export async function fetchKanbanBoard(departmentKey?: string): Promise<KanbanBo
     ? `?departmentKey=${encodeURIComponent(departmentKey)}`
     : '';
   const res = await api.get(`/api/kanban/board${q}`);
-  return readApiData<KanbanBoard>(res);
+  const data = await readApiData<KanbanBoard>(res);
+  return {
+    ...data,
+    labelPresets:
+      Array.isArray(data.labelPresets) && data.labelPresets.length > 0
+        ? data.labelPresets
+        : [...DEFAULT_KANBAN_LABEL_PRESETS],
+  };
 }
 
 export async function createKanbanCard(payload: {
@@ -128,6 +166,9 @@ export async function updateKanbanCard(
     description?: string;
     priority?: Priority;
     labels?: KanbanCardLabel[];
+    startDate?: string | null;
+    endDate?: string | null;
+    checklistEnabled?: boolean;
     completedAt?: string | null;
     archivedAt?: string | null;
   },
@@ -159,6 +200,7 @@ export async function fetchKanbanCard(id: string): Promise<KanbanCardDetail> {
     ...data,
     checklistItems: data.checklistItems ?? [],
     commentsList: data.commentsList ?? [],
+    attachmentsList: data.attachmentsList ?? [],
     labels: data.labels ?? [],
   };
 }
@@ -187,6 +229,35 @@ export async function deleteChecklistItem(id: string): Promise<void> {
 export async function createKanbanComment(cardId: string, content: string) {
   const res = await api.post(`/api/kanban/cards/${cardId}/comments`, { content });
   return readApiData<KanbanCardComment>(res);
+}
+
+export async function uploadKanbanAttachments(
+  cardId: string,
+  files: Array<{ uri: string; name: string; type: string }>,
+): Promise<KanbanCardDetail> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append('attachments', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
+    } as any);
+  }
+  const res = await api.post(`/api/kanban/cards/${cardId}/attachments`, form);
+  return readApiData<KanbanCardDetail>(res);
+}
+
+export async function addKanbanLinkAttachment(
+  cardId: string,
+  payload: { url: string; displayName?: string },
+): Promise<KanbanCardDetail> {
+  const res = await api.post(`/api/kanban/cards/${cardId}/attachments/link`, payload);
+  return readApiData<KanbanCardDetail>(res);
+}
+
+export async function deleteKanbanAttachment(id: string): Promise<KanbanCardDetail> {
+  const res = await api.delete(`/api/kanban/attachments/${id}`);
+  return readApiData<KanbanCardDetail>(res);
 }
 
 export function isKanbanCompletedColumn(title: string): boolean {

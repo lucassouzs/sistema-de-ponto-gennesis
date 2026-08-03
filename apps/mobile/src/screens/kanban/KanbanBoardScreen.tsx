@@ -263,6 +263,7 @@ export default function KanbanBoardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'KanbanBoard'>>();
   const paramKey = route.params?.departmentKey;
+  const paramTitle = route.params?.title;
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const [boardAreaH, setBoardAreaH] = useState(0);
@@ -274,6 +275,7 @@ export default function KanbanBoardScreen() {
   const queryClient = useQueryClient();
 
   const [departmentKey, setDepartmentKey] = useState<string | undefined>(paramKey);
+  const [headerTitle, setHeaderTitle] = useState<string | undefined>(paramTitle);
   const [resolvingDefault, setResolvingDefault] = useState(!paramKey);
 
   const [addColId, setAddColId] = useState<string | null>(null);
@@ -287,6 +289,7 @@ export default function KanbanBoardScreen() {
   useEffect(() => {
     if (paramKey) {
       setDepartmentKey(paramKey);
+      if (paramTitle) setHeaderTitle(paramTitle);
       setResolvingDefault(false);
       return;
     }
@@ -296,8 +299,14 @@ export default function KanbanBoardScreen() {
       try {
         const boards = await fetchKanbanBoards();
         const key = await resolveKanbanDefaultBoard(user?.id, boards);
+        const name = boards.find((b) => b.departmentKey === key)?.department;
         if (!cancelled) {
           setDepartmentKey(key ?? undefined);
+          if (name) setHeaderTitle(name);
+          navigation.setParams({
+            departmentKey: key ?? undefined,
+            title: name || undefined,
+          });
         }
       } catch {
         if (!cancelled) setDepartmentKey(undefined);
@@ -308,7 +317,7 @@ export default function KanbanBoardScreen() {
     return () => {
       cancelled = true;
     };
-  }, [paramKey, user?.id]);
+  }, [paramKey, paramTitle, user?.id, navigation]);
 
   const boardQuery = useQuery({
     queryKey: ['kanban-board', departmentKey ?? 'own'],
@@ -318,6 +327,7 @@ export default function KanbanBoardScreen() {
 
   const board = boardQuery.data;
   const readOnly = board?.canWrite === false;
+  const displayTitle = board?.department || headerTitle;
 
   const openCard = (card: KanbanCard) => {
     navigation.navigate('KanbanCard', {
@@ -376,7 +386,7 @@ export default function KanbanBoardScreen() {
     <View style={styles.safe}>
       <AppHeader
         showBack
-        title={board?.department || 'Tasks'}
+        title={displayTitle}
         onBack={() => navigation.goBack()}
         rightAction={
           <TouchableOpacity
