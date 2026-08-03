@@ -606,9 +606,8 @@ export class KanbanController {
       if (!userId) return;
       const { title } = req.body;
       if (!title?.trim()) return next(createError('Título da tarefa é obrigatório', 400));
-      const item = await kanbanService.createChecklistItem(userId, req.params.cardId, title);
-      const card = await kanbanService.getCardById(userId, req.params.cardId);
-      res.status(201).json({ success: true, data: { item, card } });
+      const data = await kanbanService.createChecklistItem(userId, req.params.cardId, title);
+      res.status(201).json({ success: true, data });
     } catch (error) {
       handleKanbanError(error, next);
     }
@@ -619,14 +618,13 @@ export class KanbanController {
       const userId = requireUserId(req, next);
       if (!userId) return;
       const { title, isDone, assigneeUserId, dueDate } = req.body;
-      const item = await kanbanService.updateChecklistItem(userId, req.params.id, {
+      const data = await kanbanService.updateChecklistItem(userId, req.params.id, {
         title,
         isDone,
         assigneeUserId: assigneeUserId !== undefined ? assigneeUserId : undefined,
         dueDate: dueDate !== undefined ? dueDate : undefined,
       });
-      const card = await kanbanService.getCardById(userId, item.cardId);
-      res.json({ success: true, data: { item, card } });
+      res.json({ success: true, data });
     } catch (error: unknown) {
       if ((error as { code?: string })?.code === 'P2025') {
         return next(createError('Tarefa não encontrada', 404));

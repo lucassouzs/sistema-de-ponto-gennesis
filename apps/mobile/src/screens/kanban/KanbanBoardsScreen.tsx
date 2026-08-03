@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,12 @@ import { LayoutGrid, Plus, Star, X } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../../components/AppHeader';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import {
+  resolveKanbanDefaultBoard,
+  saveKanbanDefaultBoard,
+} from '../../lib/kanbanDefaultBoard';
 import {
   createKanbanBoard,
   fetchKanbanBoards,
@@ -28,12 +33,14 @@ import type { RootStackParamList } from '../../../App';
 export default function KanbanBoardsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, isDark } = useTheme();
+  const { user } = useAuth();
   const { isAdministrator } = usePermissions();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [defaultKey, setDefaultKey] = useState<string | null>(null);
   const canCreateBoard = !isAdministrator;
 
   const boardsQuery = useQuery({
@@ -43,8 +50,30 @@ export default function KanbanBoardsScreen() {
 
   const boards = boardsQuery.data ?? [];
 
+  useEffect(() => {
+    if (!boards.length) {
+      setDefaultKey(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const key = await resolveKanbanDefaultBoard(user?.id, boards);
+      if (!cancelled) setDefaultKey(key);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [boards, user?.id]);
+
   const openBoard = (board: KanbanBoardSummary) => {
     navigation.navigate('KanbanBoard', { departmentKey: board.departmentKey });
+  };
+
+  const setAsDefault = async (board: KanbanBoardSummary) => {
+    if (!user?.id) return;
+    await saveKanbanDefaultBoard(user.id, board.departmentKey);
+    setDefaultKey(board.departmentKey);
+    Toast.show({ type: 'success', text1: 'Quadro favorito definido' });
   };
 
   const create = async () => {
@@ -77,7 +106,7 @@ export default function KanbanBoardsScreen() {
 
   return (
     <View style={styles.safe}>
-      <AppHeader showBack title="Tasks" onBack={() => navigation.goBack()} />
+      <AppHeader showBack title="Quadros" onBack={() => navigation.goBack()} />
 
       <View style={styles.toolbar}>
         <Text style={styles.subtitle}>Seus quadros</Text>
@@ -108,36 +137,55 @@ export default function KanbanBoardsScreen() {
               : 'Nenhum quadro de setor disponível.'}
           </Text>
         ) : (
-          boards.map((board) => (
-            <TouchableOpacity
-              key={board.id || board.departmentKey}
-              style={styles.card}
-              onPress={() => openBoard(board)}
-              activeOpacity={0.75}
-            >
-              <View style={styles.cardIcon}>
-                <LayoutGrid size={20} color={colors.primary} strokeWidth={2} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  {board.department}
-                </Text>
-                <Text style={styles.cardMeta}>
-                  {board.columnCount} coluna{board.columnCount === 1 ? '' : 's'}
-                  {board.isOwnDepartment ? ' · Seu setor' : ''}
-                  {board.sharedWithMe ? ' · Compartilhado' : ''}
-                </Text>
-              </View>
-              {board.isOwnDepartment ? (
-                <Star size={16} color={colors.warning} fill={colors.warning} />
-              ) : null}
-            </TouchableOpacity>
-          ))
+          boards.map((board) => {
+            const isFavorite = defaultKey === board.departmentKey;
+            return (
+              <TouchableOpacity
+                key={board.id || board.departmentKey}
+                style={styles.card}
+                onPress={() => openBoard(board)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.cardIcon}>
+                  <LayoutGrid size={20} color={colors.primary} strokeWidth={2} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {board.department}
+                  </Text>
+                  <Text style={styles.cardMeta}>
+                    {board.columnCount} coluna{board.columnCount === 1 ? '' : 's'}
+                    {board.isOwnDepartment ? ' · Seu setor' : ''}
+                    {board.sharedWithMe ? ' · Compartilhado' : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => void setAsDefault(board)}
+                  hitSlop={10}
+                  accessibilityLabel={
+                    isFavorite ? 'Quadro favorito' : 'Definir como favorito'
+                  }
+                >
+                  <Star
+                    size={18}
+                    color={isFavorite ? colors.warning : colors.textSecondary}
+                    fill={isFavorite ? colors.warning : 'transparent'}
+                    strokeWidth={2}
+                  />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            );
+          })
         )}
       </ScrollView>
 
       {canCreateBoard ? (
-        <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
+        <Modal
+          visible={createOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCreateOpen(false)}
+        >
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
@@ -154,7 +202,11 @@ export default function KanbanBoardsScreen() {
                 style={styles.input}
                 autoFocus
               />
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => void create()} disabled={saving}>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => void create()}
+                disabled={saving}
+              >
                 {saving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (

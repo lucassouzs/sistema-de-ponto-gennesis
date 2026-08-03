@@ -96,7 +96,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.quickCard}
-            onPress={() => navigation.navigate('KanbanBoards')}
+            onPress={() => navigation.navigate('KanbanBoard', {})}
             activeOpacity={0.8}
           >
             <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />

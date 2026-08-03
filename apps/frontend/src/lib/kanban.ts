@@ -811,6 +811,7 @@ export interface KanbanCardDetail extends KanbanCard {
 export function normalizeKanbanCardDetail(data: KanbanCardDetail): KanbanCardDetail {
   return {
     ...data,
+    commentsList: data.commentsList ?? [],
     attachmentsList: data.attachmentsList ?? [],
     checklistItems: (data.checklistItems ?? []).map((item) => ({
       ...item,

@@ -15,8 +15,10 @@ import Menu from './Menu';
 type AppHeaderProps = {
   showBack?: boolean;
   onBack?: () => void;
-  /** Título ao lado do voltar (páginas fora da tab bar) */
+  /** Título centralizado (páginas fora da tab bar) */
   title?: string;
+  /** Substitui o sino de notificações (ex.: trocar quadro) */
+  rightAction?: React.ReactNode;
 };
 
 function HeaderIconButton({
@@ -59,7 +61,12 @@ function NotificationBell({ iconColor }: { iconColor: string }) {
   );
 }
 
-export default function AppHeader({ showBack = false, onBack, title }: AppHeaderProps) {
+export default function AppHeader({
+  showBack = false,
+  onBack,
+  title,
+  rightAction,
+}: AppHeaderProps) {
   const { colors, isDark } = useTheme();
   const [showMenu, setShowMenu] = useState(false);
 
@@ -69,25 +76,32 @@ export default function AppHeader({ showBack = false, onBack, title }: AppHeader
     return (
       <SafeAreaView edges={['top']} style={styles.topSafe}>
         <View style={styles.stackHeader}>
-          <TouchableOpacity
-            onPress={onBack}
-            hitSlop={8}
-            accessibilityLabel="Voltar"
-            style={styles.iconBtn}
-            activeOpacity={0.7}
-          >
-            <ArrowLeft size={24} color={iconColor} strokeWidth={2.2} />
-          </TouchableOpacity>
+          <View style={styles.side}>
+            <TouchableOpacity
+              onPress={onBack}
+              hitSlop={8}
+              accessibilityLabel="Voltar"
+              style={styles.iconBtn}
+              activeOpacity={0.7}
+            >
+              <ArrowLeft size={24} color={iconColor} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
 
-          {title ? (
-            <Text style={[styles.stackTitle, { color: colors.text }]} numberOfLines={1}>
-              {title}
-            </Text>
-          ) : (
-            <View style={styles.stackTitleSpacer} />
-          )}
+          <View style={styles.center} pointerEvents="none">
+            {title ? (
+              <Text
+                style={[styles.stackTitle, { color: colors.text }]}
+                numberOfLines={1}
+              >
+                {title}
+              </Text>
+            ) : null}
+          </View>
 
-          <NotificationBell iconColor={iconColor} />
+          <View style={[styles.side, styles.sideRight]}>
+            {rightAction ?? <NotificationBell iconColor={iconColor} />}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -150,7 +164,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 8,
     minHeight: 52,
-    gap: 4,
   },
   iconBtn: {
     width: 44,
@@ -159,13 +172,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stackTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     letterSpacing: -0.3,
-  },
-  stackTitleSpacer: {
-    flex: 1,
+    textAlign: 'center',
   },
   side: {
     width: 48,
@@ -178,6 +188,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
   },
   logo: {
     width: 168,

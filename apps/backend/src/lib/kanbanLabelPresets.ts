@@ -133,13 +133,8 @@ export function validateCardLabelsForBoard(
   const normalized = normalizeCardLabelsAgainstPresets(labels, presets);
   const allowed = new Set(presets.map((p) => p.color.toLowerCase()));
 
-  for (const label of normalized) {
-    if (!allowed.has(label.color.toLowerCase())) {
-      throw new Error('Etiqueta não permitida neste setor');
-    }
-  }
-
-  return normalized;
+  // Cores fora do setor são ignoradas (não derruba o save do card).
+  return normalized.filter((label) => allowed.has(label.color.toLowerCase()));
 }
 
 export type KanbanLabelColorRemap = { from: string; to: string };

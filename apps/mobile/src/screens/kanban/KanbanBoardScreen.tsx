@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,16 +20,20 @@ import {
   Paperclip,
   ListChecks,
   Calendar,
+  LayoutGrid,
   X,
 } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../../components/AppHeader';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
+import { resolveKanbanDefaultBoard } from '../../lib/kanbanDefaultBoard';
 import {
   createKanbanCard,
   createKanbanColumn,
   fetchKanbanBoard,
+  fetchKanbanBoards,
   type KanbanCard,
   type KanbanColumn,
   type Priority,
@@ -258,7 +262,8 @@ function BoardCard({
 export default function KanbanBoardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'KanbanBoard'>>();
-  const departmentKey = route.params?.departmentKey;
+  const paramKey = route.params?.departmentKey;
+  const { user } = useAuth();
   const { colors, isDark } = useTheme();
   const [boardAreaH, setBoardAreaH] = useState(0);
   const columnHeight = Math.max(0, boardAreaH - BOARD_GAP * 2);
@@ -268,6 +273,9 @@ export default function KanbanBoardScreen() {
   );
   const queryClient = useQueryClient();
 
+  const [departmentKey, setDepartmentKey] = useState<string | undefined>(paramKey);
+  const [resolvingDefault, setResolvingDefault] = useState(!paramKey);
+
   const [addColId, setAddColId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [saving, setSaving] = useState(false);
@@ -276,9 +284,36 @@ export default function KanbanBoardScreen() {
   const [newColumnColor, setNewColumnColor] = useState(COLUMN_COLORS[0]);
   const [savingColumn, setSavingColumn] = useState(false);
 
+  useEffect(() => {
+    if (paramKey) {
+      setDepartmentKey(paramKey);
+      setResolvingDefault(false);
+      return;
+    }
+    let cancelled = false;
+    setResolvingDefault(true);
+    void (async () => {
+      try {
+        const boards = await fetchKanbanBoards();
+        const key = await resolveKanbanDefaultBoard(user?.id, boards);
+        if (!cancelled) {
+          setDepartmentKey(key ?? undefined);
+        }
+      } catch {
+        if (!cancelled) setDepartmentKey(undefined);
+      } finally {
+        if (!cancelled) setResolvingDefault(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paramKey, user?.id]);
+
   const boardQuery = useQuery({
     queryKey: ['kanban-board', departmentKey ?? 'own'],
     queryFn: () => fetchKanbanBoard(departmentKey),
+    enabled: !resolvingDefault,
   });
 
   const board = boardQuery.data;
@@ -287,7 +322,7 @@ export default function KanbanBoardScreen() {
   const openCard = (card: KanbanCard) => {
     navigation.navigate('KanbanCard', {
       cardId: card.id,
-      departmentKey: board?.departmentKey,
+      departmentKey: board?.departmentKey ?? departmentKey,
     });
   };
 
@@ -343,9 +378,20 @@ export default function KanbanBoardScreen() {
         showBack
         title={board?.department || 'Tasks'}
         onBack={() => navigation.goBack()}
+        rightAction={
+          <TouchableOpacity
+            onPress={() => navigation.navigate('KanbanBoards')}
+            hitSlop={8}
+            accessibilityLabel="Trocar de quadro"
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
+            activeOpacity={0.7}
+          >
+            <LayoutGrid size={22} color={colors.text} strokeWidth={2.1} />
+          </TouchableOpacity>
+        }
       />
 
-      {boardQuery.isLoading && !board ? (
+      {(resolvingDefault || (boardQuery.isLoading && !board)) ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <View
@@ -634,11 +680,8 @@ function getStyles(colors: any, isDark: boolean, columnHeight: number) {
       borderRadius: 16,
       padding: 14,
       marginBottom: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: isDark ? 0.25 : 0.08,
-      shadowRadius: 3,
-      elevation: 2,
+      borderWidth: StyleSheet.hairlineWidth * 2,
+      borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
     },
     labels: {
       flexDirection: 'row',

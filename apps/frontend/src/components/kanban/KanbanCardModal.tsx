@@ -541,15 +541,21 @@ export function KanbanCardModal({
             pendingChecklistCreatesRef.current.has(item.id) &&
             !pendingChecklistCreatesRef.current.get(item.id)?.cancelled,
         ) ?? [];
+      const base: KanbanCardDetail = {
+        ...detail,
+        // Respostas leves de checklist não trazem comentários/anexos — preserva o cache.
+        commentsList: detail.commentsList ?? local?.commentsList ?? [],
+        attachmentsList: detail.attachmentsList ?? local?.attachmentsList ?? [],
+      };
       const merged: KanbanCardDetail =
         pendingOptimistic.length === 0
-          ? detail
+          ? base
           : (() => {
-              const checklistItems = [...detail.checklistItems, ...pendingOptimistic];
+              const checklistItems = [...base.checklistItems, ...pendingOptimistic];
               const totalTasks = checklistItems.length;
               const completedTasks = checklistItems.filter((i) => i.isDone).length;
               return {
-                ...detail,
+                ...base,
                 checklistItems,
                 totalTasks,
                 completedTasks,
@@ -701,21 +707,25 @@ export function KanbanCardModal({
     void (async () => {
       try {
         const updated = await updateKanbanCard(cardId, buildMetaApiPayload(partial), {
-          timeout: 20_000,
+          timeout: 45_000,
         });
         // Resposta antiga não pode sobrescrever save mais novo.
         if (saveGen !== metaSaveGenRef.current) return;
         if (titleGen != null && titleGen !== titleSaveGenRef.current) {
-          syncCardFromApi(
-            {
-              ...updated,
-              title: titleLiveRef.current,
-              ...(labelsMutationInFlight.current > 0
-                ? { labels: labelsLiveRef.current }
-                : {}),
-            },
-            targetColumnId,
-          );
+          try {
+            syncCardFromApi(
+              {
+                ...updated,
+                title: titleLiveRef.current,
+                ...(labelsMutationInFlight.current > 0
+                  ? { labels: labelsLiveRef.current }
+                  : {}),
+              },
+              targetColumnId,
+            );
+          } catch {
+            /* sync local não deve virar toast de save */
+          }
           return;
         }
         if (partial.title !== undefined) {
@@ -729,8 +739,12 @@ export function KanbanCardModal({
           labelsLiveRef.current = Array.isArray(updated.labels) ? updated.labels : [];
           setLabels(labelsLiveRef.current);
         }
-        syncCardFromApi(toSync, targetColumnId);
-      } catch {
+        try {
+          syncCardFromApi(toSync, targetColumnId);
+        } catch {
+          /* sync local não deve virar toast de save */
+        }
+      } catch (err: unknown) {
         if (saveGen !== metaSaveGenRef.current) return;
         if (titleGen != null && titleGen !== titleSaveGenRef.current) return;
         const snapshot = metaSaveSnapshotRef.current;
@@ -745,7 +759,19 @@ export function KanbanCardModal({
           labelsLiveRef.current = rolled;
           setLabels(rolled);
         }
-        toast.error('Erro ao salvar alterações');
+        if (partial.checklistEnabled !== undefined) {
+          setChecklistEnabled(snapshot?.board.checklistEnabled ?? false);
+        }
+        const axiosErr = err as {
+          code?: string;
+          response?: { data?: { message?: string } };
+        };
+        const apiMsg =
+          axiosErr.response?.data?.message ||
+          (axiosErr.code === 'ECONNABORTED'
+            ? 'Tempo esgotado ao salvar. Tente de novo.'
+            : null);
+        toast.error(apiMsg || 'Erro ao salvar alterações');
       } finally {
         if (touchesLabels) {
           labelsMutationInFlight.current = Math.max(0, labelsMutationInFlight.current - 1);
@@ -763,10 +789,29 @@ export function KanbanCardModal({
     }
     if (!isDetail || !cardId) return;
     const next = nextTitle;
-    if (next === lastSavedTitleRef.current) return;
+    const trimmed = next.trim();
+    const fallback =
+      lastSavedTitleRef.current?.trim() || card?.title?.trim() || '';
+
+    // Título vazio não é permitido: restaura o último nome salvo.
+    if (!trimmed) {
+      if (fallback && next !== fallback) {
+        titleLiveRef.current = fallback;
+        setTitle(fallback);
+        if (card) {
+          onBoardCardSync?.(
+            kanbanDetailToBoardCard({ ...card, title: fallback }),
+            columnId,
+          );
+        }
+      }
+      return;
+    }
+
+    if (trimmed === lastSavedTitleRef.current) return;
     const titleGen = ++titleSaveGenRef.current;
-    lastSavedTitleRef.current = next;
-    saveMeta({ title: next }, { titleGen });
+    lastSavedTitleRef.current = trimmed;
+    saveMeta({ title: trimmed }, { titleGen });
   }
 
   function scheduleTitleSave(nextTitle: string) {
@@ -1607,7 +1652,19 @@ export function KanbanCardModal({
                     const next = !checklistEnabled;
                     setChecklistEnabled(next);
                     if (!isDetail || !cardId) return;
-                    saveMeta({ checklistEnabled: next });
+                    // Abrir painel é só UI — o backend liga checklist ao criar a 1ª tarefa.
+                    // Fechar (desligar) precisa persistir para o quadro refletir.
+                    if (next) {
+                      const local = buildLocalBoardCard();
+                      if (local) {
+                        onBoardCardSync?.(
+                          { ...local, checklistEnabled: true },
+                          columnId,
+                        );
+                      }
+                      return;
+                    }
+                    saveMeta({ checklistEnabled: false });
                   }}
                 >
                   Tarefas

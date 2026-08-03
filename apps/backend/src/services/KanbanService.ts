@@ -1758,10 +1758,11 @@ export class KanbanService {
     };
 
     if (!hasOrderChange) {
+      // Meta simples: include leve (o frontend tipa como KanbanCard do board).
       const card = await prisma.kanbanCard.update({
         where: { id },
         data: baseUpdateData,
-        include: cardInclude,
+        include: boardListCardInclude,
       });
       return formatCard(card);
     }
@@ -2222,7 +2223,37 @@ export class KanbanService {
       where: { id: cardId },
       data: { checklistEnabled: true },
     });
-    return formatChecklistItem(item);
+    const card = await this.getCardChecklistSnapshot(cardId);
+    return { item: formatChecklistItem(item), card };
+  }
+
+  /**
+   * Snapshot leve do card após mutação de checklist — sem comments/attachments.
+   * O frontend preserva comentários/anexos do cache local.
+   */
+  private async getCardChecklistSnapshot(cardId: string) {
+    const card = await prisma.kanbanCard.findUnique({
+      where: { id: cardId },
+      include: {
+        ...boardListCardInclude,
+        checklistItems: {
+          orderBy: { position: 'asc' as const },
+          include: { assignee: { select: memberUserSelect } },
+        },
+        column: { select: { id: true, title: true, color: true } },
+      },
+    });
+    if (!card) throw new Error('Card não encontrado');
+    const base = formatCard(card);
+    return {
+      ...base,
+      columnId: card.columnId,
+      columnTitle: card.column.title,
+      columnColor: card.column.color,
+      checklistItems: card.checklistItems.map((item) => formatChecklistItem(item)),
+      commentsList: [] as Array<unknown>,
+      attachmentsList: [] as Array<unknown>,
+    };
   }
 
   async updateChecklistItem(
@@ -2253,7 +2284,8 @@ export class KanbanService {
       include: { assignee: { select: memberUserSelect } },
     });
     await syncCardTaskCounts(item.cardId);
-    return formatChecklistItem(item);
+    const card = await this.getCardChecklistSnapshot(item.cardId);
+    return { item: formatChecklistItem(item), card };
   }
 
   async deleteChecklistItem(userId: string, id: string) {

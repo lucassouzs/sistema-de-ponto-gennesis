@@ -110,7 +110,7 @@ export default function Menu({ visible, onClose }: MenuProps) {
   const links = [
     { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
     { key: 'agenda', label: 'Agenda', icon: Calendar, onPress: () => go('Agenda') },
-    { key: 'tasks', label: 'Tasks', icon: LayoutGrid, onPress: () => go('KanbanBoards') },
+    { key: 'tasks', label: 'Tasks', icon: LayoutGrid, onPress: () => go('KanbanBoard') },
     ...(canSeeDpRequests
       ? [
           {
