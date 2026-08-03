@@ -44,7 +44,7 @@ const SHORT_LABELS: Record<string, string> = {
   Vehicle: 'Reservas',
 };
 
-const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle']);
+const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle', 'DpRequests']);
 const SLIDE_EASE = Easing.bezier(0.32, 0.72, 0, 1);
 const FAB_SHOW_EASE = Easing.bezier(0.22, 1, 0.36, 1);
 const FAB_HIDE_EASE = Easing.bezier(0.4, 0, 0.7, 0.2);
@@ -344,8 +344,16 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
 
   const handleFabPress = () => {
     const name = activeRoute as FabBarTabName;
-    if (name === 'Combustivel' || name === 'Reservas' || name === 'Fuel' || name === 'Vehicle') {
-      emitFabBarPress(name === 'Fuel' ? 'Combustivel' : name === 'Vehicle' ? 'Reservas' : name);
+    if (
+      name === 'Combustivel' ||
+      name === 'Reservas' ||
+      name === 'Fuel' ||
+      name === 'Vehicle' ||
+      name === 'DpRequests'
+    ) {
+      emitFabBarPress(
+        name === 'Fuel' ? 'Combustivel' : name === 'Vehicle' ? 'Reservas' : name,
+      );
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
+import { StatusBar } from 'expo-status-bar';
 import {
   Plus,
   Users,
@@ -25,12 +26,14 @@ import {
   ChevronDown,
   Filter,
   Paperclip,
+  Search,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { onFabBarPress } from '../navigation/fabBarEvents';
 import {
   ADM_SIMPLE_TYPES,
   createDpRequest,
@@ -236,12 +239,27 @@ export default function DpRequestsScreen() {
       if (destFilter === 'DP' && isAdmTstRequestType(r.requestType)) return false;
       if (destFilter === 'ADM_TST' && !isAdmTstRequestType(r.requestType)) return false;
       if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-      const q = search.trim();
+      const q = search.trim().toLowerCase();
       if (!q) return true;
-      if (r.displayNumber != null && String(r.displayNumber) === q) return true;
-      return r.id.toLowerCase() === q.toLowerCase();
+      if (r.displayNumber != null && String(r.displayNumber).includes(q)) return true;
+      if (r.id.toLowerCase().includes(q)) return true;
+      const typeLabel = (DP_TYPE_LABELS[r.requestType] || r.requestType).toLowerCase();
+      if (typeLabel.includes(q)) return true;
+      if ((r.contract?.name || '').toLowerCase().includes(q)) return true;
+      if ((STATUS_LABELS[r.status] || '').toLowerCase().includes(q)) return true;
+      return false;
     });
   }, [list, destFilter, statusFilter, search]);
+
+  const filterChips = useMemo(
+    () =>
+      [
+        { key: 'all' as const, label: 'Todas', count: stats.total },
+        { key: 'DP' as const, label: 'DP', count: stats.dp },
+        { key: 'ADM_TST' as const, label: 'ADM/TST', count: stats.admTst },
+      ] as const,
+    [stats],
+  );
 
   const typeOptions = useMemo(() => {
     if (createTarget === 'ADM_TST') {
@@ -304,6 +322,11 @@ export default function DpRequestsScreen() {
     setCreateTarget(null);
     setCreateOpen(true);
   };
+
+  useEffect(() => {
+    const sub = onFabBarPress('DpRequests', openCreate);
+    return () => sub.remove();
+  }, []);
 
   const onPickContract = (c: DpEligibleContract) => {
     setContractId(c.id);
@@ -598,23 +621,25 @@ export default function DpRequestsScreen() {
       .slice(0, 80);
   }, [employees, empSearch]);
 
-  const listTitle =
-    destFilter === 'DP'
-      ? 'Departamento Pessoal'
-      : destFilter === 'ADM_TST'
-        ? 'ADM/TST'
-        : 'Todas as solicitações';
-
   return (
-    <View style={styles.safe}>
+    <View style={styles.safeArea}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader
         showBack={!isTabScreen}
-        title={!isTabScreen ? 'Solicitações DP/ADM/TST' : undefined}
+        title={!isTabScreen ? 'Solicitações' : undefined}
         onBack={() => navigation.goBack()}
+        rightAction={
+          !isTabScreen ? (
+            <TouchableOpacity onPress={openCreate} hitSlop={8} accessibilityLabel="Nova">
+              <Plus size={22} color={colors.text} strokeWidth={2.4} />
+            </TouchableOpacity>
+          ) : undefined
+        }
       />
 
       <ScrollView
-        contentContainerStyle={[styles.pad, isTabScreen && { paddingBottom: 110 }]}
+        style={styles.container}
+        contentContainerStyle={[styles.scrollContent, isTabScreen && { paddingBottom: 110 }]}
         refreshControl={
           <RefreshControl
             refreshing={listQuery.isRefetching}
@@ -623,113 +648,134 @@ export default function DpRequestsScreen() {
           />
         }
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {isTabScreen ? (
-          <>
-            <Text style={styles.pageTitle}>Solicitações DP/ADM/TST</Text>
-            <Text style={styles.subtitle}>
-              Crie e acompanhe solicitações ao DP e ADM/TST.
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.subtitle}>
-            Crie e acompanhe solicitações ao DP e ADM/TST.
-          </Text>
-        )}
+          <Text style={styles.pageTitle}>Solicitações</Text>
+        ) : null}
+        <Text style={styles.pageSubtitle}>
+          {filtered.length}{' '}
+          {filtered.length === 1 ? 'solicitação' : 'solicitações'}
+          {statusFilter !== 'all' ? ` · ${STATUS_LABELS[statusFilter]}` : ''}
+        </Text>
 
-        <View style={styles.statRow}>
-          {(
-            [
-              { key: 'all' as const, label: 'Registros', count: stats.total, Icon: MailPlus },
-              { key: 'DP' as const, label: 'DP', count: stats.dp, Icon: Users },
-              { key: 'ADM_TST' as const, label: 'ADM/TST', count: stats.admTst, Icon: ClipboardList },
-            ] as const
-          ).map((card) => {
-            const active = destFilter === card.key;
-            const Icon = card.Icon;
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
+        >
+          {filterChips.map(({ key, label, count }) => {
+            const active = destFilter === key;
             return (
               <TouchableOpacity
-                key={card.key}
-                style={[styles.statCard, active && styles.statCardActive]}
-                onPress={() => setDestFilter(card.key)}
-                activeOpacity={0.75}
+                key={key}
+                onPress={() => setDestFilter(key)}
+                style={[styles.filterChip, active && styles.filterChipActive]}
+                activeOpacity={0.7}
               >
-                <Icon size={16} color={active ? '#fff' : colors.primary} />
-                <Text style={[styles.statCount, active && { color: '#fff' }]}>{card.count}</Text>
-                <Text style={[styles.statLabel, active && { color: 'rgba(255,255,255,0.9)' }]}>
-                  {card.label}
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
+                  {label}
+                </Text>
+                <Text style={[styles.filterChipCount, active && styles.filterChipCountActive]}>
+                  {count}
                 </Text>
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
-        <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>{listTitle}</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
-            <Plus size={16} color="#fff" strokeWidth={2.4} />
-            <Text style={styles.addBtnText}>Nova</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Search size={16} color={colors.textSecondary} strokeWidth={2} />
           <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar tipo, nº, contrato..."
+            placeholderTextColor={colors.textSecondary}
             value={search}
             onChangeText={setSearch}
-            placeholder="Buscar por ID ou nº"
-            placeholderTextColor={colors.textSecondary}
-            style={styles.searchInput}
           />
-          <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterOpen(true)}>
-            <Filter size={18} color={colors.text} />
+          <TouchableOpacity
+            onPress={() => setFilterOpen(true)}
+            hitSlop={8}
+            accessibilityLabel="Filtrar status"
+          >
+            <Filter
+              size={18}
+              color={statusFilter !== 'all' ? colors.primary : colors.textSecondary}
+              strokeWidth={2.2}
+            />
           </TouchableOpacity>
         </View>
 
         {listQuery.isLoading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 28 }} />
+          <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} />
         ) : filtered.length === 0 ? (
-          <Text style={styles.empty}>Nenhuma solicitação encontrada.</Text>
+          <View style={styles.empty}>
+            <View style={styles.emptyIcon}>
+              <MailPlus size={28} color={colors.textSecondary} />
+            </View>
+            <Text style={styles.emptyTitle}>Nenhuma solicitação</Text>
+            <Text style={styles.emptyText}>
+              Toque no + para criar um pedido ao DP ou ADM/TST.
+            </Text>
+          </View>
         ) : (
-          filtered.map((row) => (
-            <TouchableOpacity
-              key={row.id}
-              style={styles.card}
-              onPress={() => {
-                setDetail(row);
-                setReturnComment('');
-              }}
-              activeOpacity={0.75}
-            >
-              <View style={styles.cardTop}>
-                <Text style={styles.cardId}>
-                  #{row.displayNumber ?? row.id.slice(0, 8)}
-                </Text>
-                <View
-                  style={[
-                    styles.badge,
-                    { backgroundColor: `${statusColor(row.status, colors)}22` },
-                  ]}
+          <View style={styles.list}>
+            {filtered.map((row) => (
+              <View key={row.id} style={styles.card}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setDetail(row);
+                    setReturnComment('');
+                  }}
+                  activeOpacity={0.85}
                 >
-                  <Text style={[styles.badgeText, { color: statusColor(row.status, colors) }]}>
-                    {STATUS_LABELS[row.status] || row.status}
+                  <View style={styles.cardTop}>
+                    <Text style={styles.cardNumber}>
+                      #{row.displayNumber ?? row.id.slice(0, 8)}
+                    </Text>
+                    <View
+                      style={[
+                        styles.badge,
+                        { backgroundColor: `${statusColor(row.status, colors)}18` },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.badgeText, { color: statusColor(row.status, colors) }]}
+                      >
+                        {STATUS_LABELS[row.status] || row.status}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.cardRoute} numberOfLines={2}>
+                    {DP_TYPE_LABELS[row.requestType] || row.requestType}
                   </Text>
-                </View>
+                  <View style={styles.cardFooter}>
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                      {destinationLabel(row.requestType)}
+                    </Text>
+                    <View style={styles.dot} />
+                    <Text style={styles.cardMeta} numberOfLines={1}>
+                      {URGENCY_LABELS[row.urgency] || row.urgency}
+                    </Text>
+                  </View>
+                  {row.contract?.name ? (
+                    <Text style={styles.cardSub} numberOfLines={1}>
+                      {row.contract.name}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
+                    Toque para ver detalhes
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.cardType}>
-                {DP_TYPE_LABELS[row.requestType] || row.requestType}
-              </Text>
-              <Text style={styles.cardMeta}>
-                {destinationLabel(row.requestType)} · {URGENCY_LABELS[row.urgency] || row.urgency}
-                {row.contract?.name ? ` · ${row.contract.name}` : ''}
-              </Text>
-            </TouchableOpacity>
-          ))
+            ))}
+          </View>
         )}
       </ScrollView>
 
       {/* Detail */}
       <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>
-        <View style={[styles.safe, { paddingTop: 12 }]}>
+        <View style={[styles.safeArea, { paddingTop: 12 }]}>
           <View style={styles.modalHeaderBar}>
             <Text style={styles.modalTitle}>
               Solicitação #{detail?.displayNumber ?? detail?.id.slice(0, 8)}
@@ -826,7 +872,7 @@ export default function DpRequestsScreen() {
       {/* Create */}
       <Modal visible={createOpen} animationType="slide" onRequestClose={() => setCreateOpen(false)}>
         <KeyboardAvoidingView
-          style={styles.safe}
+          style={styles.safeArea}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.modalHeaderBar}>
@@ -1276,82 +1322,134 @@ function AttachButton({
   );
 }
 
-function getStyles(colors: any, _isDark: boolean) {
+function getStyles(colors: any, isDark: boolean) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.background },
+    safeArea: { flex: 1, backgroundColor: colors.background },
+    container: { flex: 1, backgroundColor: colors.background },
+    scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
     pad: { padding: 16, paddingBottom: 48 },
     pageTitle: {
-      fontSize: 26,
-      fontWeight: '800',
       color: colors.text,
+      fontSize: 28,
+      fontWeight: '700',
+      letterSpacing: -0.6,
       marginBottom: 4,
     },
-    subtitle: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
-    statRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-    statCard: {
-      flex: 1,
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 12,
-      alignItems: 'center',
-      gap: 4,
+    pageSubtitle: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 18,
     },
-    statCardActive: { backgroundColor: colors.primary },
-    statCount: { fontSize: 18, fontWeight: '800', color: colors.text },
-    statLabel: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, textAlign: 'center' },
-    listHeader: {
+    chipsRow: { gap: 8, paddingBottom: 14 },
+    filterChip: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 10,
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 999,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
     },
-    listTitle: { fontSize: 16, fontWeight: '700', color: colors.text, flex: 1 },
-    addBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
+    filterChipActive: {
       backgroundColor: colors.primary,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
+      borderColor: colors.primary,
     },
-    addBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-    searchRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+    filterChipText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+    filterChipTextActive: { color: '#fff' },
+    filterChipCount: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+      opacity: 0.7,
+    },
+    filterChipCountActive: { color: 'rgba(255,255,255,0.85)', opacity: 1 },
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      marginBottom: 20,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
     searchInput: {
       flex: 1,
-      height: 42,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      backgroundColor: colors.surface,
+      paddingVertical: Platform.OS === 'ios' ? 13 : 10,
       color: colors.text,
+      fontSize: 15,
     },
-    filterBtn: {
-      width: 42,
-      height: 42,
-      borderRadius: 10,
-      backgroundColor: colors.surface,
+    list: { gap: 10 },
+    empty: { alignItems: 'center', paddingVertical: 56, gap: 8, paddingHorizontal: 24 },
+    emptyIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: isDark ? colors.card : colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
+      marginBottom: 8,
     },
-    empty: { textAlign: 'center', color: colors.textSecondary, marginTop: 28 },
+    emptyTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+    emptyText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
     card: {
-      backgroundColor: colors.surface,
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 10,
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 16,
     },
     cardTop: {
       flexDirection: 'row',
-      alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 6,
+      alignItems: 'center',
+      marginBottom: 8,
       gap: 8,
     },
-    cardId: { fontSize: 13, fontWeight: '700', color: colors.textSecondary },
-    badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    cardNumber: {
+      fontWeight: '700',
+      color: colors.textSecondary,
+      fontSize: 13,
+      letterSpacing: 0.2,
+    },
+    badge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
     badgeText: { fontSize: 11, fontWeight: '700' },
-    cardType: { fontSize: 15, fontWeight: '700', color: colors.text },
-    cardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 4 },
+    cardRoute: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 10,
+      letterSpacing: -0.2,
+    },
+    cardFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 4,
+    },
+    dot: {
+      width: 3,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: colors.textSecondary,
+      opacity: 0.5,
+    },
+    cardMeta: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+    cardSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
+    cardHint: {
+      fontSize: 11,
+      fontWeight: '600',
+      marginTop: 10,
+      letterSpacing: -0.1,
+    },
     modalHeaderBar: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1383,9 +1481,12 @@ function getStyles(colors: any, _isDark: boolean) {
     },
     primaryBtn: {
       backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
+      borderRadius: 14,
+      paddingVertical: 15,
       alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+      marginBottom: 8,
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
     overlay: {
@@ -1400,7 +1501,11 @@ function getStyles(colors: any, _isDark: boolean) {
       padding: 18,
       paddingBottom: 28,
     },
-    optionRow: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+    optionRow: {
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
     optionText: { fontSize: 15, color: colors.text, fontWeight: '500' },
     optionSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
     fieldLabel: {
