@@ -373,7 +373,13 @@ export function insertCardIntoBoardCache(
 /** IDs temporários gerados no cliente antes da API confirmar (criação/cópia). */
 export function isOptimisticKanbanCardId(cardId: string | undefined | null): boolean {
   if (!cardId) return false;
-  return cardId.startsWith('optimistic-');
+  return cardId.startsWith('optimistic-') && !cardId.startsWith('optimistic-checklist-');
+}
+
+/** IDs temporários de itens de checklist antes da API confirmar. */
+export function isOptimisticKanbanChecklistItemId(id: string | undefined | null): boolean {
+  if (!id) return false;
+  return id.startsWith('optimistic-checklist-');
 }
 
 export function buildOptimisticNewCard(title: string, tempId: string): KanbanCard {

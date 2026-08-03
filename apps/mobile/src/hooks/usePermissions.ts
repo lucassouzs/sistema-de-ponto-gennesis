@@ -22,6 +22,7 @@ const PNCP_KEY = pathToModuleKey('/ponto/licitacoes-pncp');
 const LICITACOES_KEY = pathToModuleKey('/ponto/licitacoes');
 const COMBUSTIVEL_KEY = pathToModuleKey('/ponto/solicitar-combustivel');
 const RESERVAS_KEY = pathToModuleKey('/ponto/reserva-veiculos');
+const SOLICITACOES_DP_KEY = pathToModuleKey('/ponto/solicitacoes-dp');
 
 function moduleReady(isFetched: boolean, isPending: boolean) {
   return isFetched && !isPending;
@@ -48,6 +49,8 @@ export function usePermissions() {
   const isElevated = isAdministrator || !!data?.isAdmin;
   const isDepartmentCompras =
     !!user?.employee?.department?.toLowerCase().includes('compras');
+  const isDepartmentPessoal =
+    !!user?.employee?.department?.toLowerCase().includes('pessoal');
 
   const allowedModules = useMemo(() => {
     const set = new Set<string>();
@@ -78,6 +81,9 @@ export function usePermissions() {
     isElevated ||
     (ready && (allowedModules.has(PNCP_KEY) || allowedModules.has(LICITACOES_KEY)));
 
+  const canSeeDpRequests =
+    isElevated || isDepartmentPessoal || hasModule(SOLICITACOES_DP_KEY);
+
   return {
     isLoading: isAuthenticated && !!user?.id && !isElevated && (isPending || !isFetched),
     isAdministrator: isElevated,
@@ -85,5 +91,6 @@ export function usePermissions() {
     canSeeCombustivel,
     canSeeReservas,
     canSeePncp,
+    canSeeDpRequests,
   };
 }

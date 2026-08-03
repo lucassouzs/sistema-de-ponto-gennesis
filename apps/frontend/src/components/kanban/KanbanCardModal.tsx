@@ -31,6 +31,7 @@ import {
   boardCardToDetailPlaceholder,
   fetchKanbanCard,
   isOptimisticKanbanCardId,
+  isOptimisticKanbanChecklistItemId,
   kanbanCardQueryKey,
   kanbanDetailToBoardCard,
   normalizeKanbanCardDetail,
@@ -46,6 +47,7 @@ import {
   addKanbanLinkAttachment,
   createKanbanComment,
   deleteKanbanComment,
+  type KanbanChecklistItem,
 } from '@/lib/kanban';
 import { KanbanCardCostModal } from './KanbanCardCostModal';
 import {
@@ -280,7 +282,6 @@ export function KanbanCardModal({
   const [commentText, setCommentText] = useState('');
   const [hideDone, setHideDone] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [addingTask, setAddingTask] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [postingComment, setPostingComment] = useState(false);
   const [draftTasks, setDraftTasks] = useState<DraftChecklistTask[]>([]);
@@ -309,6 +310,19 @@ export function KanbanCardModal({
   const titleFocusedRef = useRef(false);
   const titleLiveRef = useRef('');
   const checklistToggleSeqRef = useRef<Record<string, number>>({});
+  /** Criações otimistas de checklist ainda sem ID real da API. */
+  const pendingChecklistCreatesRef = useRef<
+    Map<
+      string,
+      {
+        cancelled: boolean;
+        pendingDone?: boolean;
+        pendingTitle?: string;
+        pendingDueDate?: string | null;
+        pendingAssigneeUserId?: string | null;
+      }
+    >
+  >(new Map());
   const hydratedCardIdRef = useRef<string | undefined>(undefined);
   const [commentsPanelHeight, setCommentsPanelHeight] = useState<number | undefined>(undefined);
   const isCreate = mode === 'create';
@@ -517,11 +531,49 @@ export function KanbanCardModal({
 
   const syncChecklistFromApi = useCallback(
     (detail: KanbanCardDetail) => {
-      applyCardDetail(detail);
-      patchBoardCard(detail);
+      const local = cardId
+        ? queryClient.getQueryData<KanbanCardDetail>(kanbanCardQueryKey(cardId))
+        : undefined;
+      const pendingOptimistic =
+        local?.checklistItems.filter(
+          (item) =>
+            isOptimisticKanbanChecklistItemId(item.id) &&
+            pendingChecklistCreatesRef.current.has(item.id) &&
+            !pendingChecklistCreatesRef.current.get(item.id)?.cancelled,
+        ) ?? [];
+      const merged: KanbanCardDetail =
+        pendingOptimistic.length === 0
+          ? detail
+          : (() => {
+              const checklistItems = [...detail.checklistItems, ...pendingOptimistic];
+              const totalTasks = checklistItems.length;
+              const completedTasks = checklistItems.filter((i) => i.isDone).length;
+              return {
+                ...detail,
+                checklistItems,
+                totalTasks,
+                completedTasks,
+                progress:
+                  totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+                checklistEnabled: true,
+              };
+            })();
+      applyCardDetail(merged);
+      patchBoardCard(merged);
     },
-    [applyCardDetail, patchBoardCard],
+    [applyCardDetail, cardId, patchBoardCard, queryClient],
   );
+
+  function recalcChecklistCounts(items: KanbanChecklistItem[]) {
+    const totalTasks = items.length;
+    const completedTasks = items.filter((i) => i.isDone).length;
+    return {
+      totalTasks,
+      completedTasks,
+      progress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      checklistEnabled: totalTasks > 0,
+    };
+  }
 
   function buildOptimisticChecklistToggle(
     current: KanbanCardDetail,
@@ -880,6 +932,36 @@ export function KanbanCardModal({
     })();
   }
 
+  function patchLocalChecklistItem(
+    itemId: string,
+    partial: Partial<
+      Pick<KanbanChecklistItem, 'title' | 'isDone' | 'dueDate' | 'assigneeUserId' | 'assignee'>
+    >,
+  ) {
+    if (!cardId) return;
+    const current = queryClient.getQueryData<KanbanCardDetail>(kanbanCardQueryKey(cardId));
+    if (!current) return;
+    const nextItems = current.checklistItems.map((i) =>
+      i.id === itemId ? { ...i, ...partial } : i,
+    );
+    const next: KanbanCardDetail = {
+      ...current,
+      checklistItems: nextItems,
+      ...recalcChecklistCounts(nextItems),
+    };
+    applyCardDetail(next);
+    patchBoardCard(next);
+
+    const pending = pendingChecklistCreatesRef.current.get(itemId);
+    if (!pending) return;
+    if (partial.title !== undefined) pending.pendingTitle = partial.title;
+    if (partial.dueDate !== undefined) pending.pendingDueDate = partial.dueDate;
+    if (partial.assigneeUserId !== undefined) {
+      pending.pendingAssigneeUserId = partial.assigneeUserId;
+    }
+    if (partial.isDone !== undefined) pending.pendingDone = partial.isDone;
+  }
+
   function handleAddTask() {
     if (!newTask.trim()) return;
     if (isCreate) {
@@ -895,14 +977,132 @@ export function KanbanCardModal({
       toast.error('Aguarde o card ser salvo');
       return;
     }
-    setAddingTask(true);
-    createChecklistItem(cardId, newTask.trim())
-      .then(({ card: updated }) => {
-        setNewTask('');
-        syncChecklistFromApi(updated);
+    const titleText = newTask.trim();
+    setNewTask('');
+
+    const latest =
+      queryClient.getQueryData<KanbanCardDetail>(kanbanCardQueryKey(cardId)) ?? card;
+    if (!latest) return;
+
+    const tempId = `optimistic-checklist-${crypto.randomUUID()}`;
+    const optimisticItem: KanbanChecklistItem = {
+      id: tempId,
+      cardId,
+      title: titleText,
+      isDone: false,
+      position: latest.checklistItems.length,
+      dueDate: null,
+      assigneeUserId: null,
+      assignee: null,
+    };
+    const checklistItems = [...latest.checklistItems, optimisticItem];
+    const counts = recalcChecklistCounts(checklistItems);
+    const optimistic: KanbanCardDetail = {
+      ...latest,
+      checklistItems,
+      ...counts,
+      checklistEnabled: true,
+    };
+
+    pendingChecklistCreatesRef.current.set(tempId, { cancelled: false });
+    setChecklistEnabled(true);
+    applyCardDetail(optimistic);
+    patchBoardCard(optimistic);
+    void queryClient.cancelQueries({ queryKey: kanbanCardQueryKey(cardId) });
+
+    void createChecklistItem(cardId, titleText)
+      .then(({ item, card: updated }) => {
+        const meta = pendingChecklistCreatesRef.current.get(tempId);
+        pendingChecklistCreatesRef.current.delete(tempId);
+
+        if (!meta || meta.cancelled) {
+          void deleteChecklistItem(item.id).catch(() => undefined);
+          return;
+        }
+
+        const current =
+          queryClient.getQueryData<KanbanCardDetail>(kanbanCardQueryKey(cardId)) ??
+          updated;
+        const stillHasTemp = current.checklistItems.some((i) => i.id === tempId);
+        if (!stillHasTemp) {
+          void deleteChecklistItem(item.id).catch(() => undefined);
+          return;
+        }
+
+        const nextDone =
+          meta.pendingDone !== undefined ? meta.pendingDone : item.isDone;
+        const realItem: KanbanChecklistItem = {
+          ...item,
+          isDone: nextDone,
+          title: meta.pendingTitle ?? item.title,
+          dueDate:
+            meta.pendingDueDate !== undefined ? meta.pendingDueDate : item.dueDate,
+          assigneeUserId:
+            meta.pendingAssigneeUserId !== undefined
+              ? meta.pendingAssigneeUserId
+              : item.assigneeUserId,
+        };
+        const nextItems = current.checklistItems.map((i) =>
+          i.id === tempId ? realItem : i,
+        );
+        const next: KanbanCardDetail = {
+          ...current,
+          checklistItems: nextItems,
+          ...recalcChecklistCounts(nextItems),
+          checklistEnabled: true,
+        };
+        applyCardDetail(next);
+        patchBoardCard(next);
+
+        const followUp: {
+          isDone?: boolean;
+          title?: string;
+          dueDate?: string | null;
+          assigneeUserId?: string | null;
+        } = {};
+        if (meta.pendingDone !== undefined && meta.pendingDone !== item.isDone) {
+          followUp.isDone = meta.pendingDone;
+        }
+        if (meta.pendingTitle && meta.pendingTitle !== item.title) {
+          followUp.title = meta.pendingTitle;
+        }
+        if (
+          meta.pendingDueDate !== undefined &&
+          meta.pendingDueDate !== item.dueDate
+        ) {
+          followUp.dueDate = meta.pendingDueDate;
+        }
+        if (
+          meta.pendingAssigneeUserId !== undefined &&
+          meta.pendingAssigneeUserId !== item.assigneeUserId
+        ) {
+          followUp.assigneeUserId = meta.pendingAssigneeUserId;
+        }
+
+        if (Object.keys(followUp).length > 0) {
+          void updateChecklistItem(item.id, followUp)
+            .then(({ card: patched }) => syncChecklistFromApi(patched))
+            .catch(() => {
+              toast.error('Erro ao atualizar tarefa');
+            });
+        }
       })
-      .catch(() => toast.error('Erro ao adicionar tarefa'))
-      .finally(() => setAddingTask(false));
+      .catch(() => {
+        pendingChecklistCreatesRef.current.delete(tempId);
+        const current = queryClient.getQueryData<KanbanCardDetail>(
+          kanbanCardQueryKey(cardId),
+        );
+        if (!current) return;
+        const nextItems = current.checklistItems.filter((i) => i.id !== tempId);
+        const next: KanbanCardDetail = {
+          ...current,
+          checklistItems: nextItems,
+          ...recalcChecklistCounts(nextItems),
+        };
+        applyCardDetail(next);
+        patchBoardCard(next);
+        toast.error('Erro ao adicionar tarefa');
+      });
   }
 
   function toggleDraftTask(taskId: string) {
@@ -944,6 +1144,12 @@ export function KanbanCardModal({
     patchBoardCard(optimistic);
     void queryClient.cancelQueries({ queryKey: kanbanCardQueryKey(cardId) });
 
+    if (isOptimisticKanbanChecklistItemId(itemId)) {
+      const pending = pendingChecklistCreatesRef.current.get(itemId);
+      if (pending) pending.pendingDone = nextDone;
+      return;
+    }
+
     try {
       const { card: updated } = await updateChecklistItem(itemId, { isDone: nextDone });
       if (checklistToggleSeqRef.current[itemId] !== nextSeq) return;
@@ -958,27 +1164,28 @@ export function KanbanCardModal({
 
   async function handleDeleteTask(itemId: string) {
     if (deletingTaskId || !card || !cardId || isOptimisticKanbanCardId(cardId)) return;
-    const removed = card.checklistItems.find((i) => i.id === itemId);
+    const latest =
+      queryClient.getQueryData<KanbanCardDetail>(kanbanCardQueryKey(cardId)) ?? card;
+    const removed = latest.checklistItems.find((i) => i.id === itemId);
     if (!removed) return;
 
-    const previous = card;
+    const previous = latest;
     setDeletingTaskId(itemId);
-    const checklistItems = card.checklistItems.filter((i) => i.id !== itemId);
-    const totalTasks = Math.max(0, card.totalTasks - 1);
-    const completedTasks = Math.max(
-      0,
-      removed.isDone ? card.completedTasks - 1 : card.completedTasks,
-    );
-    const optimistic = {
-      ...card,
+    const checklistItems = latest.checklistItems.filter((i) => i.id !== itemId);
+    const optimistic: KanbanCardDetail = {
+      ...latest,
       checklistItems,
-      totalTasks,
-      completedTasks,
-      progress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
-      checklistEnabled: totalTasks > 0 ? card.checklistEnabled : false,
+      ...recalcChecklistCounts(checklistItems),
     };
     applyCardDetail(optimistic);
     patchBoardCard(optimistic);
+
+    if (isOptimisticKanbanChecklistItemId(itemId)) {
+      const pending = pendingChecklistCreatesRef.current.get(itemId);
+      if (pending) pending.cancelled = true;
+      setDeletingTaskId(null);
+      return;
+    }
 
     try {
       await deleteChecklistItem(itemId);
@@ -1752,6 +1959,11 @@ export function KanbanCardModal({
                           onToggle={() => void toggleTask(item.id)}
                           onDelete={() => handleDeleteTask(item.id)}
                           onUpdated={syncChecklistFromApi}
+                          onLocalPatch={
+                            isOptimisticKanbanChecklistItemId(item.id)
+                              ? (partial) => patchLocalChecklistItem(item.id, partial)
+                              : undefined
+                          }
                         />
                       ))}
                 </ul>
@@ -1774,15 +1986,11 @@ export function KanbanCardModal({
                   <button
                     type="button"
                     onClick={handleAddTask}
-                    disabled={addingTask || !newTask.trim()}
+                    disabled={!newTask.trim()}
                     title="Adicionar tarefa"
                     className="w-9 h-9 shrink-0 rounded-lg bg-red-600 hover:bg-red-700 flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {addingTask ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Plus className="w-5 h-5" />
-                    )}
+                    <Plus className="w-5 h-5" />
                   </button>
                 </div>
               </div>

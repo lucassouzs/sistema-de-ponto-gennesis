@@ -90,6 +90,12 @@ export interface KanbanChecklistTaskRowProps {
   onToggle: () => void;
   onDelete: () => void;
   onUpdated: (card: KanbanCardDetail) => void | Promise<void>;
+  /** Atualiza item ainda sem ID real da API (criação otimista). */
+  onLocalPatch?: (
+    partial: Partial<
+      Pick<KanbanChecklistItem, 'title' | 'dueDate' | 'assigneeUserId' | 'assignee'>
+    >,
+  ) => void;
 }
 
 function KanbanChecklistTaskRowInner({
@@ -100,6 +106,7 @@ function KanbanChecklistTaskRowInner({
   onToggle,
   onDelete,
   onUpdated,
+  onLocalPatch,
 }: KanbanChecklistTaskRowProps) {
   const [openMenu, setOpenMenu] = useState<'date' | 'assign' | null>(null);
   const [saving, setSaving] = useState(false);
@@ -170,6 +177,30 @@ function KanbanChecklistTaskRowInner({
     assigneeUserId?: string | null;
     dueDate?: string | null;
   }) {
+    if (onLocalPatch) {
+      const assignee =
+        partial.assigneeUserId === undefined
+          ? undefined
+          : partial.assigneeUserId
+            ? (() => {
+                const m = assignableMembers.find((x) => x.userId === partial.assigneeUserId);
+                return m
+                  ? {
+                      id: m.userId,
+                      name: m.name,
+                      profilePhotoUrl: m.profilePhotoUrl,
+                      avatarColor: m.avatarColor,
+                    }
+                  : null;
+              })()
+            : null;
+      onLocalPatch({
+        ...partial,
+        ...(partial.assigneeUserId !== undefined ? { assignee: assignee ?? null } : {}),
+      });
+      setOpenMenu(null);
+      return;
+    }
     setSaving(true);
     try {
       const { card: updated } = await updateChecklistItem(item.id, partial);
@@ -194,6 +225,11 @@ function KanbanChecklistTaskRowInner({
       return;
     }
     if (trimmed === item.title) {
+      setEditingTitle(false);
+      return;
+    }
+    if (onLocalPatch) {
+      onLocalPatch({ title: trimmed });
       setEditingTitle(false);
       return;
     }

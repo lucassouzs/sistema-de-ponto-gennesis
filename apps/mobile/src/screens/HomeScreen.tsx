@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { Droplets, CalendarCheck } from 'lucide-react-native';
+import { Droplets, CalendarCheck, Calendar, LayoutGrid, MailPlus } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
@@ -28,7 +28,7 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
-  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
+  const { canSeeCombustivel, canSeeReservas, canSeePncp, canSeeDpRequests } = usePermissions();
   const { items: liveItems } = useLiveActivities();
   const styles = getStyles(colors, isDark);
 
@@ -83,6 +83,41 @@ export default function HomeScreen() {
         </View>
 
         <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
+
+        <View style={styles.quickRow}>
+          <TouchableOpacity
+            style={styles.quickCard}
+            onPress={() => navigation.navigate('Agenda')}
+            activeOpacity={0.8}
+          >
+            <Calendar size={20} color={colors.primary} strokeWidth={2.2} />
+            <Text style={styles.quickTitle}>Agenda</Text>
+            <Text style={styles.quickSub}>Calendário e tarefas</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.quickCard}
+            onPress={() => navigation.navigate('KanbanBoards')}
+            activeOpacity={0.8}
+          >
+            <LayoutGrid size={20} color={colors.primary} strokeWidth={2.2} />
+            <Text style={styles.quickTitle}>Tasks</Text>
+            <Text style={styles.quickSub}>Quadros estilo Trello</Text>
+          </TouchableOpacity>
+        </View>
+
+        {canSeeDpRequests ? (
+          <TouchableOpacity
+            style={styles.dpCard}
+            onPress={() => navigation.navigate('DpRequests')}
+            activeOpacity={0.8}
+          >
+            <MailPlus size={20} color={colors.primary} strokeWidth={2.2} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.quickTitle}>Solicitações DP/ADM/TST</Text>
+              <Text style={styles.quickSub}>Crie e acompanhe pedidos ao DP e ADM/TST</Text>
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         {canSeePncp ? <PncpCaptacoesCard /> : null}
 
@@ -175,6 +210,37 @@ const getStyles = (colors: any, _isDark: boolean) =>
       height: 48,
       borderRadius: 24,
       overflow: 'hidden',
+    },
+    quickRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    quickCard: {
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 14,
+      gap: 4,
+    },
+    quickTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+      marginTop: 6,
+    },
+    quickSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    dpCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 16,
     },
     hero: {
       backgroundColor: colors.primary,

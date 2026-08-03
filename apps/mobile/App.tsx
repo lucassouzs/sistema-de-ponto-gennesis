@@ -14,6 +14,11 @@ import TimeRecordsScreen from './src/screens/TimeRecordsScreen';
 import FuelRequestsScreen from './src/screens/FuelRequestsScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import PncpLicitacoesScreen from './src/screens/PncpLicitacoesScreen';
+import AgendaScreen from './src/screens/AgendaScreen';
+import KanbanBoardsScreen from './src/screens/kanban/KanbanBoardsScreen';
+import KanbanBoardScreen from './src/screens/kanban/KanbanBoardScreen';
+import KanbanCardScreen from './src/screens/kanban/KanbanCardScreen';
+import DpRequestsScreen from './src/screens/DpRequestsScreen';
 import AuthBrandSplash, { SPLASH_BG } from './src/components/AuthBrandSplash';
 
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
@@ -31,6 +36,11 @@ export type RootStackParamList = {
   FuelRequests: undefined;
   Profile: undefined;
   Pncp: undefined;
+  Agenda: undefined;
+  KanbanBoards: undefined;
+  KanbanBoard: { departmentKey?: string };
+  KanbanCard: { cardId: string; departmentKey?: string };
+  DpRequests: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -121,6 +131,11 @@ function AppNavigator() {
               <Stack.Screen name="FuelRequests" component={FuelRequestsScreen} />
               <Stack.Screen name="Profile" component={ProfileScreen} />
               <Stack.Screen name="Pncp" component={PncpLicitacoesScreen} />
+              <Stack.Screen name="Agenda" component={AgendaScreen} />
+              <Stack.Screen name="KanbanBoards" component={KanbanBoardsScreen} />
+              <Stack.Screen name="KanbanBoard" component={KanbanBoardScreen} />
+              <Stack.Screen name="KanbanCard" component={KanbanCardScreen} />
+              <Stack.Screen name="DpRequests" component={DpRequestsScreen} />
             </>
           ) : (
             <Stack.Screen name="Login">

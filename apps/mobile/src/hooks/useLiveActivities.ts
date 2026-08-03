@@ -99,9 +99,9 @@ export function useLiveActivities() {
           id: `reservation:${row.id}`,
           kind: 'reservation',
           title: 'Veículo liberado',
-          subtitle: 'Reserva em uso',
+          subtitle: 'Pode retirar e iniciar o uso',
           meta: [plate, row.localDestino].filter(Boolean).join(' · ') || row.code || 'Reserva ativa',
-          cta: 'Ver reserva',
+          cta: 'Abrir reserva',
           statusKey: row.status,
         });
       }

@@ -21,6 +21,9 @@ import {
   Sun,
   LogOut,
   ClipboardList,
+  Calendar,
+  LayoutGrid,
+  MailPlus,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -37,7 +40,7 @@ interface MenuProps {
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors, isDark, toggleTheme } = useTheme();
   const { logout } = useAuth();
-  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
+  const { canSeeCombustivel, canSeeReservas, canSeePncp, canSeeDpRequests } = usePermissions();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const slideAnim = React.useRef(new Animated.Value(-300)).current;
@@ -79,7 +82,7 @@ export default function Menu({ visible, onClose }: MenuProps) {
     onClose();
     setTimeout(() => {
       if (name === 'Home' || name === 'Combustivel' || name === 'Reservas' || name === 'Pncp') {
-        navigation.navigate('Main' as never, { screen: name } as never);
+        (navigation as any).navigate('Main', { screen: name });
         return;
       }
       navigation.navigate(name as never);
@@ -106,6 +109,18 @@ export default function Menu({ visible, onClose }: MenuProps) {
 
   const links = [
     { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
+    { key: 'agenda', label: 'Agenda', icon: Calendar, onPress: () => go('Agenda') },
+    { key: 'tasks', label: 'Tasks', icon: LayoutGrid, onPress: () => go('KanbanBoards') },
+    ...(canSeeDpRequests
+      ? [
+          {
+            key: 'dp',
+            label: 'Solicitações DP/ADM/TST',
+            icon: MailPlus,
+            onPress: () => go('DpRequests'),
+          },
+        ]
+      : []),
     ...(canSeeCombustivel
       ? [{ key: 'fuel', label: 'Combustível', icon: Droplets, onPress: () => go('Combustivel') }]
       : []),
