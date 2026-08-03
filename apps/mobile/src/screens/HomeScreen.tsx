@@ -9,12 +9,13 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
-import { Calendar, LayoutGrid } from 'lucide-react-native';
+import { LayoutGrid } from 'lucide-react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
 import UserAvatar from '../components/UserAvatar';
 import LiveActivitySection from '../components/LiveActivitySection';
+import HomeAgendaCard from '../components/HomeAgendaCard';
 import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 import { usePermissions } from '../hooks/usePermissions';
@@ -86,22 +87,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
-
         <View style={styles.quickRow}>
-          <TouchableOpacity
-            style={styles.quickCard}
-            onPress={() => navigation.navigate('Agenda')}
-            activeOpacity={0.75}
-          >
-            <View style={styles.quickIconWrap}>
-              <Calendar size={20} color={colors.primary} strokeWidth={2.2} />
-            </View>
-            <Text style={styles.quickTitle} numberOfLines={1}>
-              Agenda
-            </Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.quickCard}
             onPress={openTasks}
@@ -115,6 +101,10 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+
+        <LiveActivitySection items={liveItems} onPress={openLiveActivity} />
+
+        <HomeAgendaCard />
 
         {canSeePncp ? <PncpCaptacoesCard /> : null}
       </ScrollView>
@@ -163,6 +153,7 @@ const getStyles = (colors: any, _isDark: boolean) =>
     },
     quickCard: {
       flex: 1,
+      maxWidth: '50%',
       minWidth: 0,
       alignItems: 'center',
       justifyContent: 'center',

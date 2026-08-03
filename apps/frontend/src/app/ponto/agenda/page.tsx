@@ -40,35 +40,26 @@ function AgendaPage() {
   };
 
   const user = meUser || { name: 'Usuário', role: 'EMPLOYEE' };
+  const isTasks = agendaView === 'tasks';
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <div
-        className={
-          agendaView === 'planner'
-            ? 'flex h-[calc(100dvh-2rem)] flex-col overflow-hidden -mx-2 sm:-mx-4 lg:h-[calc(100dvh-4rem)]'
-            : 'flex flex-col -mx-2 sm:-mx-4'
-        }
-      >
-        {agendaView === 'tasks' ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Tarefas</h1>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Minhas tarefas</p>
-              </div>
-              <AgendaModeSwitcher mode="tasks" onChange={setView} />
-            </div>
-            <KanbanTasksView />
+      <div className="flex h-[calc(100dvh-2rem)] flex-col overflow-hidden -mx-2 sm:-mx-4 lg:h-[calc(100dvh-4rem)]">
+        <div className="flex shrink-0 flex-wrap items-end justify-between gap-3 px-4 pb-3 pt-1">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
+              {isTasks ? 'Tarefas' : 'Agenda'}
+            </h1>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              {isTasks ? 'Minhas tarefas' : 'Agenda pessoal'}
+            </p>
           </div>
-        ) : (
-          <KanbanPlannerView
-            mode="planner"
-            onModeChange={setView}
-            pageTitle="Agenda"
-            pageSubtitle="Agenda pessoal"
-          />
-        )}
+          <AgendaModeSwitcher mode={agendaView} onChange={setView} />
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {isTasks ? <KanbanTasksView /> : <KanbanPlannerView mode="planner" />}
+        </div>
       </div>
     </MainLayout>
   );

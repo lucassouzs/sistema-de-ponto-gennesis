@@ -37,6 +37,24 @@ export async function fetchPlannerTaskLists(): Promise<PlannerTaskList[]> {
   return (await readApiData<PlannerTaskList[]>(res)) || [];
 }
 
+export async function fetchPlannerTasks(params?: {
+  from?: Date;
+  to?: Date;
+  withDue?: boolean;
+  includeCompleted?: boolean;
+  listId?: string;
+}): Promise<PlannerTask[]> {
+  const q = new URLSearchParams();
+  if (params?.from) q.set('from', params.from.toISOString());
+  if (params?.to) q.set('to', params.to.toISOString());
+  if (params?.withDue) q.set('withDue', '1');
+  if (params?.includeCompleted === false) q.set('includeCompleted', '0');
+  if (params?.listId) q.set('listId', params.listId);
+  const qs = q.toString();
+  const res = await api.get(`/api/planner-tasks${qs ? `?${qs}` : ''}`);
+  return (await readApiData<PlannerTask[]>(res)) || [];
+}
+
 export async function createPlannerTaskList(title: string): Promise<PlannerTaskList> {
   const res = await api.post('/api/planner-tasks/lists', { title });
   return readApiData<PlannerTaskList>(res);
@@ -91,4 +109,13 @@ export function toDateInputValue(value?: string | Date | null): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+export function toTimeInputValue(value?: string | Date | null): string {
+  if (!value) return '';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return '';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${mi}`;
 }

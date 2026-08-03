@@ -9,9 +9,12 @@ import {
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import Svg, { Rect, Line, Text as SvgText } from 'react-native-svg';
-import { Gavel, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Gavel, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
 import api from '../services/api';
+import type { RootStackParamList } from '../../App';
 
 type DayPayload = { date: string; label: string; total: number };
 type SemanaPayload = {
@@ -75,6 +78,7 @@ function formatDayMonthShort(ymd: string) {
 }
 
 export default function PncpCaptacoesCard() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, isDark } = useTheme();
   const styles = getStyles(colors, isDark);
   const today = toYmd(new Date());
@@ -154,6 +158,14 @@ export default function PncpCaptacoesCard() {
           <Text style={styles.title}>Captações</Text>
           <Text style={styles.subtitle}>Envios PNCP na semana</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Pncp')}
+          style={styles.openBtn}
+          hitSlop={10}
+          accessibilityLabel="Abrir licitações PNCP"
+        >
+          <ExternalLink size={16} color={colors.textSecondary} strokeWidth={2.2} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.controls}>
@@ -323,6 +335,13 @@ const getStyles = (colors: any, isDark: boolean) =>
       fontSize: 12,
       fontWeight: '500',
       color: colors.textSecondary,
+    },
+    openBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     controls: {
       gap: 10,

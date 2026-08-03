@@ -52,12 +52,12 @@ function TaskRow({
   const timeVal = toTimeInputValue(task.dueDate) || '09:00';
 
   return (
-    <div className="group flex items-start gap-2.5 px-1 py-2">
+    <div className="group flex items-start gap-2.5 rounded-lg px-1.5 py-2 transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/40">
       <button
         type="button"
         disabled={busy}
         onClick={onToggle}
-        className="mt-0.5 shrink-0 text-gray-400 hover:text-red-600 disabled:opacity-50"
+        className="mt-0.5 shrink-0 text-gray-300 transition-colors hover:text-red-600 disabled:opacity-50 dark:text-gray-600"
         aria-label={task.completed ? 'Reabrir tarefa' : 'Concluir tarefa'}
       >
         {task.completed ? (
@@ -86,7 +86,7 @@ function TaskRow({
                 setEditing(false);
               }
             }}
-            className="w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-900 outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-normal text-gray-900 outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
         ) : (
           <button
@@ -97,10 +97,10 @@ function TaskRow({
                 setEditing(true);
               }
             }}
-            className={`w-full text-left text-sm ${
+            className={`w-full text-left text-sm font-normal ${
               task.completed
                 ? 'text-gray-400 line-through dark:text-gray-500'
-                : 'font-medium text-gray-900 dark:text-gray-100'
+                : 'text-gray-800 dark:text-gray-100'
             }`}
           >
             {task.title}
@@ -108,7 +108,7 @@ function TaskRow({
         )}
 
         <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          <label className="inline-flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+          <label className="inline-flex items-center gap-1 text-[11px] text-gray-400 dark:text-gray-500">
             <Calendar className="h-3 w-3" />
             <input
               type="date"
@@ -122,7 +122,7 @@ function TaskRow({
                 }
                 onChangeDue(combineDateAndTime(nextDate, timeVal || '09:00'));
               }}
-              className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px] outline-none disabled:opacity-50 dark:border-gray-700 dark:text-gray-200"
+              className="rounded border border-gray-200/80 bg-transparent px-1 py-0.5 text-[11px] font-normal outline-none disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
             />
           </label>
           {dateVal ? (
@@ -133,7 +133,7 @@ function TaskRow({
               onChange={(e) => {
                 onChangeDue(combineDateAndTime(dateVal, e.target.value || '09:00'));
               }}
-              className="rounded border border-gray-200 bg-transparent px-1 py-0.5 text-[11px] outline-none disabled:opacity-50 dark:border-gray-700 dark:text-gray-200"
+              className="rounded border border-gray-200/80 bg-transparent px-1 py-0.5 text-[11px] font-normal outline-none disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"
             />
           ) : null}
         </div>
@@ -143,7 +143,7 @@ function TaskRow({
         type="button"
         disabled={busy}
         onClick={onStar}
-        className={`mt-0.5 shrink-0 rounded p-1 ${
+        className={`mt-0.5 shrink-0 rounded-md p-1 transition-opacity ${
           task.starred
             ? 'text-amber-500'
             : 'text-gray-300 opacity-0 group-hover:opacity-100 hover:text-amber-500 dark:text-gray-600'
@@ -156,7 +156,7 @@ function TaskRow({
         type="button"
         disabled={busy}
         onClick={onDelete}
-        className="mt-0.5 shrink-0 rounded p-1 text-gray-300 opacity-0 group-hover:opacity-100 hover:text-red-600 dark:text-gray-600"
+        className="mt-0.5 shrink-0 rounded-md p-1 text-gray-300 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600 dark:text-gray-600"
         aria-label="Excluir tarefa"
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -235,8 +235,8 @@ function ListBlock({
   };
 
   return (
-    <div className="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-      <div className="flex items-start justify-between gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+    <div className="flex h-full w-[300px] shrink-0 flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-700/80 dark:bg-gray-900 sm:w-[320px]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3.5 py-2.5 dark:border-gray-800">
         {renaming ? (
           <input
             autoFocus
@@ -255,10 +255,10 @@ function ListBlock({
                 setRenaming(false);
               }
             }}
-            className="min-w-0 flex-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm font-semibold text-gray-900 outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-gray-900 outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
         ) : (
-          <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-gray-100">
             {list.title}
           </h3>
         )}
@@ -267,7 +267,7 @@ function ListBlock({
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Opções da lista"
           >
             <MoreVertical className="h-4 w-4" />
@@ -281,7 +281,7 @@ function ListBlock({
                   setRenameDraft(list.title);
                   setRenaming(true);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-normal text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
               >
                 <Pencil className="h-3.5 w-3.5" />
                 Renomear
@@ -293,7 +293,7 @@ function ListBlock({
                     setMenuOpen(false);
                     onDeleteList();
                   }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-normal text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Excluir lista
@@ -304,7 +304,7 @@ function ListBlock({
         </div>
       </div>
 
-      <div className="border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+      <div className="shrink-0 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
         {adding ? (
           <div className="space-y-2">
             <input
@@ -319,7 +319,7 @@ function ListBlock({
                 }
               }}
               placeholder="Título da tarefa"
-              className="w-full rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-sm outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm font-normal outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             />
             <div className="flex flex-wrap items-center gap-1.5">
               <input
@@ -329,14 +329,14 @@ function ListBlock({
                   setDraftDue(e.target.value);
                   if (e.target.value && !draftTime) setDraftTime('09:00');
                 }}
-                className="rounded border border-gray-300 bg-white px-1.5 py-1 text-[11px] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[11px] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
               />
               {draftDue ? (
                 <input
                   type="time"
                   value={draftTime}
                   onChange={(e) => setDraftTime(e.target.value || '09:00')}
-                  className="rounded border border-gray-300 bg-white px-1.5 py-1 text-[11px] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                  className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[11px] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
                 />
               ) : null}
             </div>
@@ -345,7 +345,7 @@ function ListBlock({
                 type="button"
                 disabled={busy || !draftTitle.trim()}
                 onClick={submitTask}
-                className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
               >
                 Adicionar
               </button>
@@ -355,7 +355,7 @@ function ListBlock({
                   setAdding(false);
                   setDraftTitle('');
                 }}
-                className="rounded-lg px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="rounded-lg px-2.5 py-1 text-xs font-normal text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 Cancelar
               </button>
@@ -365,7 +365,7 @@ function ListBlock({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-medium text-sky-700 hover:bg-sky-50 dark:text-sky-300 dark:hover:bg-sky-950/40"
+            className="inline-flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm font-normal text-gray-500 transition-colors hover:bg-gray-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-800/60 dark:hover:text-red-400"
           >
             <Plus className="h-4 w-4" />
             Adicionar uma tarefa
@@ -373,23 +373,23 @@ function ListBlock({
         )}
       </div>
 
-      <div className="max-h-[min(60vh,520px)] flex-1 overflow-y-auto px-3 py-1">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-1">
         {openTasks.length === 0 ? (
-          <div className="px-2 py-10 text-center">
-            <CheckCircle2 className="mx-auto h-9 w-9 text-green-500/80" />
-            <p className="mt-3 text-sm font-medium text-gray-800 dark:text-gray-100">
+          <div className="px-2 py-12 text-center">
+            <CheckCircle2 className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-600" />
+            <p className="mt-3 text-sm font-normal text-gray-600 dark:text-gray-300">
               {filter === 'starred'
                 ? 'Nenhuma tarefa com estrela'
                 : list.tasks.length === 0
                   ? 'Não há tarefas'
                   : 'Todas as tarefas concluídas'}
             </p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
               {list.tasks.length === 0 ? 'Adicione uma tarefa acima.' : 'Bom trabalho!'}
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-800">
+          <div className="divide-y divide-gray-50 dark:divide-gray-800/80">
             {openTasks.map((task) => (
               <TaskRow
                 key={task.id}
@@ -407,11 +407,11 @@ function ListBlock({
       </div>
 
       {completedTasks.length > 0 && filter === 'all' && (
-        <details className="border-t border-gray-100 dark:border-gray-800">
-          <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/50">
+        <details className="shrink-0 border-t border-gray-100 dark:border-gray-800">
+          <summary className="cursor-pointer list-none px-4 py-2.5 text-sm font-normal text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50">
             Concluídas ({completedTasks.length})
           </summary>
-          <div className="divide-y divide-gray-100 px-3 pb-2 dark:divide-gray-800">
+          <div className="max-h-40 divide-y divide-gray-50 overflow-y-auto px-2.5 pb-2 dark:divide-gray-800/80">
             {completedTasks.map((task) => (
               <TaskRow
                 key={task.id}
@@ -526,26 +526,30 @@ export function KanbanTasksView() {
     deleteTaskMut.isPending;
 
   return (
-    <div className="flex flex-col gap-4 px-4 pb-8">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col gap-3 px-4 pb-3">
+      <div
+        className="inline-flex w-fit shrink-0 items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+        role="group"
+        aria-label="Filtrar tarefas"
+      >
         <button
           type="button"
           onClick={() => setFilter('all')}
-          className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+          className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
             filter === 'all'
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+              ? 'bg-white font-medium text-red-600 shadow-sm dark:bg-gray-600 dark:text-red-400'
+              : 'font-normal text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
-          Todas as tarefas
+          Todas
         </button>
         <button
           type="button"
           onClick={() => setFilter('starred')}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+          className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
             filter === 'starred'
-              ? 'bg-red-600 text-white'
-              : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+              ? 'bg-white font-medium text-red-600 shadow-sm dark:bg-gray-600 dark:text-red-400'
+              : 'font-normal text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           <Star className="h-3.5 w-3.5" />
@@ -554,11 +558,11 @@ export function KanbanTasksView() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-gray-500">Carregando listas…</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Carregando listas…</p>
       ) : (
         <div
           ref={listsScrollRef}
-          className="flex items-start gap-4 overflow-x-auto pb-2"
+          className="flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto pb-1"
         >
           {lists.map((list) => (
             <ListBlock
@@ -600,9 +604,9 @@ export function KanbanTasksView() {
             />
           ))}
 
-          <div className="w-[280px] shrink-0">
+          <div className="flex w-[280px] shrink-0 flex-col">
             {creatingList ? (
-              <div className="rounded-2xl border border-dashed border-gray-300 bg-white/70 p-4 dark:border-gray-600 dark:bg-gray-900/50">
+              <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 dark:border-gray-600 dark:bg-gray-900">
                 <input
                   autoFocus
                   value={newListTitle}
@@ -617,14 +621,14 @@ export function KanbanTasksView() {
                     }
                   }}
                   placeholder="Nome da lista"
-                  className="mb-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-normal outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 />
                 <div className="flex gap-2">
                   <button
                     type="button"
                     disabled={busy || !newListTitle.trim()}
                     onClick={() => createListMut.mutate(newListTitle.trim())}
-                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     Criar
                   </button>
@@ -634,7 +638,7 @@ export function KanbanTasksView() {
                       setCreatingList(false);
                       setNewListTitle('');
                     }}
-                    className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    className="rounded-lg px-3 py-1.5 text-sm font-normal text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     Cancelar
                   </button>
@@ -644,9 +648,9 @@ export function KanbanTasksView() {
               <button
                 type="button"
                 onClick={() => setCreatingList(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-300 py-8 text-sm font-medium text-gray-500 transition-colors hover:border-gray-400 hover:bg-white/40 hover:text-gray-700 dark:border-gray-600 dark:hover:bg-gray-900/40 dark:hover:text-gray-200"
+                className="flex h-full min-h-[140px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 text-sm font-normal text-gray-400 transition-colors hover:border-gray-400 hover:bg-gray-50/80 hover:text-gray-600 dark:border-gray-600 dark:hover:bg-gray-900/60 dark:hover:text-gray-300"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-5 w-5" />
                 Criar nova lista
               </button>
             )}
