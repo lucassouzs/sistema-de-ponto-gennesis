@@ -3,9 +3,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Car, Loader2, Plus, Search, Upload, X } from 'lucide-react';
+import { Car, Loader2, Plus, Search, Trash2, Upload, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
+import { TableCheckbox } from '@/components/ui/Checkbox';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -143,6 +144,9 @@ export default function VeiculosPage() {
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [formData, setFormData] = useState<VehicleFormState>(EMPTY_FORM);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -232,6 +236,63 @@ export default function VeiculosPage() {
     totalPages: 1
   };
 
+  const selectedCount = selectedIds.size;
+  const allPageSelected =
+    vehicles.length > 0 && vehicles.every((vehicle) => selectedIds.has(vehicle.id));
+  const somePageSelected = vehicles.some((vehicle) => selectedIds.has(vehicle.id));
+  const allSearchSelected =
+    pagination.total > 0 && selectedCount > 0 && selectedCount >= pagination.total;
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPage = () => {
+    setSelectedIds((prev) => {
+      if (vehicles.length === 0) return prev;
+      if (vehicles.every((vehicle) => prev.has(vehicle.id))) {
+        const next = new Set(prev);
+        vehicles.forEach((vehicle) => next.delete(vehicle.id));
+        return next;
+      }
+      const next = new Set(prev);
+      vehicles.forEach((vehicle) => next.add(vehicle.id));
+      return next;
+    });
+  };
+
+  const selectAllFromSearch = async () => {
+    if (selectingAll || pagination.total === 0) return;
+    setSelectingAll(true);
+    try {
+      const pageSize = 500;
+      const totalPages = Math.max(1, Math.ceil(pagination.total / pageSize));
+      const ids: string[] = [];
+      for (let page = 1; page <= totalPages; page++) {
+        const res = await api.get('/vehicles', {
+          params: {
+            search: searchTerm || undefined,
+            page,
+            limit: pageSize,
+          },
+        });
+        const rows = (res.data?.data || []) as Vehicle[];
+        for (const row of rows) ids.push(row.id);
+      }
+      setSelectedIds(new Set(ids));
+      toast.success(`${ids.length} veículo(s) selecionado(s)`);
+    } catch {
+      toast.error('Não foi possível selecionar todos os veículos da busca');
+    } finally {
+      setSelectingAll(false);
+    }
+  };
+
   const employeeByName = useMemo(() => {
     const map = new Map<string, EmployeeOption>();
     for (const employee of employeeOptions) {
@@ -297,9 +358,10 @@ export default function VeiculosPage() {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedIds(new Set());
   }, [searchTerm]);
 
-  const modalOpen = showForm || deleteId != null;
+  const modalOpen = showForm || deleteId != null || showBulkDeleteModal;
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -380,9 +442,37 @@ export default function VeiculosPage() {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       setDeleteId(null);
       setRowActionMenu(null);
+      setSelectedIds((prev) => {
+        if (!deleteId || !prev.has(deleteId)) return prev;
+        const next = new Set(prev);
+        next.delete(deleteId);
+        return next;
+      });
       toast.success('Veículo excluído com sucesso!');
     },
     onError: (err: any) => toast.error(err.response?.data?.message || 'Erro ao excluir veículo')
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await api.post('/vehicles/delete-many', { ids }, { timeout: 120_000 });
+      return Number(res.data?.data?.deleted ?? ids.length);
+    },
+    onSuccess: (deleted) => {
+      toast.success(
+        deleted === 1 ? '1 veículo excluído' : `${deleted} veículos excluídos`
+      );
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      setSelectedIds(new Set());
+      setShowBulkDeleteModal(false);
+      setRowActionMenu(null);
+    },
+    onError: (err: any) =>
+      toast.error(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Erro ao excluir selecionados'
+      ),
   });
 
   const openEdit = (vehicle: Vehicle) => {
@@ -512,6 +602,16 @@ export default function VeiculosPage() {
                   </div>
                 </div>
                 <div className={cadastroListClasses.cardToolbar}>
+                  {selectedCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkDeleteModal(true)}
+                      className="flex h-10 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                    >
+                      <Trash2 className="h-4 w-4 shrink-0" />
+                      <span>Excluir ({selectedCount})</span>
+                    </button>
+                  ) : null}
                   <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
@@ -583,6 +683,15 @@ export default function VeiculosPage() {
                     <table className={cadastroListClasses.table}>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
+                          <th scope="col" className="w-10 px-3 py-4 sm:px-4">
+                            <TableCheckbox
+                              checked={allPageSelected}
+                              indeterminate={!allPageSelected && somePageSelected}
+                              onChange={() => toggleSelectAllPage()}
+                              onClick={(e) => e.stopPropagation()}
+                              ariaLabel="Selecionar todos desta página"
+                            />
+                          </th>
                           <th className={cadastroListClasses.th}>ID</th>
                           <th className={cadastroListClasses.th}>Modelo</th>
                           <th className={cadastroListClasses.thCenter}>Placa</th>
@@ -595,6 +704,14 @@ export default function VeiculosPage() {
                       <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                         {vehicles.map((vehicle, index) => (
                           <tr key={vehicle.id} className={listTableRowClasses.tr}>
+                            <td className="w-10 px-3 py-4 sm:px-4">
+                              <TableCheckbox
+                                checked={selectedIds.has(vehicle.id)}
+                                onChange={() => toggleSelectOne(vehicle.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                ariaLabel={`Selecionar veículo ${formatPlacaDisplay(vehicle.placaVeic)}`}
+                              />
+                            </td>
                             <td className={cadastroListClasses.tdMono}>
                               {formatCadastroListId(
                                 vehicle.code,
@@ -625,6 +742,25 @@ export default function VeiculosPage() {
                       </tbody>
                     </table>
                   </div>
+                  {allPageSelected &&
+                  pagination.total > vehicles.length &&
+                  !allSearchSelected ? (
+                    <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                      Todos os {vehicles.length} desta página estão selecionados.{' '}
+                      <button
+                        type="button"
+                        disabled={selectingAll}
+                        onClick={() => {
+                          void selectAllFromSearch();
+                        }}
+                        className="font-semibold text-red-600 hover:underline disabled:opacity-50 dark:text-red-400"
+                      >
+                        {selectingAll
+                          ? 'Selecionando…'
+                          : `Selecionar todos os ${pagination.total} da busca`}
+                      </button>
+                    </div>
+                  ) : null}
 
                   {pagination.totalPages > 1 && (
                     <div className={cadastroListClasses.pagination}>
@@ -922,6 +1058,48 @@ export default function VeiculosPage() {
             </div>
           )}
 
+          {showBulkDeleteModal && (
+            <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/50"
+                aria-hidden
+                onClick={() =>
+                  !bulkDeleteMutation.isPending && setShowBulkDeleteModal(false)
+                }
+              />
+              <div className="relative z-[1101] w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Excluir selecionados
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Tem certeza que deseja excluir{' '}
+                  <strong>{selectedCount}</strong> veículo(s) selecionado(s)? Esta ação não
+                  pode ser desfeita.
+                </p>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    disabled={bulkDeleteMutation.isPending}
+                    onClick={() => setShowBulkDeleteModal(false)}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bulkDeleteMutation.isPending || selectedCount === 0}
+                    onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {bulkDeleteMutation.isPending
+                      ? 'Excluindo...'
+                      : `Excluir ${selectedCount}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <SpreadsheetImportModal
             isOpen={showImportModal}
             onClose={() => setShowImportModal(false)}
@@ -930,6 +1108,8 @@ export default function VeiculosPage() {
             columns={VEHICLE_IMPORT_COLUMNS}
             bodyKey="vehicles"
             importPath="/vehicles/import"
+            batchSize={25}
+            requestTimeoutMs={180_000}
             downloadTemplate={downloadVehicleImportTemplate}
             parseFile={async (file) => {
               const report = await parseVehiclesFromFile(file);

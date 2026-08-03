@@ -100,8 +100,20 @@ export const errorHandler = (
         : 'Recurso já existe (violação de chave única)';
       statusCode = 409;
     } else if (code === 'P2003') {
-      message = 'Referência inválida no banco de dados (vínculo com outro registro inexistente)';
-      statusCode = 400;
+      const field =
+        typeof prisma.meta?.field_name === 'string'
+          ? prisma.meta.field_name
+          : typeof prisma.meta?.constraint === 'string'
+            ? prisma.meta.constraint
+            : null;
+      if (field && /vehicle/i.test(field)) {
+        message =
+          'Não é possível excluir: este veículo está vinculado a reservas. Remova ou desvincule as reservas e tente novamente.';
+      } else {
+        message =
+          'Não é possível excluir: o registro está vinculado a outros dados do sistema.';
+      }
+      statusCode = 409;
     } else if (code === 'P2021' || code === 'P2022') {
       message =
         'Esquema do banco está desatualizado em relação ao aplicativo. Rode as migrations (prisma migrate deploy) ou contate o suporte.';
