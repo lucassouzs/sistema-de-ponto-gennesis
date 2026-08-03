@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { TimePickerField } from '@/components/ui/TimePickerField';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   createPlannerEvent,
@@ -307,31 +308,16 @@ function ViewSwitcher({
   onChange: (view: CalendarView) => void;
 }) {
   return (
-    <div
-      className="inline-flex shrink-0 items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
-      role="group"
+    <SegmentedControl
+      value={value}
+      onChange={onChange}
       aria-label="Visualização do calendário"
-    >
-      {VIEW_OPTIONS.map((opt) => {
-        const selected = opt.id === value;
-        return (
-          <button
-            key={opt.id}
-            type="button"
-            title={`${opt.label} (${opt.shortcut})`}
-            aria-pressed={selected}
-            onClick={() => onChange(opt.id)}
-            className={`rounded-md px-2.5 py-1.5 text-sm transition-colors sm:px-3 ${
-              selected
-                ? 'bg-white font-medium text-red-600 shadow-sm dark:bg-gray-600 dark:text-red-400'
-                : 'font-normal text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-            }`}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
+      options={VIEW_OPTIONS.map((opt) => ({
+        value: opt.id,
+        title: `${opt.label} (${opt.shortcut})`,
+        label: opt.label,
+      }))}
+    />
   );
 }
 
@@ -768,7 +754,7 @@ export function KanbanPlannerView({
   const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-4 lg:flex-row lg:items-stretch lg:gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4">
       <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[248px]">
         {pageTitle ? (
           <div>
@@ -900,7 +886,7 @@ export function KanbanPlannerView({
                       className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
                       <Share2 className="h-4 w-4 shrink-0 text-gray-500" />
-                      Compartilhar com alguém
+                      Compartilhar
                     </button>
                     <button
                       type="button"
