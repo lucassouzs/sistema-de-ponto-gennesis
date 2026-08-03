@@ -150,7 +150,7 @@ export class VehicleController {
 
       if (isActive !== undefined) where.isActive = isActive === 'true';
 
-      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
+      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 500);
       const pageNum = Math.max(1, Number(page) || 1);
       const skip = (pageNum - 1) * limitNum;
 
@@ -347,8 +347,49 @@ export class VehicleController {
       const existing = await prisma.vehicle.findUnique({ where: { id } });
       if (!existing) throw createError('Veículo não encontrado', 404);
 
-      await prisma.vehicle.delete({ where: { id } });
+      await prisma.$transaction(async (tx) => {
+        await tx.vehicleReservation.updateMany({
+          where: { vehicleId: id },
+          data: { vehicleId: null },
+        });
+        await tx.vehicle.delete({ where: { id } });
+      });
+
       res.json({ success: true, message: 'Veículo excluído com sucesso' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteMany(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const ids = Array.isArray(req.body?.ids)
+        ? (req.body.ids as unknown[])
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+        : [];
+
+      if (ids.length === 0) {
+        throw createError('Envie um array "ids" com ao menos um veículo', 400);
+      }
+
+      const uniqueIds = Array.from(new Set(ids));
+
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.vehicleReservation.updateMany({
+          where: { vehicleId: { in: uniqueIds } },
+          data: { vehicleId: null },
+        });
+        return tx.vehicle.deleteMany({
+          where: { id: { in: uniqueIds } },
+        });
+      });
+
+      res.json({
+        success: true,
+        data: { deleted: result.count },
+        message: `${result.count} veículo(s) excluído(s)`,
+      });
     } catch (error) {
       next(error);
     }

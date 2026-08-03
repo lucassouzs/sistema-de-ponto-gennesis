@@ -33,7 +33,29 @@ type SpreadsheetImportModalProps = {
   parseFile: (file: File) => Promise<ParseReport>;
   onImported: () => void;
   batchSize?: number;
+  /** Timeout por lote (ms). Padrão: 120s — importações com normalização externa precisam de mais tempo. */
+  requestTimeoutMs?: number;
 };
+
+function resolveImportErrorMessage(err: unknown): string {
+  const ax = err as {
+    code?: string;
+    message?: string;
+    response?: { status?: number; data?: { message?: string; error?: string } };
+  };
+  if (ax.code === 'ECONNABORTED' || /timeout/i.test(String(ax.message || ''))) {
+    return 'A importação demorou demais e foi interrompida. Tente novamente — a planilha será enviada em lotes menores.';
+  }
+  if (!ax.response) {
+    return 'Não foi possível conectar ao servidor. Confirme se o backend está rodando e tente de novo.';
+  }
+  const fromBody = ax.response.data?.message || ax.response.data?.error;
+  if (fromBody) return fromBody;
+  if (ax.response.status === 413) {
+    return 'Arquivo/lote grande demais para o servidor. Tente importar em partes menores.';
+  }
+  return `Erro ao importar (HTTP ${ax.response.status}).`;
+}
 
 export function SpreadsheetImportModal({
   isOpen,
@@ -47,6 +69,7 @@ export function SpreadsheetImportModal({
   parseFile,
   onImported,
   batchSize = 100,
+  requestTimeoutMs = 120_000,
 }: SpreadsheetImportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputId = `import-file-${bodyKey}`;
@@ -131,7 +154,7 @@ export function SpreadsheetImportModal({
           created,
           failed,
         });
-        const res = await api.post(importPath, { [bodyKey]: slice });
+        const res = await api.post(importPath, { [bodyKey]: slice }, { timeout: requestTimeoutMs });
         const data = res.data?.data as
           | { created?: number; failed?: number; errors?: BackendError[] }
           | undefined;
@@ -159,8 +182,7 @@ export function SpreadsheetImportModal({
         onClose();
       }
     } catch (err: unknown) {
-      const ax = err as { response?: { data?: { message?: string } } };
-      toast.error(ax.response?.data?.message || 'Erro ao importar.');
+      toast.error(resolveImportErrorMessage(err));
     } finally {
       setIsImporting(false);
     }
