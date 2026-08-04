@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/passwordHash';
 import { gennecyBotUserWhereExclude } from '../lib/gennecyBotUser';
+import { releaseUserIdentity, buildReleasedIdentity } from '../lib/userIdentityRelease';
 
 export class UserController {
   async updateUserPassword(req: AuthRequest, res: Response, next: NextFunction) {
@@ -416,17 +417,33 @@ export class UserController {
       }
 
       const result = await prisma.$transaction(async (tx: any) => {
+        const deactivating =
+          isActive === false && existingUser.isActive !== false;
+
         // Atualizar usuário
-        const user = await tx.user.update({
-          where: { id },
-          data: {
-            ...(name && { name }),
-            ...(email && { email }),
-            ...(cpf && { cpf }),
-            ...(role && { role }),
-            ...(isActive !== undefined && { isActive })
-          }
-        });
+        const user = deactivating
+          ? await tx.user.update({
+              where: { id },
+              data: {
+                isActive: false,
+                ...(() => {
+                  const identity = buildReleasedIdentity(id);
+                  return { email: identity.email, cpf: identity.cpf };
+                })(),
+                ...(name && { name }),
+                ...(role && { role }),
+              },
+            })
+          : await tx.user.update({
+              where: { id },
+              data: {
+                ...(name && { name }),
+                ...(email && { email }),
+                ...(cpf && { cpf }),
+                ...(role && { role }),
+                ...(isActive !== undefined && { isActive }),
+              },
+            });
 
         // Atualizar dados do funcionário se fornecidos
         if (employeeData && existingUser.employee) {
@@ -506,11 +523,8 @@ export class UserController {
         throw createError('Usuário não encontrado', 404);
       }
 
-      // Soft delete - apenas desativar
-      await prisma.user.update({
-        where: { id },
-        data: { isActive: false }
-      });
+      // Desliga e libera CPF/e-mail para permitir novo cadastro com os mesmos dados
+      await releaseUserIdentity(id);
 
       res.json({
         success: true,
@@ -680,6 +694,7 @@ export class UserController {
       
       const existingUser = await prisma.user.findFirst({
         where: {
+          isActive: true,
           OR: [
             { cpf: cpfNumbers },
             { cpf: cpfFormatted }
@@ -688,9 +703,10 @@ export class UserController {
         select: { id: true, name: true }
       });
 
-      // Se não encontrou, fazer uma busca mais ampla normalizando CPFs
+      // Se não encontrou, fazer uma busca mais ampla normalizando CPFs (só ativos)
       if (!existingUser) {
         const allUsers = await prisma.user.findMany({
+          where: { isActive: true },
           select: { id: true, name: true, cpf: true }
         });
 
@@ -736,9 +752,10 @@ export class UserController {
         });
       }
 
-      // Buscar email no banco (case-insensitive)
+      // Buscar email no banco (case-insensitive) — só ativos
       const existingUser = await prisma.user.findFirst({
         where: {
+          isActive: true,
           email: {
             equals: email,
             mode: 'insensitive'

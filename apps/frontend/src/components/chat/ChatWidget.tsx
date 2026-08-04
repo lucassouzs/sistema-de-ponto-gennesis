@@ -41,6 +41,7 @@ const DEPARTMENTS = [
   { value: 'Administrativo', label: 'Administrativo' },
   { value: 'Financeiro', label: 'Financeiro' },
   { value: 'Operacional', label: 'Operacional' },
+  { value: 'Segurança do Trabalho', label: 'Segurança do Trabalho' },
 ];
 
 const departmentSelectOptions = labeledToSelectOptions(DEPARTMENTS);

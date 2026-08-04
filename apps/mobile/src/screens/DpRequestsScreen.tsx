@@ -94,6 +94,7 @@ const DEPARTMENTS_LIST = [
   'Administrativo',
   'Financeiro',
   'Operacional',
+  'Segurança do Trabalho',
 ];
 
 const MOTIVO_CONTRATACAO_OPTIONS = [

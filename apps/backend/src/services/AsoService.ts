@@ -1,6 +1,15 @@
 import { AsoGrauRisco, AsoResultado, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
+import {
+  canonicalizeSetorAso,
+  cargoRiscoPairKey,
+  isSetorAsoValido,
+  labelFuncaoAso,
+  labelFuncaoFromEmployee,
+  normalizeAsoKey,
+  normalizeCargoSetorAso,
+} from '../lib/asoFuncao';
 
 const DEFAULT_PERIODICIDADE_MESES = 12;
 
@@ -69,7 +78,13 @@ export class AsoService {
   }
 
   async listCargosRisco() {
-    return prisma.cargoRisco.findMany({ orderBy: { cargo: 'asc' } });
+    const rows = await prisma.cargoRisco.findMany({
+      orderBy: [{ setor: 'asc' }, { cargo: 'asc' }],
+    });
+    return rows.map((r) => ({
+      ...r,
+      label: labelFuncaoAso(r.cargo, r.setor),
+    }));
   }
 
   /**
@@ -133,17 +148,25 @@ export class AsoService {
       if (!uniqueByNorm.has(key)) uniqueByNorm.set(key, cargo);
     }
 
-    const cadastrados = await prisma.cargoRisco.findMany({ select: { cargo: true } });
-    const cadastradosNorm = new Set(
-      cadastrados.map((c) => c.cargo.trim().toLowerCase()).filter(Boolean)
-    );
+    const cadastrados = await prisma.cargoRisco.findMany({ select: { cargo: true, setor: true } });
+    const setoresByCargo = new Map<string, string[]>();
+    for (const c of cadastrados) {
+      const key = c.cargo.trim().toLowerCase();
+      const list = setoresByCargo.get(key) || [];
+      list.push(c.setor);
+      setoresByCargo.set(key, list);
+    }
 
     return [...uniqueByNorm.values()]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
-      .map((cargo) => ({
-        cargo,
-        jaCadastrado: cadastradosNorm.has(cargo.toLowerCase()),
-      }));
+      .map((cargo) => {
+        const setoresCadastrados = setoresByCargo.get(cargo.toLowerCase()) || [];
+        return {
+          cargo,
+          setoresCadastrados,
+          jaCadastrado: setoresCadastrados.length > 0,
+        };
+      });
   }
 
   private async assertCargoExisteEmFuncionariosAtivos(cargo: string) {
@@ -212,11 +235,17 @@ export class AsoService {
 
   async createCargoRisco(data: {
     cargo: string;
+    setor: string;
     grauRisco: AsoGrauRisco;
     periodicidadeMeses: number;
   }) {
     const cargo = data.cargo.trim();
     if (!cargo) throw createError('Cargo é obrigatório', 400);
+    if (!data.setor?.trim()) throw createError('Setor é obrigatório', 400);
+    if (!isSetorAsoValido(data.setor)) {
+      throw createError('Setor inválido', 400);
+    }
+    const setor = canonicalizeSetorAso(data.setor);
     if (!Number.isFinite(data.periodicidadeMeses) || data.periodicidadeMeses < 1) {
       throw createError('Periodicidade deve ser um número de meses >= 1', 400);
     }
@@ -224,16 +253,18 @@ export class AsoService {
     await this.assertCargoExisteEmFuncionariosAtivos(cargo);
 
     try {
-      return await prisma.cargoRisco.create({
+      const row = await prisma.cargoRisco.create({
         data: {
           cargo,
+          setor,
           grauRisco: data.grauRisco,
           periodicidadeMeses: Math.floor(data.periodicidadeMeses),
         },
       });
+      return { ...row, label: labelFuncaoAso(row.cargo, row.setor) };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw createError('Já existe periodicidade cadastrada para este cargo', 409);
+        throw createError('Já existe periodicidade para este cargo neste setor', 409);
       }
       throw error;
     }
@@ -241,7 +272,12 @@ export class AsoService {
 
   async updateCargoRisco(
     id: string,
-    data: Partial<{ cargo: string; grauRisco: AsoGrauRisco; periodicidadeMeses: number }>
+    data: Partial<{
+      cargo: string;
+      setor: string;
+      grauRisco: AsoGrauRisco;
+      periodicidadeMeses: number;
+    }>
   ) {
     const existing = await prisma.cargoRisco.findUnique({ where: { id } });
     if (!existing) throw createError('Cargo de risco não encontrado', 404);
@@ -251,6 +287,14 @@ export class AsoService {
     if (cargo !== undefined) {
       await this.assertCargoExisteEmFuncionariosAtivos(cargo);
     }
+
+    let setor: string | undefined;
+    if (data.setor !== undefined) {
+      if (!data.setor.trim()) throw createError('Setor é obrigatório', 400);
+      if (!isSetorAsoValido(data.setor)) throw createError('Setor inválido', 400);
+      setor = canonicalizeSetorAso(data.setor);
+    }
+
     if (
       data.periodicidadeMeses !== undefined &&
       (!Number.isFinite(data.periodicidadeMeses) || data.periodicidadeMeses < 1)
@@ -259,19 +303,21 @@ export class AsoService {
     }
 
     try {
-      return await prisma.cargoRisco.update({
+      const row = await prisma.cargoRisco.update({
         where: { id },
         data: {
           ...(cargo !== undefined ? { cargo } : {}),
+          ...(setor !== undefined ? { setor } : {}),
           ...(data.grauRisco !== undefined ? { grauRisco: data.grauRisco } : {}),
           ...(data.periodicidadeMeses !== undefined
             ? { periodicidadeMeses: Math.floor(data.periodicidadeMeses) }
             : {}),
         },
       });
+      return { ...row, label: labelFuncaoAso(row.cargo, row.setor) };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw createError('Já existe periodicidade cadastrada para este cargo', 409);
+        throw createError('Já existe periodicidade para este cargo neste setor', 409);
       }
       throw error;
     }
@@ -285,8 +331,8 @@ export class AsoService {
   }
 
   /**
-   * Cargos de funcionários ativos que não possuem periodicidade cadastrada em cargos_risco
-   * (usam os 12 meses padrão). Agrupado por cargo, com a lista de funcionários.
+   * Pares cargo+setor de funcionários ativos sem periodicidade cadastrada
+   * (usam os 12 meses padrão).
    */
   async cargosSemPeriodicidade() {
     const employees = await prisma.employee.findMany({
@@ -300,23 +346,35 @@ export class AsoService {
       },
     });
 
-    const cargosRisco = await prisma.cargoRisco.findMany({ select: { cargo: true } });
+    const cargosRisco = await prisma.cargoRisco.findMany({ select: { cargo: true, setor: true } });
     const cadastradosNorm = new Set(
-      cargosRisco.map((c) => c.cargo.trim().toLowerCase()).filter(Boolean)
+      cargosRisco.map((c) => cargoRiscoPairKey(c.cargo, c.setor))
     );
 
-    const byCargo = new Map<
+    const byPair = new Map<
       string,
-      { cargo: string; funcionarios: Array<{ id: string; nome: string; employeeId: string; department: string }> }
+      {
+        cargo: string;
+        setor: string;
+        label: string;
+        funcionarios: Array<{ id: string; nome: string; employeeId: string; department: string }>;
+      }
     >();
 
     for (const e of employees) {
-      const cargo = String(e.position || '').trim();
-      if (!cargo) continue;
-      const key = cargo.toLowerCase();
+      const { cargo, setor } = normalizeCargoSetorAso(e.position, e.department);
+      if (!cargo || !setor) continue;
+      const key = cargoRiscoPairKey(cargo, setor);
       if (cadastradosNorm.has(key)) continue;
-      if (!byCargo.has(key)) byCargo.set(key, { cargo, funcionarios: [] });
-      byCargo.get(key)!.funcionarios.push({
+      if (!byPair.has(key)) {
+        byPair.set(key, {
+          cargo,
+          setor,
+          label: labelFuncaoAso(cargo, setor),
+          funcionarios: [],
+        });
+      }
+      byPair.get(key)!.funcionarios.push({
         id: e.id,
         nome: e.user?.name || '',
         employeeId: e.employeeId,
@@ -324,37 +382,51 @@ export class AsoService {
       });
     }
 
-    return [...byCargo.values()].sort((a, b) => a.cargo.localeCompare(b.cargo, 'pt-BR'));
+    return [...byPair.values()].sort((a, b) => {
+      const bySetor = a.setor.localeCompare(b.setor, 'pt-BR', { sensitivity: 'base' });
+      if (bySetor !== 0) return bySetor;
+      return a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' });
+    });
   }
 
   /**
-   * Resolve periodicidade pelo cargo do funcionário (match case-insensitive).
-   * Sem cadastro → 12 meses + flag validadePadrao.
+   * Resolve periodicidade por cargo + setor (match case-insensitive).
+   * Sem cadastro do par → 12 meses + flag validadePadrao.
    */
-  async resolvePeriodicidade(cargoFuncionario: string | null | undefined): Promise<{
+  async resolvePeriodicidade(
+    cargoFuncionario: string | null | undefined,
+    setorFuncionario?: string | null
+  ): Promise<{
     periodicidadeMeses: number;
     validadePadrao: boolean;
     cargoRiscoId: string | null;
     grauRisco: AsoGrauRisco | null;
+    label: string | null;
   }> {
-    const cargo = (cargoFuncionario || '').trim();
-    if (!cargo) {
+    const { cargo, setor } = normalizeCargoSetorAso(cargoFuncionario, setorFuncionario);
+    if (!cargo || !setor) {
       return {
         periodicidadeMeses: DEFAULT_PERIODICIDADE_MESES,
         validadePadrao: true,
         cargoRiscoId: null,
         grauRisco: null,
+        label: cargo ? labelFuncaoAso(cargo, setor) || cargo : null,
       };
     }
 
     const all = await prisma.cargoRisco.findMany();
-    const match = all.find((c) => c.cargo.trim().toLowerCase() === cargo.toLowerCase());
+    const match = all.find(
+      (c) =>
+        normalizeAsoKey(c.cargo) === normalizeAsoKey(cargo) &&
+        normalizeAsoKey(c.setor) === normalizeAsoKey(setor)
+    );
     if (!match) {
       return {
         periodicidadeMeses: DEFAULT_PERIODICIDADE_MESES,
         validadePadrao: true,
         cargoRiscoId: null,
         grauRisco: null,
+        label: labelFuncaoAso(cargo, setor),
       };
     }
 
@@ -363,24 +435,28 @@ export class AsoService {
       validadePadrao: false,
       cargoRiscoId: match.id,
       grauRisco: match.grauRisco,
+      label: labelFuncaoAso(match.cargo, match.setor),
     };
   }
 
   async previewValidade(funcionarioId: string, dataExame: string | Date) {
     const employee = await prisma.employee.findUnique({
       where: { id: funcionarioId },
-      select: { id: true, position: true },
+      select: { id: true, position: true, department: true },
     });
     if (!employee) throw createError('Funcionário não encontrado', 404);
 
     const exame = parseDateOnly(dataExame);
-    const resolved = await this.resolvePeriodicidade(employee.position);
+    const resolved = await this.resolvePeriodicidade(employee.position, employee.department);
+    const { cargo, setor } = normalizeCargoSetorAso(employee.position, employee.department);
     return {
       dataExame: exame.toISOString().slice(0, 10),
       dataValidade: addMonths(exame, resolved.periodicidadeMeses).toISOString().slice(0, 10),
       periodicidadeMeses: resolved.periodicidadeMeses,
       validadePadrao: resolved.validadePadrao,
-      cargo: employee.position,
+      cargo,
+      setor,
+      label: resolved.label || labelFuncaoAso(cargo, setor),
       grauRisco: resolved.grauRisco,
     };
   }
@@ -530,7 +606,7 @@ export class AsoService {
   }) {
     const employee = await prisma.employee.findUnique({
       where: { id: input.funcionarioId },
-      select: { id: true, position: true },
+      select: { id: true, position: true, department: true },
     });
     if (!employee) throw createError('Funcionário não encontrado', 404);
 
@@ -548,7 +624,7 @@ export class AsoService {
     }
 
     const dataExame = parseDateOnly(input.dataExame);
-    const resolved = await this.resolvePeriodicidade(employee.position);
+    const resolved = await this.resolvePeriodicidade(employee.position, employee.department);
     const dataValidade = addMonths(dataExame, resolved.periodicidadeMeses);
 
     const todayUtc = todayDateOnly();
@@ -646,9 +722,9 @@ export class AsoService {
     if (shouldRecalc) {
       const employee = await prisma.employee.findUnique({
         where: { id: funcionarioId },
-        select: { position: true },
+        select: { position: true, department: true },
       });
-      const resolved = await this.resolvePeriodicidade(employee?.position);
+      const resolved = await this.resolvePeriodicidade(employee?.position, employee?.department);
       dataValidade = addMonths(dataExame, resolved.periodicidadeMeses);
       validadePadrao = resolved.validadePadrao;
       periodicidadeUsada = resolved.periodicidadeMeses;
@@ -711,9 +787,9 @@ export class AsoService {
         prisma.asoRegistro.count({ where: { validadePadrao: true } }),
         prisma.employee.findMany({
           where: { user: { isActive: true } },
-          select: { id: true, position: true },
+          select: { id: true, position: true, department: true },
         }),
-        prisma.cargoRisco.findMany({ select: { cargo: true } }),
+        prisma.cargoRisco.findMany({ select: { cargo: true, setor: true } }),
       ]);
 
     const activeIds = activeEmployees.map((e) => e.id);
@@ -742,13 +818,13 @@ export class AsoService {
     const percentual = ativos > 0 ? Math.round((comAsoValido / ativos) * 1000) / 10 : 0;
 
     const cargosRiscoNorm = new Set(
-      cargosRisco.map((c) => c.cargo.trim().toLowerCase()).filter(Boolean)
+      cargosRisco.map((c) => cargoRiscoPairKey(c.cargo, c.setor))
     );
     const cargosSemPeriodicidadeSet = new Set<string>();
     for (const e of activeEmployees) {
-      const cargo = String(e.position || '').trim();
-      if (!cargo) continue;
-      const key = cargo.toLowerCase();
+      const { cargo, setor } = normalizeCargoSetorAso(e.position, e.department);
+      if (!cargo || !setor) continue;
+      const key = cargoRiscoPairKey(cargo, setor);
       if (!cargosRiscoNorm.has(key)) cargosSemPeriodicidadeSet.add(key);
     }
 
@@ -817,9 +893,9 @@ export class AsoService {
       }
     }
 
-    const cargosRisco = await prisma.cargoRisco.findMany({ select: { cargo: true } });
+    const cargosRisco = await prisma.cargoRisco.findMany({ select: { cargo: true, setor: true } });
     const cargosRiscoNorm = new Set(
-      cargosRisco.map((c) => c.cargo.trim().toLowerCase()).filter(Boolean)
+      cargosRisco.map((c) => cargoRiscoPairKey(c.cargo, c.setor))
     );
 
     const todayUtc = todayDateOnly();
@@ -833,7 +909,10 @@ export class AsoService {
         const classe = classifyValidade(ultimoAso.dataValidade, todayUtc, in30, in60);
         statusValidade = classe === 'vencido' ? 'vencidos' : classe === 'valido' ? 'validos' : classe;
       }
-      const hasPeriodicidadeCargo = cargosRiscoNorm.has(String(e.position || '').trim().toLowerCase());
+      const normalized = normalizeCargoSetorAso(e.position, e.department);
+      const hasPeriodicidadeCargo = cargosRiscoNorm.has(
+        cargoRiscoPairKey(normalized.cargo, normalized.setor)
+      );
 
       return {
         funcionarioId: e.id,
@@ -842,6 +921,7 @@ export class AsoService {
         cpf: e.user?.cpf || '',
         position: e.position,
         department: e.department,
+        labelFuncao: labelFuncaoFromEmployee(e.position, e.department),
         ultimoAso: ultimoAso
           ? {
               id: ultimoAso.id,
