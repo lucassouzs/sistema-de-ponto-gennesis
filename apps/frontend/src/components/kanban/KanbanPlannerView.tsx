@@ -617,6 +617,7 @@ export function KanbanPlannerView({
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [memberPickerOpen, setMemberPickerOpen] = useState(false);
   const [hoveringAttendeeId, setHoveringAttendeeId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const ataInputRef = useRef<HTMLInputElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
@@ -999,6 +1000,26 @@ export function KanbanPlannerView({
   const dayCount = days.length || 1;
   const gridCols = `${TIME_COL_WIDTH}px repeat(${dayCount}, minmax(0, 1fr))`;
 
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const id = window.setInterval(tick, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const nowIndicatorTop = useMemo(() => {
+    const minutes = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const gridStart = HOUR_START * 60;
+    const gridEnd = (HOUR_END + 1) * 60;
+    if (minutes < gridStart || minutes > gridEnd) return null;
+    return ((minutes - gridStart) / 60) * ROW_HEIGHT;
+  }, [now]);
+
+  const nowDayIndex = useMemo(
+    () => days.findIndex((day) => isSameDay(day, startOfDay(now))),
+    [days, now]
+  );
+
   const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   return (
@@ -1289,6 +1310,26 @@ export function KanbanPlannerView({
                   ))}
                 </div>
               ))}
+
+              {nowIndicatorTop != null && nowDayIndex >= 0 ? (
+                <div
+                  className="pointer-events-none absolute left-0 right-0 z-30 grid"
+                  style={{ top: nowIndicatorTop, gridTemplateColumns: gridCols }}
+                  aria-hidden
+                >
+                  <div />
+                  {days.map((day, index) => (
+                    <div key={`now-${day.toISOString()}`} className="relative">
+                      {index === nowDayIndex ? (
+                        <>
+                          <span className="absolute left-0 top-0 z-[1] h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 shadow-sm" />
+                          <span className="absolute left-0 right-0 top-0 h-0.5 -translate-y-1/2 bg-red-600" />
+                        </>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div
                 className="pointer-events-none absolute inset-0 grid"
