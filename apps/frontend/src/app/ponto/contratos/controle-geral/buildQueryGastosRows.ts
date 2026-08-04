@@ -9,8 +9,7 @@ import {
   resolveCanonicalGastosContractName,
   resolveVisibleLocalityItems,
   sortContractNamesByCustomOrder,
-  sortContractsByCustomOrder,
-  type GastosOperacionaisLocality
+  sortContractsByCustomOrder
 } from './gastosOperacionaisContractOrder';
 import {
   contractMatchesLocalitiesWithOverrides,
@@ -83,7 +82,7 @@ export type GastosNaturezaModalDfcTree = {
 };
 
 export type GastosOperacionaisFilters = {
-  localities: GastosOperacionaisLocality[];
+  localities: string[];
   polos: string[];
   /** YYYY-MM-DD (fuso local). Vazio = sem limite inferior. */
   periodFrom: string;
@@ -547,7 +546,7 @@ export function getGastosFilterOptions(
   detailRows: QueryGastosDetailRow[],
   filters?: Pick<GastosOperacionaisFilters, 'localities'>,
   localityOverrides: GastosOperacionaisLocalityOverrideMap = {},
-  visibleLocalities?: readonly GastosOperacionaisLocality[]
+  visibleLocalities?: readonly string[]
 ): GastosOperacionaisFilterOptions {
   const years = Array.from(new Set(detailRows.map((row) => row.year))).sort((a, b) => b - a);
   const allContracts = Array.from(new Set(detailRows.map((row) => row.contract)));
@@ -582,7 +581,7 @@ export function filterGastosDetailRows(
   detailRows: QueryGastosDetailRow[],
   filters: GastosOperacionaisFilters,
   localityOverrides: GastosOperacionaisLocalityOverrideMap = {},
-  visibleLocalities?: readonly GastosOperacionaisLocality[]
+  visibleLocalities?: readonly string[]
 ): QueryGastosDetailRow[] {
   return detailRows.filter((row) => {
     if (!isContractInVisibleLocalities(row.contract, visibleLocalities, localityOverrides)) {
@@ -679,7 +678,7 @@ function mergeContractNameIntoRows(
 
 function shouldMergeContractForVisibleLocalities(
   contract: string,
-  visibleLocalities: readonly GastosOperacionaisLocality[] | undefined,
+  visibleLocalities: readonly string[] | undefined,
   localityOverrides: GastosOperacionaisLocalityOverrideMap,
   costCenter?: { code?: string; name?: string } | null
 ): boolean {
@@ -696,18 +695,20 @@ function shouldMergeContractForVisibleLocalities(
     return visibleLocalities.includes(inferred);
   }
 
-  return false;
+  // Sem localidade conhecida: mantém na lista para poder atribuir depois.
+  return true;
 }
 
 export function mergeCatalogContractsIntoGastosRows(
   rows: GastosOperacionaisRow[],
-  visibleLocalities?: readonly GastosOperacionaisLocality[],
+  visibleLocalities?: readonly string[],
   options?: {
     databaseContracts?: readonly GastosMergeDatabaseContract[];
     spreadsheetContracts?: readonly string[];
     excludedContractKeys?: readonly string[];
     resolveExcludedLabel?: (key: string) => string | undefined;
     localityOverrides?: GastosOperacionaisLocalityOverrideMap;
+    localitiesCatalog?: ReadonlyArray<{ key: string; label: string }>;
   }
 ): GastosOperacionaisRow[] {
   const byKey = new Map<string, GastosOperacionaisRow>();
@@ -718,7 +719,10 @@ export function mergeCatalogContractsIntoGastosRows(
   const localityOverrides = options?.localityOverrides ?? {};
   const namesToMerge = new Set<string>();
 
-  for (const contract of listContractsForLocalities(visibleLocalities)) {
+  for (const contract of listContractsForLocalities(
+    visibleLocalities,
+    options?.localitiesCatalog
+  )) {
     namesToMerge.add(contract);
   }
 
@@ -757,7 +761,7 @@ export function buildGastosRowsFromSheetRows(rows: string[][]): GastosOperaciona
 }
 
 export type GastosLocalityGroup = {
-  localityKey: GastosOperacionaisLocality | 'OUTROS';
+  localityKey: string;
   localityLabel: string;
   rows: GastosOperacionaisRow[];
   subtotal: number;
@@ -766,9 +770,10 @@ export type GastosLocalityGroup = {
 export function groupGastosRowsByLocality(
   rows: GastosOperacionaisRow[],
   localityOverrides: GastosOperacionaisLocalityOverrideMap = {},
-  visibleLocalities?: readonly GastosOperacionaisLocality[]
+  visibleLocalities?: readonly string[],
+  localitiesCatalog?: ReadonlyArray<{ key: string; label: string }>
 ): GastosLocalityGroup[] {
-  const buckets = new Map<GastosOperacionaisLocality | 'OUTROS', GastosOperacionaisRow[]>();
+  const buckets = new Map<string, GastosOperacionaisRow[]>();
 
   for (const row of rows) {
     const locality = getEffectiveContractLocality(row.contract, localityOverrides);
@@ -779,7 +784,7 @@ export function groupGastosRowsByLocality(
 
   const groups: GastosLocalityGroup[] = [];
 
-  for (const locality of resolveVisibleLocalityItems(visibleLocalities)) {
+  for (const locality of resolveVisibleLocalityItems(visibleLocalities, localitiesCatalog)) {
     const groupRows = buckets.get(locality.key);
     if (!groupRows?.length) continue;
 
@@ -791,16 +796,14 @@ export function groupGastosRowsByLocality(
     });
   }
 
-  if (!visibleLocalities?.length) {
-    const outros = buckets.get('OUTROS');
-    if (outros?.length) {
-      groups.push({
-        localityKey: 'OUTROS',
-        localityLabel: 'Outros',
-        rows: sortContractsByCustomOrder(outros),
-        subtotal: Math.abs(outros.reduce((sum, row) => sum + row.totalAcumulado, 0))
-      });
-    }
+  const outros = buckets.get('OUTROS');
+  if (outros?.length) {
+    groups.push({
+      localityKey: 'OUTROS',
+      localityLabel: 'Sem localidade',
+      rows: sortContractsByCustomOrder(outros),
+      subtotal: Math.abs(outros.reduce((sum, row) => sum + row.totalAcumulado, 0))
+    });
   }
 
   return groups;

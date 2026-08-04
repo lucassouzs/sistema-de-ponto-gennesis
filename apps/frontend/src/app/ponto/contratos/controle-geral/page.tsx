@@ -17,7 +17,6 @@ import {
   filterTotvsGastosDetailRowsForControleGeral,
   mergeControleGeralGastosDetailRows
 } from './buildQueryGastosRows';
-import { CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES } from './gastosOperacionaisContractOrder';
 import {
   fetchGastosOperacionaisTotvs,
   GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
@@ -311,9 +310,7 @@ export default function ControleGeralContratosPage() {
               void refetchTotvsGastos();
             }}
             dataRefreshNonce={dataRefreshNonce}
-            visibleLocalities={CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES}
             enableRowExclusion
-            hideLocalityColumn
             panelTitle="Controle de Contratos"
             panelDescription={
               gastosTotvsWarning

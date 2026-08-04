@@ -1,22 +1,22 @@
 import {
   buildCatalogLocalityOverrideMap,
   getContractLocality,
-  normalizeContractOrderKey,
-  type GastosOperacionaisLocality
+  normalizeContractOrderKey
 } from './gastosOperacionaisContractOrder';
 
 const STORAGE_KEY = 'gastos-operacionais-locality-overrides';
 const CATALOG_SEED_KEY = 'gastos-operacionais-locality-catalog-seeded-v2';
 
-export type GastosOperacionaisLocalityOverrideMap = Partial<
-  Record<string, GastosOperacionaisLocality | null>
->;
+export type GastosOperacionaisLocalityOverrideMap = Partial<Record<string, string | null>>;
 
-export type EffectiveContractLocality = GastosOperacionaisLocality | 'OUTROS';
+export type EffectiveContractLocality = string;
+
+export const SEM_LOCALIDADE_KEY = 'OUTROS' as const;
+export const SEM_LOCALIDADE_LABEL = 'Sem localidade';
 
 /**
  * Localidade efetiva do contrato.
- * Usa override salvo pelo usuário; senão, o catálogo embutido; contratos novos ficam em "Outros".
+ * Usa override salvo pelo usuário; senão, o catálogo embutido; contratos novos ficam em "Sem localidade".
  */
 export function getEffectiveContractLocality(
   contract: string,
@@ -31,25 +31,26 @@ export function getEffectiveContractLocality(
 
 export function isContractInVisibleLocalities(
   contract: string,
-  visibleLocalities: readonly GastosOperacionaisLocality[] | undefined,
+  visibleLocalities: readonly string[] | undefined,
   overrides: GastosOperacionaisLocalityOverrideMap = {}
 ): boolean {
   if (!visibleLocalities?.length) return true;
 
   const effective = getEffectiveContractLocality(contract, overrides);
-  if (effective === 'OUTROS') return false;
+  // Sem localidade sempre aparece — para poder atribuir/mover depois.
+  if (effective === 'OUTROS') return true;
 
   return visibleLocalities.includes(effective);
 }
 
 export function contractMatchesLocalitiesWithOverrides(
   contract: string,
-  localities: GastosOperacionaisLocality[],
+  localities: string[],
   overrides: GastosOperacionaisLocalityOverrideMap = {}
 ): boolean {
   if (!localities.length) return true;
   const effective = getEffectiveContractLocality(contract, overrides);
-  return effective !== 'OUTROS' && localities.includes(effective);
+  return localities.includes(effective);
 }
 
 export function applyContractLocalityOverride(
@@ -59,13 +60,15 @@ export function applyContractLocalityOverride(
 ): GastosOperacionaisLocalityOverrideMap {
   const key = normalizeContractOrderKey(contract);
 
+  // null = Sem localidade explícito (não volta ao catálogo embutido).
   if (locality === 'OUTROS') {
-    if (!Object.prototype.hasOwnProperty.call(overrides, key)) {
+    if (Object.prototype.hasOwnProperty.call(overrides, key) && overrides[key] === null) {
       return overrides;
     }
-    const next = { ...overrides };
-    delete next[key];
-    return next;
+    return {
+      ...overrides,
+      [key]: null
+    };
   }
 
   if (overrides[key] === locality) {
@@ -85,7 +88,7 @@ export function loadGastosLocalityOverrides(): GastosOperacionaisLocalityOverrid
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
 
-    const parsed = JSON.parse(raw) as Record<string, GastosOperacionaisLocality | null>;
+    const parsed = JSON.parse(raw) as Record<string, string | null>;
     if (!parsed || typeof parsed !== 'object') return {};
 
     return parsed;

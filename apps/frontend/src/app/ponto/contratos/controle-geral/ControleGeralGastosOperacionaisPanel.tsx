@@ -16,6 +16,7 @@ import {
   PiggyBank,
   RefreshCw,
   RotateCcw,
+  Settings2,
   Wallet,
   X
 } from 'lucide-react';
@@ -65,8 +66,7 @@ import {
   GASTOS_OPERACIONAIS_CONTRACT_ORDER,
   inferContractLocalityFromHints,
   normalizeContractOrderKey,
-  resolveVisibleLocalityItems,
-  type GastosOperacionaisLocality
+  resolveVisibleLocalityItems
 } from './gastosOperacionaisContractOrder';
 import {
   findNewSpreadsheetContracts,
@@ -80,9 +80,16 @@ import {
   getEffectiveContractLocality,
   loadGastosLocalityOverridesWithCatalogSeed,
   saveGastosLocalityOverrides,
+  SEM_LOCALIDADE_KEY,
+  SEM_LOCALIDADE_LABEL,
   type EffectiveContractLocality,
   type GastosOperacionaisLocalityOverrideMap
 } from './gastosOperacionaisLocalityOverrides';
+import {
+  loadGastosLocalitiesCatalog,
+  type GastosLocalityItem
+} from './gastosOperacionaisLocalitiesStore';
+import { GastosLocalitiesManageModal } from './GastosLocalitiesManageModal';
 import {
   addControleGeralExcludedContracts,
   clearControleGeralExcludedContracts,
@@ -157,8 +164,8 @@ type ControleGeralGastosOperacionaisPanelProps = {
   isError?: boolean;
   errorMessage?: string;
   onRetry?: () => void;
-  /** Quando definido, oculta contratos e grupos das demais localidades. */
-  visibleLocalities?: readonly GastosOperacionaisLocality[];
+  /** Quando definido, limita grupos às keys informadas (ainda respeitando o catálogo dinâmico). */
+  visibleLocalities?: readonly string[];
   /** Exibe botão de exportação em PDF (módulo Gastos Operacionais). */
   showPdfExport?: boolean;
   /** Permite ocultar linhas da visualização (somente Controle Geral de Contratos). */
@@ -594,8 +601,10 @@ const filterLabelClassName =
 const filterFieldLabelClassName =
   'mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300';
 
-const localitySelectClassName =
-  'w-full min-w-[10rem] rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+const localitySelectWrapperClassName = 'mx-auto flex w-full min-w-[9.5rem] max-w-[12rem] justify-center';
+
+const localitySelectTriggerClassName =
+  'flex w-full items-center justify-center gap-1.5 rounded-lg border-0 bg-transparent px-1.5 py-1 text-center text-sm font-medium text-gray-800 outline-none transition-colors hover:bg-gray-100 focus:bg-gray-100 focus:ring-0 dark:text-gray-100 dark:hover:bg-gray-700/60 dark:focus:bg-gray-700/60';
 
 const FILTER_DROPDOWN_LIST_MAX_HEIGHT = 320;
 
@@ -690,6 +699,29 @@ export function ControleGeralGastosOperacionaisPanel({
   const [localityOverrides, setLocalityOverrides] = useState<GastosOperacionaisLocalityOverrideMap>(
     () => loadGastosLocalityOverridesWithCatalogSeed()
   );
+  const [localitiesCatalog, setLocalitiesCatalog] = useState<GastosLocalityItem[]>(() =>
+    loadGastosLocalitiesCatalog()
+  );
+  const [localitiesModalOpen, setLocalitiesModalOpen] = useState(false);
+
+  const refreshLocalitiesCatalog = useCallback(() => {
+    const nextCatalog = loadGastosLocalitiesCatalog();
+    setLocalitiesCatalog(nextCatalog);
+    setLocalityOverrides(loadGastosLocalityOverridesWithCatalogSeed());
+    setFilters((prev) => {
+      const validKeys = new Set([
+        ...nextCatalog.map((item) => item.key),
+        SEM_LOCALIDADE_KEY
+      ]);
+      const localities = prev.localities.filter((key) => validKeys.has(key));
+      if (localities.length === prev.localities.length) return prev;
+      return { ...prev, localities };
+    });
+  }, []);
+
+  useEffect(() => {
+    setLocalitiesCatalog(loadGastosLocalitiesCatalog());
+  }, []);
   const inferredLocalityOverrides = useMemo(() => {
     const merged: GastosOperacionaisLocalityOverrideMap = { ...localityOverrides };
     const sources = [
@@ -894,8 +926,8 @@ export function ControleGeralGastosOperacionaisPanel({
   const isPanelLoading = isLoading;
 
   const visibleLocalityItems = useMemo(
-    () => resolveVisibleLocalityItems(visibleLocalities),
-    [visibleLocalities]
+    () => resolveVisibleLocalityItems(visibleLocalities, localitiesCatalog),
+    [visibleLocalities, localitiesCatalog]
   );
 
   const filterOptions = useMemo(
@@ -919,20 +951,19 @@ export function ControleGeralGastosOperacionaisPanel({
   );
 
   const localityFilterOptions = useMemo(
-    () =>
-      visibleLocalityItems.map((locality) => ({
+    () => [
+      ...visibleLocalityItems.map((locality) => ({
         value: locality.key,
         label: locality.label
       })),
+      { value: SEM_LOCALIDADE_KEY, label: SEM_LOCALIDADE_LABEL }
+    ],
     [visibleLocalityItems]
   );
 
   const localityTableSelectOptions = useMemo(
-    () =>
-      !visibleLocalities?.length
-        ? labeledToSelectOptions([{ value: 'OUTROS', label: 'Outros' }])
-        : labeledToSelectOptions(localityFilterOptions),
-    [visibleLocalities, localityFilterOptions]
+    () => labeledToSelectOptions(localityFilterOptions),
+    [localityFilterOptions]
   );
 
   const poloFilterOptions = useMemo(
@@ -1002,7 +1033,8 @@ export function ControleGeralGastosOperacionaisPanel({
       excludedContractKeys: enableRowExclusion ? Array.from(excludedContracts) : [],
       resolveExcludedLabel: (key) =>
         contractLabelByKey.get(key) ?? contractLabelByKey.get(normalizeContractOrderKey(key)) ?? key,
-      localityOverrides: inferredLocalityOverrides
+      localityOverrides: inferredLocalityOverrides,
+      localitiesCatalog
     });
   }, [
     detailRows,
@@ -1014,7 +1046,8 @@ export function ControleGeralGastosOperacionaisPanel({
     allSpreadsheetContracts,
     enableRowExclusion,
     excludedContracts,
-    contractLabelByKey
+    contractLabelByKey,
+    localitiesCatalog
   ]);
 
   const visibleRows = useMemo(() => {
@@ -1138,9 +1171,16 @@ export function ControleGeralGastosOperacionaisPanel({
     return groupGastosRowsByLocality(
       visibleRowsWithFaturamento,
       inferredLocalityOverrides,
-      visibleLocalities
+      visibleLocalities,
+      localitiesCatalog
     );
-  }, [visibleRowsWithFaturamento, inferredLocalityOverrides, readOnlyPoloColumn, visibleLocalities]);
+  }, [
+    visibleRowsWithFaturamento,
+    inferredLocalityOverrides,
+    readOnlyPoloColumn,
+    visibleLocalities,
+    localitiesCatalog
+  ]);
 
   const grandSummary = useMemo(
     () => summarizeGastosPanelRows(visibleRowsWithFaturamento),
@@ -1341,7 +1381,7 @@ export function ControleGeralGastosOperacionaisPanel({
   };
 
   const handleLocalitiesChange = (selected: string[]) => {
-    const localities = selected as GastosOperacionaisLocality[];
+    const localities = selected;
     setFilters((prev) => ({
       ...prev,
       localities,
@@ -1422,9 +1462,22 @@ export function ControleGeralGastosOperacionaisPanel({
       </div>
 
       <div>
-        <span className={filterLabelClassName}>
-          {readOnlyPoloColumn ? 'Polo' : 'Localidade'}
-        </span>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className={`${filterLabelClassName} !mb-0`}>
+            {readOnlyPoloColumn ? 'Polo' : 'Localidade'}
+          </span>
+          {!readOnlyPoloColumn ? (
+            <button
+              type="button"
+              onClick={() => setLocalitiesModalOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40"
+              title="Gerenciar localidades"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Gerenciar
+            </button>
+          ) : null}
+        </div>
         <MultiSelectSearchDropdown
           options={readOnlyPoloColumn ? poloFilterOptions : localityFilterOptions}
           selected={readOnlyPoloColumn ? filters.polos : filters.localities}
@@ -1504,7 +1557,7 @@ export function ControleGeralGastosOperacionaisPanel({
     } else if (filters.localities.length) {
       lines.push(
         `Localidades: ${filters.localities
-          .map((key) => getLocalityLabel(key))
+          .map((key) => getLocalityLabel(key, localitiesCatalog))
           .join(', ')}`
       );
     }
@@ -2084,7 +2137,10 @@ export function ControleGeralGastosOperacionaisPanel({
                                       }
                                       options={localityTableSelectOptions}
                                       allowEmpty={false}
-                                      className={`${localitySelectClassName} mx-auto`}
+                                      disableSearch
+                                      hideChevron
+                                      className={localitySelectWrapperClassName}
+                                      triggerClassName={localitySelectTriggerClassName}
                                     />
                                   )}
                                 </td>
@@ -2622,6 +2678,14 @@ export function ControleGeralGastosOperacionaisPanel({
           contractOptions={tetoContractOptions}
           entries={tetoOrcamentarioEntries}
           prefill={tetoModalPrefill}
+        />
+      ) : null}
+
+      {!readOnlyPoloColumn ? (
+        <GastosLocalitiesManageModal
+          isOpen={localitiesModalOpen}
+          onClose={() => setLocalitiesModalOpen(false)}
+          onCatalogChanged={refreshLocalitiesCatalog}
         />
       ) : null}
     </Card>

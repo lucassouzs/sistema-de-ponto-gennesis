@@ -21,23 +21,27 @@ export const CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES = [
 ] as const satisfies readonly GastosOperacionaisLocality[];
 
 export function resolveVisibleLocalityItems(
-  visibleLocalities?: readonly GastosOperacionaisLocality[]
+  visibleLocalities?: readonly string[],
+  catalog: ReadonlyArray<{ key: string; label: string }> = GASTOS_OPERACIONAIS_LOCALITIES
 ) {
   if (!visibleLocalities?.length) {
-    return [...GASTOS_OPERACIONAIS_LOCALITIES];
+    return catalog.map((locality) => ({ key: locality.key, label: locality.label }));
   }
 
   const allowed = new Set(visibleLocalities);
-  return GASTOS_OPERACIONAIS_LOCALITIES.filter((locality) => allowed.has(locality.key));
+  return catalog
+    .filter((locality) => allowed.has(locality.key))
+    .map((locality) => ({ key: locality.key, label: locality.label }));
 }
 
 /** Contratos do catálogo para as localidades visíveis (inclui linhas sem gastos na planilha). */
 export function listContractsForLocalities(
-  visibleLocalities?: readonly GastosOperacionaisLocality[]
+  visibleLocalities?: readonly string[],
+  catalog: ReadonlyArray<{ key: string; label: string }> = GASTOS_OPERACIONAIS_LOCALITIES
 ): readonly string[] {
   const contracts: string[] = [];
-  for (const locality of resolveVisibleLocalityItems(visibleLocalities)) {
-    for (const contract of CONTRACTS_BY_LOCALITY[locality.key] ?? []) {
+  for (const locality of resolveVisibleLocalityItems(visibleLocalities, catalog)) {
+    for (const contract of CONTRACTS_BY_LOCALITY[locality.key as GastosOperacionaisLocality] ?? []) {
       if (!isContractExcludedFromPresentation(contract)) {
         contracts.push(contract);
       }
@@ -444,6 +448,13 @@ export function contractMatchesLocalities(
   return contractLocality != null && localities.includes(contractLocality);
 }
 
-export function getLocalityLabel(locality: GastosOperacionaisLocality): string {
+export function getLocalityLabel(
+  locality: string,
+  catalog?: ReadonlyArray<{ key: string; label: string }>
+): string {
+  if (locality === 'OUTROS') return 'Sem localidade';
+  if (catalog?.length) {
+    return catalog.find((item) => item.key === locality)?.label ?? locality;
+  }
   return GASTOS_OPERACIONAIS_LOCALITIES.find((item) => item.key === locality)?.label ?? locality;
 }
