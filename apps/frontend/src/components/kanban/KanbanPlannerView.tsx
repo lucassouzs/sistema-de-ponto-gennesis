@@ -25,6 +25,7 @@ import {
   Coffee,
   MapPin,
   Briefcase,
+  Eye,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
@@ -471,16 +472,111 @@ function EventAttendeeAvatars({
   );
 }
 
+function EventBlockMenu({
+  event,
+  iconClassName,
+  iconColor,
+  canDelete,
+  onEdit,
+  onDelete,
+}: {
+  event: PlannerEvent;
+  iconClassName: string;
+  iconColor: string;
+  canDelete?: boolean;
+  onEdit: (event: PlannerEvent) => void;
+  onDelete?: (event: PlannerEvent) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div ref={menuRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((open) => !open);
+        }}
+        className="-m-1 rounded-md p-1 opacity-70 transition-opacity hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+        style={{ color: iconColor }}
+        aria-label="Opções do evento"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        title="Opções"
+      >
+        <MoreVertical className={iconClassName} aria-hidden />
+      </button>
+      {menuOpen ? (
+        <div
+          role="menu"
+          className="absolute bottom-full right-0 z-50 mb-1 min-w-[9.5rem] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(false);
+              onEdit(event);
+            }}
+            className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            <Eye className="h-4 w-4 shrink-0 text-gray-500" />
+            Ver
+          </button>
+          {canDelete && onDelete ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(false);
+                onDelete(event);
+              }}
+              className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="h-4 w-4 shrink-0" />
+              Remover
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function EventBlock({
   event,
   top,
   height,
   onEdit,
+  onDelete,
+  canDelete,
 }: {
   event: PlannerEvent;
   top: number;
   height: number;
   onEdit: (event: PlannerEvent) => void;
+  onDelete?: (event: PlannerEvent) => void;
+  canDelete?: boolean;
 }) {
   const pastel = plannerPastelFromColor(event.color || COLOR_OPTIONS[0]);
   const attendees = event.attendees || [];
@@ -491,13 +587,21 @@ function EventBlock({
   const showFooter = height >= 80;
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
         onEdit(event);
       }}
-      className={`pointer-events-auto absolute left-1 right-1 z-10 flex flex-col overflow-visible text-left shadow-sm transition-shadow hover:shadow-md ${
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          e.stopPropagation();
+          onEdit(event);
+        }
+      }}
+      className={`pointer-events-auto absolute left-1 right-1 z-10 flex cursor-pointer flex-col overflow-visible text-left shadow-sm transition-shadow hover:shadow-md ${
         isSpacious ? 'rounded-2xl px-3 py-2.5' : 'rounded-xl px-2 py-1.5'
       }`}
       style={{
@@ -540,10 +644,13 @@ function EventBlock({
                 mutedColor={pastel.muted}
                 size="md"
               />
-              <MoreVertical
-                className="h-4 w-4 shrink-0 opacity-70"
-                style={{ color: pastel.text }}
-                aria-hidden
+              <EventBlockMenu
+                event={event}
+                iconClassName="h-4 w-4"
+                iconColor={pastel.text}
+                canDelete={canDelete}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             </div>
           ) : null}
@@ -559,9 +666,19 @@ function EventBlock({
             {event.ataFileUrl ? (
               <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" style={{ color: pastel.muted }} />
             ) : null}
-            <span className="line-clamp-2 text-xs font-bold leading-snug sm:text-[13px]">
+            <span className="line-clamp-2 min-w-0 flex-1 text-xs font-bold leading-snug sm:text-[13px]">
               {event.title}
             </span>
+            {showFooter && attendees.length === 0 ? (
+              <EventBlockMenu
+                event={event}
+                iconClassName="h-3.5 w-3.5"
+                iconColor={pastel.text}
+                canDelete={canDelete}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ) : null}
           </div>
           {showMeta && timeLabel ? (
             <span className="truncate text-[11px] font-medium" style={{ color: pastel.muted }}>
@@ -576,16 +693,19 @@ function EventBlock({
                 mutedColor={pastel.muted}
                 size="sm"
               />
-              <MoreVertical
-                className="h-3.5 w-3.5 shrink-0 opacity-70"
-                style={{ color: pastel.text }}
-                aria-hidden
+              <EventBlockMenu
+                event={event}
+                iconClassName="h-3.5 w-3.5"
+                iconColor={pastel.text}
+                canDelete={canDelete}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             </div>
           ) : null}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -1366,6 +1486,12 @@ export function KanbanPlannerView({
                             top={top}
                             height={height}
                             onEdit={openEdit}
+                            canDelete={canWriteEffective}
+                            onDelete={(event) => {
+                              if (confirm('Excluir este evento?')) {
+                                deleteMutation.mutate(event.id);
+                              }
+                            }}
                           />
                         );
                       })}
