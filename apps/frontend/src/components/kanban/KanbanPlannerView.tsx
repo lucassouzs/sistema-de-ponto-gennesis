@@ -3,7 +3,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Trash2, RefreshCw, Share2, FileText, Upload, Download, X, CheckSquare, MoreVertical, Plus } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+  RefreshCw,
+  Share2,
+  FileText,
+  Upload,
+  Download,
+  X,
+  CheckSquare,
+  MoreVertical,
+  Plus,
+  Users,
+  Phone,
+  BarChart3,
+  Star,
+  CheckCircle2,
+  Plane,
+  Coffee,
+  MapPin,
+  Briefcase,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
@@ -21,10 +43,12 @@ import {
   fetchGoogleCalendarStatus,
   fetchPlannerAgendas,
   fetchPlannerEvents,
+  plannerPastelFromColor,
   syncGoogleCalendar,
   updatePlannerEvent,
   uploadPlannerEventAta,
   type PlannerEvent,
+  type PlannerEventAttendee,
 } from '@/lib/plannerEvents';
 import {
   fetchPlannerTasks,
@@ -40,6 +64,10 @@ import {
 } from './AgendaModeSwitcher';
 import { kanbanLabel } from './kanbanFormStyles';
 import { splitDateTime } from './kanbanDateTime';
+import { KanbanMemberPickerModal, type KanbanPickerUser } from './KanbanMemberPickerModal';
+import { KanbanMemberChip } from './KanbanMemberChip';
+import { KanbanUserAvatar } from './KanbanUserAvatar';
+import { kanbanAvatarColorForKey } from './kanbanAvatar';
 
 const HOUR_START = 0;
 const HOUR_END = 23;
@@ -56,6 +84,45 @@ const COLOR_OPTIONS = [
   '#06B6D4',
   '#EC4899',
 ];
+
+const PLANNER_ICON_OPTIONS: {
+  id: string;
+  label: string;
+  Icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+}[] = [
+  { id: 'meeting', label: 'Reunião', Icon: Users },
+  { id: 'phone', label: 'Ligação', Icon: Phone },
+  { id: 'chart', label: 'Vendas', Icon: BarChart3 },
+  { id: 'star', label: 'Destaque', Icon: Star },
+  { id: 'check', label: 'Tarefa', Icon: CheckCircle2 },
+  { id: 'plane', label: 'Viagem', Icon: Plane },
+  { id: 'coffee', label: 'Café', Icon: Coffee },
+  { id: 'users', label: 'Equipe', Icon: Users },
+  { id: 'map-pin', label: 'Local', Icon: MapPin },
+  { id: 'briefcase', label: 'Trabalho', Icon: Briefcase },
+];
+
+function PlannerEventIconView({
+  icon,
+  className,
+  style,
+}: {
+  icon?: string | null;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const opt = PLANNER_ICON_OPTIONS.find((o) => o.id === icon);
+  if (!opt) return null;
+  const Icon = opt.Icon;
+  return <Icon className={className} style={style} />;
+}
+
+function formatEventTimeRange(startAt: string, endAt: string): string {
+  const start = toTimeInputValue(startAt);
+  const end = toTimeInputValue(endAt);
+  if (!start) return '';
+  return end ? `${start} – ${end}` : start;
+}
 
 type CalendarView = 'day' | 'week' | 'month' | 'year';
 
@@ -281,11 +348,14 @@ function rangeForView(view: CalendarView, anchor: Date): { from: Date; to: Date 
 
 type FormState = {
   id?: string;
+  userId?: string;
   title: string;
   description: string;
   startAt: string;
   endAt: string;
   color: string;
+  icon: string | null;
+  attendees: PlannerEventAttendee[];
   ataFileName?: string | null;
   ataFileUrl?: string | null;
 };
@@ -296,6 +366,8 @@ const EMPTY_FORM: FormState = {
   startAt: '',
   endAt: '',
   color: COLOR_OPTIONS[0],
+  icon: null,
+  attendees: [],
   ataFileName: null,
   ataFileUrl: null,
 };
@@ -321,6 +393,84 @@ function ViewSwitcher({
   );
 }
 
+function EventAttendeeAvatars({
+  attendees,
+  ringColor,
+  mutedColor,
+  size = 'md',
+}: {
+  attendees: PlannerEventAttendee[];
+  ringColor: string;
+  mutedColor: string;
+  size?: 'sm' | 'md';
+}) {
+  const [hoveredUserId, setHoveredUserId] = useState<string | null>(null);
+  if (attendees.length === 0) return null;
+
+  const visible = attendees.slice(0, 3);
+  const avatarClass =
+    size === 'md' ? '!h-7 !w-7 !text-[10px]' : '!h-6 !w-6 !text-[9px]';
+  const overflowClass =
+    size === 'md'
+      ? 'inline-flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold'
+      : 'inline-flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold';
+
+  return (
+    <div className="flex min-w-0 items-center -space-x-1.5">
+      {visible.map((u, index) => {
+        const isHovered = hoveredUserId === u.id;
+        return (
+          <div
+            key={u.id}
+            className="relative rounded-full"
+            style={{
+              zIndex: isHovered ? visible.length + 10 : visible.length - index,
+              boxShadow: `0 0 0 2px ${ringColor}`,
+            }}
+            onMouseEnter={(e) => {
+              e.stopPropagation();
+              setHoveredUserId(u.id);
+            }}
+            onMouseLeave={() => setHoveredUserId(null)}
+          >
+            <KanbanUserAvatar
+              name={u.name}
+              profilePhotoUrl={u.profilePhotoUrl}
+              colorKey={u.id}
+              size="sm"
+              showNativeTitle={false}
+              className={`${avatarClass} transition-transform duration-150 ${
+                isHovered ? 'scale-110' : ''
+              }`}
+            />
+            {isHovered ? (
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 shadow-lg dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+              >
+                {u.name}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+      {attendees.length > 3 ? (
+        <span
+          className={overflowClass}
+          style={{
+            zIndex: 0,
+            backgroundColor: mutedColor,
+            color: '#fff',
+            boxShadow: `0 0 0 2px ${ringColor}`,
+          }}
+        >
+          +{attendees.length - 3}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function EventBlock({
   event,
   top,
@@ -332,6 +482,14 @@ function EventBlock({
   height: number;
   onEdit: (event: PlannerEvent) => void;
 }) {
+  const pastel = plannerPastelFromColor(event.color || COLOR_OPTIONS[0]);
+  const attendees = event.attendees || [];
+  const timeLabel = formatEventTimeRange(event.startAt, event.endAt);
+  /** Layout em coluna (ícone → título → horário → avatar), como o card de referência. */
+  const isSpacious = height >= 96;
+  const showMeta = height >= 52;
+  const showFooter = height >= 80;
+
   return (
     <button
       type="button"
@@ -339,18 +497,94 @@ function EventBlock({
         e.stopPropagation();
         onEdit(event);
       }}
-      className="pointer-events-auto absolute left-1 right-1 z-10 overflow-hidden rounded-md px-1.5 py-1 text-left text-xs font-semibold text-white shadow-sm"
+      className={`pointer-events-auto absolute left-1 right-1 z-10 flex flex-col overflow-visible text-left shadow-sm transition-shadow hover:shadow-md ${
+        isSpacious ? 'rounded-2xl px-3 py-2.5' : 'rounded-xl px-2 py-1.5'
+      }`}
       style={{
         top,
         height,
-        backgroundColor: event.color || COLOR_OPTIONS[0],
+        backgroundColor: pastel.bg,
+        color: pastel.text,
+        minHeight: attendees.length > 0 ? 80 : 36,
       }}
-      title={event.ataFileUrl ? `${event.title} · Ata PDF anexada` : event.title}
+      aria-label={event.ataFileUrl ? `${event.title} · Ata PDF anexada` : event.title}
     >
-      <span className="flex items-start gap-1">
-        {event.ataFileUrl ? <FileText className="mt-0.5 h-3 w-3 shrink-0 opacity-90" /> : null}
-        <span className="line-clamp-2">{event.title}</span>
-      </span>
+      {isSpacious ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center gap-1.5">
+            <PlannerEventIconView
+              icon={event.icon}
+              className="h-5 w-5 shrink-0"
+              style={{ color: pastel.text }}
+            />
+            {event.ataFileUrl ? (
+              <FileText className="h-4 w-4 shrink-0 opacity-80" style={{ color: pastel.muted }} />
+            ) : null}
+          </div>
+          <span className="mt-2 line-clamp-3 text-sm font-bold leading-snug tracking-tight sm:text-[15px]">
+            {event.title}
+          </span>
+          {timeLabel ? (
+            <span
+              className="mt-1.5 truncate text-xs font-medium sm:text-[13px]"
+              style={{ color: pastel.muted }}
+            >
+              {timeLabel}
+            </span>
+          ) : null}
+          {showFooter ? (
+            <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+              <EventAttendeeAvatars
+                attendees={attendees}
+                ringColor={pastel.bg}
+                mutedColor={pastel.muted}
+                size="md"
+              />
+              <MoreVertical
+                className="h-4 w-4 shrink-0 opacity-70"
+                style={{ color: pastel.text }}
+                aria-hidden
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-start gap-1.5">
+            <PlannerEventIconView
+              icon={event.icon}
+              className="mt-0.5 h-4 w-4 shrink-0"
+              style={{ color: pastel.text }}
+            />
+            {event.ataFileUrl ? (
+              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" style={{ color: pastel.muted }} />
+            ) : null}
+            <span className="line-clamp-2 text-xs font-bold leading-snug sm:text-[13px]">
+              {event.title}
+            </span>
+          </div>
+          {showMeta && timeLabel ? (
+            <span className="truncate text-[11px] font-medium" style={{ color: pastel.muted }}>
+              {timeLabel}
+            </span>
+          ) : null}
+          {showFooter && attendees.length > 0 ? (
+            <div className="mt-auto flex items-center justify-between pt-1">
+              <EventAttendeeAvatars
+                attendees={attendees}
+                ringColor={pastel.bg}
+                mutedColor={pastel.muted}
+                size="sm"
+              />
+              <MoreVertical
+                className="h-3.5 w-3.5 shrink-0 opacity-70"
+                style={{ color: pastel.text }}
+                aria-hidden
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
     </button>
   );
 }
@@ -381,6 +615,8 @@ export function KanbanPlannerView({
   const [pendingAtaFile, setPendingAtaFile] = useState<File | null>(null);
   const [uploadingAta, setUploadingAta] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+  const [hoveringAttendeeId, setHoveringAttendeeId] = useState<string | null>(null);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const ataInputRef = useRef<HTMLInputElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
@@ -469,6 +705,11 @@ export function KanbanPlannerView({
     viewingOwnAgenda ||
     eventsResult?.meta?.isOwner === true ||
     (!eventsResult?.meta && isOwnAgenda);
+
+  /** Só o dono (ou quem tem WRITE na agenda do dono) edita; attendee vê leitura. */
+  const formCanWrite =
+    canWriteEffective &&
+    (!form.id || !form.userId || form.userId === activeOwnerId);
 
   const { data: googleStatus } = useQuery({
     queryKey: ['planner-events', 'google-status'],
@@ -609,6 +850,8 @@ export function KanbanPlannerView({
         startAt: fromLocalInputValue(form.startAt),
         endAt: fromLocalInputValue(form.endAt),
         color: form.color,
+        icon: form.icon,
+        attendeeIds: form.attendees.map((a) => a.id),
         ownerId: activeOwnerId || undefined,
       };
       const saved = form.id
@@ -631,6 +874,7 @@ export function KanbanPlannerView({
       setFormOpen(false);
       setForm(EMPTY_FORM);
       setPendingAtaFile(null);
+      setMemberPickerOpen(false);
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || 'Erro ao salvar evento');
@@ -682,13 +926,17 @@ export function KanbanPlannerView({
 
   const openEdit = (event: PlannerEvent) => {
     setPendingAtaFile(null);
+    setMemberPickerOpen(false);
     setForm({
       id: event.id,
+      userId: event.userId,
       title: event.title,
       description: event.description || '',
       startAt: toLocalInputValue(event.startAt),
       endAt: toLocalInputValue(event.endAt),
       color: event.color || COLOR_OPTIONS[0],
+      icon: event.icon || null,
+      attendees: event.attendees || [],
       ataFileName: event.ataFileName,
       ataFileUrl: event.ataFileUrl,
     });
@@ -1065,8 +1313,9 @@ export function KanbanPlannerView({
                         const clampedEnd = Math.min(endMinutes, gridEnd);
                         if (clampedEnd <= clampedStart) return null;
                         const top = ((clampedStart - gridStart) / 60) * ROW_HEIGHT;
+                        const minH = (ev.attendees?.length || 0) > 0 ? 72 : 36;
                         const height = Math.max(
-                          36,
+                          minH,
                           ((clampedEnd - clampedStart) / 60) * ROW_HEIGHT - 2
                         );
                         return (
@@ -1199,18 +1448,26 @@ export function KanbanPlannerView({
                         </span>
                       );
                     })}
-                    {dayEvents.slice(0, 3).map((ev) => (
-                      <button
-                        key={ev.id}
-                        type="button"
-                        onClick={() => openEdit(ev)}
-                        className="truncate rounded px-1 py-0.5 text-left text-[11px] font-semibold text-white"
-                        style={{ backgroundColor: ev.color || COLOR_OPTIONS[0] }}
-                        title={ev.title}
-                      >
-                        {ev.title}
-                      </button>
-                    ))}
+                    {dayEvents.slice(0, 3).map((ev) => {
+                      const pastel = plannerPastelFromColor(ev.color || COLOR_OPTIONS[0]);
+                      return (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() => openEdit(ev)}
+                          className="flex items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold"
+                          style={{ backgroundColor: pastel.bg, color: pastel.text }}
+                          title={ev.title}
+                        >
+                          <PlannerEventIconView
+                            icon={ev.icon}
+                            className="h-3 w-3 shrink-0"
+                            style={{ color: pastel.muted }}
+                          />
+                          <span className="truncate">{ev.title}</span>
+                        </button>
+                      );
+                    })}
                     {dayEvents.length + dayTasks.length > 4 && (
                       <button
                         type="button"
@@ -1311,7 +1568,7 @@ export function KanbanPlannerView({
           setPendingAtaFile(null);
         }}
         title={
-          !canWriteEffective
+          !formCanWrite
             ? 'Detalhes do evento'
             : form.id
               ? 'Editar evento'
@@ -1323,7 +1580,7 @@ export function KanbanPlannerView({
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!canWriteEffective) return;
+            if (!formCanWrite) return;
             if (!form.title.trim()) {
               toast.error('Informe o título');
               return;
@@ -1339,11 +1596,47 @@ export function KanbanPlannerView({
             saveMutation.mutate();
           }}
         >
-          {!canWriteEffective && (
+          {!formCanWrite && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              Agenda em modo somente leitura — você pode ver, mas não alterar.
+              {form.userId && form.userId !== activeOwnerId
+                ? 'Você foi convidado para este evento — somente leitura na sua agenda.'
+                : 'Agenda em modo somente leitura — você pode ver, mas não alterar.'}
             </p>
           )}
+          <div>
+            <label className={kanbanLabel}>Ícone</label>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                disabled={!formCanWrite}
+                onClick={() => setForm({ ...form, icon: null })}
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-xs font-medium disabled:cursor-default ${
+                  !form.icon
+                    ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                    : 'border-gray-200 text-gray-400 hover:border-gray-300 dark:border-gray-600'
+                }`}
+                title="Sem ícone"
+              >
+                —
+              </button>
+              {PLANNER_ICON_OPTIONS.map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={!formCanWrite}
+                  title={label}
+                  onClick={() => setForm({ ...form, icon: id })}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border disabled:cursor-default ${
+                    form.icon === id
+                      ? 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300 dark:border-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className={kanbanLabel}>Título</label>
             <input
@@ -1351,9 +1644,9 @@ export function KanbanPlannerView({
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="Ex.: Reunião de alinhamento"
-              autoFocus={canWriteEffective}
-              disabled={!canWriteEffective}
-              readOnly={!canWriteEffective}
+              autoFocus={formCanWrite}
+              disabled={!formCanWrite}
+              readOnly={!formCanWrite}
             />
           </div>
           <div>
@@ -1361,7 +1654,7 @@ export function KanbanPlannerView({
             <DatePickerField
               value={splitDateTime(form.startAt).date}
               onChange={(ymd) => {
-                if (!canWriteEffective) return;
+                if (!formCanWrite) return;
                 if (!ymd) {
                   setForm({ ...form, startAt: '', endAt: '' });
                   return;
@@ -1377,7 +1670,7 @@ export function KanbanPlannerView({
               }}
               placeholder="dd/mm/aaaa"
               noFocusRing
-              disabled={!canWriteEffective}
+              disabled={!formCanWrite}
               aria-label="Data do evento"
             />
           </div>
@@ -1386,9 +1679,9 @@ export function KanbanPlannerView({
               <label className={kanbanLabel}>Hora de início *</label>
               <TimePickerField
                 value={form.startAt ? splitDateTime(form.startAt).time : ''}
-                disabled={!canWriteEffective || !splitDateTime(form.startAt).date}
+                disabled={!formCanWrite || !splitDateTime(form.startAt).date}
                 onChange={(time) => {
-                  if (!canWriteEffective) return;
+                  if (!formCanWrite) return;
                   const date = splitDateTime(form.startAt).date;
                   if (!date) return;
                   const nextStart = combineDateAndTime(date, time || '09:00');
@@ -1407,10 +1700,10 @@ export function KanbanPlannerView({
               <label className={kanbanLabel}>Hora de término *</label>
               <TimePickerField
                 value={form.endAt ? splitDateTime(form.endAt).time : ''}
-                disabled={!canWriteEffective || !splitDateTime(form.startAt).date}
+                disabled={!formCanWrite || !splitDateTime(form.startAt).date}
                 minTime={form.startAt ? splitDateTime(form.startAt).time : undefined}
                 onChange={(time) => {
-                  if (!canWriteEffective) return;
+                  if (!formCanWrite) return;
                   const date = splitDateTime(form.startAt).date;
                   if (!date) return;
                   setForm({
@@ -1433,9 +1726,84 @@ export function KanbanPlannerView({
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Opcional"
-              disabled={!canWriteEffective}
-              readOnly={!canWriteEffective}
+              disabled={!formCanWrite}
+              readOnly={!formCanWrite}
             />
+          </div>
+
+          <div className="flex flex-col">
+            <label className={kanbanLabel}>Pessoas</label>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {form.attendees.map((u) =>
+                formCanWrite ? (
+                  <KanbanMemberChip
+                    key={u.id}
+                    userId={u.id}
+                    name={u.name}
+                    profilePhotoUrl={u.profilePhotoUrl}
+                    avatarColor={kanbanAvatarColorForKey(u.id)}
+                    isHovering={hoveringAttendeeId === u.id}
+                    onHover={(hovering) => setHoveringAttendeeId(hovering ? u.id : null)}
+                    onRemove={() =>
+                      setForm({
+                        ...form,
+                        attendees: form.attendees.filter((a) => a.id !== u.id),
+                      })
+                    }
+                  />
+                ) : (
+                  <span key={u.id} title={u.name} className="inline-flex shrink-0">
+                    <KanbanUserAvatar
+                      name={u.name}
+                      profilePhotoUrl={u.profilePhotoUrl}
+                      colorClass={kanbanAvatarColorForKey(u.id)}
+                      size="md"
+                      className="!h-10 !w-10 !text-xs"
+                    />
+                  </span>
+                )
+              )}
+              {formCanWrite &&
+                meUser &&
+                !form.attendees.some((a) => a.id === meUser.id) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        attendees: [
+                          ...f.attendees,
+                          {
+                            id: meUser.id,
+                            name: meUser.name,
+                            email: meUser.email ?? '',
+                            profilePhotoUrl: meUser.profilePhotoUrl ?? null,
+                          },
+                        ],
+                      }))
+                    }
+                    className="h-10 shrink-0 rounded-full border-2 border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                    title="Atribuir evento a mim"
+                  >
+                    Atribuir a mim
+                  </button>
+                )}
+              {formCanWrite && (
+                <button
+                  type="button"
+                  onClick={() => setMemberPickerOpen(true)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gray-300 bg-white text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-gray-500 dark:hover:text-gray-300"
+                  title="Adicionar pessoa"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+            {form.attendees.length === 0 ? (
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Ninguém atribuído. Quem for adicionado verá este evento na própria agenda.
+              </p>
+            ) : null}
           </div>
 
           <div>
@@ -1501,7 +1869,7 @@ export function KanbanPlannerView({
                 >
                   <Download className="h-4 w-4" />
                 </button>
-                {canWriteEffective && (
+                {formCanWrite && (
                   <>
                     <button
                       type="button"
@@ -1546,7 +1914,7 @@ export function KanbanPlannerView({
                   </>
                 )}
               </div>
-            ) : canWriteEffective ? (
+            ) : formCanWrite ? (
               <button
                 type="button"
                 onClick={() => ataInputRef.current?.click()}
@@ -1569,7 +1937,7 @@ export function KanbanPlannerView({
                 <button
                   key={c}
                   type="button"
-                  disabled={!canWriteEffective}
+                  disabled={!formCanWrite}
                   onClick={() => setForm({ ...form, color: c })}
                   className={`h-7 w-7 rounded-full border-2 disabled:cursor-default ${
                     form.color === c ? 'border-gray-900 dark:border-white' : 'border-transparent'
@@ -1581,7 +1949,7 @@ export function KanbanPlannerView({
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 pt-2">
-            {canWriteEffective && form.id ? (
+            {formCanWrite && form.id ? (
               <button
                 type="button"
                 onClick={() => {
@@ -1603,11 +1971,12 @@ export function KanbanPlannerView({
                 onClick={() => {
                   setFormOpen(false);
                   setForm(EMPTY_FORM);
+                  setMemberPickerOpen(false);
                 }}
               >
-                {canWriteEffective ? 'Cancelar' : 'Fechar'}
+                {formCanWrite ? 'Cancelar' : 'Fechar'}
               </Button>
-              {canWriteEffective && (
+              {formCanWrite && (
               <Button type="submit" disabled={saveMutation.isPending || uploadingAta}>
                 {saveMutation.isPending || uploadingAta ? 'Salvando…' : 'Salvar'}
               </Button>
@@ -1616,6 +1985,42 @@ export function KanbanPlannerView({
           </div>
         </form>
       </Modal>
+
+      <KanbanMemberPickerModal
+        isOpen={memberPickerOpen}
+        onClose={() => setMemberPickerOpen(false)}
+        elevated
+        currentUserId={meUser?.id}
+        currentUser={
+          meUser
+            ? {
+                id: meUser.id,
+                name: meUser.name,
+                email: meUser.email ?? '',
+                profilePhotoUrl: meUser.profilePhotoUrl ?? null,
+              }
+            : null
+        }
+        excludeUserIds={[
+          ...(form.userId ? [form.userId] : activeOwnerId ? [activeOwnerId] : []),
+          ...form.attendees.map((a) => a.id),
+        ]}
+        onSelect={(user: KanbanPickerUser) => {
+          setForm((f) => ({
+            ...f,
+            attendees: [
+              ...f.attendees,
+              {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                profilePhotoUrl: user.profilePhotoUrl ?? null,
+              },
+            ],
+          }));
+          setMemberPickerOpen(false);
+        }}
+      />
 
       <PlannerAgendaShareModal
         isOpen={shareOpen}

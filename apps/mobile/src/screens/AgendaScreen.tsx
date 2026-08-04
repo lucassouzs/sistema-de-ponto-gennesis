@@ -27,9 +27,18 @@ import {
   Calendar as CalendarIcon,
   ListTodo,
   X,
+  Users,
+  Phone,
+  BarChart3,
+  CheckCircle2,
+  Plane,
+  Coffee,
+  MapPin,
+  Briefcase,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
+import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../context/ThemeContext';
 import {
   createPlannerEvent,
@@ -84,6 +93,35 @@ function formatTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+const PLANNER_ICON_MAP: Record<
+  string,
+  React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
+> = {
+  meeting: Users,
+  phone: Phone,
+  chart: BarChart3,
+  star: Star,
+  check: CheckCircle2,
+  plane: Plane,
+  coffee: Coffee,
+  users: Users,
+  'map-pin': MapPin,
+  briefcase: Briefcase,
+};
+
+function PlannerEventIcon({
+  icon,
+  color,
+}: {
+  icon?: string | null;
+  color: string;
+}) {
+  if (!icon) return null;
+  const Icon = PLANNER_ICON_MAP[icon];
+  if (!Icon) return null;
+  return <Icon size={14} color={color} strokeWidth={2.2} />;
 }
 
 function AnimatedModeSwitcher({
@@ -561,32 +599,58 @@ export default function AgendaScreen() {
             <Text style={styles.empty}>Nenhum evento neste dia.</Text>
           ) : (
             <View style={styles.eventList}>
-              {dayEvents.map((ev, index) => (
-                <TouchableOpacity
-                  key={ev.id}
-                  style={styles.eventRow}
-                  onPress={() => canWrite && openEditEvent(ev)}
-                  activeOpacity={0.75}
-                >
-                  <View style={styles.eventTimeline}>
-                    {index < dayEvents.length - 1 ? <View style={styles.eventLine} /> : null}
-                    <View
-                      style={[
-                        styles.eventDot,
-                        { backgroundColor: ev.color || colors.primary },
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.eventBody}>
-                    <Text style={styles.eventTime}>
-                      {formatTime(ev.startAt)} – {formatTime(ev.endAt)}
-                    </Text>
-                    <Text style={styles.eventTitle} numberOfLines={2}>
-                      {ev.title}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {dayEvents.map((ev, index) => {
+                const attendees = ev.attendees || [];
+                const accent = ev.color || colors.primary;
+                return (
+                  <TouchableOpacity
+                    key={ev.id}
+                    style={styles.eventRow}
+                    onPress={() => canWrite && openEditEvent(ev)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.eventTimeline}>
+                      {index < dayEvents.length - 1 ? <View style={styles.eventLine} /> : null}
+                      <View style={[styles.eventDot, { backgroundColor: accent }]} />
+                    </View>
+                    <View style={styles.eventBody}>
+                      <Text style={styles.eventTime}>
+                        {formatTime(ev.startAt)} – {formatTime(ev.endAt)}
+                      </Text>
+                      <View style={styles.eventTitleRow}>
+                        <PlannerEventIcon icon={ev.icon} color={accent} />
+                        <Text style={styles.eventTitle} numberOfLines={2}>
+                          {ev.title}
+                        </Text>
+                      </View>
+                      {attendees.length > 0 ? (
+                        <View style={styles.eventAvatars}>
+                          {attendees.slice(0, 3).map((u, i) => (
+                            <View
+                              key={u.id}
+                              style={[styles.eventAvatarWrap, { marginLeft: i === 0 ? 0 : -6, zIndex: 3 - i }]}
+                            >
+                              <UserAvatar
+                                uri={u.profilePhotoUrl}
+                                size={22}
+                                backgroundColor={isDark ? '#374151' : '#e5e7eb'}
+                                iconColor={colors.textSecondary}
+                                borderColor={colors.surface}
+                                borderWidth={2}
+                              />
+                            </View>
+                          ))}
+                          {attendees.length > 3 ? (
+                            <View style={[styles.eventAvatarMore, { marginLeft: -6 }]}>
+                              <Text style={styles.eventAvatarMoreText}>+{attendees.length - 3}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </ScrollView>
@@ -1114,11 +1178,41 @@ function getStyles(colors: any, isDark: boolean) {
       color: colors.primary,
     },
     eventTitle: {
-      marginTop: 2,
+      flex: 1,
+      marginTop: 0,
       fontSize: 15,
       fontWeight: '600',
       color: colors.text,
-      lineHeight: 20,
+    },
+    eventTitleRow: {
+      marginTop: 2,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+    },
+    eventAvatars: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    eventAvatarWrap: {
+      borderRadius: 11,
+    },
+    eventAvatarMore: {
+      minWidth: 22,
+      height: 22,
+      borderRadius: 11,
+      paddingHorizontal: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#4b5563' : '#d1d5db',
+      borderWidth: 2,
+      borderColor: colors.surface,
+    },
+    eventAvatarMoreText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: colors.text,
     },
     listChipsScroll: {
       flexGrow: 0,

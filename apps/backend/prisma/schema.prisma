@@ -82,6 +82,7 @@ model User {
   kanbanCardAttachments    KanbanCardAttachment[] @relation("KanbanCardAttachmentUploader")
   kanbanChecklistAssigned  KanbanChecklistItem[]  @relation("KanbanChecklistAssignee")
   plannerEvents            PlannerEvent[]         @relation("PlannerEventOwner")
+  plannerEventAttendances  PlannerEventAttendee[] @relation("PlannerEventAttendeeUser")
   plannerTasks             PlannerTask[]          @relation("PlannerTaskOwner")
   plannerTaskLists         PlannerTaskList[]      @relation("PlannerTaskListOwner")
   plannerAgendaSharesOwned     PlannerAgendaShare[] @relation("PlannerAgendaShareOwner")
@@ -2723,6 +2724,8 @@ model PlannerEvent {
   startAt       DateTime
   endAt         DateTime
   color         String   @default("#3B82F6")
+  /// Ícone opcional do card (chave do conjunto fixo no frontend).
+  icon          String?
   /// ID do evento no Google Calendar (para sincronização sem duplicar).
   googleEventId String?
   /// PDF da ata da reunião (opcional).
@@ -2734,12 +2737,29 @@ model PlannerEvent {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  user User @relation("PlannerEventOwner", fields: [userId], references: [id], onDelete: Cascade)
+  user      User                   @relation("PlannerEventOwner", fields: [userId], references: [id], onDelete: Cascade)
+  attendees PlannerEventAttendee[]
 
   @@unique([userId, googleEventId])
   @@index([userId, startAt])
   @@index([userId, endAt])
   @@map("planner_events")
+}
+
+/// Pessoas atribuídas a um evento (aparece na agenda delas em leitura).
+model PlannerEventAttendee {
+  id        String   @id @default(cuid())
+  eventId   String   @map("event_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now())
+
+  event PlannerEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User         @relation("PlannerEventAttendeeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@index([eventId])
+  @@map("planner_event_attendees")
 }
 
 /// Compartilhamento da agenda de um usuário com outro (ver ou editar).

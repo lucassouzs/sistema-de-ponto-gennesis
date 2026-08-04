@@ -1,5 +1,24 @@
 import api from '@/lib/api';
 
+export type PlannerEventAttendee = {
+  id: string;
+  name: string;
+  email: string;
+  profilePhotoUrl: string | null;
+};
+
+export type PlannerEventIcon =
+  | 'meeting'
+  | 'phone'
+  | 'chart'
+  | 'star'
+  | 'check'
+  | 'plane'
+  | 'coffee'
+  | 'users'
+  | 'map-pin'
+  | 'briefcase';
+
 export type PlannerEvent = {
   id: string;
   userId: string;
@@ -8,6 +27,8 @@ export type PlannerEvent = {
   startAt: string;
   endAt: string;
   color: string;
+  icon?: string | null;
+  attendees?: PlannerEventAttendee[];
   googleEventId?: string | null;
   ataFileName?: string | null;
   ataFileUrl?: string | null;
@@ -24,6 +45,8 @@ export type PlannerEventInput = {
   startAt: string;
   endAt: string;
   color?: string;
+  icon?: string | null;
+  attendeeIds?: string[];
   ownerId?: string;
 };
 
@@ -56,6 +79,25 @@ export type PlannerEventsMeta = {
   canWrite: boolean;
   isOwner: boolean;
 };
+
+/** Mapeia a cor sólida do evento para fundo pastel + texto (cards estilo referência). */
+export function plannerPastelFromColor(color: string): {
+  bg: string;
+  text: string;
+  muted: string;
+} {
+  const c = (color || '#3B82F6').toUpperCase();
+  const map: Record<string, { bg: string; text: string; muted: string }> = {
+    '#3B82F6': { bg: '#DBEAFE', text: '#1E3A8A', muted: '#3B82F6' },
+    '#22C55E': { bg: '#DCFCE7', text: '#166534', muted: '#16A34A' },
+    '#F59E0B': { bg: '#FEF3C7', text: '#92400E', muted: '#D97706' },
+    '#EF4444': { bg: '#FEE2E2', text: '#991B1B', muted: '#DC2626' },
+    '#A855F7': { bg: '#F3E8FF', text: '#6B21A8', muted: '#9333EA' },
+    '#06B6D4': { bg: '#CFFAFE', text: '#155E75', muted: '#0891B2' },
+    '#EC4899': { bg: '#FCE7F3', text: '#9D174D', muted: '#DB2777' },
+  };
+  return map[c] || { bg: '#E0F2FE', text: '#0C4A6E', muted: '#0284C7' };
+}
 
 export async function fetchPlannerAgendas(): Promise<PlannerAgenda[]> {
   const res = await api.get('/planner-events/agendas');
@@ -122,17 +164,19 @@ export async function deletePlannerEvent(id: string): Promise<void> {
 }
 
 export async function uploadPlannerEventAta(
-  eventId: string,
+  id: string,
   file: File
 ): Promise<PlannerEvent> {
   const form = new FormData();
   form.append('ata', file);
-  const res = await api.post(`/planner-events/${eventId}/ata`, form);
+  const res = await api.post(`/planner-events/${id}/ata`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return res.data.data as PlannerEvent;
 }
 
-export async function deletePlannerEventAta(eventId: string): Promise<PlannerEvent> {
-  const res = await api.delete(`/planner-events/${eventId}/ata`);
+export async function deletePlannerEventAta(id: string): Promise<PlannerEvent> {
+  const res = await api.delete(`/planner-events/${id}/ata`);
   return res.data.data as PlannerEvent;
 }
 

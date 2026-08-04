@@ -1,6 +1,6 @@
 /** Siglas de polo exibidas em Gastos Operacionais (DF, GO, CENTRAL, …). */
 
-const KNOWN_POLO_SIGLAS = new Set(['CENTRAL', 'DF', 'GO', 'PB', 'PE', 'RS', 'RN']);
+const KNOWN_POLO_SIGLAS = new Set(['CENTRAL', 'DF', 'GO', 'PB', 'PE', 'RS', 'RN', 'BA']);
 
 function stripAccents(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -82,7 +82,11 @@ function buildNomeToPoloMap(): Record<string, string> {
     ['TJGO RETROFIT PARCEIROS - LOTE 5', 'GO'],
     ['TJGO RETROFIT R5 - LOTE 4', 'GO'],
     ['TJGO RETROFIT R5 - LOTE 5', 'GO'],
-    ['UFG', 'GO']
+    ['UFG', 'GO'],
+    ['MAPA - UMIPI DE JEQUIE', 'BA'],
+    ['POLO BAHIA', 'BA'],
+    ['BAHIA', 'BA'],
+    ['JEQUIE', 'BA']
   ];
 
   const map: Record<string, string> = {};
@@ -105,6 +109,7 @@ export function normalizePoloSigla(raw: string | null | undefined): string | nul
   if (u === 'BRASILIA' || u.includes('BRASILIA') || u.includes('DISTRITO FEDERAL')) return 'DF';
   if (u === 'GOIAS' || u.includes('GOIAS')) return 'GO';
   if (u.includes('PARAIBA') || u.endsWith(' PB') || u.startsWith('PB ')) return 'PB';
+  if (u.includes('BAHIA') || u.endsWith(' BA') || u.startsWith('BA ')) return 'BA';
   if (u.includes('PERNAMBUCO') || u.endsWith(' PE')) return 'PE';
   if (u.includes('RIO GRANDE DO SUL') || u.endsWith(' RS')) return 'RS';
   if (u.includes('RIO GRANDE DO NORTE') || u.endsWith(' RN')) return 'RN';

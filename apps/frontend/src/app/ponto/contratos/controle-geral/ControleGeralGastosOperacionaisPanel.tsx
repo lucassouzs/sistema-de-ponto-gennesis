@@ -757,6 +757,18 @@ export function ControleGeralGastosOperacionaisPanel({
     window.localStorage.setItem('controle-geral-pb-hidden-seeded-v1', '1');
   }, [allSpreadsheetContracts, enableRowExclusion]);
 
+  // Restaura contratos recém-incluídos no catálogo que tinham sido auto-ocultados.
+  useEffect(() => {
+    if (!enableRowExclusion) return;
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem('controle-geral-mapa-jequie-restored-v1')) return;
+
+    setExcludedContracts((prev) =>
+      removeControleGeralExcludedContract('MAPA - UMIPI DE JEQUIE', prev)
+    );
+    window.localStorage.setItem('controle-geral-mapa-jequie-restored-v1', '1');
+  }, [enableRowExclusion]);
+
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(() => new Set());
   const [hiddenContractsListMinimized, setHiddenContractsListMinimized] = useState(false);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);

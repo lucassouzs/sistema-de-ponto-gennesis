@@ -49,6 +49,79 @@ function normalizeColor(value: unknown): string {
   return '#3B82F6';
 }
 
+const PLANNER_EVENT_ICONS = new Set([
+  'meeting',
+  'phone',
+  'chart',
+  'star',
+  'check',
+  'plane',
+  'coffee',
+  'users',
+  'map-pin',
+  'briefcase',
+]);
+
+function normalizeIcon(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw || raw === 'none') return null;
+  return PLANNER_EVENT_ICONS.has(raw) ? raw : null;
+}
+
+function parseAttendeeIds(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+const eventInclude = {
+  attendees: {
+    include: { user: { select: { id: true, name: true, email: true, profilePhotoUrl: true } } },
+    orderBy: { createdAt: 'asc' as const },
+  },
+} as const;
+
+function serializeEvent<T extends {
+  attendees?: Array<{ user: { id: string; name: string; email: string; profilePhotoUrl: string | null } }>;
+}>(event: T) {
+  const { attendees, ...rest } = event;
+  return {
+    ...rest,
+    attendees: (attendees || []).map((a) => a.user),
+  };
+}
+
+async function replaceEventAttendees(eventId: string, ownerId: string, attendeeIds: string[]) {
+  const unique = [...new Set(attendeeIds)].filter((id) => id !== ownerId);
+  if (unique.length > 0) {
+    const found = await prisma.user.findMany({
+      where: { id: { in: unique }, isActive: true },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) {
+      throw createError('Uma ou mais pessoas atribuídas não foram encontradas', 400);
+    }
+  }
+
+  await prisma.$transaction([
+    prisma.plannerEventAttendee.deleteMany({ where: { eventId } }),
+    ...(unique.length
+      ? [
+          prisma.plannerEventAttendee.createMany({
+            data: unique.map((userId) => ({ eventId, userId })),
+          }),
+        ]
+      : []),
+  ]);
+}
+
 function parsePermission(value: unknown): PlannerAgendaSharePermission {
   const raw = String(value || '').trim().toUpperCase();
   if (raw === 'WRITE') return PlannerAgendaSharePermission.WRITE;
@@ -268,26 +341,31 @@ export class PlannerEventController {
       const from = parseDate(req.query.from);
       const to = parseDate(req.query.to);
 
-      const where: {
-        userId: string;
-        AND?: object[];
-      } = { userId: ownerId };
+      const dateFilters: object[] = [];
+      if (from) dateFilters.push({ endAt: { gt: from } });
+      if (to) dateFilters.push({ startAt: { lt: to } });
 
-      if (from || to) {
-        where.AND = [
-          ...(from ? [{ endAt: { gt: from } }] : []),
-          ...(to ? [{ startAt: { lt: to } }] : []),
-        ];
-      }
+      const ownershipFilter =
+        ownerId === requesterId
+          ? {
+              OR: [
+                { userId: ownerId },
+                { attendees: { some: { userId: requesterId } } },
+              ],
+            }
+          : { userId: ownerId };
 
       const events = await prisma.plannerEvent.findMany({
-        where,
+        where: {
+          AND: [ownershipFilter, ...dateFilters],
+        },
+        include: eventInclude,
         orderBy: [{ startAt: 'asc' }, { title: 'asc' }],
       });
 
       res.json({
         success: true,
-        data: events,
+        data: events.map(serializeEvent),
         meta: {
           ownerId: access.ownerId,
           permission: access.permission,
@@ -317,6 +395,9 @@ export class PlannerEventController {
       if (!startAt || !endAt) throw createError('Data/hora de início e fim são obrigatórias', 400);
       if (endAt <= startAt) throw createError('O término deve ser depois do início', 400);
 
+      const attendeeIds = parseAttendeeIds(req.body?.attendeeIds) ?? [];
+      const icon = normalizeIcon(req.body?.icon);
+
       const created = await prisma.plannerEvent.create({
         data: {
           userId: ownerId,
@@ -325,10 +406,20 @@ export class PlannerEventController {
           startAt,
           endAt,
           color: normalizeColor(req.body?.color),
+          icon,
         },
       });
 
-      res.status(201).json({ success: true, data: created });
+      if (attendeeIds.length > 0) {
+        await replaceEventAttendees(created.id, ownerId, attendeeIds);
+      }
+
+      const full = await prisma.plannerEvent.findUniqueOrThrow({
+        where: { id: created.id },
+        include: eventInclude,
+      });
+
+      res.status(201).json({ success: true, data: serializeEvent(full) });
     } catch (error) {
       next(error);
     }
@@ -356,7 +447,7 @@ export class PlannerEventController {
       if (!startAt || !endAt) throw createError('Data/hora de início e fim inválidas', 400);
       if (endAt <= startAt) throw createError('O término deve ser depois do início', 400);
 
-      const updated = await prisma.plannerEvent.update({
+      await prisma.plannerEvent.update({
         where: { id },
         data: {
           title,
@@ -368,10 +459,22 @@ export class PlannerEventController {
           endAt,
           color:
             req.body?.color !== undefined ? normalizeColor(req.body.color) : existing.color,
+          icon:
+            req.body?.icon !== undefined ? normalizeIcon(req.body.icon) : existing.icon,
         },
       });
 
-      res.json({ success: true, data: updated });
+      const attendeeIds = parseAttendeeIds(req.body?.attendeeIds);
+      if (attendeeIds !== undefined) {
+        await replaceEventAttendees(id, existing.userId, attendeeIds);
+      }
+
+      const full = await prisma.plannerEvent.findUniqueOrThrow({
+        where: { id },
+        include: eventInclude,
+      });
+
+      res.json({ success: true, data: serializeEvent(full) });
     } catch (error) {
       next(error);
     }
@@ -426,7 +529,7 @@ export class PlannerEventController {
       if (!file) throw createError('Envie o PDF da ata', 400);
 
       const upload = await chatUploadService.uploadFile(file, requesterId);
-      const updated = await prisma.plannerEvent.update({
+      await prisma.plannerEvent.update({
         where: { id },
         data: {
           ataFileName: file.originalname || 'ata.pdf',
@@ -437,7 +540,12 @@ export class PlannerEventController {
         },
       });
 
-      res.json({ success: true, data: updated });
+      const full = await prisma.plannerEvent.findUniqueOrThrow({
+        where: { id },
+        include: eventInclude,
+      });
+
+      res.json({ success: true, data: serializeEvent(full) });
     } catch (error) {
       next(error);
     }
@@ -455,7 +563,7 @@ export class PlannerEventController {
         throw createError('Sem permissão para editar esta agenda', 403);
       }
 
-      const updated = await prisma.plannerEvent.update({
+      await prisma.plannerEvent.update({
         where: { id },
         data: {
           ataFileName: null,
@@ -466,7 +574,12 @@ export class PlannerEventController {
         },
       });
 
-      res.json({ success: true, data: updated });
+      const full = await prisma.plannerEvent.findUniqueOrThrow({
+        where: { id },
+        include: eventInclude,
+      });
+
+      res.json({ success: true, data: serializeEvent(full) });
     } catch (error) {
       next(error);
     }

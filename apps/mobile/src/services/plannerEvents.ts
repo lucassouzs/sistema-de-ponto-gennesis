@@ -1,6 +1,25 @@
 import api from './api';
 import { readApiData, readApiJson } from './http';
 
+export type PlannerEventAttendee = {
+  id: string;
+  name: string;
+  email: string;
+  profilePhotoUrl: string | null;
+};
+
+export type PlannerEventIcon =
+  | 'meeting'
+  | 'phone'
+  | 'chart'
+  | 'star'
+  | 'check'
+  | 'plane'
+  | 'coffee'
+  | 'users'
+  | 'map-pin'
+  | 'briefcase';
+
 export type PlannerEvent = {
   id: string;
   userId: string;
@@ -9,6 +28,8 @@ export type PlannerEvent = {
   startAt: string;
   endAt: string;
   color: string;
+  icon?: string | null;
+  attendees?: PlannerEventAttendee[];
 };
 
 export type PlannerEventInput = {
@@ -17,6 +38,8 @@ export type PlannerEventInput = {
   startAt: string;
   endAt: string;
   color?: string;
+  icon?: string | null;
+  attendeeIds?: string[];
   ownerId?: string;
 };
 

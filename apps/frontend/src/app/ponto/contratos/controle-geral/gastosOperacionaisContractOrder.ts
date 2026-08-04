@@ -12,9 +12,12 @@ export type GastosOperacionaisLocality =
 
 /** Localidades exibidas no painel de gastos do Controle Geral de Contratos. */
 export const CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES = [
+  'CENTRAL',
   'GOIAS',
   'DISTRITO_FEDERAL',
-  'PARAIBA'
+  'PARAIBA',
+  'SUL',
+  'NORDESTE'
 ] as const satisfies readonly GastosOperacionaisLocality[];
 
 export function resolveVisibleLocalityItems(
@@ -135,6 +138,7 @@ const CONTRACTS_BY_LOCALITY: Record<GastosOperacionaisLocality, readonly string[
     'CEHAB PE',
     'INCRA - MÃO DE OBRA',
     'INCRA - SERVIÇOS EVENTUAIS',
+    'MAPA - UMIPI DE JEQUIE',
     'PARQUE TRES RUAS - JOAO PESSOA',
     'RECEITA FEDERAL - MÃO DE OBRA',
     'RN - ADM LOCAL',
@@ -304,6 +308,7 @@ export const GASTOS_OPERACIONAIS_CONTRACT_ORDER = [
   'CEHAB PE',
   'INCRA - MÃO DE OBRA',
   'INCRA - SERVIÇOS EVENTUAIS',
+  'MAPA - UMIPI DE JEQUIE',
   'PARQUE TRES RUAS - JOAO PESSOA',
   'RECEITA FEDERAL - MÃO DE OBRA',
   'RN - ADM LOCAL',
@@ -400,6 +405,23 @@ export function inferContractLocalityFromHints(
   }
   if (/\bGO\b|GOIAS|GOIANIA|APARECIDA|ANAPOLIS|RIO VERDE|CALDAS NOVAS|UFG|TJGO/.test(haystack)) {
     return 'GOIAS';
+  }
+  if (
+    /\bBA\b|BAHIA|JEQUIE|UMIPI|\bRN\b|RIO GRANDE DO NORTE|NATAL|MACAIBA|\bPE\b|PERNAMBUCO|RECIFE|CEHAB/.test(
+      haystack
+    )
+  ) {
+    return 'NORDESTE';
+  }
+  if (
+    /\bRS\b|RIO GRANDE DO SUL|PORTO ALEGRE|\bPR\b|PARANA|CURITIBA|LONDRINA|MARINGA|BANRISUL|FUNDEPAR/.test(
+      haystack
+    )
+  ) {
+    return 'SUL';
+  }
+  if (/ADM CENTRAL|ADMINISTRACAO CENTRAL|DESPESAS GERAIS/.test(haystack)) {
+    return 'CENTRAL';
   }
 
   return undefined;
