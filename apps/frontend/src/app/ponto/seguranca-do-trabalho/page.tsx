@@ -31,6 +31,7 @@ import { cadastroListClasses, listTableRowClasses } from '@/components/ui/RowAct
 import { CARGOS_AVAILABLE } from '@/constants/cargos';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import { exportAsoRegistrosToExcel } from '@/lib/asoExport';
+import { ASO_SETORES, labelFuncaoAso, labelFuncaoFromEmployee, normalizeAsoKey } from '@/lib/asoFuncao';
 import {
   ASO_IMPORT_COLUMNS,
   downloadAsoImportTemplate,
@@ -54,6 +55,8 @@ type AsoTipo = { id: string; nome: string };
 type CargoRisco = {
   id: string;
   cargo: string;
+  setor: string;
+  label?: string;
   grauRisco: AsoGrauRisco;
   periodicidadeMeses: number;
 };
@@ -111,6 +114,7 @@ type PorFuncionarioItem = {
   cpf: string;
   position: string;
   department: string;
+  labelFuncao?: string;
   ultimoAso: {
     id: string;
     tipoAsoId: string;
@@ -124,6 +128,8 @@ type PorFuncionarioItem = {
 
 type CargoSemPeriodicidadeItem = {
   cargo: string;
+  setor: string;
+  label: string;
   funcionarios: Array<{ id: string; nome: string; employeeId: string; department: string }>;
 };
 
@@ -266,10 +272,12 @@ export default function SegurancaDoTrabalhoPage() {
   // Cargos e risco
   const [cargoForm, setCargoForm] = useState({
     cargo: '',
+    setor: '',
     grauRisco: 'MEDIO' as AsoGrauRisco,
     periodicidadeMeses: '12',
   });
   const [editingCargo, setEditingCargo] = useState<CargoRisco | null>(null);
+  const [setorTab, setSetorTab] = useState<string>('todos');
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -359,7 +367,7 @@ export default function SegurancaDoTrabalhoPage() {
   });
 
   const { data: cargosDisponiveis = [], isLoading: loadingCargosDisponiveis } = useQuery<
-    Array<{ cargo: string; jaCadastrado: boolean }>
+    Array<{ cargo: string; jaCadastrado: boolean; setoresCadastrados?: string[] }>
   >({
     queryKey: ['aso-cargos-disponiveis'],
     queryFn: async () => (await api.get('/aso/cargos-disponiveis')).data?.data || [],
@@ -380,14 +388,27 @@ export default function SegurancaDoTrabalhoPage() {
       cargosDisponiveis.map((item) => [item.cargo.trim().toLowerCase(), item] as const)
     );
     const editingCargoNorm = editingCargo?.cargo.trim().toLowerCase() || '';
+    const editingSetorNorm = editingCargo?.setor.trim().toLowerCase() || '';
+    const selectedSetorNorm = cargoForm.setor.trim().toLowerCase();
+
+    const pairAlreadyExists = (cargo: string) => {
+      if (!selectedSetorNorm) return false;
+      return cargos.some(
+        (c) =>
+          c.cargo.trim().toLowerCase() === cargo.trim().toLowerCase() &&
+          c.setor.trim().toLowerCase() === selectedSetorNorm
+      );
+    };
 
     const fromApi = cargosDisponiveis.map((item) => {
       const isCurrentEdit =
-        Boolean(editingCargoNorm) && item.cargo.trim().toLowerCase() === editingCargoNorm;
-      const disabled = item.jaCadastrado && !isCurrentEdit;
+        Boolean(editingCargoNorm) &&
+        item.cargo.trim().toLowerCase() === editingCargoNorm &&
+        (!selectedSetorNorm || selectedSetorNorm === editingSetorNorm);
+      const disabled = pairAlreadyExists(item.cargo) && !isCurrentEdit;
       return {
         value: item.cargo,
-        label: disabled ? `${item.cargo} (já cadastrado)` : item.cargo,
+        label: disabled ? `${item.cargo} (já cadastrado neste setor)` : item.cargo,
         searchText: item.cargo,
         disabled,
       };
@@ -395,12 +416,15 @@ export default function SegurancaDoTrabalhoPage() {
 
     const fromCadastroFallback = CARGOS_AVAILABLE.filter(
       (cargo) => cargo !== 'Diretor' && !byNorm.has(cargo.trim().toLowerCase())
-    ).map((cargo) => ({
-      value: cargo,
-      label: cargo,
-      searchText: cargo,
-      disabled: false,
-    }));
+    ).map((cargo) => {
+      const disabled = pairAlreadyExists(cargo) && !editingCargo;
+      return {
+        value: cargo,
+        label: disabled ? `${cargo} (já cadastrado neste setor)` : cargo,
+        searchText: cargo,
+        disabled,
+      };
+    });
 
     const merged = [...fromApi, ...fromCadastroFallback].sort((a, b) =>
       a.label.localeCompare(b.label, 'pt-BR')
@@ -419,7 +443,56 @@ export default function SegurancaDoTrabalhoPage() {
     }
 
     return merged;
-  }, [cargosDisponiveis, editingCargo]);
+  }, [cargosDisponiveis, editingCargo, cargoForm.setor, cargos]);
+
+  const setorSelectOptions = useMemo(
+    () => ASO_SETORES.map((setor) => ({ value: setor, label: setor, searchText: setor })),
+    []
+  );
+
+  const cargoFormLabelPreview = useMemo(
+    () => labelFuncaoAso(cargoForm.cargo, cargoForm.setor),
+    [cargoForm.cargo, cargoForm.setor]
+  );
+
+  const cargosFiltradosPorSetor = useMemo(() => {
+    const list =
+      setorTab === 'todos'
+        ? cargos
+        : cargos.filter((c) => normalizeAsoKey(c.setor) === normalizeAsoKey(setorTab));
+    return [...list].sort((a, b) => {
+      if (setorTab === 'todos') {
+        const bySetor = a.setor.localeCompare(b.setor, 'pt-BR', { sensitivity: 'base' });
+        if (bySetor !== 0) return bySetor;
+      }
+      const labelA = a.label || labelFuncaoAso(a.cargo, a.setor);
+      const labelB = b.label || labelFuncaoAso(b.cargo, b.setor);
+      return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
+    });
+  }, [cargos, setorTab]);
+
+  const cargosSemPeriodicidadeFiltrados = useMemo(() => {
+    const list =
+      setorTab === 'todos'
+        ? cargosSemPeriodicidade
+        : cargosSemPeriodicidade.filter(
+            (c) => normalizeAsoKey(c.setor) === normalizeAsoKey(setorTab)
+          );
+    return [...list].sort((a, b) => {
+      if (setorTab === 'todos') {
+        const bySetor = a.setor.localeCompare(b.setor, 'pt-BR', { sensitivity: 'base' });
+        if (bySetor !== 0) return bySetor;
+      }
+      const labelA = a.label || labelFuncaoAso(a.cargo, a.setor);
+      const labelB = b.label || labelFuncaoAso(b.cargo, b.setor);
+      return labelA.localeCompare(labelB, 'pt-BR', { sensitivity: 'base' });
+    });
+  }, [cargosSemPeriodicidade, setorTab]);
+
+  const resetCargoForm = () => {
+    setEditingCargo(null);
+    setCargoForm({ cargo: '', setor: '', grauRisco: 'MEDIO', periodicidadeMeses: '12' });
+  };
 
   const { data: preview } = useQuery({
     queryKey: ['aso-preview-validade', form.funcionarioId, form.dataExame],
@@ -432,6 +505,8 @@ export default function SegurancaDoTrabalhoPage() {
         periodicidadeMeses: number;
         validadePadrao: boolean;
         cargo: string;
+        setor?: string;
+        label?: string;
       };
     },
     enabled: showForm && Boolean(form.funcionarioId && form.dataExame),
@@ -731,6 +806,7 @@ export default function SegurancaDoTrabalhoPage() {
     mutationFn: async () => {
       const payload = {
         cargo: cargoForm.cargo.trim(),
+        setor: cargoForm.setor.trim(),
         grauRisco: cargoForm.grauRisco,
         periodicidadeMeses: Number(cargoForm.periodicidadeMeses),
       };
@@ -741,12 +817,12 @@ export default function SegurancaDoTrabalhoPage() {
     },
     onSuccess: (res) => {
       toast.success(res?.message || 'Cargo salvo');
-      setEditingCargo(null);
-      setCargoForm({ cargo: '', grauRisco: 'MEDIO', periodicidadeMeses: '12' });
+      resetCargoForm();
       queryClient.invalidateQueries({ queryKey: ['aso-cargos-risco'] });
       queryClient.invalidateQueries({ queryKey: ['aso-cargos-disponiveis'] });
       queryClient.invalidateQueries({ queryKey: ['aso-cargos-sem-periodicidade'] });
       queryClient.invalidateQueries({ queryKey: ['aso-dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['aso-por-funcionario'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message || 'Erro ao salvar cargo');
@@ -1268,7 +1344,7 @@ export default function SegurancaDoTrabalhoPage() {
                         <tr>
                           <th className={cadastroListClasses.th}>Funcionário</th>
                           <th className={cadastroListClasses.thCenter}>Matrícula</th>
-                          <th className={cadastroListClasses.thCenter}>Cargo</th>
+                          <th className={cadastroListClasses.thCenter}>Função</th>
                           <th className={cadastroListClasses.thCenter}>Setor</th>
                           <th className={cadastroListClasses.thCenter}>Último tipo</th>
                           <th className={cadastroListClasses.thCenter}>Exame</th>
@@ -1293,7 +1369,11 @@ export default function SegurancaDoTrabalhoPage() {
                                 ) : null}
                               </td>
                               <td className="px-3 py-3 text-center text-sm">{item.employeeId}</td>
-                              <td className="px-3 py-3 text-center text-sm">{item.position}</td>
+                              <td className="px-3 py-3 text-center text-sm">
+                                {item.labelFuncao ||
+                                  labelFuncaoFromEmployee(item.position, item.department) ||
+                                  item.position}
+                              </td>
                               <td className="px-3 py-3 text-center text-sm">{item.department}</td>
                               <td className="px-3 py-3 text-center text-sm">
                                 {item.ultimoAso?.tipoAso?.nome || '—'}
@@ -1351,22 +1431,51 @@ export default function SegurancaDoTrabalhoPage() {
             </Card>
           ) : (
             <div className="space-y-6">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSetorTab('todos')}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                    setorTab === 'todos'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                  }`}
+                >
+                  Todos
+                </button>
+                {ASO_SETORES.map((setor) => (
+                  <button
+                    key={setor}
+                    type="button"
+                    onClick={() => setSetorTab(setor)}
+                    className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+                      normalizeAsoKey(setorTab) === normalizeAsoKey(setor)
+                        ? 'bg-red-600 text-white'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                    }`}
+                  >
+                    {setor}
+                  </button>
+                ))}
+              </div>
+
               <Card className={cadastroListClasses.card}>
                 <CardHeader className={cadastroListClasses.cardHeader}>
                   <div className={cadastroListClasses.cardHeaderRow}>
                     <div>
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Periodicidade por cargo
+                        Periodicidade por cargo e setor
                       </h2>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Define o intervalo do ASO periódico. Sem cadastro, usa 12 meses.
+                        Ex.: Assistente + Engenharia = Assistente de Engenharia. Sem cadastro, usa 12
+                        meses.
                       </p>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4 p-4 sm:p-6">
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <div className="sm:col-span-2">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div>
                       <SingleSelectSearchDropdown
                         value={cargoForm.cargo}
                         onChange={(cargo) => setCargoForm((c) => ({ ...c, cargo }))}
@@ -1380,9 +1489,19 @@ export default function SegurancaDoTrabalhoPage() {
                         emptyOptionsMessage="Nenhum cargo disponível."
                         noFocusRing
                       />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Mesmas opções do campo Cargo no cadastro de funcionários.
-                      </p>
+                    </div>
+                    <div>
+                      <SingleSelectSearchDropdown
+                        value={cargoForm.setor}
+                        onChange={(setor) => setCargoForm((c) => ({ ...c, setor }))}
+                        options={setorSelectOptions}
+                        disabled={Boolean(editingCargo)}
+                        allowEmpty={false}
+                        placeholder="Selecionar setor..."
+                        searchPlaceholder="Pesquisar setor..."
+                        emptyOptionsMessage="Nenhum setor."
+                        noFocusRing
+                      />
                     </div>
                     <SingleSelectSearchDropdown
                       value={cargoForm.grauRisco}
@@ -1394,7 +1513,7 @@ export default function SegurancaDoTrabalhoPage() {
                       placeholder="Grau de risco"
                       noFocusRing
                     />
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 lg:col-span-2">
                       <input
                         type="number"
                         min={1}
@@ -1408,8 +1527,12 @@ export default function SegurancaDoTrabalhoPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (!editingCargo && !cargoForm.cargo.trim()) {
+                          if (!cargoForm.cargo.trim()) {
                             toast.error('Selecione um cargo');
+                            return;
+                          }
+                          if (!cargoForm.setor.trim()) {
+                            toast.error('Selecione um setor');
                             return;
                           }
                           saveCargoMutation.mutate();
@@ -1422,10 +1545,7 @@ export default function SegurancaDoTrabalhoPage() {
                       {editingCargo ? (
                         <button
                           type="button"
-                          onClick={() => {
-                            setEditingCargo(null);
-                            setCargoForm({ cargo: '', grauRisco: 'MEDIO', periodicidadeMeses: '12' });
-                          }}
+                          onClick={resetCargoForm}
                           className="shrink-0 rounded-lg border border-gray-300 px-3 text-sm dark:border-gray-600"
                         >
                           Cancelar
@@ -1433,28 +1553,47 @@ export default function SegurancaDoTrabalhoPage() {
                       ) : null}
                     </div>
                   </div>
+                  {cargoFormLabelPreview ? (
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Função no ASO:{' '}
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {cargoFormLabelPreview}
+                      </span>
+                      {cargoForm.setor ? (
+                        <span className="ml-2 text-xs text-gray-400">({cargoForm.setor})</span>
+                      ) : null}
+                    </p>
+                  ) : null}
 
                   {loadingCargos ? (
                     <Loading message="Carregando cargos..." />
-                  ) : cargos.length === 0 ? (
+                  ) : cargosFiltradosPorSetor.length === 0 ? (
                     <p className="py-8 text-center text-sm text-gray-500">
-                      Nenhum cargo cadastrado. Novos ASOs usarão 12 meses padrão.
+                      Nenhum cadastro
+                      {setorTab !== 'todos' ? ` em ${setorTab}` : ''}. Novos ASOs usarão 12 meses
+                      padrão.
                     </p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className={cadastroListClasses.table}>
                         <thead>
                           <tr>
-                            <th className={cadastroListClasses.th}>Cargo</th>
+                            <th className={cadastroListClasses.th}>Função</th>
+                            <th className={cadastroListClasses.th}>Setor</th>
                             <th className={cadastroListClasses.thCenter}>Grau</th>
                             <th className={cadastroListClasses.thCenter}>Meses</th>
                             <th className={cadastroListClasses.thRight}>Ação</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {cargos.map((c) => (
+                          {cargosFiltradosPorSetor.map((c) => (
                             <tr key={c.id} className={listTableRowClasses.tr}>
-                              <td className="px-3 py-3">{c.cargo}</td>
+                              <td className="px-3 py-3">
+                                {c.label || labelFuncaoAso(c.cargo, c.setor)}
+                              </td>
+                              <td className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">
+                                {c.setor}
+                              </td>
                               <td className="px-3 py-3 text-center">{GRAU_LABEL[c.grauRisco]}</td>
                               <td className="px-3 py-3 text-center">{c.periodicidadeMeses}</td>
                               <td className="px-3 py-3">
@@ -1465,9 +1604,11 @@ export default function SegurancaDoTrabalhoPage() {
                                       setEditingCargo(c);
                                       setCargoForm({
                                         cargo: c.cargo,
+                                        setor: c.setor,
                                         grauRisco: c.grauRisco,
                                         periodicidadeMeses: String(c.periodicidadeMeses),
                                       });
+                                      setSetorTab(c.setor);
                                     }}
                                     className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                                   >
@@ -1500,10 +1641,11 @@ export default function SegurancaDoTrabalhoPage() {
                       </div>
                       <div>
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
-                          Cargos sem periodicidade
+                          Sem periodicidade
+                          {setorTab !== 'todos' ? ` — ${setorTab}` : ''}
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Funcionários ativos cujo cargo usa os 12 meses padrão
+                          Funcionários ativos cujo cargo+setor usa os 12 meses padrão
                         </p>
                       </div>
                     </div>
@@ -1512,32 +1654,42 @@ export default function SegurancaDoTrabalhoPage() {
                 <CardContent className="space-y-3 p-4 sm:p-6">
                   {loadingCargosSemPeriodicidade ? (
                     <Loading message="Carregando..." />
-                  ) : cargosSemPeriodicidade.length === 0 ? (
+                  ) : cargosSemPeriodicidadeFiltrados.length === 0 ? (
                     <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                      Todos os cargos ativos possuem periodicidade cadastrada.
+                      {setorTab === 'todos'
+                        ? 'Todos os pares cargo+setor ativos possuem periodicidade cadastrada.'
+                        : `Nenhum pendente em ${setorTab}.`}
                     </p>
                   ) : (
-                    cargosSemPeriodicidade.map((item) => (
+                    cargosSemPeriodicidadeFiltrados.map((item) => (
                       <button
-                        key={item.cargo}
+                        key={`${item.cargo}|||${item.setor}`}
                         type="button"
                         onClick={() => {
                           setEditingCargo(null);
-                          setCargoForm((c) => ({ ...c, cargo: item.cargo }));
+                          setCargoForm((c) => ({
+                            ...c,
+                            cargo: item.cargo,
+                            setor: item.setor,
+                          }));
+                          setSetorTab(item.setor);
                         }}
                         className="flex w-full flex-col gap-1 rounded-lg border border-gray-200 px-4 py-3 text-left hover:border-red-300 dark:border-gray-700 dark:hover:border-red-800"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {item.cargo}
+                            {item.label || labelFuncaoAso(item.cargo, item.setor)}
                           </span>
                           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                             {item.funcionarios.length} funcionário
                             {item.funcionarios.length === 1 ? '' : 's'}
                           </span>
                         </div>
-                        <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                          {item.funcionarios.map((f) => f.nome).join(', ')}
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {item.setor}
+                          {item.funcionarios.length > 0
+                            ? ` · ${item.funcionarios.map((f) => f.nome).join(', ')}`
+                            : ''}
                         </p>
                       </button>
                     ))
@@ -1603,7 +1755,11 @@ export default function SegurancaDoTrabalhoPage() {
                 {preview?.validadePadrao ? (
                   <p className="mt-1 flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    Cargo sem periodicidade em Cargos e risco — usando 12 meses.
+                    {preview.label || 'Função'} sem periodicidade em Cargos e risco — usando 12 meses.
+                  </p>
+                ) : preview?.label ? (
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Função: {preview.label}
                   </p>
                 ) : null}
               </div>

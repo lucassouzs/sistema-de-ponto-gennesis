@@ -63,15 +63,16 @@ export class AsoController {
 
   async createCargoRisco(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { cargo, grauRisco, periodicidadeMeses } = req.body;
-      if (!cargo || grauRisco == null || periodicidadeMeses == null) {
-        throw createError('Cargo, grau de risco e periodicidade são obrigatórios', 400);
+      const { cargo, setor, grauRisco, periodicidadeMeses } = req.body;
+      if (!cargo || !setor || grauRisco == null || periodicidadeMeses == null) {
+        throw createError('Cargo, setor, grau de risco e periodicidade são obrigatórios', 400);
       }
       if (!Object.values(AsoGrauRisco).includes(grauRisco)) {
         throw createError('Grau de risco inválido', 400);
       }
       const data = await asoService.createCargoRisco({
         cargo,
+        setor,
         grauRisco,
         periodicidadeMeses: Number(periodicidadeMeses),
       });
@@ -84,12 +85,13 @@ export class AsoController {
   async updateCargoRisco(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { cargo, grauRisco, periodicidadeMeses } = req.body;
+      const { cargo, setor, grauRisco, periodicidadeMeses } = req.body;
       if (grauRisco != null && !Object.values(AsoGrauRisco).includes(grauRisco)) {
         throw createError('Grau de risco inválido', 400);
       }
       const data = await asoService.updateCargoRisco(id, {
         ...(cargo !== undefined ? { cargo } : {}),
+        ...(setor !== undefined ? { setor } : {}),
         ...(grauRisco !== undefined ? { grauRisco } : {}),
         ...(periodicidadeMeses !== undefined
           ? { periodicidadeMeses: Number(periodicidadeMeses) }

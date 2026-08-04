@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Trash2, Users, Search, AlertTriangle, X, Clock, Calendar, User, Download, Edit, Save, Camera, FileCheck, Eye, EyeOff, Plus, ChevronDown, ChevronUp, CheckCircle, RotateCcw, Upload, FileSpreadsheet, Loader2, MoreVertical, DoorOpen, DoorClosed, Utensils, UtensilsCrossed, XCircle, UserX, Shield, Filter, KeyRound } from 'lucide-react';
+import { TableCheckbox } from '@/components/ui/Checkbox';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -143,6 +144,8 @@ export function EmployeeList({
   const [searchTerm, setSearchTerm] = useState('');
   const deferredSearchTerm = useDeferredValue(searchTerm.trim());
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   /** Menu flutuante: fixed + portal para não ser cortado pelo overflow-x da tabela */
   const [employeeActionMenu, setEmployeeActionMenu] = useState<{
     employeeId: string;
@@ -493,7 +496,44 @@ export function EmployeeList({
     },
     onError: (error: any) => {
       console.error('Erro ao deletar funcionário:', error);
+      toast.error(error?.response?.data?.message || error?.response?.data?.error || 'Erro ao desligar');
     }
+  });
+
+  const bulkDesligarMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let ok = 0;
+      let failed = 0;
+      for (const id of ids) {
+        try {
+          await api.delete(`/users/${id}`);
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      return { ok, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      if (ok > 0) {
+        toast.success(ok === 1 ? '1 funcionário desligado' : `${ok} funcionários desligados`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} não puderam ser desligados`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setSelectedIds(new Set());
+      setShowBulkDeleteModal(false);
+      setSelectedEmployee(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          'Erro ao desligar selecionados'
+      );
+    },
   });
 
   // Reativar funcionário
@@ -1339,6 +1379,49 @@ export function EmployeeList({
   const endIndex = startIndex + itemsPerPage;
   const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
 
+  const selectedCount = selectedIds.size;
+  const allPageSelected =
+    paginatedEmployees.length > 0 &&
+    paginatedEmployees.every((employee) => selectedIds.has(employee.id));
+  const somePageSelected = paginatedEmployees.some((employee) => selectedIds.has(employee.id));
+  const activeFilteredCount = filteredEmployees.filter((e) => e.isActive).length;
+  const allFilteredSelected =
+    activeFilteredCount > 0 &&
+    selectedCount > 0 &&
+    filteredEmployees.filter((e) => e.isActive).every((e) => selectedIds.has(e.id));
+
+  const toggleSelectOne = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllPage = () => {
+    setSelectedIds((prev) => {
+      if (paginatedEmployees.length === 0) return prev;
+      if (paginatedEmployees.every((employee) => prev.has(employee.id))) {
+        const next = new Set(prev);
+        paginatedEmployees.forEach((employee) => next.delete(employee.id));
+        return next;
+      }
+      const next = new Set(prev);
+      paginatedEmployees.forEach((employee) => next.add(employee.id));
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    const ids = filteredEmployees.filter((e) => e.isActive).map((e) => e.id);
+    setSelectedIds(new Set(ids));
+    toast.success(
+      ids.length === 1 ? '1 funcionário selecionado' : `${ids.length} funcionários selecionados`
+    );
+  };
+
   // Calcular informações de paginação
   const totalPages = Math.ceil(totalFiltered / itemsPerPage);
   const startItem = totalFiltered === 0 ? 0 : startIndex + 1;
@@ -1714,6 +1797,17 @@ export function EmployeeList({
             >
               <Filter className="h-4 w-4" />
             </button>
+            {canDeleteEmployees && showDeleteButton && selectedCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                title="Desligar selecionados"
+              >
+                <UserX className="h-4 w-4 shrink-0" />
+                <span>Desligar ({selectedCount})</span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => void exportEmployeesToExcel()}
@@ -1879,6 +1973,17 @@ export function EmployeeList({
               <table className="w-full text-sm">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>
+                    {canDeleteEmployees && showDeleteButton ? (
+                      <th scope="col" className="w-10 px-3 py-4 sm:px-4">
+                        <TableCheckbox
+                          checked={allPageSelected}
+                          indeterminate={!allPageSelected && somePageSelected}
+                          onChange={() => toggleSelectAllPage()}
+                          onClick={(e) => e.stopPropagation()}
+                          ariaLabel="Selecionar todos desta página"
+                        />
+                      </th>
+                    ) : null}
                     <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Funcionário
                     </th>
@@ -1913,6 +2018,19 @@ export function EmployeeList({
                         }}
                         className={getListTableRowClassName(true)}
                       >
+                        {canDeleteEmployees && showDeleteButton ? (
+                          <td
+                            className="w-10 px-3 py-3 sm:px-4"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TableCheckbox
+                              checked={selectedIds.has(employee.id)}
+                              onChange={() => toggleSelectOne(employee.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              ariaLabel={`Selecionar ${employee.name}`}
+                            />
+                          </td>
+                        ) : null}
                         <td className="px-3 sm:px-6 py-3 align-middle text-left">
                           <div className="flex items-center gap-3">
                             <div
@@ -1988,6 +2106,23 @@ export function EmployeeList({
                 </tbody>
               </table>
             </div>
+
+            {canDeleteEmployees &&
+            showDeleteButton &&
+            allPageSelected &&
+            activeFilteredCount > paginatedEmployees.length &&
+            !allFilteredSelected ? (
+              <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                Todos os {paginatedEmployees.length} desta página estão selecionados.{' '}
+                <button
+                  type="button"
+                  onClick={selectAllFiltered}
+                  className="font-semibold text-red-600 hover:underline dark:text-red-400"
+                >
+                  Selecionar todos os {activeFilteredCount} filtrados
+                </button>
+              </div>
+            ) : null}
 
             {employeeActionMenu && employeeForActionMenu && (
               <ActionMenuOverlay
@@ -2284,6 +2419,64 @@ export function EmployeeList({
                       <>
                         <Trash2 className="w-4 h-4" />
                         <span>Desligar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showBulkDeleteModal && (
+          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => !bulkDesligarMutation.isPending && setShowBulkDeleteModal(false)}
+            />
+            <div className="relative mx-4 w-full max-w-md rounded-lg bg-white shadow-2xl dark:bg-gray-800">
+              <div className="p-6">
+                <div className="mb-4 flex items-center space-x-3">
+                  <div className="rounded-full bg-red-100 p-2 dark:bg-red-900/30">
+                    <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      Desligar selecionados
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {selectedCount} funcionário{selectedCount === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                </div>
+                <p className="mb-6 text-gray-700 dark:text-gray-300">
+                  Tem certeza que deseja desligar {selectedCount === 1 ? 'este funcionário' : 'estes funcionários'}?
+                  Eles serão desativados e não poderão mais acessar o sistema.
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    disabled={bulkDesligarMutation.isPending}
+                    onClick={() => setShowBulkDeleteModal(false)}
+                    className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bulkDesligarMutation.isPending || selectedCount === 0}
+                    onClick={() => bulkDesligarMutation.mutate(Array.from(selectedIds))}
+                    className="flex items-center space-x-2 rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
+                  >
+                    {bulkDesligarMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Desligando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserX className="h-4 w-4" />
+                        <span>Desligar {selectedCount}</span>
                       </>
                     )}
                   </button>

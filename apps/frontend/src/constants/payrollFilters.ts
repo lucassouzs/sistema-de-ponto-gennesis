@@ -10,6 +10,7 @@ export const DEPARTMENTS_LIST = [
   'Administrativo',
   'Financeiro',
   'Operacional',
+  'Segurança do Trabalho',
 ];
 
 export const COMPANIES_LIST = [

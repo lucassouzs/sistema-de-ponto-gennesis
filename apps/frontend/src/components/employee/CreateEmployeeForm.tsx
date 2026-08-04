@@ -103,6 +103,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
     'Administrativo',
     'Financeiro',
     'Operacional',
+    'Segurança do Trabalho',
   ];
 
   // Lista de cargos disponíveis (sem Administrador e sem Diretor)

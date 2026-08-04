@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/passwordHash';
+import {
+  cpfMatchVariants,
+  releaseInactiveUsersHoldingIdentity,
+} from '../lib/userIdentityRelease';
 
 export const getAllEmployees = async (req: Request, res: Response) => {
   try {
@@ -120,23 +124,33 @@ export const createEmployee = async (req: Request, res: Response) => {
       requiresTimeClock = true // Padrão: precisa bater ponto
     } = req.body;
 
-    // Verificar se email já existe
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
+    // Verificar se email já existe (só ativos)
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        isActive: true,
+        email: { equals: email, mode: 'insensitive' },
+      },
     });
 
     if (existingUser) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
 
-    // Verificar se CPF já existe
-    const existingCpf = await prisma.user.findUnique({
-      where: { cpf }
+    // Verificar se CPF já existe (só ativos)
+    const cpfDigits = String(cpf || '').replace(/\D/g, '');
+    const existingCpf = await prisma.user.findFirst({
+      where: {
+        isActive: true,
+        OR: cpfMatchVariants(cpf).map((c) => ({ cpf: c })),
+      },
     });
 
     if (existingCpf) {
       return res.status(400).json({ error: 'CPF já cadastrado' });
     }
+
+    // Libera CPF/e-mail se ainda estiverem em usuários desligados
+    await releaseInactiveUsersHoldingIdentity(cpfDigits || cpf, email);
 
     // Verificar se matrícula já existe
     const existingEmployeeId = await prisma.employee.findUnique({

@@ -3,6 +3,10 @@ import * as XLSX from 'xlsx';
 import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/passwordHash';
 import { createError } from '../middleware/errorHandler';
+import {
+  cpfMatchVariants,
+  releaseInactiveUsersHoldingIdentity,
+} from '../lib/userIdentityRelease';
 
 interface ImportRow {
   Nome: string;
@@ -115,16 +119,22 @@ export const importEmployeesPreview = async (req: Request, res: Response) => {
         errors.push(`CPF inválido: ${row.CPF}`);
       }
 
-      // Verificar duplicatas
-      const existingEmail = await prisma.user.findUnique({
-        where: { email: row.Email }
+      // Verificar duplicatas (só ativos — desligados não bloqueiam)
+      const existingEmail = await prisma.user.findFirst({
+        where: {
+          isActive: true,
+          email: { equals: row.Email, mode: 'insensitive' },
+        },
       });
       if (existingEmail) {
         errors.push(`Email ${row.Email} já está cadastrado`);
       }
 
-      const existingCpf = await prisma.user.findUnique({
-        where: { cpf: cleanCpf }
+      const existingCpf = await prisma.user.findFirst({
+        where: {
+          isActive: true,
+          OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
+        },
       });
       if (existingCpf) {
         errors.push(`CPF ${row.CPF} já está cadastrado`);
@@ -264,9 +274,12 @@ export const importEmployees = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe email
-        const existingEmail = await prisma.user.findUnique({
-          where: { email: row.Email }
+        // Verificar se já existe email (só ativos — desligados liberam o e-mail)
+        const existingEmail = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            email: { equals: row.Email, mode: 'insensitive' },
+          },
         });
 
         if (existingEmail) {
@@ -278,9 +291,12 @@ export const importEmployees = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe CPF
-        const existingCpf = await prisma.user.findUnique({
-          where: { cpf: cleanCpf }
+        // Verificar se já existe CPF (só ativos)
+        const existingCpf = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
+          },
         });
 
         if (existingCpf) {
@@ -291,6 +307,9 @@ export const importEmployees = async (req: Request, res: Response) => {
           });
           continue;
         }
+
+        // Libera CPF/e-mail de usuários já desligados que ainda ocupavam a identidade
+        await releaseInactiveUsersHoldingIdentity(cleanCpf, row.Email);
 
         // Gerar matrícula automaticamente (sempre)
         const employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`; // Ex: 24001, 24002, etc.
@@ -528,9 +547,12 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe email
-        const existingEmail = await prisma.user.findUnique({
-          where: { email: emp.Email }
+        // Verificar se já existe email (só ativos)
+        const existingEmail = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            email: { equals: emp.Email, mode: 'insensitive' },
+          },
         });
 
         if (existingEmail) {
@@ -542,11 +564,11 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe CPF (com ou sem formatação, como no check-cpf)
-        const cpfFormatted = `${cleanCpf.slice(0, 3)}.${cleanCpf.slice(3, 6)}.${cleanCpf.slice(6, 9)}-${cleanCpf.slice(9, 11)}`;
+        // Verificar se já existe CPF (só ativos)
         const existingCpf = await prisma.user.findFirst({
           where: {
-            OR: [{ cpf: cleanCpf }, { cpf: cpfFormatted }, { cpf: String(emp.CPF || '').trim() }]
+            isActive: true,
+            OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
           },
           select: { id: true }
         });
@@ -559,6 +581,9 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           });
           continue;
         }
+
+        // Libera CPF/e-mail de desligados que ainda ocupavam a identidade
+        await releaseInactiveUsersHoldingIdentity(cleanCpf, emp.Email);
 
         // Sempre gerar matrícula no servidor (ignora matriculaGerada do client)
         let employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;

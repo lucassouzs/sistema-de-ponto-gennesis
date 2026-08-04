@@ -3600,16 +3600,19 @@ model AsoTipo {
   @@map("tipos_aso")
 }
 
-/// Periodicidade do ASO periódico por cargo (texto = Employee.position)
+/// Periodicidade do ASO periódico por cargo + setor (Employee.position + department)
 model CargoRisco {
   id                  String       @id @default(cuid())
-  cargo               String       @unique
+  cargo               String
+  setor               String
   grauRisco           AsoGrauRisco @default(MEDIO)
   periodicidadeMeses  Int
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
+  @@unique([cargo, setor])
   @@index([cargo])
+  @@index([setor])
   @@map("cargos_risco")
 }
 

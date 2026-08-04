@@ -156,7 +156,7 @@ export default function LoginPage() {
             Digite suas credenciais para acessar o sistema
           </p>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} method="post" action="#" className="space-y-6">
           <div>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
