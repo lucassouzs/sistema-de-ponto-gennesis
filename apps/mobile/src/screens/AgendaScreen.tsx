@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  LayoutChangeEvent,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -82,6 +84,84 @@ function formatTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function AnimatedModeSwitcher({
+  mode,
+  onChange,
+  colors,
+  styles,
+}: {
+  mode: Mode;
+  onChange: (next: Mode) => void;
+  colors: any;
+  styles: ReturnType<typeof getStyles>;
+}) {
+  const pillX = useRef(new Animated.Value(0)).current;
+  const [halfWidth, setHalfWidth] = useState(0);
+  const PAD = 4;
+
+  const onTrackLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    const next = Math.max(0, (w - PAD * 2) / 2);
+    setHalfWidth(next);
+    pillX.setValue(mode === 'agenda' ? 0 : next);
+  };
+
+  useEffect(() => {
+    if (halfWidth <= 0) return;
+    Animated.timing(pillX, {
+      toValue: mode === 'agenda' ? 0 : halfWidth,
+      duration: 220,
+      useNativeDriver: true,
+    }).start();
+  }, [mode, halfWidth, pillX]);
+
+  return (
+    <View style={styles.switcher} onLayout={onTrackLayout}>
+      {halfWidth > 0 && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.switchPill,
+            {
+              width: halfWidth,
+              transform: [{ translateX: pillX }],
+              backgroundColor: colors.surface,
+            },
+          ]}
+        />
+      )}
+      <TouchableOpacity
+        style={styles.switchBtn}
+        onPress={() => onChange('agenda')}
+        activeOpacity={0.8}
+      >
+        <CalendarIcon
+          size={15}
+          color={mode === 'agenda' ? colors.primary : colors.textSecondary}
+          strokeWidth={2.2}
+        />
+        <Text style={[styles.switchText, mode === 'agenda' && styles.switchTextActive]}>
+          Agenda
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.switchBtn}
+        onPress={() => onChange('tasks')}
+        activeOpacity={0.8}
+      >
+        <ListTodo
+          size={15}
+          color={mode === 'tasks' ? colors.primary : colors.textSecondary}
+          strokeWidth={2.2}
+        />
+        <Text style={[styles.switchText, mode === 'tasks' && styles.switchTextActive]}>
+          Tarefas
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 export default function AgendaScreen() {
@@ -330,40 +410,26 @@ export default function AgendaScreen() {
   const openTasks = activeList?.tasks.filter((t) => !t.completed) ?? [];
   const doneTasks = activeList?.tasks.filter((t) => t.completed) ?? [];
 
+  const goToday = () => {
+    const today = startOfDay(new Date());
+    setCursor(startOfMonth(today));
+    setSelectedDay(today);
+  };
+
   return (
     <View style={styles.safe}>
-      <AppHeader showBack title="Agenda" onBack={() => navigation.goBack()} />
+      <AppHeader
+        showBack
+        title={mode === 'agenda' ? 'Agenda' : 'Tarefas'}
+        onBack={() => navigation.goBack()}
+      />
 
-      <View style={styles.switcher}>
-        <TouchableOpacity
-          style={[styles.switchBtn, mode === 'agenda' && styles.switchBtnActive]}
-          onPress={() => setMode('agenda')}
-          activeOpacity={0.8}
-        >
-          <CalendarIcon
-            size={16}
-            color={mode === 'agenda' ? '#fff' : colors.textSecondary}
-            strokeWidth={2.2}
-          />
-          <Text style={[styles.switchText, mode === 'agenda' && styles.switchTextActive]}>
-            Agenda
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.switchBtn, mode === 'tasks' && styles.switchBtnActive]}
-          onPress={() => setMode('tasks')}
-          activeOpacity={0.8}
-        >
-          <ListTodo
-            size={16}
-            color={mode === 'tasks' ? '#fff' : colors.textSecondary}
-            strokeWidth={2.2}
-          />
-          <Text style={[styles.switchText, mode === 'tasks' && styles.switchTextActive]}>
-            Tarefas
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <AnimatedModeSwitcher
+        mode={mode}
+        onChange={setMode}
+        colors={colors}
+        styles={styles}
+      />
 
       {mode === 'agenda' ? (
         <ScrollView
@@ -377,23 +443,32 @@ export default function AgendaScreen() {
             />
           }
         >
-          <View style={styles.monthNav}>
-            <TouchableOpacity
-              onPress={() =>
-                setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))
-              }
-              hitSlop={10}
-            >
-              <ChevronLeft size={22} color={colors.text} />
-            </TouchableOpacity>
-            <Text style={styles.monthTitle}>{formatMonthTitle(cursor)}</Text>
-            <TouchableOpacity
-              onPress={() =>
-                setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))
-              }
-              hitSlop={10}
-            >
-              <ChevronRight size={22} color={colors.text} />
+          <View style={styles.monthNavCard}>
+            <View style={styles.monthNavGroup}>
+              <TouchableOpacity
+                style={styles.monthNavBtn}
+                onPress={() =>
+                  setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))
+                }
+                hitSlop={8}
+                accessibilityLabel="Mês anterior"
+              >
+                <ChevronLeft size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+              <Text style={styles.monthTitle}>{formatMonthTitle(cursor)}</Text>
+              <TouchableOpacity
+                style={styles.monthNavBtn}
+                onPress={() =>
+                  setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))
+                }
+                hitSlop={8}
+                accessibilityLabel="Próximo mês"
+              >
+                <ChevronRight size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.todayBtn} onPress={goToday} activeOpacity={0.75}>
+              <Text style={styles.todayBtnText}>Hoje</Text>
             </TouchableOpacity>
           </View>
 
@@ -425,27 +500,37 @@ export default function AgendaScreen() {
                         activeOpacity={0.7}
                       >
                         <View
+                          collapsable={false}
                           style={[
-                            styles.dayInner,
-                            selected && styles.daySelected,
-                            today && !selected && styles.dayToday,
+                            styles.dayCircle,
+                            today
+                              ? styles.dayToday
+                              : selected
+                                ? styles.daySelected
+                                : styles.dayIdle,
                           ]}
                         >
                           <Text
                             style={[
                               styles.dayNum,
-                              selected && styles.dayNumSelected,
-                              today && !selected && { color: colors.primary },
+                              today && styles.dayNumToday,
+                              selected && !today && styles.dayNumSelected,
                             ]}
                           >
                             {day.getDate()}
                           </Text>
-                          {has ? (
-                            <View style={[styles.dot, selected && styles.dotSelected]} />
-                          ) : (
-                            <View style={styles.dotPlaceholder} />
-                          )}
                         </View>
+                        {has ? (
+                          <View
+                            style={[
+                              styles.dot,
+                              today && styles.dotOnToday,
+                              selected && !today && styles.dotSelected,
+                            ]}
+                          />
+                        ) : (
+                          <View style={styles.dotPlaceholder} />
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -463,8 +548,8 @@ export default function AgendaScreen() {
               })}
             </Text>
             {canWrite ? (
-              <TouchableOpacity style={styles.addChip} onPress={openCreateEvent}>
-                <Plus size={16} color="#fff" strokeWidth={2.4} />
+              <TouchableOpacity style={styles.addChip} onPress={openCreateEvent} activeOpacity={0.75}>
+                <Plus size={15} color={colors.primary} strokeWidth={2.4} />
                 <Text style={styles.addChipText}>Evento</Text>
               </TouchableOpacity>
             ) : null}
@@ -475,79 +560,96 @@ export default function AgendaScreen() {
           ) : dayEvents.length === 0 ? (
             <Text style={styles.empty}>Nenhum evento neste dia.</Text>
           ) : (
-            dayEvents.map((ev) => (
-              <TouchableOpacity
-                key={ev.id}
-                style={styles.eventRow}
-                onPress={() => canWrite && openEditEvent(ev)}
-                activeOpacity={0.75}
-              >
-                <View style={[styles.eventBar, { backgroundColor: ev.color || colors.primary }]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.eventTitle}>{ev.title}</Text>
-                  <Text style={styles.eventTime}>
-                    {formatTime(ev.startAt)} – {formatTime(ev.endAt)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))
+            <View style={styles.eventList}>
+              {dayEvents.map((ev, index) => (
+                <TouchableOpacity
+                  key={ev.id}
+                  style={styles.eventRow}
+                  onPress={() => canWrite && openEditEvent(ev)}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.eventTimeline}>
+                    {index < dayEvents.length - 1 ? <View style={styles.eventLine} /> : null}
+                    <View
+                      style={[
+                        styles.eventDot,
+                        { backgroundColor: ev.color || colors.primary },
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.eventBody}>
+                    <Text style={styles.eventTime}>
+                      {formatTime(ev.startAt)} – {formatTime(ev.endAt)}
+                    </Text>
+                    <Text style={styles.eventTitle} numberOfLines={2}>
+                      {ev.title}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
         </ScrollView>
       ) : (
         <View style={styles.body}>
           <ScrollView
             horizontal
+            style={styles.listChipsScroll}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.listChips}
           >
-            {lists.map((list) => (
-              <TouchableOpacity
-                key={list.id}
-                style={[
-                  styles.listChip,
-                  activeList?.id === list.id && styles.listChipActive,
-                ]}
-                onPress={() => setActiveListId(list.id)}
-              >
-                <Text
-                  style={[
-                    styles.listChipText,
-                    activeList?.id === list.id && styles.listChipTextActive,
-                  ]}
+            {lists.map((list) => {
+              const active = activeList?.id === list.id;
+              return (
+                <TouchableOpacity
+                  key={list.id}
+                  style={[styles.listChip, active && styles.listChipActive]}
+                  onPress={() => setActiveListId(list.id)}
+                  activeOpacity={0.75}
                 >
-                  {list.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={[styles.listChipText, active && styles.listChipTextActive]}>
+                    {list.title}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity
               style={styles.listChipAdd}
               onPress={() => setListModalOpen(true)}
+              activeOpacity={0.75}
             >
-              <Plus size={16} color={colors.primary} />
+              <Plus size={16} color={colors.primary} strokeWidth={2.2} />
             </TouchableOpacity>
           </ScrollView>
 
           <View style={styles.addTaskRow}>
-            <TextInput
-              value={newTaskTitle}
-              onChangeText={setNewTaskTitle}
-              placeholder="Nova tarefa..."
-              placeholderTextColor={colors.textSecondary}
-              style={styles.addTaskInput}
-              onSubmitEditing={() => void addTask()}
-              returnKeyType="done"
-            />
-            <TouchableOpacity
-              style={styles.addTaskBtn}
-              onPress={() => void addTask()}
-              disabled={!newTaskTitle.trim() || !activeList}
-            >
-              <Plus size={20} color="#fff" strokeWidth={2.4} />
-            </TouchableOpacity>
+            <View style={styles.addTaskField}>
+              <TextInput
+                value={newTaskTitle}
+                onChangeText={setNewTaskTitle}
+                placeholder="Nova tarefa..."
+                placeholderTextColor={colors.textSecondary}
+                style={styles.addTaskInput}
+                onSubmitEditing={() => void addTask()}
+                returnKeyType="done"
+              />
+              <TouchableOpacity
+                style={[
+                  styles.addTaskBtn,
+                  (!newTaskTitle.trim() || !activeList) && styles.addTaskBtnDisabled,
+                ]}
+                onPress={() => void addTask()}
+                disabled={!newTaskTitle.trim() || !activeList}
+                activeOpacity={0.75}
+              >
+                <Plus size={18} color="#fff" strokeWidth={2.4} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
-            contentContainerStyle={styles.bodyPad}
+            style={styles.tasksScroll}
+            contentContainerStyle={styles.tasksPad}
             refreshControl={
               <RefreshControl
                 refreshing={listsQuery.isRefetching}
@@ -575,7 +677,9 @@ export default function AgendaScreen() {
                 ))}
                 {doneTasks.length > 0 ? (
                   <>
-                    <Text style={styles.sectionLabel}>Concluídas</Text>
+                    <Text style={styles.sectionLabel}>
+                      Concluídas ({doneTasks.length})
+                    </Text>
                     {doneTasks.map((task) => (
                       <TaskRow
                         key={task.id}
@@ -736,13 +840,13 @@ function TaskRow({
   onDelete: () => void;
 }) {
   return (
-    <View style={[styles.taskRow, task.completed && { opacity: 0.55 }]}>
+    <View style={[styles.taskRow, task.completed && styles.taskRowDone]}>
       <TouchableOpacity
         onPress={onToggle}
         style={[styles.check, task.completed && styles.checkDone]}
         hitSlop={6}
       >
-        {task.completed ? <Check size={14} color="#fff" strokeWidth={3} /> : null}
+        {task.completed ? <Check size={13} color="#fff" strokeWidth={3} /> : null}
       </TouchableOpacity>
       <Text
         style={[styles.taskTitle, task.completed && styles.taskDone]}
@@ -750,33 +854,49 @@ function TaskRow({
       >
         {task.title}
       </Text>
-      <TouchableOpacity onPress={onStar} hitSlop={8}>
+      <TouchableOpacity onPress={onStar} hitSlop={8} style={styles.taskAction}>
         <Star
-          size={18}
+          size={16}
           color={task.starred ? colors.warning : colors.textSecondary}
           fill={task.starred ? colors.warning : 'transparent'}
           strokeWidth={2}
         />
       </TouchableOpacity>
-      <TouchableOpacity onPress={onDelete} hitSlop={8} style={{ marginLeft: 8 }}>
-        <Trash2 size={16} color={colors.textSecondary} />
+      <TouchableOpacity onPress={onDelete} hitSlop={8} style={styles.taskAction}>
+        <Trash2 size={15} color={colors.textSecondary} strokeWidth={2} />
       </TouchableOpacity>
     </View>
   );
 }
 
 function getStyles(colors: any, isDark: boolean) {
+  const track = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)';
+  const selectedBg = isDark ? 'rgba(255,255,255,0.92)' : '#111827';
+  const selectedFg = isDark ? '#111827' : '#fff';
+
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.background },
     switcher: {
       flexDirection: 'row',
-      marginHorizontal: 16,
-      marginTop: 8,
-      marginBottom: 4,
+      marginHorizontal: 20,
+      marginTop: 10,
+      marginBottom: 8,
       padding: 4,
-      borderRadius: 12,
-      backgroundColor: colors.surface,
-      gap: 4,
+      borderRadius: 14,
+      backgroundColor: track,
+      position: 'relative',
+    },
+    switchPill: {
+      position: 'absolute',
+      top: 4,
+      bottom: 4,
+      left: 4,
+      borderRadius: 10,
+      shadowColor: '#000',
+      shadowOpacity: isDark ? 0.2 : 0.06,
+      shadowRadius: 4,
+      shadowOffset: { width: 0, height: 1 },
+      elevation: 1,
     },
     switchBtn: {
       flex: 1,
@@ -786,35 +906,80 @@ function getStyles(colors: any, isDark: boolean) {
       gap: 6,
       paddingVertical: 10,
       borderRadius: 10,
+      zIndex: 1,
     },
-    switchBtnActive: { backgroundColor: colors.primary },
-    switchText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
-    switchTextActive: { color: '#fff' },
+    switchText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
+    switchTextActive: { color: colors.primary, fontWeight: '600' },
     body: { flex: 1 },
-    bodyPad: { paddingHorizontal: 16, paddingBottom: 40 },
-    monthNav: {
+    bodyPad: { paddingHorizontal: 20, paddingBottom: 40 },
+    tasksScroll: { flex: 1 },
+    tasksPad: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 40 },
+    monthNavCard: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: 12,
-      marginBottom: 8,
+      gap: 10,
+      marginTop: 8,
+      marginBottom: 12,
+      padding: 6,
+      paddingLeft: 4,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
-    monthTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+    monthNavGroup: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      minWidth: 0,
+    },
+    monthNavBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    monthTitle: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    todayBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: track,
+      marginRight: 2,
+    },
+    todayBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.text,
+    },
     calendarCard: {
       backgroundColor: colors.surface,
       borderRadius: 16,
-      paddingHorizontal: 8,
-      paddingTop: 10,
-      paddingBottom: 8,
+      paddingHorizontal: 10,
+      paddingTop: 12,
+      paddingBottom: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
-    weekRow: { flexDirection: 'row', marginBottom: 6 },
+    weekRow: { flexDirection: 'row', marginBottom: 8 },
     weekLabel: {
       flex: 1,
       textAlign: 'center',
       fontSize: 11,
-      fontWeight: '700',
+      fontWeight: '500',
       color: colors.textSecondary,
-      letterSpacing: 0.2,
+      letterSpacing: 0.3,
+      textTransform: 'uppercase',
     },
     grid: { gap: 2 },
     weekLine: {
@@ -826,41 +991,54 @@ function getStyles(colors: any, isDark: boolean) {
       minWidth: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 2,
+      paddingVertical: 4,
     },
-    dayInner: {
-      width: 36,
-      height: 40,
-      borderRadius: 12,
+    dayCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 999,
+      overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
     },
-    daySelected: { backgroundColor: colors.primary },
+    dayIdle: {
+      backgroundColor: 'transparent',
+      borderRadius: 999,
+      overflow: 'hidden',
+    },
     dayToday: {
-      borderWidth: 1.5,
-      borderColor: colors.primary,
+      backgroundColor: colors.primary,
+      borderRadius: 999,
+      overflow: 'hidden',
+    },
+    daySelected: {
+      backgroundColor: selectedBg,
+      borderRadius: 999,
+      overflow: 'hidden',
     },
     dayNum: {
       fontSize: 14,
-      fontWeight: '700',
+      fontWeight: '500',
       color: colors.text,
       fontVariant: ['tabular-nums'],
-      lineHeight: 18,
       textAlign: 'center',
+      includeFontPadding: false,
     },
-    dayNumSelected: { color: '#fff' },
+    dayNumToday: { color: '#fff', fontWeight: '600' },
+    dayNumSelected: { color: selectedFg, fontWeight: '600' },
     dot: {
       width: 4,
       height: 4,
       borderRadius: 2,
       backgroundColor: colors.primary,
-      marginTop: 2,
+      marginTop: 3,
     },
-    dotSelected: { backgroundColor: '#fff' },
+    dotOnToday: { backgroundColor: colors.primary },
+    dotSelected: { backgroundColor: selectedBg },
     dotPlaceholder: {
       width: 4,
       height: 4,
-      marginTop: 2,
+      marginTop: 3,
       opacity: 0,
     },
     dayHeader: {
@@ -868,101 +1046,167 @@ function getStyles(colors: any, isDark: boolean) {
       alignItems: 'center',
       justifyContent: 'space-between',
       marginTop: 18,
-      marginBottom: 10,
+      marginBottom: 12,
       gap: 8,
     },
     dayHeaderTitle: {
       flex: 1,
       fontSize: 15,
-      fontWeight: '700',
+      fontWeight: '600',
       color: colors.text,
       textTransform: 'capitalize',
+      letterSpacing: -0.2,
     },
     addChip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: colors.primary,
+      backgroundColor: isDark ? 'rgba(206,55,54,0.18)' : 'rgba(206,55,54,0.1)',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(206,55,54,0.35)' : 'rgba(206,55,54,0.25)',
       paddingHorizontal: 10,
       paddingVertical: 7,
-      borderRadius: 8,
+      borderRadius: 10,
     },
-    addChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+    addChipText: { color: colors.primary, fontWeight: '600', fontSize: 13 },
     empty: {
-      textAlign: 'center',
+      textAlign: 'left',
       color: colors.textSecondary,
-      marginTop: 20,
+      marginTop: 8,
       fontSize: 14,
+      fontWeight: '500',
+      lineHeight: 20,
     },
+    eventList: { gap: 0 },
     eventRow: {
       flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 8,
-      gap: 10,
+      gap: 12,
+      paddingBottom: 14,
     },
-    eventBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 },
-    eventTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
-    eventTime: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-    listChips: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+    eventTimeline: {
+      width: 12,
+      alignItems: 'center',
+      position: 'relative',
+    },
+    eventLine: {
+      position: 'absolute',
+      top: 8,
+      bottom: 0,
+      width: StyleSheet.hairlineWidth * 2,
+      backgroundColor: colors.border,
+    },
+    eventDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      marginTop: 4,
+      zIndex: 1,
+    },
+    eventBody: {
+      flex: 1,
+      minWidth: 0,
+      paddingBottom: 2,
+    },
+    eventTime: {
+      fontSize: 12,
+      fontWeight: '700',
+      fontVariant: ['tabular-nums'],
+      color: colors.primary,
+    },
+    eventTitle: {
+      marginTop: 2,
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.text,
+      lineHeight: 20,
+    },
+    listChipsScroll: {
+      flexGrow: 0,
+      flexShrink: 0,
+    },
+    listChips: {
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 10,
+      gap: 8,
+      alignItems: 'center',
+    },
     listChip: {
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 20,
       backgroundColor: colors.surface,
-      marginRight: 8,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
-    listChipActive: { backgroundColor: colors.primary },
-    listChipText: { color: colors.text, fontWeight: '600', fontSize: 13 },
-    listChipTextActive: { color: '#fff' },
+    listChipActive: {
+      backgroundColor: isDark ? 'rgba(206,55,54,0.18)' : 'rgba(206,55,54,0.1)',
+      borderColor: isDark ? 'rgba(206,55,54,0.4)' : 'rgba(206,55,54,0.3)',
+    },
+    listChipText: { color: colors.text, fontWeight: '500', fontSize: 13 },
+    listChipTextActive: { color: colors.primary, fontWeight: '600' },
     listChipAdd: {
       width: 36,
       height: 36,
       borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDark ? '#7f1d1d33' : '#fee2e2',
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderStyle: 'dashed',
     },
     addTaskRow: {
+      paddingHorizontal: 20,
+      marginBottom: 4,
+    },
+    addTaskField: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 16,
+      borderRadius: 14,
+      backgroundColor: colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      paddingLeft: 14,
+      paddingRight: 6,
+      paddingVertical: 6,
       gap: 8,
-      marginBottom: 4,
     },
     addTaskInput: {
       flex: 1,
-      height: 44,
-      borderRadius: 12,
-      paddingHorizontal: 14,
-      backgroundColor: colors.surface,
+      height: 36,
       color: colors.text,
       fontSize: 15,
+      fontWeight: '500',
+      padding: 0,
     },
     addTaskBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 12,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
     },
+    addTaskBtnDisabled: { opacity: 0.4 },
     taskRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 12,
+      borderRadius: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
       marginBottom: 8,
       gap: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
     },
+    taskRowDone: { opacity: 0.6 },
     check: {
       width: 22,
       height: 22,
       borderRadius: 11,
-      borderWidth: 2,
+      borderWidth: 1.5,
       borderColor: colors.border,
       alignItems: 'center',
       justifyContent: 'center',
@@ -970,14 +1214,20 @@ function getStyles(colors: any, isDark: boolean) {
     checkDone: { backgroundColor: colors.primary, borderColor: colors.primary },
     taskTitle: { flex: 1, fontSize: 15, color: colors.text, fontWeight: '500' },
     taskDone: { textDecorationLine: 'line-through', color: colors.textSecondary },
+    taskAction: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     sectionLabel: {
-      marginTop: 12,
+      marginTop: 14,
       marginBottom: 8,
-      fontSize: 12,
-      fontWeight: '700',
+      fontSize: 11,
+      fontWeight: '600',
       color: colors.textSecondary,
       textTransform: 'uppercase',
-      letterSpacing: 0.4,
+      letterSpacing: 0.5,
     },
     modalOverlay: {
       flex: 1,

@@ -3,12 +3,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ChevronDown, ChevronLeft, ChevronRight, Trash2, RefreshCw, Share2, FileText, Upload, Download, X, CheckSquare, MoreVertical, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trash2, RefreshCw, Share2, FileText, Upload, Download, X, CheckSquare, MoreVertical, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { TimePickerField } from '@/components/ui/TimePickerField';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   createPlannerEvent,
@@ -176,16 +177,16 @@ function MiniMonthCalendar({
   const weekLetters = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
   return (
-    <div className="w-[240px] shrink-0 rounded-2xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold capitalize text-gray-800 dark:text-gray-100">
+    <div className="w-full rounded-xl border border-gray-200/80 bg-white p-3.5 dark:border-gray-700/80 dark:bg-gray-900">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium capitalize text-gray-800 dark:text-gray-100">
           {monthLabel}
         </span>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
             onClick={() => setCursor((c) => addMonths(c, -1))}
-            className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Mês anterior"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -193,24 +194,24 @@ function MiniMonthCalendar({
           <button
             type="button"
             onClick={() => setCursor((c) => addMonths(c, 1))}
-            className="rounded-full p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Próximo mês"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
-      <div className="mb-1 grid grid-cols-7 text-center">
+      <div className="mb-1.5 grid grid-cols-7 text-center">
         {weekLetters.map((letter, idx) => (
           <span
             key={`${letter}-${idx}`}
-            className="py-1 text-[11px] font-medium text-gray-400 dark:text-gray-500"
+            className="py-1 text-[10px] font-normal uppercase tracking-wide text-gray-400 dark:text-gray-500"
           >
             {letter}
           </span>
         ))}
       </div>
-      <div className="grid grid-cols-7 text-center">
+      <div className="grid grid-cols-7 gap-y-0.5 text-center">
         {cells.map((day) => {
           const inMonth = isSameMonth(day, cursor);
           const isSelected = isSameDay(day, selected);
@@ -220,14 +221,14 @@ function MiniMonthCalendar({
               key={day.toISOString()}
               type="button"
               onClick={() => onSelect(startOfDay(day))}
-              className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-colors ${
-                isSelected
-                  ? 'bg-red-600 text-white'
-                  : isToday
-                    ? 'bg-red-50 font-semibold text-red-700 dark:bg-red-950/40 dark:text-red-300'
+              className={`mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs transition-colors ${
+                isToday
+                  ? 'bg-red-600 font-medium text-white'
+                  : isSelected
+                    ? 'bg-gray-900 font-medium text-white dark:bg-gray-100 dark:text-gray-900'
                     : inMonth
-                      ? 'text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-800'
-                      : 'text-gray-300 hover:bg-gray-50 dark:text-gray-600 dark:hover:bg-gray-800/50'
+                      ? 'font-normal text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'
+                      : 'font-normal text-gray-300 hover:bg-gray-50 dark:text-gray-600 dark:hover:bg-gray-800/50'
               }`}
             >
               {day.getDate()}
@@ -306,71 +307,17 @@ function ViewSwitcher({
   value: CalendarView;
   onChange: (view: CalendarView) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const current = VIEW_OPTIONS.find((o) => o.id === value) || VIEW_OPTIONS[1];
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   return (
-    <div ref={rootRef} className="relative">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        icon={<ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />}
-        iconPosition="right"
-      >
-        {current.label}
-      </Button>
-      {open && (
-        <div
-          role="listbox"
-          className="absolute left-0 top-full z-40 mt-1.5 min-w-[160px] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
-        >
-          {VIEW_OPTIONS.map((opt) => {
-            const selected = opt.id === value;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onClick={() => {
-                  onChange(opt.id);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-6 px-4 py-2.5 text-left text-sm ${
-                  selected
-                    ? 'bg-gray-100 font-semibold text-gray-900 dark:bg-gray-800 dark:text-white'
-                    : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800'
-                }`}
-              >
-                <span>{opt.label}</span>
-                <span className="text-xs font-medium text-gray-400">{opt.shortcut}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
+    <SegmentedControl
+      value={value}
+      onChange={onChange}
+      aria-label="Visualização do calendário"
+      options={VIEW_OPTIONS.map((opt) => ({
+        value: opt.id,
+        title: `${opt.label} (${opt.shortcut})`,
+        label: opt.label,
+      }))}
+    />
   );
 }
 
@@ -807,11 +754,11 @@ export function KanbanPlannerView({
   const weekdayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 px-4 lg:flex-row lg:items-stretch">
-      <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[240px]">
+    <div className="flex h-full min-h-0 flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-4">
+      <aside className="flex w-full shrink-0 flex-col gap-3 lg:w-[248px]">
         {pageTitle ? (
           <div>
-            <h1 className="text-3xl font-bold leading-tight text-gray-900 dark:text-gray-100">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
               {pageTitle}
             </h1>
             {pageSubtitle ? (
@@ -836,10 +783,10 @@ export function KanbanPlannerView({
               });
               setFormOpen(true);
             }}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
           >
             <Plus className="h-4 w-4 shrink-0" />
-            <span>Criar</span>
+            <span>Criar evento</span>
           </button>
         )}
         <MiniMonthCalendar
@@ -854,39 +801,41 @@ export function KanbanPlannerView({
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-3">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={goPrev}
-              aria-label="Período anterior"
-              className="!px-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={goToday}>
-              Hoje
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={goNext}
-              aria-label="Próximo período"
-              className="!px-2"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <span className="ml-1 text-sm font-semibold text-gray-800 dark:text-gray-100">
+            <div className="inline-flex items-center rounded-lg border border-gray-200 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900">
+              <button
+                type="button"
+                onClick={goPrev}
+                aria-label="Período anterior"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={goToday}
+                className="h-8 rounded-md px-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Hoje
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                aria-label="Próximo período"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <span className="text-base font-medium tracking-tight text-gray-900 dark:text-gray-100 sm:text-lg">
               {periodLabel}
             </span>
             {agendas.length > 1 && (
-              <label className="ml-1 inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-                <span className="font-medium">Agenda</span>
+              <label className="ml-0.5 inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                <span className="sr-only sm:not-sr-only">Agenda</span>
                 <select
                   value={activeOwnerId}
                   onChange={(e) => setSelectedOwnerId(e.target.value)}
-                  className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-gray-800 outline-none ring-2 ring-red-100 dark:border-red-700 dark:bg-gray-800 dark:text-gray-100 dark:ring-red-950"
+                  className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 outline-none transition-colors hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-gray-600"
                   title="Escolher agenda"
                   aria-label="Escolher agenda"
                 >
@@ -911,19 +860,17 @@ export function KanbanPlannerView({
             )}
             {isOwnerEffective && (
               <div ref={actionsMenuRef} className="relative">
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={() => setActionsMenuOpen((v) => !v)}
-                  className="!px-2"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                   aria-label="Mais opções"
                   aria-haspopup="menu"
                   aria-expanded={actionsMenuOpen}
                   title="Mais opções"
                 >
                   <MoreVertical className="h-4 w-4" />
-                </Button>
+                </button>
                 {actionsMenuOpen && (
                   <div
                     role="menu"
@@ -939,7 +886,7 @@ export function KanbanPlannerView({
                       className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
                       <Share2 className="h-4 w-4 shrink-0 text-gray-500" />
-                      Compartilhar com alguém
+                      Compartilhar
                     </button>
                     <button
                       type="button"
@@ -1002,7 +949,7 @@ export function KanbanPlannerView({
         </div>
 
       {(view === 'day' || view === 'week') && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-700/80 dark:bg-gray-900">
           {/* Cabeçalho + grade no mesmo scroll: evita linhas tortas por causa da scrollbar */}
           <div
             ref={gridScrollRef}
@@ -1010,10 +957,10 @@ export function KanbanPlannerView({
             style={{ scrollbarGutter: 'stable' }}
           >
             <div
-              className="sticky top-0 z-20 grid border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+              className="sticky top-0 z-20 grid border-b border-gray-100 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95"
               style={{ gridTemplateColumns: gridCols }}
             >
-              <div className="border-r border-gray-200 dark:border-gray-700" />
+              <div className="border-r border-gray-100 dark:border-gray-800" />
               {days.map((day) => {
                 const { weekday, day: dayNum } = dayHeaderLabel(day);
                 const isToday = isSameDay(day, today);
@@ -1025,18 +972,18 @@ export function KanbanPlannerView({
                       setAnchor(startOfDay(day));
                       setView('day');
                     }}
-                    className="flex flex-col items-center gap-1 border-r border-gray-200 py-3 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/60"
+                    className="flex flex-col items-center gap-1 border-r border-gray-100 py-2.5 transition-colors hover:bg-gray-50/80 dark:border-gray-800 dark:hover:bg-gray-800/40"
                     title={`Abrir dia ${day.toLocaleDateString('pt-BR')}`}
                     aria-label={`Abrir agenda do dia ${day.toLocaleDateString('pt-BR')}`}
                   >
-                    <span className="text-xs font-medium uppercase text-gray-500 dark:text-gray-400">
+                    <span className="text-[11px] font-normal uppercase tracking-wide text-gray-400 dark:text-gray-500">
                       {weekday}
                     </span>
                     <span
                       className={
                         isToday
-                          ? 'flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white'
-                          : 'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-gray-800 hover:bg-gray-200 dark:text-gray-100 dark:hover:bg-gray-700'
+                          ? 'flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-medium text-white'
+                          : 'flex h-8 w-8 items-center justify-center rounded-full text-sm font-normal text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700'
                       }
                     >
                       {dayNum}
@@ -1053,11 +1000,11 @@ export function KanbanPlannerView({
                 style={{ gridTemplateColumns: gridCols }}
                 aria-hidden
               >
-                <div className="border-r border-gray-200 dark:border-gray-700" />
+                <div className="border-r border-gray-100 dark:border-gray-800" />
                 {days.map((day) => (
                   <div
                     key={`vline-${day.toISOString()}`}
-                    className="border-r border-gray-200 dark:border-gray-700"
+                    className="border-r border-gray-100 dark:border-gray-800"
                   />
                 ))}
               </div>
@@ -1065,7 +1012,7 @@ export function KanbanPlannerView({
               {HOURS.map((hour, idx) => (
                 <div
                   key={hour}
-                  className="absolute left-0 right-0 grid border-t border-gray-200 dark:border-gray-700"
+                  className="absolute left-0 right-0 grid border-t border-gray-100 dark:border-gray-800"
                   style={{
                     top: idx * ROW_HEIGHT,
                     height: ROW_HEIGHT,
@@ -1074,7 +1021,7 @@ export function KanbanPlannerView({
                 >
                   <div className="relative">
                     <span
-                      className={`pointer-events-none absolute right-2 z-[1] bg-white px-0.5 text-[11px] leading-none text-gray-400 dark:bg-gray-900 dark:text-gray-500 ${
+                      className={`pointer-events-none absolute right-2 z-[1] bg-white px-0.5 text-[10px] leading-none text-gray-400 dark:bg-gray-900 dark:text-gray-500 ${
                         idx === 0
                           ? 'top-1'
                           : 'top-0 -translate-y-1/2'
@@ -1088,7 +1035,7 @@ export function KanbanPlannerView({
                       key={`${day.toISOString()}-${hour}`}
                       type="button"
                       onClick={() => openCreateAt(day, hour)}
-                      className="hover:bg-red-50/50 dark:hover:bg-red-950/25"
+                      className="hover:bg-red-50/40 dark:hover:bg-red-950/20"
                       aria-label={`Criar evento ${day.toLocaleDateString('pt-BR')} às ${hour}h`}
                     />
                   ))}
@@ -1192,12 +1139,12 @@ export function KanbanPlannerView({
       )}
 
       {view === 'month' && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-          <div className="grid shrink-0 grid-cols-7 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white dark:border-gray-700/80 dark:bg-gray-900">
+          <div className="grid shrink-0 grid-cols-7 border-b border-gray-100 dark:border-gray-800">
             {weekdayNames.map((name) => (
               <div
                 key={name}
-                className="px-2 py-2 text-center text-xs font-semibold uppercase text-gray-500 dark:text-gray-400"
+                className="px-2 py-2 text-center text-[11px] font-normal uppercase tracking-wide text-gray-400 dark:text-gray-500"
               >
                 {name}
               </div>
@@ -1313,7 +1260,7 @@ export function KanbanPlannerView({
                     setAnchor(startOfMonth(monthDate));
                     setView('month');
                   }}
-                  className="flex h-full min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-3 text-left hover:border-red-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:hover:border-red-800"
+                  className="flex h-full min-h-0 flex-col rounded-xl border border-gray-200/80 bg-white p-3 text-left transition-colors hover:border-red-300 hover:shadow-sm dark:border-gray-700/80 dark:bg-gray-900 dark:hover:border-red-800"
                 >
                   <div className="mb-2 shrink-0 text-sm font-semibold capitalize text-gray-800 dark:text-gray-100">
                     {monthLabel}

@@ -6,10 +6,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
 import { KanbanPlannerView } from '@/components/kanban/KanbanPlannerView';
 import { KanbanTasksView } from '@/components/kanban/KanbanTasksView';
-import {
-  AgendaModeSwitcher,
-  type AgendaSurfaceMode,
-} from '@/components/kanban/AgendaModeSwitcher';
+import { type AgendaSurfaceMode } from '@/components/kanban/AgendaModeSwitcher';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { usePermissions } from '@/hooks/usePermissions';
 
@@ -40,35 +37,27 @@ function AgendaPage() {
   };
 
   const user = meUser || { name: 'Usuário', role: 'EMPLOYEE' };
+  const isTasks = agendaView === 'tasks';
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <div
-        className={
-          agendaView === 'planner'
-            ? 'flex h-[calc(100dvh-2rem)] flex-col overflow-hidden -mx-2 sm:-mx-4 lg:h-[calc(100dvh-4rem)]'
-            : 'flex flex-col -mx-2 sm:-mx-4'
-        }
-      >
-        {agendaView === 'tasks' ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-start justify-between gap-3 px-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Tarefas</h1>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Minhas tarefas</p>
-              </div>
-              <AgendaModeSwitcher mode="tasks" onChange={setView} />
-            </div>
-            <KanbanTasksView />
-          </div>
-        ) : (
-          <KanbanPlannerView
-            mode="planner"
-            onModeChange={setView}
-            pageTitle="Agenda"
-            pageSubtitle="Agenda pessoal"
-          />
-        )}
+      <div className="flex h-[calc(100dvh-6rem)] flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
+        <div className="shrink-0 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+            {isTasks ? 'Tarefas' : 'Agenda'}
+          </h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+            {isTasks ? 'Minhas tarefas' : 'Agenda pessoal'}
+          </p>
+        </div>
+
+        <div className="mt-6 min-h-0 flex-1 overflow-hidden">
+          {isTasks ? (
+            <KanbanTasksView mode="tasks" onModeChange={setView} />
+          ) : (
+            <KanbanPlannerView mode="planner" onModeChange={setView} />
+          )}
+        </div>
       </div>
     </MainLayout>
   );

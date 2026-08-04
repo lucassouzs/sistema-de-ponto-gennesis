@@ -3851,10 +3851,33 @@ function KanbanPage() {
         )}
       >
         {/* ── Page Header ── */}
-        <div className="mb-4 flex-shrink-0 space-y-4 px-4">
-          <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-[1fr_auto_1fr] sm:gap-4">
+        <div className="mb-4 flex-shrink-0 space-y-6 px-4">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+              Tasks
+            </h1>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+              {board?.department ? (
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <span>{board.department}</span>
+                  {boardReadOnly ? (
+                    <span title="Somente leitura" className="inline-flex">
+                      <Eye
+                        className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
+                        aria-hidden
+                      />
+                    </span>
+                  ) : null}
+                </span>
+              ) : (
+                'Organize cards e colunas por setor'
+              )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Esquerda: visão + quadros */}
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-self-start">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <div
                 className="relative inline-flex h-10 w-20 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
                 role="group"
@@ -3918,30 +3941,8 @@ function KanbanPage() {
               />
             </div>
 
-            {/* Centro: título */}
-            <div className="min-w-0 text-center sm:justify-self-center">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                Tasks
-              </h1>
-              {board?.department && (
-                <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-                  <p className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                    <span>{board.department}</span>
-                    {boardReadOnly && (
-                      <span title="Somente leitura" className="inline-flex">
-                        <Eye
-                          className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
-                          aria-hidden
-                        />
-                      </span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
-
             {/* Direita: busca + filtro + arquivo + export/import + etiquetas */}
-            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-self-end">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {/* Search — colapsável com animação de largura */}
               <div
                 className={clsx(
