@@ -1166,10 +1166,11 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     return pathname === href;
   };
 
-  const renderSidebarNavItem = (item: SidebarNavItem, forceExpanded: boolean) => {
+  const renderSidebarNavItem = (item: SidebarNavItem, forceExpanded: boolean, navIndex = 0) => {
     const ItemIcon = item.icon;
     const visibleChildren = item.children?.filter((child) => child.permission) ?? [];
     const groupKey = item.name;
+    const wrapStyle = { ['--nav-i' as string]: navIndex } as React.CSSProperties;
 
     if (visibleChildren.length > 0) {
       const childActive = visibleChildren.some((child) => isActive(child.href));
@@ -1185,7 +1186,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       );
 
       return (
-        <div key={`group-${groupKey}`} className="space-y-1">
+        <div key={`group-${groupKey}`} className="sidebar-nav-item-wrap space-y-1" style={wrapStyle}>
           <button
             type="button"
             onClick={() => {
@@ -1195,15 +1196,15 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                 [groupKey]: !expanded,
               }));
             }}
-            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200 ${
+            className={`sidebar-nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 ${
               childActive
-                ? 'bg-red-50/70 text-red-700 dark:bg-red-900/10 dark:text-red-500'
+                ? 'sidebar-nav-item--active bg-red-50/70 text-red-700 dark:bg-red-900/10 dark:text-red-500'
                 : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
             }`}
             aria-expanded={expanded}
           >
             <ItemIcon
-              className={`h-4 w-4 flex-shrink-0 ${
+              className={`sidebar-nav-item__icon h-4 w-4 flex-shrink-0 ${
                 childActive ? 'text-red-600 dark:text-red-500' : 'text-gray-500 dark:text-gray-400'
               }`}
             />
@@ -1219,26 +1220,31 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           </button>
           {expanded ? (
             <div className="ml-3 space-y-1 border-l border-gray-200 pl-2 dark:border-gray-700">
-              {visibleChildren.map((child) => {
+              {visibleChildren.map((child, childIndex) => {
                 const active = isActive(child.href);
                 const badgeCount = navBadgeCountForHref(child.href);
                 return (
-                  <Link
+                  <div
                     key={child.href}
-                    href={resolveNavHref(child.href)}
-                    prefetch={navLinkPrefetch}
-                    onMouseEnter={
-                      FLUIG_PREFETCH_HREFS.has(child.href) ? prefetchFluigDatasets : undefined
-                    }
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-all duration-200 ${
-                      active
-                        ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
-                        : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
-                    }`}
+                    className="sidebar-nav-item-wrap"
+                    style={{ ['--nav-i' as string]: navIndex + childIndex * 0.35 } as React.CSSProperties}
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{child.name}</span>
-                    <NotificationCountBadge count={badgeCount} />
-                  </Link>
+                    <Link
+                      href={resolveNavHref(child.href)}
+                      prefetch={navLinkPrefetch}
+                      onMouseEnter={
+                        FLUIG_PREFETCH_HREFS.has(child.href) ? prefetchFluigDatasets : undefined
+                      }
+                      className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2 ${
+                        active
+                          ? 'sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
+                          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{child.name}</span>
+                      <NotificationCountBadge count={badgeCount} />
+                    </Link>
+                  </div>
                 );
               })}
             </div>
@@ -1250,25 +1256,26 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     const active = isActive(item.href);
     const badgeCount = navBadgeCountForHref(item.href);
     return (
-      <Link
-        key={item.href}
-        href={resolveNavHref(item.href)}
-        prefetch={navLinkPrefetch}
-        onMouseEnter={FLUIG_PREFETCH_HREFS.has(item.href) ? prefetchFluigDatasets : undefined}
-        className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-200 ${
-          active
-            ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
-            : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
-        }`}
-      >
-        <ItemIcon
-          className={`h-4 w-4 flex-shrink-0 ${
-            active ? 'text-red-600 dark:text-red-500' : 'text-gray-500 dark:text-gray-400'
+      <div key={item.href} className="sidebar-nav-item-wrap" style={wrapStyle}>
+        <Link
+          href={resolveNavHref(item.href)}
+          prefetch={navLinkPrefetch}
+          onMouseEnter={FLUIG_PREFETCH_HREFS.has(item.href) ? prefetchFluigDatasets : undefined}
+          className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+            active
+              ? 'sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
+              : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
           }`}
-        />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
-        <NotificationCountBadge count={badgeCount} />
-      </Link>
+        >
+          <ItemIcon
+            className={`sidebar-nav-item__icon h-4 w-4 flex-shrink-0 ${
+              active ? 'text-red-600 dark:text-red-500' : 'text-gray-500 dark:text-gray-400'
+            }`}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
+          <NotificationCountBadge count={badgeCount} />
+        </Link>
+      </div>
     );
   };
 
@@ -1669,18 +1676,27 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           </div>
 
           {/* Lista de páginas */}
-          <nav className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4">
+          <nav
+            key={
+              searchTerm.trim()
+                ? `search:${searchTerm.trim().toLowerCase()}`
+                : `module:${displayedModuleId ?? 'none'}:${tier2Visible ? 'open' : 'closed'}`
+            }
+            className="sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4"
+          >
             {sidebarHydrated && !isLoading ? searchTerm.trim() ? (
               menuItems.map((category) => {
                 const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);
                 if (filteredItems.length === 0) return null;
                 return (
                   <div key={category.id} className="mb-4">
-                    <p className="px-3 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       {category.name}
                     </p>
                     <div className="space-y-3">
-                      {filteredItems.map((item) => renderSidebarNavItem(item, true))}
+                      {filteredItems.map((item, index) =>
+                        renderSidebarNavItem(item, true, index)
+                      )}
                     </div>
                   </div>
                 );
@@ -1688,7 +1704,9 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             ) : (
               selectedModule?.items
                 .filter((item) => navItemIsVisible(item as SidebarNavItem))
-                .map((item) => renderSidebarNavItem(item as SidebarNavItem, false))
+                .map((item, index) =>
+                  renderSidebarNavItem(item as SidebarNavItem, false, index)
+                )
             ) : null}
           </nav>
 
