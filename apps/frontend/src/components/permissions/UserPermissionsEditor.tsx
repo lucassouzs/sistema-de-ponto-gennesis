@@ -217,6 +217,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/banco-horas',
       '/relatorios/alocacao',
       '/ponto/aniversariantes',
+      '/ponto/seguranca-do-trabalho',
     ].some((p) => h === p)
   ) {
     return 'Departamento Pessoal';

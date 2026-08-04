@@ -107,6 +107,7 @@ model User {
   updatedFluigWorkflowApproverViewers     FluigWorkflowApproverViewer[] @relation("FluigApproverViewerUpdatedBy")
   flowDiagrams                            FlowDiagram[]        @relation("FlowDiagramOwner")
   licitacoesCreated                       Licitacao[]          @relation("LicitacaoCreator")
+  asoRegistrosCreated                     AsoRegistro[]        @relation("AsoRegistroCreator")
 
   @@map("users")
 }
@@ -171,6 +172,7 @@ model Employee {
   pointCorrectionRequests PointCorrectionRequest[]
   dpRequests              DpRequest[]
   manualInssValues        ManualInssValue[]
+  asoRegistros            AsoRegistro[]
 
   @@map("employees")
 }
@@ -3550,4 +3552,75 @@ model PncpSyncUfState {
   @@index([lastStatus])
   @@index([lastSuccessAt])
   @@map("pncp_sync_uf_states")
+}
+
+// ─── Segurança do Trabalho / ASO ─────────────────────────────────────────────
+
+enum AsoGrauRisco {
+  BAIXO
+  MEDIO
+  ALTO
+}
+
+enum AsoResultado {
+  APTO
+  APTO_COM_RESTRICAO
+  INAPTO
+}
+
+/// Tipos de ASO (Admissional, Periódico, etc.)
+model AsoTipo {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  registros AsoRegistro[]
+
+  @@map("tipos_aso")
+}
+
+/// Periodicidade do ASO periódico por cargo (texto = Employee.position)
+model CargoRisco {
+  id                  String       @id @default(cuid())
+  cargo               String       @unique
+  grauRisco           AsoGrauRisco @default(MEDIO)
+  periodicidadeMeses  Int
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([cargo])
+  @@map("cargos_risco")
+}
+
+/// Registro de ASO vinculado a um funcionário
+model AsoRegistro {
+  id                String       @id @default(cuid())
+  funcionarioId     String
+  tipoAsoId         String
+  dataExame         DateTime     @db.Date
+  dataValidade      DateTime     @db.Date
+  resultado         AsoResultado
+  medicoResponsavel String
+  crmMedico         String
+  clinica           String
+  anexoUrl          String?
+  observacoes       String?      @db.Text
+  /// true quando a validade usou 12 meses padrão (cargo sem cargos_risco)
+  validadePadrao    Boolean      @default(false)
+  periodicidadeUsada Int
+  criadoPorId       String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  funcionario Employee @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
+  tipoAso     AsoTipo  @relation(fields: [tipoAsoId], references: [id], onDelete: Restrict)
+  criadoPor   User?    @relation("AsoRegistroCreator", fields: [criadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([funcionarioId])
+  @@index([tipoAsoId])
+  @@index([dataValidade])
+  @@index([resultado])
+  @@index([createdAt])
+  @@map("aso_registros")
 }

@@ -18,6 +18,11 @@ const EXTRA_PAGE_TITLES: Record<string, { title: string; category?: string; href
     title: 'Postos de Combustível',
     category: 'Cadastros',
   },
+  '/ponto/veiculos': { title: 'Frota', category: 'Cadastros' },
+  '/ponto/seguranca-do-trabalho': {
+    title: 'Segurança do Trabalho',
+    category: 'Departamento Pessoal',
+  },
   '/auth/login': { title: 'Login' },
 };
 

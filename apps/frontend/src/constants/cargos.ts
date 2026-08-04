@@ -14,7 +14,6 @@ export const CARGOS_LIST = [
   'Encarregado',
   'Engenheiro',
   'Estagiário(a)',
-  'Função',
   'Gerente',
   'Gesseiro',
   'Impermeabilizador',

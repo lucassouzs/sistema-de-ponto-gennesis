@@ -26,6 +26,8 @@ export type MultiSelectSearchOption = {
   triggerLabel?: string;
   /** Segmentos da 2ª linha (ex.: status coloridos). */
   statusSegments?: Array<{ text: string; className?: string }>;
+  /** Opção visível mas não selecionável. */
+  disabled?: boolean;
 };
 
 function OptionLabelContent({ opt }: { opt: MultiSelectSearchOption }) {

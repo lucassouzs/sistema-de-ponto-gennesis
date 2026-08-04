@@ -49,6 +49,7 @@ import {
   ShoppingCart,
   Building2,
   Cake,
+  Shield,
   DraftingCompass,
   Database,
   ClipboardList,
@@ -645,7 +646,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Cake,
             description: 'Ver aniversariantes do mês',
             permission: isAdministrator || can(pk('/ponto/aniversariantes'))
-          }
+          },
+          {
+            name: 'Segurança do Trabalho',
+            href: '/ponto/seguranca-do-trabalho',
+            icon: Shield,
+            description: 'Controle de ASO dos funcionários',
+            permission:
+              isAdministrator ||
+              isDepartmentPessoal ||
+              can(pk('/ponto/seguranca-do-trabalho')),
+          },
         ]
       },
       {

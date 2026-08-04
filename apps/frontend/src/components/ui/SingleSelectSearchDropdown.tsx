@@ -412,15 +412,25 @@ export function SingleSelectSearchDropdown({
             ) : null}
             {filtered.map((opt) => {
               const active = opt.value === value;
+              const isDisabled = Boolean(opt.disabled);
               return (
                 <button
                   key={opt.value}
                   type="button"
                   role="option"
                   aria-selected={active}
+                  aria-disabled={isDisabled || undefined}
+                  disabled={isDisabled}
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pickValue(opt.value)}
-                  className={optionClassName(active)}
+                  onClick={() => {
+                    if (isDisabled) return;
+                    pickValue(opt.value);
+                  }}
+                  className={`${optionClassName(active)} ${
+                    isDisabled
+                      ? 'cursor-not-allowed opacity-50 hover:bg-transparent dark:hover:bg-transparent'
+                      : ''
+                  }`}
                 >
                   <span
                     className={`min-w-0 flex-1 ${

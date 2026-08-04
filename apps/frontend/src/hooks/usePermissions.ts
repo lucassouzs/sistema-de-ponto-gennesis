@@ -535,6 +535,8 @@ export function useRoutePermission(route: string) {
     '/ponto/funcionarios':
       isAdministrator || isDepartmentPessoal || permissions.canManageEmployees,
     '/ponto/aniversariantes': isAdministrator || isDepartmentPessoal || can(pk('/ponto/aniversariantes')),
+    '/ponto/seguranca-do-trabalho':
+      isAdministrator || isDepartmentPessoal || can(pk('/ponto/seguranca-do-trabalho')),
     '/ponto/atestados': isAdministrator || can(pk('/ponto/atestados')),
     '/ponto/gerenciar-atestados': isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-atestados')),
     '/ponto/solicitacoes': isAdministrator || can(pk('/ponto/solicitacoes')),
