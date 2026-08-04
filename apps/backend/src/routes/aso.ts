@@ -16,6 +16,9 @@ const asoService = new AsoService();
 router.use(authenticate);
 
 router.get('/tipos', (req, res, next) => controller.listTipos(req, res, next));
+router.put('/tipos/:id', authorize('EMPLOYEE'), (req, res, next) =>
+  controller.updateTipo(req, res, next)
+);
 router.get('/dashboard', (req, res, next) => controller.dashboard(req, res, next));
 router.get('/preview-validade', (req, res, next) => controller.previewValidade(req, res, next));
 router.get('/export', (req, res, next) => controller.exportRegistros(req, res, next));

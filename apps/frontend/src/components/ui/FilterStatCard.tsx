@@ -13,6 +13,7 @@ type FilterStatCardProps = {
   iconColor: string;
   isActive?: boolean;
   loading?: boolean;
+  subtitle?: string;
   onClick: () => void;
 };
 
@@ -24,6 +25,7 @@ export function FilterStatCard({
   iconColor,
   isActive = false,
   loading = false,
+  subtitle,
   onClick,
 }: FilterStatCardProps) {
   return (
@@ -53,6 +55,9 @@ export function FilterStatCard({
             <p className="mt-1 text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100 sm:text-2xl">
               {loading ? '—' : count}
             </p>
+            {subtitle ? (
+              <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{subtitle}</p>
+            ) : null}
           </div>
         </div>
       </CardContent>

@@ -3590,10 +3590,12 @@ enum AsoResultado {
 
 /// Tipos de ASO (Admissional, Periódico, etc.)
 model AsoTipo {
-  id        String   @id @default(cuid())
-  nome      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  nome        String   @unique
+  /// Preço padrão sugerido ao cadastrar ASO deste tipo (R$)
+  valorPadrao Decimal? @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   registros AsoRegistro[]
 
@@ -3627,6 +3629,8 @@ model AsoRegistro {
   medicoResponsavel String
   crmMedico         String
   clinica           String
+  /// Valor cobrado / pago pelo exame (R$)
+  valor             Decimal?     @db.Decimal(12, 2)
   anexoUrl          String?
   observacoes       String?      @db.Text
   /// true quando a validade usou 12 meses padrão (cargo sem cargos_risco)

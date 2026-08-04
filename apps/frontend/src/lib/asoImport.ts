@@ -22,6 +22,11 @@ export const ASO_IMPORT_COLUMNS = [
   { name: 'Médico Responsável', required: true },
   { name: 'CRM', required: true },
   { name: 'Clínica', required: true },
+  {
+    name: 'Valor',
+    required: false,
+    hint: 'R$ opcional (ex.: 150 ou 150,00). Se vazio, usa o preço padrão do tipo',
+  },
   { name: 'Observações', required: false },
 ] as const;
 
@@ -37,6 +42,7 @@ export const ASO_IMPORT_TEMPLATE_EXAMPLE = [
   'Dr. Davi Souza',
   '12345-DF',
   'Clínica Exemplo',
+  '150,00',
   '',
 ];
 
@@ -124,6 +130,43 @@ function pickDateValue(row: Record<string, unknown>, ...keys: string[]): string 
   return null;
 }
 
+function parseMoneyValue(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Number(raw.toFixed(2));
+  }
+  const text = String(raw)
+    .trim()
+    .replace(/R\$\s?/gi, '')
+    .replace(/\s/g, '');
+  if (!text || text === '-' || text === '—') return null;
+  const normalized =
+    text.includes(',') && text.includes('.')
+      ? text.replace(/\./g, '').replace(',', '.')
+      : text.includes(',')
+        ? text.replace(',', '.')
+        : text;
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return null;
+  return Number(num.toFixed(2));
+}
+
+function pickMoneyValue(row: Record<string, unknown>, ...keys: string[]): number | null {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      const parsed = parseMoneyValue(row[key]);
+      if (parsed !== null) return parsed;
+    }
+  }
+  const normalized = new Map(Object.entries(row).map(([k, v]) => [normalizeHeaderKey(k), v]));
+  for (const key of keys) {
+    const val = normalized.get(normalizeHeaderKey(key));
+    const parsed = parseMoneyValue(val);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
 function parseResultado(raw: string): 'APTO' | 'APTO_COM_RESTRICAO' | 'INAPTO' | null {
   if (!raw) return null;
   const n = raw
@@ -156,6 +199,7 @@ export type AsoImportItem = {
   medicoResponsavel: string;
   crmMedico: string;
   clinica: string;
+  valor?: number;
   observacoes?: string;
 };
 
@@ -187,6 +231,7 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
   );
   const crmMedico = pickRowValue(row, 'CRM', 'crmMedico', 'CRM Médico');
   const clinica = pickRowValue(row, 'Clínica', 'Clinica', 'clinica');
+  const valor = pickMoneyValue(row, 'Valor', 'Preço', 'Preco', 'valor', 'preco');
   const observacoes = pickRowValue(row, 'Observações', 'Observacoes', 'observacoes');
 
   const resultado = parseResultado(resultadoRaw);
@@ -220,6 +265,7 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
   if (matricula) item.matricula = matricula;
   if (cpf) item.cpf = cpf;
   if (funcionarioNome) item.funcionarioNome = funcionarioNome;
+  if (valor !== null) item.valor = valor;
   if (observacoes) item.observacoes = observacoes;
 
   return { item, skipReasons: [], preview };
