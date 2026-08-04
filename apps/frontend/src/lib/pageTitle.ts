@@ -157,23 +157,32 @@ export function buildDocumentTitle(pageTitle: string | null | undefined): string
 }
 
 /**
- * Insere a entidade dinâmica após o crumb do módulo (ex.: após Contratos).
- * Ex.: Engenharia > Contratos + SEDES → Engenharia > Contratos > SEDES
+ * Insere entidade(s) dinâmica(s) após o crumb do módulo (ex.: após Contratos / Meu Drive).
+ * Ex.: Principal > Meu Drive + CONFEA → Principal > Meu Drive > CONFEA
  */
 export function appendBreadcrumbEntity(
   crumbs: BreadcrumbItem[],
-  entity: BreadcrumbItem | null | undefined,
+  entity: BreadcrumbItem | BreadcrumbItem[] | null | undefined,
 ): BreadcrumbItem[] {
-  const label = entity?.label?.trim();
-  if (!label || crumbs.length === 0) return crumbs;
-  if (crumbs.some((c) => c.label === label)) return crumbs;
+  const entities = (Array.isArray(entity) ? entity : entity ? [entity] : [])
+    .map((item) => ({
+      label: item.label?.trim() ?? '',
+      href: item.href,
+    }))
+    .filter((item) => item.label.length > 0);
+
+  if (entities.length === 0 || crumbs.length === 0) return crumbs;
+
+  const existing = new Set(crumbs.map((c) => c.label));
+  const toInsert = entities.filter((e) => !existing.has(e.label));
+  if (toInsert.length === 0) return crumbs;
 
   const moduleIdx = crumbs.findIndex((c) => Boolean(c.href));
   if (moduleIdx < 0) {
-    return [...crumbs, { label, href: entity?.href }];
+    return [...crumbs, ...toInsert];
   }
 
   const next = [...crumbs];
-  next.splice(moduleIdx + 1, 0, { label, href: entity?.href });
+  next.splice(moduleIdx + 1, 0, ...toInsert);
   return next;
 }

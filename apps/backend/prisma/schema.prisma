@@ -2368,12 +2368,14 @@ model PositionPermissionTemplate {
 
 // Drive — pastas e arquivos armazenados no S3
 model DriveFolder {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
   parentId  String?
   ownerId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  starred   Boolean   @default(false)
+  trashedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   parent   DriveFolder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children DriveFolder[] @relation("FolderChildren")
@@ -2383,6 +2385,8 @@ model DriveFolder {
 
   @@index([parentId])
   @@index([ownerId])
+  @@index([ownerId, trashedAt])
+  @@index([starred])
   @@map("drive_folders")
 }
 
@@ -2412,7 +2416,7 @@ model DriveFolderShare {
 }
 
 model DriveFile {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
   originalName String
   s3Key        String
@@ -2420,14 +2424,19 @@ model DriveFile {
   mimeType     String
   folderId     String?
   ownerId      String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  starred      Boolean   @default(false)
+  trashedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   folder DriveFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   owner  User         @relation("DriveFileOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([folderId])
   @@index([ownerId])
+  @@index([ownerId, trashedAt])
+  @@index([starred])
+  @@index([updatedAt])
   @@map("drive_files")
 }
 

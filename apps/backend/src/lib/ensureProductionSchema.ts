@@ -884,6 +884,36 @@ async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): P
   `);
 }
 
+async function ensureDriveStarTrashColumns(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "drive_folders" ADD COLUMN IF NOT EXISTS "starred" BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "drive_folders" ADD COLUMN IF NOT EXISTS "trashedAt" TIMESTAMP(3);
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "drive_files" ADD COLUMN IF NOT EXISTS "starred" BOOLEAN NOT NULL DEFAULT false;
+  `);
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "drive_files" ADD COLUMN IF NOT EXISTS "trashedAt" TIMESTAMP(3);
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "drive_folders_ownerId_trashedAt_idx" ON "drive_folders"("ownerId", "trashedAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "drive_folders_starred_idx" ON "drive_folders"("starred");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "drive_files_ownerId_trashedAt_idx" ON "drive_files"("ownerId", "trashedAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "drive_files_starred_idx" ON "drive_files"("starred");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "drive_files_updatedAt_idx" ON "drive_files"("updatedAt");
+  `);
+}
+
 /**
  * Corrige drift conhecido entre Prisma schema e bancos de produção onde migrate deploy não aplicou tudo.
  * DDL idempotente (IF NOT EXISTS / duplicate_object).
@@ -913,6 +943,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoConfigTable(prisma);
     await ensureLicitacaoOrcamentosTable(prisma);
     await ensureControleGeralTetoOrcamentarioTable(prisma);
+    await ensureDriveStarTrashColumns(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);

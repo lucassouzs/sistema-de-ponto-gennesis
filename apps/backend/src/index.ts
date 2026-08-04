@@ -456,6 +456,12 @@ process.env.TZ = 'America/Sao_Paulo';
 // Iniciar servidor HTTP + WebSocket (sinalização de chamadas WebRTC)
 try {
   const server = http.createServer(app);
+  // Uploads grandes no Drive (vídeos ~GB) — sem cortar a conexão no meio
+  const longMs = 6 * 60 * 60 * 1000;
+  server.timeout = longMs;
+  server.headersTimeout = longMs + 60_000;
+  // Node 18+: 0 = sem limite de tempo da requisição
+  (server as http.Server & { requestTimeout?: number }).requestTimeout = 0;
   attachCallSignaling(server);
   server.listen(PORT, '0.0.0.0', () => {
     void (async () => {
@@ -467,6 +473,16 @@ try {
         }
       } catch (e) {
         console.error('Erro ao sincronizar permissões com o registro de módulos:', e);
+      }
+
+      try {
+        const { DriveService } = await import('./services/DriveService');
+        await new DriveService().ensureBucketCorsForBrowserUploads();
+      } catch (e) {
+        console.warn(
+          '[drive] Não foi possível atualizar CORS do S3 (upload direto pode falhar):',
+          e instanceof Error ? e.message : e,
+        );
       }
     })();
 

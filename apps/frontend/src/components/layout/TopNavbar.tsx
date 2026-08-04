@@ -121,7 +121,7 @@ export function TopNavbar({
   const pathname = usePathname();
   const { user, userDepartment, userPosition } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
-  const { breadcrumbEntity } = usePageTitleOverride();
+  const { breadcrumbEntities } = usePageTitleOverride();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const profileTriggerRef = useRef<HTMLButtonElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -141,7 +141,7 @@ export function TopNavbar({
 
   const breadcrumbs = appendBreadcrumbEntity(
     resolveBreadcrumbs(pathname ?? '/'),
-    breadcrumbEntity,
+    breadcrumbEntities,
   );
   const displayName = user?.name || userName || 'Usuário';
   const cargoLabel = userPosition || userDepartment || 'Conta';

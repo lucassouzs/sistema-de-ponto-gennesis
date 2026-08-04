@@ -62,7 +62,7 @@ export function SegmentedControl<T extends string>({
   return (
     <div
       ref={rootRef}
-      className={`relative inline-flex shrink-0 items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-800 ${className}`}
+      className={`relative inline-flex h-9 shrink-0 items-stretch rounded-lg bg-gray-100 p-1 dark:bg-gray-800 ${className}`}
       role="group"
       aria-label={ariaLabel}
     >
@@ -90,7 +90,7 @@ export function SegmentedControl<T extends string>({
             aria-label={opt.ariaLabel}
             aria-pressed={active}
             onClick={() => onChange(opt.value)}
-            className={`relative z-10 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm transition-colors duration-200 sm:px-3 ${
+            className={`relative z-10 inline-flex h-full items-center justify-center gap-1.5 rounded-md px-2.5 text-sm transition-colors duration-200 sm:px-3 ${
               active
                 ? 'font-medium text-red-600 dark:text-red-400'
                 : 'font-normal text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'

@@ -1,8 +1,23 @@
 import AWS from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
 import path from 'path';
 import { DriveFile, DriveFolder, DriveFolderSharePermission } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+
+/** Limite padrão: 5 GB (vídeos longos). Override via DRIVE_MAX_FILE_SIZE (bytes). */
+export const DRIVE_MAX_FILE_SIZE_BYTES = parseInt(
+  process.env.DRIVE_MAX_FILE_SIZE || String(5 * 1024 * 1024 * 1024),
+  10,
+);
+
+/** Cota de armazenamento exibida na sidebar (default 15 GB). */
+export const DRIVE_QUOTA_BYTES = parseInt(
+  process.env.DRIVE_QUOTA_BYTES || String(15 * 1024 * 1024 * 1024),
+  10,
+);
+
+const NOT_TRASHED = { trashedAt: null } as const;
 
 export interface DriveUploadResult {
   id: string;
@@ -25,8 +40,76 @@ export class DriveService {
       accessKeyId: process.env.AWS_ACCESS_KEY_ID,
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
       region: process.env.AWS_REGION || 'us-east-1',
+      // Uploads grandes (multipart ~GB) — sem cortar no meio
+      httpOptions: { timeout: 0, connectTimeout: 120_000 },
     });
     this.bucketName = process.env.AWS_S3_BUCKET || 'sistema-ponto-fotos';
+  }
+
+  /**
+   * Libera PUT/GET do browser no bucket (upload direto sem CORS block).
+   * Idempotente: mescla origens novas com as regras existentes.
+   */
+  async ensureBucketCorsForBrowserUploads(): Promise<void> {
+    const extra = (process.env.DRIVE_CORS_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const desiredOrigins = Array.from(
+      new Set([
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://www.gennesisconecta.com.br',
+        'https://gennesisconecta.com.br',
+        'https://sistema-pontofrontend-production.up.railway.app',
+        ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL.replace(/\/$/, '')] : []),
+        ...extra,
+      ]),
+    );
+
+    let existingRules: AWS.S3.CORSRule[] = [];
+    try {
+      const current = await this.s3.getBucketCors({ Bucket: this.bucketName }).promise();
+      existingRules = current.CORSRules || [];
+    } catch (err: any) {
+      // Sem CORS ainda (NoSuchCORSConfiguration)
+      if (err?.code !== 'NoSuchCORSConfiguration') {
+        console.warn('[drive] getBucketCors:', err?.message || err);
+      }
+    }
+
+    const originSet = new Set<string>();
+    for (const rule of existingRules) {
+      for (const o of rule.AllowedOrigins || []) originSet.add(o);
+    }
+    for (const o of desiredOrigins) originSet.add(o);
+
+    const methods = new Set<string>(['GET', 'PUT', 'HEAD', 'POST']);
+    for (const rule of existingRules) {
+      for (const m of rule.AllowedMethods || []) methods.add(m);
+    }
+
+    await this.s3
+      .putBucketCors({
+        Bucket: this.bucketName,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedHeaders: ['*'],
+              AllowedMethods: Array.from(methods) as Array<'GET' | 'PUT' | 'HEAD' | 'POST' | 'DELETE'>,
+              AllowedOrigins: Array.from(originSet),
+              ExposeHeaders: ['ETag', 'x-amz-request-id', 'x-amz-version-id'],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      })
+      .promise();
+
+    console.log(
+      `[drive] CORS do bucket ${this.bucketName} atualizado (${originSet.size} origens) para upload direto.`,
+    );
   }
 
   /**
@@ -70,6 +153,7 @@ export class DriveService {
   async canUserAccessFolder(userId: string, folderId: string): Promise<boolean> {
     let current = await prisma.driveFolder.findUnique({ where: { id: folderId } });
     while (current) {
+      if (current.trashedAt) return false;
       if (current.ownerId === userId) return true;
       const sh = await prisma.driveFolderShare.findUnique({
         where: { folderId_userId: { folderId: current.id, userId } },
@@ -115,12 +199,12 @@ export class DriveService {
 
   private async listRootFoldersForUser(userId: string) {
     const owned = await prisma.driveFolder.findMany({
-      where: { parentId: null, ownerId: userId },
+      where: { parentId: null, ownerId: userId, ...NOT_TRASHED },
       orderBy: { name: 'asc' },
     });
 
     const shareRows = await prisma.driveFolderShare.findMany({
-      where: { userId },
+      where: { userId, folder: { trashedAt: null } },
       include: { folder: true },
     });
 
@@ -129,6 +213,7 @@ export class DriveService {
 
     for (const s of shareRows) {
       const f = s.folder;
+      if (f.trashedAt) continue;
       if (seen.has(f.id)) continue;
       if (!f.parentId) {
         extra.push(f as any);
@@ -167,7 +252,7 @@ export class DriveService {
       const foldersRaw = await this.listRootFoldersForUser(userId);
       const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
       const files = await prisma.driveFile.findMany({
-        where: { ownerId: userId, folderId: null },
+        where: { ownerId: userId, folderId: null, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
       });
       return {
@@ -182,11 +267,11 @@ export class DriveService {
 
     const [foldersRaw, allFiles] = await Promise.all([
       prisma.driveFolder.findMany({
-        where: { parentId },
+        where: { parentId, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
       }),
       prisma.driveFile.findMany({
-        where: { folderId: parentId },
+        where: { folderId: parentId, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
       }),
     ]);
@@ -234,7 +319,7 @@ export class DriveService {
   }
 
   async renameFolder(id: string, name: string, userId: string) {
-    const folder = await prisma.driveFolder.findFirst({ where: { id } });
+    const folder = await prisma.driveFolder.findFirst({ where: { id, ...NOT_TRASHED } });
     if (!folder) throw new Error('Pasta não encontrada');
     if (folder.ownerId !== userId) throw new Error('Apenas o dono da pasta pode renomeá-la');
     return prisma.driveFolder.update({ where: { id }, data: { name } });
@@ -244,12 +329,35 @@ export class DriveService {
     const folder = await prisma.driveFolder.findFirst({ where: { id } });
     if (!folder) throw new Error('Pasta não encontrada');
     if (folder.ownerId !== userId) throw new Error('Apenas o dono da pasta pode excluí-la');
+    if (folder.trashedAt) throw new Error('Pasta já está na lixeira');
 
-    await this.deleteFolderRecursive(id);
-    await prisma.driveFolder.delete({ where: { id } });
+    const now = new Date();
+    await this.softDeleteFolderRecursive(id, now);
   }
 
-  private async deleteFolderRecursive(folderId: string): Promise<void> {
+  /** Soft-delete recursivo (pasta + subpastas + arquivos). */
+  private async softDeleteFolderRecursive(folderId: string, trashedAt: Date): Promise<void> {
+    await prisma.driveFile.updateMany({
+      where: { folderId, trashedAt: null },
+      data: { trashedAt },
+    });
+
+    const subFolders = await prisma.driveFolder.findMany({
+      where: { parentId: folderId, trashedAt: null },
+      select: { id: true },
+    });
+    for (const sub of subFolders) {
+      await this.softDeleteFolderRecursive(sub.id, trashedAt);
+    }
+
+    await prisma.driveFolder.update({
+      where: { id: folderId },
+      data: { trashedAt },
+    });
+  }
+
+  /** Exclusão definitiva (S3 + DB) — só a partir da lixeira. */
+  private async hardDeleteFolderRecursive(folderId: string): Promise<void> {
     const files = await prisma.driveFile.findMany({ where: { folderId } });
     for (const file of files) {
       await this.deleteS3Object(file.s3Key);
@@ -258,11 +366,105 @@ export class DriveService {
 
     const subFolders = await prisma.driveFolder.findMany({ where: { parentId: folderId } });
     for (const sub of subFolders) {
-      await this.deleteFolderRecursive(sub.id);
+      await this.hardDeleteFolderRecursive(sub.id);
     }
+    await prisma.driveFolder.delete({ where: { id: folderId } }).catch(() => {});
   }
 
   // ── Arquivos ─────────────────────────────────────────────────────────
+
+  private async buildDriveS3Key(userId: string, fileName: string, folderId?: string): Promise<string> {
+    const ext = path.extname(fileName) || '';
+    const safeStem = this.toSafeFileStem(fileName);
+    const folderPath = folderId ? `/${(await this.getFolderPathSlugs(folderId)).join('/')}` : '';
+    return `drive/${userId}${folderPath}/${safeStem}-${uuidv4()}${ext}`;
+  }
+
+  private assertOwnDriveKey(userId: string, s3Key: string) {
+    const prefix = `drive/${userId}/`;
+    if (!s3Key.startsWith(prefix)) {
+      throw new Error('Chave de upload inválida');
+    }
+  }
+
+  /**
+   * URL assinada para o browser enviar direto ao S3 (arquivos grandes, sem timeout do API).
+   */
+  async createUploadPresign(
+    userId: string,
+    input: { name: string; mimeType?: string; size: number; folderId?: string },
+  ): Promise<{ uploadUrl: string; s3Key: string; contentType: string; expiresIn: number }> {
+    const name = input.name?.trim();
+    if (!name) throw new Error('Nome do arquivo é obrigatório');
+    if (!Number.isFinite(input.size) || input.size <= 0) {
+      throw new Error('Tamanho do arquivo inválido');
+    }
+    if (input.size > DRIVE_MAX_FILE_SIZE_BYTES) {
+      const gb = Math.round(DRIVE_MAX_FILE_SIZE_BYTES / (1024 ** 3));
+      throw new Error(`Arquivo excede o limite de ${gb} GB`);
+    }
+    if (input.folderId) {
+      const can = await this.canUserWriteInFolder(userId, input.folderId);
+      if (!can) throw new Error('Sem permissão para enviar arquivo nesta pasta');
+    }
+
+    const contentType = input.mimeType || 'application/octet-stream';
+    const s3Key = await this.buildDriveS3Key(userId, name, input.folderId);
+    const expiresIn = 6 * 3600;
+
+    const uploadUrl = await this.s3.getSignedUrlPromise('putObject', {
+      Bucket: this.bucketName,
+      Key: s3Key,
+      ContentType: contentType,
+      Expires: expiresIn,
+    });
+
+    return { uploadUrl, s3Key, contentType, expiresIn };
+  }
+
+  /** Confirma o objeto no S3 e grava o registro no banco. */
+  async confirmUpload(
+    userId: string,
+    input: { s3Key: string; name: string; mimeType?: string; size: number; folderId?: string },
+  ): Promise<DriveUploadResult> {
+    const name = input.name?.trim();
+    if (!name) throw new Error('Nome do arquivo é obrigatório');
+    this.assertOwnDriveKey(userId, input.s3Key);
+
+    if (input.folderId) {
+      const can = await this.canUserWriteInFolder(userId, input.folderId);
+      if (!can) throw new Error('Sem permissão para enviar arquivo nesta pasta');
+    }
+
+    let actualSize = input.size;
+    try {
+      const head = await this.s3
+        .headObject({ Bucket: this.bucketName, Key: input.s3Key })
+        .promise();
+      if (typeof head.ContentLength === 'number') actualSize = head.ContentLength;
+    } catch {
+      throw new Error('Upload incompleto — arquivo não encontrado no armazenamento');
+    }
+
+    if (actualSize > DRIVE_MAX_FILE_SIZE_BYTES) {
+      await this.s3.deleteObject({ Bucket: this.bucketName, Key: input.s3Key }).promise().catch(() => {});
+      throw new Error('Arquivo excede o limite permitido');
+    }
+
+    const record = await prisma.driveFile.create({
+      data: {
+        name,
+        originalName: name,
+        s3Key: input.s3Key,
+        size: actualSize,
+        mimeType: input.mimeType || 'application/octet-stream',
+        folderId: input.folderId ?? null,
+        ownerId: userId,
+      },
+    });
+
+    return record as DriveUploadResult;
+  }
 
   async uploadFile(
     file: Express.Multer.File,
@@ -274,52 +476,65 @@ export class DriveService {
       if (!can) throw new Error('Sem permissão para enviar arquivo nesta pasta');
     }
 
-    const ext = path.extname(file.originalname) || '';
-    const safeStem = this.toSafeFileStem(file.originalname);
-    const folderPath = folderId ? `/${(await this.getFolderPathSlugs(folderId)).join('/')}` : '';
-    const s3Key = `drive/${userId}${folderPath}/${safeStem}-${uuidv4()}${ext}`;
+    if (file.size > DRIVE_MAX_FILE_SIZE_BYTES) {
+      const gb = Math.round(DRIVE_MAX_FILE_SIZE_BYTES / (1024 ** 3));
+      throw new Error(`Arquivo excede o limite de ${gb} GB`);
+    }
 
-    await this.s3
-      .upload({
-        Bucket: this.bucketName,
-        Key: s3Key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        ContentDisposition: `attachment; filename="${encodeURIComponent(file.originalname)}"`,
-        ACL: 'private',
-        Metadata: {
-          userId,
+    const s3Key = await this.buildDriveS3Key(userId, file.originalname, folderId);
+    const body =
+      file.path && fs.existsSync(file.path)
+        ? fs.createReadStream(file.path)
+        : file.buffer;
+
+    if (!body) {
+      throw new Error('Conteúdo do arquivo indisponível');
+    }
+
+    try {
+      // Sem ACL: buckets com "Bucket owner enforced" rejeitam ACL e o upload trava/falha.
+      await this.s3
+        .upload(
+          {
+            Bucket: this.bucketName,
+            Key: s3Key,
+            Body: body,
+            ContentType: file.mimetype || 'application/octet-stream',
+            ContentDisposition: `attachment; filename="${encodeURIComponent(file.originalname)}"`,
+            Metadata: {
+              userid: userId,
+              uploadedat: new Date().toISOString(),
+            },
+          } as AWS.S3.PutObjectRequest,
+          {
+            partSize: 16 * 1024 * 1024,
+            queueSize: 3,
+          },
+        )
+        .promise();
+
+      const record = await prisma.driveFile.create({
+        data: {
+          name: file.originalname,
           originalName: file.originalname,
-          uploadedAt: new Date().toISOString(),
+          s3Key,
+          size: file.size,
+          mimeType: file.mimetype,
+          folderId: folderId ?? null,
+          ownerId: userId,
         },
-      } as AWS.S3.PutObjectRequest)
-      .promise();
+      });
 
-    const record = await prisma.driveFile.create({
-      data: {
-        name: file.originalname,
-        originalName: file.originalname,
-        s3Key,
-        size: file.size,
-        mimeType: file.mimetype,
-        folderId: folderId ?? null,
-        ownerId: userId,
-      },
-    });
-
-    return record as DriveUploadResult;
+      return record as DriveUploadResult;
+    } finally {
+      if (file.path) {
+        await fs.promises.unlink(file.path).catch(() => {});
+      }
+    }
   }
 
   async getSignedDownloadUrl(fileId: string, userId: string, expiresIn = 3600): Promise<string> {
-    const file = await prisma.driveFile.findFirst({ where: { id: fileId } });
-    if (!file) throw new Error('Arquivo não encontrado');
-    if (file.folderId) {
-      if (!(await this.canUserAccessFolder(userId, file.folderId))) {
-        throw new Error('Arquivo não encontrado ou sem permissão');
-      }
-    } else if (file.ownerId !== userId) {
-      throw new Error('Arquivo não encontrado');
-    }
+    const file = await this.assertUserCanAccessFile(fileId, userId);
 
     return this.s3.getSignedUrlPromise('getObject', {
       Bucket: this.bucketName,
@@ -331,15 +546,7 @@ export class DriveService {
 
   /** URL assinada para exibir no browser (sem forçar download) — imagens no Drive, etc. */
   async getSignedPreviewUrl(fileId: string, userId: string, expiresIn = 600): Promise<string> {
-    const file = await prisma.driveFile.findFirst({ where: { id: fileId } });
-    if (!file) throw new Error('Arquivo não encontrado');
-    if (file.folderId) {
-      if (!(await this.canUserAccessFolder(userId, file.folderId))) {
-        throw new Error('Arquivo não encontrado ou sem permissão');
-      }
-    } else if (file.ownerId !== userId) {
-      throw new Error('Arquivo não encontrado');
-    }
+    const file = await this.assertUserCanAccessFile(fileId, userId);
 
     return this.s3.getSignedUrlPromise('getObject', {
       Bucket: this.bucketName,
@@ -349,8 +556,52 @@ export class DriveService {
     });
   }
 
+  /** Baixa o objeto do S3 para gerar preview no cliente (PDF, planilha, etc.). */
+  async getFileContentBuffer(
+    fileId: string,
+    userId: string,
+    maxBytes = 12 * 1024 * 1024,
+  ): Promise<{ buffer: Buffer; mimeType: string; name: string; size: number }> {
+    const file = await this.assertUserCanAccessFile(fileId, userId);
+    if (file.size > maxBytes) {
+      throw new Error('Arquivo grande demais para pré-visualização');
+    }
+
+    const result = await this.s3
+      .getObject({ Bucket: this.bucketName, Key: file.s3Key })
+      .promise();
+
+    const body = result.Body;
+    if (!body) throw new Error('Conteúdo indisponível');
+
+    const buffer = Buffer.isBuffer(body)
+      ? body
+      : Buffer.from(body as ArrayBuffer | Uint8Array);
+
+    return {
+      buffer,
+      mimeType: file.mimeType || 'application/octet-stream',
+      name: file.name || file.originalName,
+      size: file.size,
+    };
+  }
+
+  private async assertUserCanAccessFile(fileId: string, userId: string): Promise<DriveFile> {
+    const file = await prisma.driveFile.findFirst({ where: { id: fileId } });
+    if (!file) throw new Error('Arquivo não encontrado');
+    if (file.trashedAt) throw new Error('Arquivo está na lixeira');
+    if (file.folderId) {
+      if (!(await this.canUserAccessFolder(userId, file.folderId))) {
+        throw new Error('Arquivo não encontrado ou sem permissão');
+      }
+    } else if (file.ownerId !== userId) {
+      throw new Error('Arquivo não encontrado');
+    }
+    return file;
+  }
+
   async renameFile(id: string, name: string, userId: string) {
-    const file = await prisma.driveFile.findFirst({ where: { id } });
+    const file = await prisma.driveFile.findFirst({ where: { id, ...NOT_TRASHED } });
     if (!file) throw new Error('Arquivo não encontrado');
     if (file.ownerId === userId) {
       return prisma.driveFile.update({ where: { id }, data: { name } });
@@ -362,7 +613,7 @@ export class DriveService {
   }
 
   async moveFile(id: string, folderId: string | null, userId: string) {
-    const file = await prisma.driveFile.findFirst({ where: { id } });
+    const file = await prisma.driveFile.findFirst({ where: { id, ...NOT_TRASHED } });
     if (!file) throw new Error('Arquivo não encontrado');
     if (file.ownerId !== userId) throw new Error('Sem permissão');
     if (folderId) {
@@ -375,17 +626,17 @@ export class DriveService {
   async deleteFile(id: string, userId: string): Promise<void> {
     const file = await prisma.driveFile.findFirst({ where: { id } });
     if (!file) throw new Error('Arquivo não encontrado');
-    if (file.ownerId === userId) {
-      await this.deleteS3Object(file.s3Key);
-      await prisma.driveFile.delete({ where: { id } });
-      return;
-    }
-    if (file.folderId && (await this.canUserWriteInFolder(userId, file.folderId))) {
-      await this.deleteS3Object(file.s3Key);
-      await prisma.driveFile.delete({ where: { id } });
-      return;
-    }
-    throw new Error('Sem permissão para excluir');
+    if (file.trashedAt) throw new Error('Arquivo já está na lixeira');
+
+    const canDelete =
+      file.ownerId === userId ||
+      (file.folderId != null && (await this.canUserWriteInFolder(userId, file.folderId)));
+    if (!canDelete) throw new Error('Sem permissão para excluir');
+
+    await prisma.driveFile.update({
+      where: { id },
+      data: { trashedAt: new Date() },
+    });
   }
 
   // ── Compartilhamento (só o dono da pasta) ─────────────────────────────
@@ -457,12 +708,12 @@ export class DriveService {
 
     const [folderCandidates, fileCandidates] = await Promise.all([
       prisma.driveFolder.findMany({
-        where: { name: { contains: q, mode: 'insensitive' } },
+        where: { name: { contains: q, mode: 'insensitive' }, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
         take: 200,
       }),
       prisma.driveFile.findMany({
-        where: { name: { contains: q, mode: 'insensitive' } },
+        where: { name: { contains: q, mode: 'insensitive' }, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
         take: 200,
       }),
@@ -486,6 +737,150 @@ export class DriveService {
     }
 
     return { folders, files };
+  }
+
+  // ── Views da sidebar ──────────────────────────────────────────────────
+
+  async listSharedWithMe(userId: string) {
+    const shareRows = await prisma.driveFolderShare.findMany({
+      where: {
+        userId,
+        folder: { trashedAt: null, ownerId: { not: userId } },
+      },
+      include: { folder: true },
+      orderBy: { folder: { name: 'asc' } },
+    });
+
+    const foldersRaw = shareRows.map((s) => s.folder);
+    const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    return {
+      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
+      files: [] as DriveFile[],
+    };
+  }
+
+  async listRecent(userId: string, limit = 50) {
+    const files = await prisma.driveFile.findMany({
+      where: { ownerId: userId, ...NOT_TRASHED },
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+    });
+    return { folders: [] as Array<Record<string, unknown>>, files };
+  }
+
+  async listStarred(userId: string) {
+    const [foldersRaw, files] = await Promise.all([
+      prisma.driveFolder.findMany({
+        where: { ownerId: userId, starred: true, ...NOT_TRASHED },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.driveFile.findMany({
+        where: { ownerId: userId, starred: true, ...NOT_TRASHED },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+    const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    return {
+      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
+      files,
+    };
+  }
+
+  async listTrash(userId: string) {
+    const [foldersRaw, files] = await Promise.all([
+      prisma.driveFolder.findMany({
+        where: { ownerId: userId, trashedAt: { not: null } },
+        orderBy: { trashedAt: 'desc' },
+      }),
+      prisma.driveFile.findMany({
+        where: { ownerId: userId, trashedAt: { not: null } },
+        orderBy: { trashedAt: 'desc' },
+      }),
+    ]);
+    const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    return {
+      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
+      files,
+    };
+  }
+
+  async getStorageUsage(userId: string): Promise<{ usedBytes: number; quotaBytes: number }> {
+    const agg = await prisma.driveFile.aggregate({
+      where: { ownerId: userId, ...NOT_TRASHED },
+      _sum: { size: true },
+    });
+    return {
+      usedBytes: agg._sum.size ?? 0,
+      quotaBytes: DRIVE_QUOTA_BYTES,
+    };
+  }
+
+  async setFolderStarred(id: string, userId: string, starred: boolean) {
+    const folder = await prisma.driveFolder.findFirst({ where: { id, ...NOT_TRASHED } });
+    if (!folder) throw new Error('Pasta não encontrada');
+    if (folder.ownerId !== userId) throw new Error('Apenas o dono pode marcar com estrela');
+    return prisma.driveFolder.update({ where: { id }, data: { starred } });
+  }
+
+  async setFileStarred(id: string, userId: string, starred: boolean) {
+    const file = await prisma.driveFile.findFirst({ where: { id, ...NOT_TRASHED } });
+    if (!file) throw new Error('Arquivo não encontrado');
+    if (file.ownerId !== userId) throw new Error('Apenas o dono pode marcar com estrela');
+    return prisma.driveFile.update({ where: { id }, data: { starred } });
+  }
+
+  async restoreFolder(id: string, userId: string) {
+    const folder = await prisma.driveFolder.findFirst({ where: { id } });
+    if (!folder) throw new Error('Pasta não encontrada');
+    if (folder.ownerId !== userId) throw new Error('Sem permissão');
+    if (!folder.trashedAt) throw new Error('Pasta não está na lixeira');
+
+    await this.restoreFolderRecursive(id);
+    return prisma.driveFolder.findUnique({ where: { id } });
+  }
+
+  private async restoreFolderRecursive(folderId: string): Promise<void> {
+    await prisma.driveFolder.update({
+      where: { id: folderId },
+      data: { trashedAt: null },
+    });
+    await prisma.driveFile.updateMany({
+      where: { folderId, trashedAt: { not: null } },
+      data: { trashedAt: null },
+    });
+    const subs = await prisma.driveFolder.findMany({
+      where: { parentId: folderId, trashedAt: { not: null } },
+      select: { id: true },
+    });
+    for (const sub of subs) {
+      await this.restoreFolderRecursive(sub.id);
+    }
+  }
+
+  async restoreFile(id: string, userId: string) {
+    const file = await prisma.driveFile.findFirst({ where: { id } });
+    if (!file) throw new Error('Arquivo não encontrado');
+    if (file.ownerId !== userId) throw new Error('Sem permissão');
+    if (!file.trashedAt) throw new Error('Arquivo não está na lixeira');
+    return prisma.driveFile.update({ where: { id }, data: { trashedAt: null } });
+  }
+
+  async permanentlyDeleteFolder(id: string, userId: string): Promise<void> {
+    const folder = await prisma.driveFolder.findFirst({ where: { id } });
+    if (!folder) throw new Error('Pasta não encontrada');
+    if (folder.ownerId !== userId) throw new Error('Sem permissão');
+    if (!folder.trashedAt) throw new Error('Mova para a lixeira antes de excluir permanentemente');
+    await this.hardDeleteFolderRecursive(id);
+    await prisma.driveFolder.delete({ where: { id } }).catch(() => {});
+  }
+
+  async permanentlyDeleteFile(id: string, userId: string): Promise<void> {
+    const file = await prisma.driveFile.findFirst({ where: { id } });
+    if (!file) throw new Error('Arquivo não encontrado');
+    if (file.ownerId !== userId) throw new Error('Sem permissão');
+    if (!file.trashedAt) throw new Error('Mova para a lixeira antes de excluir permanentemente');
+    await this.deleteS3Object(file.s3Key);
+    await prisma.driveFile.delete({ where: { id } });
   }
 
   // ── Utilitários ───────────────────────────────────────────────────────
