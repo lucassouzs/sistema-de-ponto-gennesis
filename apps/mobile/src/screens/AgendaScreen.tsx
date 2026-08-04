@@ -14,9 +14,11 @@ import {
   Platform,
   Animated,
   LayoutChangeEvent,
+  Linking,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   Plus,
   Check,
@@ -35,18 +37,27 @@ import {
   Coffee,
   MapPin,
   Briefcase,
+  FileText,
+  Upload,
+  Download,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
 import UserAvatar from '../components/UserAvatar';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
   createPlannerEvent,
   deletePlannerEvent,
+  deletePlannerEventAta,
   EVENT_COLORS,
+  fetchKanbanPickerUsers,
   fetchPlannerEvents,
   updatePlannerEvent,
+  uploadPlannerEventAta,
+  type KanbanPickerUser,
   type PlannerEvent,
+  type PlannerEventAttendee,
 } from '../services/plannerEvents';
 import {
   createPlannerTask,
@@ -57,6 +68,7 @@ import {
   type PlannerTask,
   type PlannerTaskList,
 } from '../services/plannerTasks';
+import { resolveMediaUrl } from '../utils/resolveMediaUrl';
 
 type Mode = 'agenda' | 'tasks';
 
@@ -95,21 +107,27 @@ function formatTime(iso: string) {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+const PLANNER_ICON_OPTIONS: Array<{
+  id: string;
+  label: string;
+  Icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+}> = [
+  { id: 'meeting', label: 'Reunião', Icon: Users },
+  { id: 'phone', label: 'Ligação', Icon: Phone },
+  { id: 'chart', label: 'Vendas', Icon: BarChart3 },
+  { id: 'star', label: 'Destaque', Icon: Star },
+  { id: 'check', label: 'Tarefa', Icon: CheckCircle2 },
+  { id: 'plane', label: 'Viagem', Icon: Plane },
+  { id: 'coffee', label: 'Café', Icon: Coffee },
+  { id: 'users', label: 'Equipe', Icon: Users },
+  { id: 'map-pin', label: 'Local', Icon: MapPin },
+  { id: 'briefcase', label: 'Trabalho', Icon: Briefcase },
+];
+
 const PLANNER_ICON_MAP: Record<
   string,
   React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>
-> = {
-  meeting: Users,
-  phone: Phone,
-  chart: BarChart3,
-  star: Star,
-  check: CheckCircle2,
-  plane: Plane,
-  coffee: Coffee,
-  users: Users,
-  'map-pin': MapPin,
-  briefcase: Briefcase,
-};
+> = Object.fromEntries(PLANNER_ICON_OPTIONS.map((o) => [o.id, o.Icon]));
 
 function PlannerEventIcon({
   icon,
@@ -204,11 +222,15 @@ function AnimatedModeSwitcher({
 
 export default function AgendaScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
+  const { user: meUser } = useAuth();
   const { colors, isDark } = useTheme();
   const queryClient = useQueryClient();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
-  const [mode, setMode] = useState<Mode>('agenda');
+  const initialMode =
+    (route.params as { mode?: Mode } | undefined)?.mode === 'tasks' ? 'tasks' : 'agenda';
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => startOfDay(new Date()));
   const [eventModal, setEventModal] = useState<null | {
@@ -220,6 +242,18 @@ export default function AgendaScreen() {
   const [eventStart, setEventStart] = useState('09:00');
   const [eventEnd, setEventEnd] = useState('10:00');
   const [eventColor, setEventColor] = useState(EVENT_COLORS[0]);
+  const [eventIcon, setEventIcon] = useState<string | null>(null);
+  const [eventAttendees, setEventAttendees] = useState<PlannerEventAttendee[]>([]);
+  const [eventAtaName, setEventAtaName] = useState<string | null>(null);
+  const [eventAtaUrl, setEventAtaUrl] = useState<string | null>(null);
+  const [pendingAta, setPendingAta] = useState<{
+    uri: string;
+    name: string;
+    type: string;
+  } | null>(null);
+  const [removeAtaOnSave, setRemoveAtaOnSave] = useState(false);
+  const [memberPickerOpen, setMemberPickerOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -242,11 +276,31 @@ export default function AgendaScreen() {
     enabled: mode === 'tasks',
   });
 
+  const pickerUsersQuery = useQuery({
+    queryKey: ['kanban-member-picker-users'],
+    queryFn: fetchKanbanPickerUsers,
+    enabled: memberPickerOpen,
+    staleTime: 60_000,
+  });
+
   const events = eventsQuery.data?.events ?? [];
   const canWrite = eventsQuery.data?.meta?.canWrite !== false;
   const lists = listsQuery.data ?? [];
   const activeList: PlannerTaskList | undefined =
     lists.find((l) => l.id === activeListId) || lists[0];
+
+  const filteredPickerUsers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    const exclude = new Set(eventAttendees.map((a) => a.id));
+    return (pickerUsersQuery.data || []).filter((u) => {
+      if (exclude.has(u.id)) return false;
+      if (meUser?.id && u.id === meUser.id) return false;
+      if (!q) return true;
+      return (
+        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      );
+    });
+  }, [pickerUsersQuery.data, memberSearch, eventAttendees, meUser?.id]);
 
   useEffect(() => {
     if (!activeListId && lists[0]?.id) setActiveListId(lists[0].id);
@@ -307,6 +361,14 @@ export default function AgendaScreen() {
     setEventStart('09:00');
     setEventEnd('10:00');
     setEventColor(EVENT_COLORS[0]);
+    setEventIcon(null);
+    setEventAttendees([]);
+    setEventAtaName(null);
+    setEventAtaUrl(null);
+    setPendingAta(null);
+    setRemoveAtaOnSave(false);
+    setMemberPickerOpen(false);
+    setMemberSearch('');
     setEventModal({ mode: 'create' });
   };
 
@@ -316,7 +378,35 @@ export default function AgendaScreen() {
     setEventStart(formatTime(ev.startAt) || '09:00');
     setEventEnd(formatTime(ev.endAt) || '10:00');
     setEventColor(ev.color || EVENT_COLORS[0]);
+    setEventIcon(ev.icon || null);
+    setEventAttendees(ev.attendees || []);
+    setEventAtaName(ev.ataFileName || null);
+    setEventAtaUrl(ev.ataFileUrl || null);
+    setPendingAta(null);
+    setRemoveAtaOnSave(false);
+    setMemberPickerOpen(false);
+    setMemberSearch('');
     setEventModal({ mode: 'edit', event: ev });
+  };
+
+  const pickAtaPdf = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setPendingAta({
+        uri: asset.uri,
+        name: asset.name || 'ata.pdf',
+        type: asset.mimeType || 'application/pdf',
+      });
+      setRemoveAtaOnSave(false);
+    } catch (e: any) {
+      Toast.show({ type: 'error', text1: e?.message || 'Falha ao selecionar PDF' });
+    }
   };
 
   const saveEvent = async () => {
@@ -329,32 +419,70 @@ export default function AgendaScreen() {
     try {
       const startAt = toLocalIso(selectedDay, eventStart);
       const endAt = toLocalIso(selectedDay, eventEnd);
+      const payload = {
+        title,
+        description: eventDesc.trim(),
+        startAt,
+        endAt,
+        color: eventColor,
+        icon: eventIcon,
+        attendeeIds: eventAttendees.map((a) => a.id),
+      };
+
+      let saved: PlannerEvent;
       if (eventModal?.mode === 'edit' && eventModal.event) {
-        await updatePlannerEvent(eventModal.event.id, {
-          title,
-          description: eventDesc.trim(),
-          startAt,
-          endAt,
-          color: eventColor,
-        });
+        saved = await updatePlannerEvent(eventModal.event.id, payload);
         Toast.show({ type: 'success', text1: 'Evento atualizado' });
       } else {
-        await createPlannerEvent({
-          title,
-          description: eventDesc.trim(),
-          startAt,
-          endAt,
-          color: eventColor,
-        });
+        saved = await createPlannerEvent(payload);
         Toast.show({ type: 'success', text1: 'Evento criado' });
       }
+
+      if (removeAtaOnSave && saved.id) {
+        saved = await deletePlannerEventAta(saved.id);
+      } else if (pendingAta && saved.id) {
+        saved = await uploadPlannerEventAta(saved.id, pendingAta);
+      }
+
       setEventModal(null);
+      setPendingAta(null);
       await queryClient.invalidateQueries({ queryKey: ['planner-events'] });
     } catch (e: any) {
       Toast.show({ type: 'error', text1: 'Erro', text2: e?.message || 'Falha ao salvar' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const assignToMe = () => {
+    if (!meUser?.id) return;
+    if (eventAttendees.some((a) => a.id === meUser.id)) return;
+    setEventAttendees((prev) => [
+      ...prev,
+      {
+        id: meUser.id,
+        name: meUser.name,
+        email: meUser.email || '',
+        profilePhotoUrl: meUser.profilePhotoUrl ?? null,
+      },
+    ]);
+  };
+
+  const addAttendee = (user: KanbanPickerUser) => {
+    setEventAttendees((prev) => {
+      if (prev.some((a) => a.id === user.id)) return prev;
+      return [
+        ...prev,
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          profilePhotoUrl: user.profilePhotoUrl ?? null,
+        },
+      ];
+    });
+    setMemberPickerOpen(false);
+    setMemberSearch('');
   };
 
   const confirmDeleteEvent = (ev: PlannerEvent) => {
@@ -599,36 +727,62 @@ export default function AgendaScreen() {
             <Text style={styles.empty}>Nenhum evento neste dia.</Text>
           ) : (
             <View style={styles.eventList}>
-              {dayEvents.map((ev, index) => {
+              {dayEvents.map((ev) => {
                 const attendees = ev.attendees || [];
                 const accent = ev.color || colors.primary;
+                const startLabel = formatTime(ev.startAt);
+                const endLabel = formatTime(ev.endAt);
+                const startMs = new Date(ev.startAt).getTime();
+                const endMs = new Date(ev.endAt).getTime();
+                const nowMs = Date.now();
+                const ongoing =
+                  !Number.isNaN(startMs) &&
+                  !Number.isNaN(endMs) &&
+                  startMs <= nowMs &&
+                  endMs >= nowMs;
+
                 return (
                   <TouchableOpacity
                     key={ev.id}
-                    style={styles.eventRow}
+                    style={[styles.eventCard, ongoing && styles.eventCardOngoing]}
                     onPress={() => canWrite && openEditEvent(ev)}
                     activeOpacity={0.75}
                   >
-                    <View style={styles.eventTimeline}>
-                      {index < dayEvents.length - 1 ? <View style={styles.eventLine} /> : null}
-                      <View style={[styles.eventDot, { backgroundColor: accent }]} />
-                    </View>
-                    <View style={styles.eventBody}>
-                      <Text style={styles.eventTime}>
-                        {formatTime(ev.startAt)} – {formatTime(ev.endAt)}
+                    <View style={[styles.eventTimeChip, { backgroundColor: `${accent}18` }]}>
+                      <Text style={[styles.eventTimeChipText, { color: accent }]}>
+                        {startLabel}
                       </Text>
+                    </View>
+
+                    <View style={styles.eventMain}>
                       <View style={styles.eventTitleRow}>
                         <PlannerEventIcon icon={ev.icon} color={accent} />
+                        {ev.ataFileUrl ? (
+                          <FileText size={13} color={colors.textSecondary} strokeWidth={2.2} />
+                        ) : null}
                         <Text style={styles.eventTitle} numberOfLines={2}>
                           {ev.title}
                         </Text>
                       </View>
+                      <Text style={styles.eventMeta} numberOfLines={1}>
+                        {ongoing
+                          ? 'Em andamento'
+                          : endLabel
+                            ? `${startLabel} – ${endLabel}`
+                            : startLabel}
+                        {attendees.length > 0
+                          ? ` · ${attendees.length} pessoa${attendees.length === 1 ? '' : 's'}`
+                          : ''}
+                      </Text>
                       {attendees.length > 0 ? (
                         <View style={styles.eventAvatars}>
                           {attendees.slice(0, 3).map((u, i) => (
                             <View
                               key={u.id}
-                              style={[styles.eventAvatarWrap, { marginLeft: i === 0 ? 0 : -6, zIndex: 3 - i }]}
+                              style={[
+                                styles.eventAvatarWrap,
+                                { marginLeft: i === 0 ? 0 : -6, zIndex: 3 - i },
+                              ]}
                             >
                               <UserAvatar
                                 uri={u.profilePhotoUrl}
@@ -642,12 +796,16 @@ export default function AgendaScreen() {
                           ))}
                           {attendees.length > 3 ? (
                             <View style={[styles.eventAvatarMore, { marginLeft: -6 }]}>
-                              <Text style={styles.eventAvatarMoreText}>+{attendees.length - 3}</Text>
+                              <Text style={styles.eventAvatarMoreText}>
+                                +{attendees.length - 3}
+                              </Text>
                             </View>
                           ) : null}
                         </View>
                       ) : null}
                     </View>
+
+                    <View style={[styles.eventColorDot, { backgroundColor: accent }]} />
                   </TouchableOpacity>
                 );
               })}
@@ -781,80 +939,263 @@ export default function AgendaScreen() {
                 <X size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
-            <TextInput
-              value={eventTitle}
-              onChangeText={setEventTitle}
-              placeholder="Título"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
-            />
-            <TextInput
-              value={eventDesc}
-              onChangeText={setEventDesc}
-              placeholder="Descrição (opcional)"
-              placeholderTextColor={colors.textSecondary}
-              style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
-              multiline
-            />
-            <View style={styles.timeRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Início (HH:mm)</Text>
-                <TextInput
-                  value={eventStart}
-                  onChangeText={setEventStart}
-                  placeholder="09:00"
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.input}
-                />
-              </View>
-              <View style={{ width: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>Fim (HH:mm)</Text>
-                <TextInput
-                  value={eventEnd}
-                  onChangeText={setEventEnd}
-                  placeholder="10:00"
-                  placeholderTextColor={colors.textSecondary}
-                  style={styles.input}
-                />
-              </View>
-            </View>
-            <Text style={styles.fieldLabel}>Cor</Text>
-            <View style={styles.colorRow}>
-              {EVENT_COLORS.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[
-                    styles.colorDot,
-                    { backgroundColor: c },
-                    eventColor === c && styles.colorDotActive,
-                  ]}
-                  onPress={() => setEventColor(c)}
-                />
-              ))}
-            </View>
-            <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() => void saveEvent()}
-              disabled={saving}
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollPad}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              {saving ? (
-                <ActivityIndicator color="#fff" />
+              <Text style={styles.fieldLabel}>Ícone</Text>
+              <View style={styles.iconRow}>
+                <TouchableOpacity
+                  style={[styles.iconChip, !eventIcon && styles.iconChipActive]}
+                  onPress={() => setEventIcon(null)}
+                >
+                  <Text style={[styles.iconChipDash, !eventIcon && { color: colors.primary }]}>
+                    —
+                  </Text>
+                </TouchableOpacity>
+                {PLANNER_ICON_OPTIONS.map(({ id, label, Icon }) => {
+                  const active = eventIcon === id;
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      style={[styles.iconChip, active && styles.iconChipActive]}
+                      onPress={() => setEventIcon(id)}
+                      accessibilityLabel={label}
+                    >
+                      <Icon
+                        size={16}
+                        color={active ? colors.primary : colors.textSecondary}
+                        strokeWidth={2.2}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TextInput
+                value={eventTitle}
+                onChangeText={setEventTitle}
+                placeholder="Título"
+                placeholderTextColor={colors.textSecondary}
+                style={styles.input}
+              />
+              <TextInput
+                value={eventDesc}
+                onChangeText={setEventDesc}
+                placeholder="Descrição (opcional)"
+                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
+                multiline
+              />
+              <View style={styles.timeRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Início (HH:mm)</Text>
+                  <TextInput
+                    value={eventStart}
+                    onChangeText={setEventStart}
+                    placeholder="09:00"
+                    placeholderTextColor={colors.textSecondary}
+                    style={styles.input}
+                  />
+                </View>
+                <View style={{ width: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Fim (HH:mm)</Text>
+                  <TextInput
+                    value={eventEnd}
+                    onChangeText={setEventEnd}
+                    placeholder="10:00"
+                    placeholderTextColor={colors.textSecondary}
+                    style={styles.input}
+                  />
+                </View>
+              </View>
+
+              <Text style={styles.fieldLabel}>Cor</Text>
+              <View style={styles.colorRow}>
+                {EVENT_COLORS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      styles.colorDot,
+                      { backgroundColor: c },
+                      eventColor === c && styles.colorDotActive,
+                    ]}
+                    onPress={() => setEventColor(c)}
+                  />
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>Pessoas</Text>
+              <View style={styles.peopleActions}>
+                {meUser?.id && !eventAttendees.some((a) => a.id === meUser.id) ? (
+                  <TouchableOpacity style={styles.peopleBtn} onPress={assignToMe}>
+                    <Text style={styles.peopleBtnText}>Atribuir a mim</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.peopleBtn}
+                  onPress={() => setMemberPickerOpen(true)}
+                >
+                  <Plus size={14} color={colors.primary} strokeWidth={2.4} />
+                  <Text style={styles.peopleBtnText}>Adicionar</Text>
+                </TouchableOpacity>
+              </View>
+              {eventAttendees.length === 0 ? (
+                <Text style={styles.peopleEmpty}>Nenhuma pessoa atribuída.</Text>
               ) : (
-                <Text style={styles.primaryBtnText}>Salvar</Text>
+                <View style={styles.peopleList}>
+                  {eventAttendees.map((u) => (
+                    <View key={u.id} style={styles.peopleChip}>
+                      <UserAvatar
+                        uri={u.profilePhotoUrl}
+                        size={28}
+                        backgroundColor={colors.primary}
+                        iconColor="#fff"
+                      />
+                      <Text style={styles.peopleChipName} numberOfLines={1}>
+                        {u.name}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() =>
+                          setEventAttendees((prev) => prev.filter((a) => a.id !== u.id))
+                        }
+                        hitSlop={8}
+                      >
+                        <X size={14} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
               )}
-            </TouchableOpacity>
-            {eventModal?.mode === 'edit' && eventModal.event ? (
-              <TouchableOpacity
-                style={styles.dangerBtn}
-                onPress={() => confirmDeleteEvent(eventModal.event!)}
-              >
-                <Trash2 size={16} color={colors.error} />
-                <Text style={[styles.dangerBtnText, { color: colors.error }]}>Excluir</Text>
+
+              <Text style={styles.fieldLabel}>Ata da reunião (PDF)</Text>
+              <TouchableOpacity style={styles.ataPickBtn} onPress={() => void pickAtaPdf()}>
+                <Upload size={16} color={colors.primary} strokeWidth={2.2} />
+                <Text style={styles.ataPickText}>
+                  {pendingAta ? 'Trocar PDF' : 'Selecionar PDF'}
+                </Text>
               </TouchableOpacity>
-            ) : null}
+              {pendingAta || (eventAtaUrl && !removeAtaOnSave) ? (
+                <View style={styles.ataRow}>
+                  <FileText size={16} color={colors.textSecondary} />
+                  <Text style={styles.ataName} numberOfLines={1}>
+                    {pendingAta?.name || eventAtaName || 'ata.pdf'}
+                    {pendingAta ? ' (novo)' : ''}
+                  </Text>
+                  {!pendingAta && eventAtaUrl ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const url = resolveMediaUrl(eventAtaUrl);
+                        if (url) void Linking.openURL(url);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Download size={16} color={colors.primary} />
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (pendingAta) {
+                        setPendingAta(null);
+                      } else {
+                        setRemoveAtaOnSave(true);
+                        setEventAtaUrl(null);
+                        setEventAtaName(null);
+                      }
+                    }}
+                    hitSlop={8}
+                  >
+                    <Trash2 size={15} color={colors.error} />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => void saveEvent()}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Salvar</Text>
+                )}
+              </TouchableOpacity>
+              {eventModal?.mode === 'edit' && eventModal.event ? (
+                <TouchableOpacity
+                  style={styles.dangerBtn}
+                  onPress={() => confirmDeleteEvent(eventModal.event!)}
+                >
+                  <Trash2 size={16} color={colors.error} />
+                  <Text style={[styles.dangerBtnText, { color: colors.error }]}>Excluir</Text>
+                </TouchableOpacity>
+              ) : null}
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Member picker */}
+      <Modal
+        visible={memberPickerOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setMemberPickerOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '70%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Adicionar pessoa</Text>
+              <TouchableOpacity onPress={() => setMemberPickerOpen(false)}>
+                <X size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={memberSearch}
+              onChangeText={setMemberSearch}
+              placeholder="Buscar por nome ou e-mail"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              autoFocus
+            />
+            {pickerUsersQuery.isLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+                {filteredPickerUsers.length === 0 ? (
+                  <Text style={styles.peopleEmpty}>Nenhuma pessoa encontrada.</Text>
+                ) : (
+                  filteredPickerUsers.map((u) => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={styles.pickerRow}
+                      onPress={() => addAttendee(u)}
+                    >
+                      <UserAvatar
+                        uri={u.profilePhotoUrl}
+                        size={36}
+                        backgroundColor={colors.primary}
+                        iconColor="#fff"
+                      />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.pickerName} numberOfLines={1}>
+                          {u.name}
+                        </Text>
+                        <Text style={styles.pickerEmail} numberOfLines={1}>
+                          {u.email}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
       </Modal>
 
       {/* New list modal */}
@@ -1141,57 +1482,59 @@ function getStyles(colors: any, isDark: boolean) {
       fontWeight: '500',
       lineHeight: 20,
     },
-    eventList: { gap: 0 },
-    eventRow: {
+    eventList: { gap: 8 },
+    eventCard: {
       flexDirection: 'row',
-      gap: 12,
-      paddingBottom: 14,
-    },
-    eventTimeline: {
-      width: 12,
       alignItems: 'center',
-      position: 'relative',
+      gap: 10,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8F9FB',
+      paddingVertical: 11,
+      paddingHorizontal: 12,
     },
-    eventLine: {
-      position: 'absolute',
-      top: 8,
-      bottom: 0,
-      width: StyleSheet.hairlineWidth * 2,
-      backgroundColor: colors.border,
+    eventCardOngoing: {
+      borderColor: `${colors.primary}55`,
+      backgroundColor: `${colors.primary}0F`,
     },
-    eventDot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      marginTop: 4,
-      zIndex: 1,
+    eventTimeChip: {
+      minWidth: 52,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    eventBody: {
-      flex: 1,
-      minWidth: 0,
-      paddingBottom: 2,
-    },
-    eventTime: {
+    eventTimeChipText: {
       fontSize: 12,
       fontWeight: '700',
       fontVariant: ['tabular-nums'],
-      color: colors.primary,
+    },
+    eventMain: {
+      flex: 1,
+      minWidth: 0,
+      gap: 3,
     },
     eventTitle: {
       flex: 1,
-      marginTop: 0,
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '600',
       color: colors.text,
+      lineHeight: 19,
     },
     eventTitleRow: {
-      marginTop: 2,
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       gap: 6,
     },
+    eventMeta: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
     eventAvatars: {
-      marginTop: 8,
+      marginTop: 2,
       flexDirection: 'row',
       alignItems: 'center',
     },
@@ -1213,6 +1556,11 @@ function getStyles(colors: any, isDark: boolean) {
       fontSize: 9,
       fontWeight: '700',
       color: colors.text,
+    },
+    eventColorDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
     },
     listChipsScroll: {
       flexGrow: 0,
@@ -1333,15 +1681,22 @@ function getStyles(colors: any, isDark: boolean) {
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       padding: 20,
-      paddingBottom: 32,
+      paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+      maxHeight: '92%',
+    },
+    modalScroll: {
+      flexGrow: 0,
+    },
+    modalScrollPad: {
+      paddingBottom: 12,
     },
     modalHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 14,
+      marginBottom: 10,
     },
-    modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 8 },
+    modalTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
     input: {
       borderRadius: 12,
       paddingHorizontal: 14,
@@ -1357,15 +1712,140 @@ function getStyles(colors: any, isDark: boolean) {
       fontWeight: '600',
       color: colors.textSecondary,
       marginBottom: 6,
+      marginTop: 4,
     },
-    colorRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+    iconRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    iconChip: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.background,
+    },
+    iconChipActive: {
+      borderColor: colors.primary,
+      backgroundColor: isDark ? 'rgba(206,55,54,0.18)' : 'rgba(206,55,54,0.08)',
+    },
+    iconChipDash: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
     colorDot: { width: 28, height: 28, borderRadius: 14 },
     colorDotActive: { borderWidth: 3, borderColor: '#fff', elevation: 2 },
+    peopleActions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 8,
+    },
+    peopleBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderRadius: 10,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      backgroundColor: colors.background,
+    },
+    peopleBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    peopleEmpty: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 10,
+    },
+    peopleList: {
+      gap: 8,
+      marginBottom: 12,
+    },
+    peopleChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    peopleChipName: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    ataPickBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderRadius: 12,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      marginBottom: 8,
+    },
+    ataPickText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    ataRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 14,
+      paddingHorizontal: 4,
+    },
+    ataName: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    pickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    pickerName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    pickerEmail: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 1,
+    },
     primaryBtn: {
       backgroundColor: colors.primary,
       borderRadius: 12,
       paddingVertical: 14,
       alignItems: 'center',
+      marginTop: 6,
     },
     primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
     dangerBtn: {

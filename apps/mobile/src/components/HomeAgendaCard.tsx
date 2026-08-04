@@ -12,22 +12,20 @@ import { useQuery } from '@tanstack/react-query';
 import { CalendarClock, ExternalLink } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { fetchPlannerEvents, type PlannerEvent } from '../services/plannerEvents';
-import {
-  fetchPlannerTasks,
-  toTimeInputValue,
-  type PlannerTask,
-} from '../services/plannerTasks';
 import type { RootStackParamList } from '../../App';
 
 type TodayItem = {
   id: string;
-  kind: 'event' | 'task';
   title: string;
   sortAt: number;
   expiresAt: number;
-  timeLabel: string;
-  color?: string;
+  timeStart: string;
+  timeRange: string | null;
+  accent: string;
+  ongoing: boolean;
 };
+
+const MAX_ITEMS = 5;
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -41,37 +39,29 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
-function buildTodayItems(events: PlannerEvent[], tasks: PlannerTask[]): TodayItem[] {
+function formatClock(date: Date): string {
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function buildTodayEvents(events: PlannerEvent[], nowMs: number): TodayItem[] {
   const items: TodayItem[] = [];
 
   for (const ev of events) {
     const start = new Date(ev.startAt);
     if (Number.isNaN(start.getTime())) continue;
     const end = new Date(ev.endAt);
-    const expiresAt = Number.isNaN(end.getTime()) ? start.getTime() : end.getTime();
+    const endMs = Number.isNaN(end.getTime()) ? start.getTime() : end.getTime();
+    const hasRange = !Number.isNaN(end.getTime()) && endMs > start.getTime();
+
     items.push({
-      id: `ev-${ev.id}`,
-      kind: 'event',
+      id: ev.id,
       title: ev.title,
       sortAt: start.getTime(),
-      expiresAt,
-      timeLabel: start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      color: ev.color || '#3B82F6',
-    });
-  }
-
-  for (const task of tasks) {
-    if (!task.dueDate || task.completed) continue;
-    const due = new Date(task.dueDate);
-    if (Number.isNaN(due.getTime())) continue;
-    const time = toTimeInputValue(task.dueDate);
-    items.push({
-      id: `task-${task.id}`,
-      kind: 'task',
-      title: task.title,
-      sortAt: due.getTime(),
-      expiresAt: due.getTime(),
-      timeLabel: time || '—',
+      expiresAt: endMs,
+      timeStart: formatClock(start),
+      timeRange: hasRange ? `${formatClock(start)} – ${formatClock(end)}` : null,
+      accent: ev.color || '#3B82F6',
+      ongoing: start.getTime() <= nowMs && endMs >= nowMs,
     });
   }
 
@@ -104,7 +94,7 @@ export default function HomeAgendaCard() {
     [now],
   );
 
-  const { data: todayEvents = [], isLoading: loadingEvents } = useQuery({
+  const { data: todayEvents = [], isLoading } = useQuery({
     queryKey: ['planner-events', 'home-today', todayRange.from.toISOString()],
     queryFn: async () => {
       const { events } = await fetchPlannerEvents(todayRange.from, todayRange.to);
@@ -113,26 +103,14 @@ export default function HomeAgendaCard() {
     staleTime: 60_000,
   });
 
-  const { data: todayTasks = [], isLoading: loadingTasks } = useQuery({
-    queryKey: ['planner-tasks', 'home-today', todayRange.from.toISOString()],
-    queryFn: () =>
-      fetchPlannerTasks({
-        from: todayRange.from,
-        to: todayRange.to,
-        withDue: true,
-        includeCompleted: false,
-      }),
-    staleTime: 60_000,
-  });
-
   const todayItems = useMemo(() => {
-    const items = buildTodayItems(todayEvents, todayTasks);
-    const cutoff = now.getTime();
-    return items.filter((item) => item.expiresAt >= cutoff);
-  }, [todayEvents, todayTasks, now]);
+    const items = buildTodayEvents(todayEvents, now.getTime());
+    return items.filter((item) => item.expiresAt >= now.getTime());
+  }, [todayEvents, now]);
 
-  const loading = loadingEvents || loadingTasks;
-  const openAgenda = () => navigation.navigate('Agenda');
+  const visibleItems = todayItems.slice(0, MAX_ITEMS);
+  const hiddenCount = Math.max(0, todayItems.length - visibleItems.length);
+  const openAgenda = () => navigation.navigate('Agenda', { mode: 'agenda' });
 
   return (
     <View style={styles.card}>
@@ -158,53 +136,54 @@ export default function HomeAgendaCard() {
         </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {isLoading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : todayItems.length === 0 ? (
-        <Text style={styles.empty}>Nada marcado na agenda para hoje.</Text>
+        <Text style={styles.empty}>Nenhum evento para hoje.</Text>
       ) : (
         <View style={styles.list}>
-          {todayItems.map((item, index) => (
+          {visibleItems.map((item) => (
             <TouchableOpacity
               key={item.id}
-              style={styles.row}
+              style={[styles.eventRow, item.ongoing && styles.eventRowOngoing]}
               onPress={openAgenda}
               activeOpacity={0.7}
             >
-              <View style={styles.timeline}>
-                {index < todayItems.length - 1 ? <View style={styles.line} /> : null}
-                <View
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        item.kind === 'event' ? item.color || '#3B82F6' : '#F59E0B',
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.itemBody}>
-                <View style={styles.metaRow}>
-                  <Text style={styles.time}>{item.timeLabel}</Text>
-                  <Text style={styles.kind}>
-                    {item.kind === 'task' ? 'Tarefa' : 'Evento'}
-                  </Text>
-                </View>
-                <Text style={styles.itemTitle} numberOfLines={2}>
-                  {item.title}
+              <View style={[styles.timeChip, { backgroundColor: `${item.accent}18` }]}>
+                <Text style={[styles.timeChipText, { color: item.accent }]}>
+                  {item.timeStart}
                 </Text>
               </View>
+
+              <View style={styles.eventMain}>
+                <Text style={styles.eventTitle} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <Text style={styles.eventMeta} numberOfLines={1}>
+                  {item.ongoing
+                    ? 'Em andamento'
+                    : item.timeRange || item.timeStart}
+                </Text>
+              </View>
+
+              <View style={[styles.colorDot, { backgroundColor: item.accent }]} />
             </TouchableOpacity>
           ))}
+
+          {hiddenCount > 0 ? (
+            <TouchableOpacity onPress={openAgenda} activeOpacity={0.7} hitSlop={6}>
+              <Text style={styles.more}>Ver todos ({todayItems.length})</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       )}
     </View>
   );
 }
 
-const getStyles = (colors: any, _isDark: boolean) =>
+const getStyles = (colors: any, isDark: boolean) =>
   StyleSheet.create({
     card: {
       backgroundColor: colors.surface,
@@ -268,59 +247,61 @@ const getStyles = (colors: any, _isDark: boolean) =>
       lineHeight: 20,
     },
     list: {
-      gap: 0,
-    },
-    row: {
-      flexDirection: 'row',
-      gap: 12,
-      paddingBottom: 16,
-    },
-    timeline: {
-      width: 10,
-      alignItems: 'center',
-      position: 'relative',
-    },
-    line: {
-      position: 'absolute',
-      top: 6,
-      bottom: 0,
-      width: StyleSheet.hairlineWidth * 2,
-      backgroundColor: colors.border,
-    },
-    dot: {
-      width: 10,
-      height: 10,
-      borderRadius: 5,
-      marginTop: 4,
-      zIndex: 1,
-    },
-    itemBody: {
-      flex: 1,
-      minWidth: 0,
-    },
-    metaRow: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
       gap: 8,
     },
-    time: {
+    eventRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8F9FB',
+      paddingVertical: 11,
+      paddingHorizontal: 12,
+    },
+    eventRowOngoing: {
+      borderColor: `${colors.primary}55`,
+      backgroundColor: `${colors.primary}0F`,
+    },
+    timeChip: {
+      minWidth: 52,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    timeChipText: {
       fontSize: 12,
       fontWeight: '700',
       fontVariant: ['tabular-nums'],
-      color: colors.primary,
     },
-    kind: {
-      fontSize: 10,
+    eventMain: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    eventTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: colors.text,
+      lineHeight: 19,
+    },
+    eventMeta: {
+      fontSize: 11,
       fontWeight: '600',
-      letterSpacing: 0.6,
-      textTransform: 'uppercase',
       color: colors.textSecondary,
     },
-    itemTitle: {
-      marginTop: 2,
-      fontSize: 14,
+    colorDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    more: {
+      marginTop: 4,
+      fontSize: 12,
       fontWeight: '600',
-      color: colors.text,
-      lineHeight: 20,
+      color: colors.primary,
     },
   });

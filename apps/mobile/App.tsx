@@ -36,7 +36,7 @@ export type RootStackParamList = {
   FuelRequests: undefined;
   Profile: undefined;
   Pncp: undefined;
-  Agenda: undefined;
+  Agenda: { mode?: 'agenda' | 'tasks' } | undefined;
   KanbanBoards: undefined;
   KanbanBoard: { departmentKey?: string; title?: string };
   KanbanCard: { cardId: string; departmentKey?: string };

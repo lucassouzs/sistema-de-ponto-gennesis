@@ -30,6 +30,14 @@ export type PlannerEvent = {
   color: string;
   icon?: string | null;
   attendees?: PlannerEventAttendee[];
+  googleEventId?: string | null;
+  ataFileName?: string | null;
+  ataFileUrl?: string | null;
+  ataFileKey?: string | null;
+  ataFileSize?: number | null;
+  ataMimeType?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PlannerEventInput = {
@@ -60,6 +68,24 @@ export type PlannerEventsMeta = {
   canWrite: boolean;
   isOwner: boolean;
 };
+
+export type KanbanPickerUser = {
+  id: string;
+  name: string;
+  email: string;
+  profilePhotoUrl?: string | null;
+};
+
+/** Mesmas cores da agenda web. */
+export const EVENT_COLORS = [
+  '#3B82F6',
+  '#22C55E',
+  '#F59E0B',
+  '#EF4444',
+  '#A855F7',
+  '#06B6D4',
+  '#EC4899',
+];
 
 export async function fetchPlannerAgendas(): Promise<PlannerAgenda[]> {
   const res = await api.get('/api/planner-events/agendas');
@@ -105,4 +131,26 @@ export async function deletePlannerEvent(id: string): Promise<void> {
   }
 }
 
-export const EVENT_COLORS = ['#ce3736', '#2563eb', '#16a34a', '#ca8a04', '#7c3aed', '#0891b2'];
+export async function uploadPlannerEventAta(
+  id: string,
+  file: { uri: string; name: string; type: string },
+): Promise<PlannerEvent> {
+  const form = new FormData();
+  form.append('ata', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as any);
+  const res = await api.post(`/api/planner-events/${id}/ata`, form);
+  return readApiData<PlannerEvent>(res);
+}
+
+export async function deletePlannerEventAta(id: string): Promise<PlannerEvent> {
+  const res = await api.delete(`/api/planner-events/${id}/ata`);
+  return readApiData<PlannerEvent>(res);
+}
+
+export async function fetchKanbanPickerUsers(): Promise<KanbanPickerUser[]> {
+  const res = await api.get('/api/kanban/picker-users');
+  return (await readApiData<KanbanPickerUser[]>(res)) || [];
+}

@@ -4,13 +4,15 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarClock,
+  CheckSquare,
   Gavel,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Star,
 } from 'lucide-react';
 import {
   Bar,
@@ -31,8 +33,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import { fetchPlannerEvents, type PlannerEvent } from '@/lib/plannerEvents';
 import {
-  fetchPlannerTasks,
+  fetchPlannerTaskLists,
+  toDateInputValue as toPlannerDateInputValue,
   toTimeInputValue,
+  updatePlannerTask,
   type PlannerTask,
 } from '@/lib/plannerTasks';
 
@@ -157,57 +161,108 @@ function addDays(date: Date, days: number): Date {
   return d;
 }
 
-type TodayItem = {
+type AgendaEventItem = {
   id: string;
-  kind: 'event' | 'task';
   title: string;
   sortAt: number;
   expiresAt: number;
-  timeLabel: string;
-  color?: string;
+  timeStart: string;
+  timeRange: string | null;
+  accent: string;
+  ongoing: boolean;
 };
 
-function buildTodayItems(events: PlannerEvent[], tasks: PlannerTask[]): TodayItem[] {
-  const items: TodayItem[] = [];
+type TarefaPreview = {
+  task: PlannerTask;
+  dueLabel: string | null;
+  sortAt: number;
+  overdue: boolean;
+};
+
+const HOME_LIST_MAX = 5;
+
+function formatClock(date: Date): string {
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function hasMeaningfulTime(date: Date): boolean {
+  return date.getHours() !== 0 || date.getMinutes() !== 0;
+}
+
+function buildTodayEvents(events: PlannerEvent[], nowMs: number): AgendaEventItem[] {
+  const items: AgendaEventItem[] = [];
 
   for (const ev of events) {
     const start = new Date(ev.startAt);
     if (Number.isNaN(start.getTime())) continue;
     const end = new Date(ev.endAt);
-    const expiresAt = Number.isNaN(end.getTime()) ? start.getTime() : end.getTime();
+    const endMs = Number.isNaN(end.getTime()) ? start.getTime() : end.getTime();
+    const hasRange = !Number.isNaN(end.getTime()) && endMs > start.getTime();
+
     items.push({
-      id: `ev-${ev.id}`,
-      kind: 'event',
+      id: ev.id,
       title: ev.title,
       sortAt: start.getTime(),
-      expiresAt,
-      timeLabel: start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      color: ev.color || '#3B82F6',
-    });
-  }
-
-  for (const task of tasks) {
-    if (!task.dueDate || task.completed) continue;
-    const due = new Date(task.dueDate);
-    if (Number.isNaN(due.getTime())) continue;
-    const time = toTimeInputValue(task.dueDate);
-    items.push({
-      id: `task-${task.id}`,
-      kind: 'task',
-      title: task.title,
-      sortAt: due.getTime(),
-      expiresAt: due.getTime(),
-      timeLabel: time || '—',
+      expiresAt: endMs,
+      timeStart: formatClock(start),
+      timeRange: hasRange ? `${formatClock(start)} – ${formatClock(end)}` : null,
+      accent: ev.color || '#3B82F6',
+      ongoing: start.getTime() <= nowMs && endMs >= nowMs,
     });
   }
 
   return items.sort((a, b) => a.sortAt - b.sortAt);
 }
 
+function buildTarefaPreviews(tasks: PlannerTask[], now: Date): TarefaPreview[] {
+  const todayKey = toPlannerDateInputValue(now);
+  const todayStart = startOfDay(now).getTime();
+  const rows: TarefaPreview[] = [];
+
+  for (const task of tasks) {
+    if (task.completed) continue;
+
+    let dueLabel: string | null = null;
+    let sortAt = Number.POSITIVE_INFINITY;
+    let overdue = false;
+
+    if (task.dueDate) {
+      const due = new Date(task.dueDate);
+      if (!Number.isNaN(due.getTime())) {
+        sortAt = due.getTime();
+        const dueKey = toPlannerDateInputValue(due);
+        const time = toTimeInputValue(due);
+        if (dueKey === todayKey) {
+          dueLabel = hasMeaningfulTime(due) && time ? time : 'Hoje';
+        } else if (startOfDay(due).getTime() < todayStart) {
+          dueLabel = 'Atrasada';
+          overdue = true;
+        } else {
+          dueLabel = due.toLocaleDateString('pt-BR', {
+            day: '2-digit',
+            month: 'short',
+          });
+        }
+      }
+    }
+
+    rows.push({ task, dueLabel, sortAt, overdue });
+  }
+
+  return rows.sort((a, b) => {
+    if (a.task.starred !== b.task.starred) return a.task.starred ? -1 : 1;
+    if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+    if (a.sortAt !== b.sortAt) return a.sortAt - b.sortAt;
+    return a.task.title.localeCompare(b.task.title, 'pt-BR');
+  });
+}
+
 export default function HomePage() {
   const handleLogout = useLogout();
+  const queryClient = useQueryClient();
   const [now, setNow] = useState<Date>(() => new Date());
   const [profileHydrated, setProfileHydrated] = useState(false);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     setProfileHydrated(true);
@@ -246,25 +301,46 @@ export default function HomePage() {
     staleTime: 60_000,
   });
 
-  const { data: todayTasks = [], isLoading: loadingTasks } = useQuery({
-    queryKey: ['planner-tasks', 'home-today', todayRange.from.toISOString()],
-    queryFn: () =>
-      fetchPlannerTasks({
-        from: todayRange.from,
-        to: todayRange.to,
-        withDue: true,
-        includeCompleted: false,
-      }),
+  const { data: taskLists = [], isLoading: loadingTasks } = useQuery({
+    queryKey: ['planner-task-lists'],
+    queryFn: fetchPlannerTaskLists,
     staleTime: 60_000,
   });
 
-  const todayItems = useMemo(() => {
-    const items = buildTodayItems(todayEvents, todayTasks);
-    const cutoff = now.getTime();
-    return items.filter((item) => item.expiresAt >= cutoff);
-  }, [todayEvents, todayTasks, now]);
+  const todayAgendaItems = useMemo(() => {
+    const items = buildTodayEvents(todayEvents, now.getTime());
+    return items.filter((item) => item.expiresAt >= now.getTime());
+  }, [todayEvents, now]);
 
-  const agendaLoading = loadingEvents || loadingTasks;
+  const tarefaRows = useMemo(() => {
+    const open = taskLists.flatMap((list) => list.tasks || []).filter((t) => !t.completed);
+    return buildTarefaPreviews(open, now);
+  }, [taskLists, now]);
+
+  const visibleAgenda = todayAgendaItems.slice(0, HOME_LIST_MAX);
+  const hiddenAgenda = Math.max(0, todayAgendaItems.length - visibleAgenda.length);
+  const visibleTarefas = tarefaRows.slice(0, HOME_LIST_MAX);
+  const hiddenTarefas = Math.max(0, tarefaRows.length - visibleTarefas.length);
+
+  const toggleTaskMut = useMutation({
+    mutationFn: (task: PlannerTask) =>
+      updatePlannerTask(task.id, { completed: !task.completed }),
+    onMutate: (task) => setBusyTaskId(task.id),
+    onSettled: () => {
+      setBusyTaskId(null);
+      void queryClient.invalidateQueries({ queryKey: ['planner-task-lists'] });
+    },
+  });
+
+  const starTaskMut = useMutation({
+    mutationFn: (task: PlannerTask) =>
+      updatePlannerTask(task.id, { starred: !task.starred }),
+    onMutate: (task) => setBusyTaskId(task.id),
+    onSettled: () => {
+      setBusyTaskId(null);
+      void queryClient.invalidateQueries({ queryKey: ['planner-task-lists'] });
+    },
+  });
 
   const { isAdministrator, can } = usePermissions();
 
@@ -382,7 +458,7 @@ export default function HomePage() {
             </blockquote>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-stretch">
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
             {canSeePncp && (
               <Card className="flex h-full flex-col lg:col-span-2">
                 <CardHeader className="border-b-0 pb-1">
@@ -581,76 +657,202 @@ export default function HomePage() {
               </Card>
             )}
 
-            <Card className={`flex h-full flex-col ${canSeePncp ? '' : 'lg:col-span-3'}`}>
-              <CardHeader className="border-b-0 pb-1">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center space-x-3">
-                    <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
-                      <CalendarClock className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+            <div
+              className={`flex flex-col gap-6 ${
+                canSeePncp ? '' : 'lg:col-span-3 lg:grid lg:grid-cols-2'
+              }`}
+            >
+              <Card className="flex flex-col">
+                <CardHeader className="border-b-0 pb-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center space-x-3">
+                      <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                        <CalendarClock className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          Agenda
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {formattedDate}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Agenda
-                      </h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {formattedDate}
-                      </p>
-                    </div>
+                    <Link
+                      href="/ponto/agenda"
+                      aria-label="Abrir agenda"
+                      title="Abrir agenda"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
+                    >
+                      <ExternalLink className="h-4 w-4" aria-hidden />
+                    </Link>
                   </div>
-                  <Link
-                    href="/ponto/agenda"
-                    aria-label="Abrir agenda"
-                    title="Abrir agenda"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
-                  >
-                    <ExternalLink className="h-4 w-4" aria-hidden />
-                  </Link>
-                </div>
-              </CardHeader>
-              <CardContent className="flex min-h-0 flex-1 flex-col">
-                {agendaLoading ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Carregando…</p>
-                ) : todayItems.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Nada marcado na agenda para hoje.
-                  </p>
-                ) : (
-                  <ol className="relative ml-1 max-h-[320px] overflow-y-auto pr-1">
-                    {todayItems.map((item) => (
-                      <li key={item.id} className="flex gap-3 pb-5 last:pb-0">
-                        <div className="relative flex w-2.5 shrink-0 flex-col items-center self-stretch">
+                </CardHeader>
+                <CardContent className="flex min-h-0 flex-1 flex-col">
+                  {loadingEvents ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Carregando…</p>
+                  ) : todayAgendaItems.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhum evento para hoje.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleAgenda.map((item) => (
+                        <Link
+                          key={item.id}
+                          href="/ponto/agenda"
+                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:border-red-200 dark:hover:border-red-900/50 ${
+                            item.ongoing
+                              ? 'border-red-200/80 bg-red-50/70 dark:border-red-900/40 dark:bg-red-950/20'
+                              : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-800/40'
+                          }`}
+                        >
                           <span
-                            className="absolute bottom-0 left-1/2 top-[5px] w-px -translate-x-1/2 bg-gray-200 dark:bg-gray-700"
-                            aria-hidden
-                          />
-                          <span
-                            className="relative z-10 h-2.5 w-2.5 shrink-0 rounded-full"
+                            className="inline-flex min-w-[3.25rem] items-center justify-center rounded-lg px-2 py-1.5 text-xs font-bold tabular-nums"
                             style={{
-                              backgroundColor:
-                                item.kind === 'event' ? item.color || '#3B82F6' : '#F59E0B',
+                              backgroundColor: `${item.accent}18`,
+                              color: item.accent,
                             }}
+                          >
+                            {item.timeStart}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {item.title}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                              {item.ongoing
+                                ? 'Em andamento'
+                                : item.timeRange || item.timeStart}
+                            </span>
+                          </span>
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{ backgroundColor: item.accent }}
                             aria-hidden
                           />
-                        </div>
-                        <Link href="/ponto/agenda" className="group block min-w-0 flex-1">
-                          <div className="flex items-baseline gap-2">
-                            <time className="font-mono text-xs font-semibold tabular-nums text-red-600 dark:text-red-400">
-                              {item.timeLabel}
-                            </time>
-                            <span className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                              {item.kind === 'task' ? 'Tarefa' : 'Evento'}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-sm font-medium text-gray-900 group-hover:text-red-600 dark:text-gray-100 dark:group-hover:text-red-400">
-                            {item.title}
-                          </p>
                         </Link>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </CardContent>
-            </Card>
+                      ))}
+                      {hiddenAgenda > 0 ? (
+                        <Link
+                          href="/ponto/agenda"
+                          className="inline-block text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400"
+                        >
+                          Ver todos ({todayAgendaItems.length})
+                        </Link>
+                      ) : null}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="flex flex-col">
+                <CardHeader className="border-b-0 pb-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center space-x-3">
+                      <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                        <CheckSquare className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          Tarefas
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {loadingTasks
+                            ? 'Carregando…'
+                            : tarefaRows.length === 0
+                              ? 'Nenhuma pendente'
+                              : `${tarefaRows.length} pendente${
+                                  tarefaRows.length === 1 ? '' : 's'
+                                }`}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href="/ponto/agenda?view=tasks"
+                      aria-label="Abrir tarefas"
+                      title="Abrir tarefas"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-red-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-red-400"
+                    >
+                      <ExternalLink className="h-4 w-4" aria-hidden />
+                    </Link>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex min-h-0 flex-1 flex-col">
+                  {loadingTasks ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Carregando…</p>
+                  ) : tarefaRows.length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhuma tarefa pendente.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {visibleTarefas.map(({ task, dueLabel, overdue }) => {
+                        const busy = busyTaskId === task.id;
+                        return (
+                          <div
+                            key={task.id}
+                            className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/40"
+                          >
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => toggleTaskMut.mutate(task)}
+                              aria-label={`Concluir ${task.title}`}
+                              className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-gray-300 bg-white outline-none transition-colors hover:border-red-400 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-red-500"
+                            />
+                            <Link
+                              href="/ponto/agenda?view=tasks"
+                              className="min-w-0 flex-1"
+                            >
+                              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {task.title}
+                              </span>
+                              {dueLabel ? (
+                                <span
+                                  className={`mt-0.5 block text-[11px] font-semibold ${
+                                    overdue
+                                      ? 'text-red-600 dark:text-red-400'
+                                      : 'text-gray-500 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {dueLabel}
+                                </span>
+                              ) : null}
+                            </Link>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => starTaskMut.mutate(task)}
+                              aria-label={
+                                task.starred ? 'Remover estrela' : 'Marcar com estrela'
+                              }
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-amber-500 disabled:opacity-60 dark:hover:bg-gray-700"
+                            >
+                              <Star
+                                className={`h-4 w-4 ${
+                                  task.starred
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : ''
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {hiddenTarefas > 0 ? (
+                        <Link
+                          href="/ponto/agenda?view=tasks"
+                          className="inline-block text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400"
+                        >
+                          Ver todas ({tarefaRows.length})
+                        </Link>
+                      ) : null}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </div>
       </div>

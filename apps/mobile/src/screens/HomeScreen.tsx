@@ -14,7 +14,7 @@ import AppHeader from '../components/AppHeader';
 import UserAvatar from '../components/UserAvatar';
 import LiveActivitySection from '../components/LiveActivitySection';
 import HomeAgendaCard from '../components/HomeAgendaCard';
-import HomeTasksCard from '../components/HomeTasksCard';
+import HomeTarefasCard from '../components/HomeTarefasCard';
 import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 import { usePermissions } from '../hooks/usePermissions';
@@ -84,7 +84,7 @@ export default function HomeScreen() {
 
         <HomeAgendaCard />
 
-        <HomeTasksCard />
+        <HomeTarefasCard />
 
         {canSeePncp ? <PncpCaptacoesCard /> : null}
       </ScrollView>
