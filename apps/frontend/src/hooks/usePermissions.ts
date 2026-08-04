@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import {
   pathToModuleKey,
   PERMISSION_ACCESS_ACTION,
+  PERMISSION_MODULE_KEYS_OPEN_ACCESS,
 } from '@sistema-ponto/permission-modules';
 import api from '@/lib/api';
 import {
@@ -506,8 +507,15 @@ export function useRoutePermission(route: string) {
     canAccessFluigApproversRoute,
   } = usePermissions();
 
+  const OPEN_ACCESS = new Set(PERMISSION_MODULE_KEYS_OPEN_ACCESS);
+
   if (isLoading) {
     return { hasAccess: false, isLoading: true, canAccessContract };
+  }
+
+  // Drive / Kanban / Flow: liberados para qualquer usuário autenticado
+  if (OPEN_ACCESS.has(pk(route))) {
+    return { hasAccess: true, isLoading: false, canAccessContract };
   }
 
   const isAdministrator = isElevatedUser;
