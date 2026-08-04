@@ -1300,6 +1300,29 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
   const selectedModule = menuItems.find((c) => c.id === displayedModuleId) ?? menuItems[0];
 
+  /** Anima entrada só ao abrir o painel ou trocar de módulo — nunca ao navegar entre páginas. */
+  const [navEnterClass, setNavEnterClass] = useState(false);
+  const prevNavModuleRef = useRef(displayedModuleId);
+  const prevTier2VisibleRef = useRef(tier2Visible);
+  useEffect(() => {
+    const moduleChanged = prevNavModuleRef.current !== displayedModuleId;
+    const justOpened = !prevTier2VisibleRef.current && tier2Visible;
+    prevNavModuleRef.current = displayedModuleId;
+    prevTier2VisibleRef.current = tier2Visible;
+
+    if (!tier2Visible || (!moduleChanged && !justOpened)) return;
+
+    setNavEnterClass(false);
+    const raf = requestAnimationFrame(() => {
+      setNavEnterClass(true);
+    });
+    const timeout = window.setTimeout(() => setNavEnterClass(false), 700);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+    };
+  }, [displayedModuleId, tier2Visible]);
+
   /** Rail: painel aberto → módulo exibido; recolhido → rota ativa; na home recolhida → nenhum (só logo) */
   const railModuleActiveId: string | null = tier2Visible
     ? displayedModuleId
@@ -1499,7 +1522,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           </div>
 
           <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2 [@media(max-height:820px)]:pt-1">
-            {sidebarHydrated && !isLoading ? menuItems.map((category) => {
+            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? menuItems.map((category) => {
               const CategoryIcon = category.icon;
               const isRailActive = category.id === railModuleActiveId;
               const visibleItems = category.items.filter((item) =>
@@ -1677,14 +1700,11 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
           {/* Lista de páginas */}
           <nav
-            key={
-              searchTerm.trim()
-                ? `search:${searchTerm.trim().toLowerCase()}`
-                : `module:${displayedModuleId ?? 'none'}:${tier2Visible ? 'open' : 'closed'}`
-            }
-            className="sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4"
+            className={`sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4${
+              navEnterClass ? ' sidebar-nav-list--enter' : ''
+            }`}
           >
-            {sidebarHydrated && !isLoading ? searchTerm.trim() ? (
+            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? searchTerm.trim() ? (
               menuItems.map((category) => {
                 const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);
                 if (filteredItems.length === 0) return null;
