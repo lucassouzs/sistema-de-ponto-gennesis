@@ -42,16 +42,7 @@ function AgendaPage() {
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
       <div className="flex h-[calc(100dvh-6rem)] flex-col overflow-hidden lg:h-[calc(100dvh-8rem)]">
-        <div className="shrink-0 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-            {isTasks ? 'Tarefas' : 'Agenda'}
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-            {isTasks ? 'Minhas tarefas' : 'Agenda pessoal'}
-          </p>
-        </div>
-
-        <div className="mt-6 min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-hidden">
           {isTasks ? (
             <KanbanTasksView mode="tasks" onModeChange={setView} />
           ) : (

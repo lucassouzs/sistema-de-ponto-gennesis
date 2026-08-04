@@ -2290,6 +2290,7 @@ function KanbanBoardPicker({
   defaultDepartmentKey,
   canCreateBoard,
   isAdministrator,
+  currentBoardLabel,
   onSelect,
   onSetDefault,
   onCreateBoard,
@@ -2302,6 +2303,8 @@ function KanbanBoardPicker({
   defaultDepartmentKey?: string | null;
   canCreateBoard?: boolean;
   isAdministrator?: boolean;
+  /** Nome exibido no botão (fallback se o quadro ainda não estiver na lista). */
+  currentBoardLabel?: string | null;
   onSelect: (departmentKey: string) => void;
   onSetDefault: (departmentKey: string) => void;
   onCreateBoard: () => void;
@@ -2311,6 +2314,11 @@ function KanbanBoardPicker({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const currentBoardName =
+    currentBoardLabel?.trim() ||
+    boards.find((b) => b.departmentKey === currentDepartmentKey)?.department ||
+    'Quadros';
 
   useEffect(() => {
     if (!open) return;
@@ -2331,11 +2339,12 @@ function KanbanBoardPicker({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label="Quadros"
-        title="Quadros"
-        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        aria-label={`Quadro atual: ${currentBoardName}`}
+        title={currentBoardName}
+        className="inline-flex h-10 max-w-[min(18rem,calc(100vw-8rem))] items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
       >
-        <LayoutGrid className="h-4 w-4 shrink-0" />
+        <LayoutGrid className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
+        <span className="min-w-0 truncate">{currentBoardName}</span>
       </button>
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 min-w-[16rem] w-max max-w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
@@ -3850,31 +3859,8 @@ function KanbanPage() {
             'mb-[-1rem] h-[calc(100dvh-5rem)] overflow-hidden lg:mb-[-2rem] lg:h-[calc(100dvh-6rem)]',
         )}
       >
-        {/* ── Page Header ── */}
-        <div className="mb-4 flex-shrink-0 space-y-6 px-4">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Tasks
-            </h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              {board?.department ? (
-                <span className="inline-flex items-center justify-center gap-1.5">
-                  <span>{board.department}</span>
-                  {boardReadOnly ? (
-                    <span title="Somente leitura" className="inline-flex">
-                      <Eye
-                        className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400"
-                        aria-hidden
-                      />
-                    </span>
-                  ) : null}
-                </span>
-              ) : (
-                'Organize cards e colunas por setor'
-              )}
-            </p>
-          </div>
-
+        {/* ── Toolbar ── */}
+        <div className="mb-4 flex-shrink-0 px-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Esquerda: visão + quadros */}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -3925,6 +3911,7 @@ function KanbanPage() {
               <KanbanBoardPicker
                 boards={boardsList ?? []}
                 currentDepartmentKey={board?.departmentKey}
+                currentBoardLabel={board?.department}
                 defaultDepartmentKey={defaultDepartmentKey}
                 canCreateBoard={!isAdministrator}
                 isAdministrator={isAdministrator}
@@ -3939,6 +3926,15 @@ function KanbanPage() {
                 }
                 onDeleteBoard={setBoardDeleteTarget}
               />
+              {boardReadOnly ? (
+                <span
+                  title="Somente leitura"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
+                >
+                  <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  Somente leitura
+                </span>
+              ) : null}
             </div>
 
             {/* Direita: busca + filtro + arquivo + export/import + etiquetas */}
