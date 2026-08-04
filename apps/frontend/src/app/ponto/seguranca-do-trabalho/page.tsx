@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
+  CheckCircle,
+  Clock,
   Download,
   Edit,
   FileText,
@@ -18,11 +20,13 @@ import {
   Upload,
   Users,
   X,
+  type LucideIcon,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
@@ -50,7 +54,7 @@ type StatusValidadeFilter =
   | 'vencidos'
   | 'validade_padrao';
 
-type AsoTipo = { id: string; nome: string };
+type AsoTipo = { id: string; nome: string; valorPadrao?: string | number | null };
 
 type CargoRisco = {
   id: string;
@@ -79,6 +83,7 @@ type AsoRegistro = {
   medicoResponsavel: string;
   crmMedico: string;
   clinica: string;
+  valor?: string | number | null;
   anexoUrl?: string | null;
   observacoes?: string | null;
   validadePadrao: boolean;
@@ -104,6 +109,58 @@ type DashboardData = {
   cobertura: { ativos: number; comAsoValido: number; percentual: number };
   cargosSemPeriodicidade: number;
 };
+
+const ASO_STAT_CARDS: Array<{
+  key: string;
+  label: string;
+  filter: StatusValidadeFilter | 'cobertura';
+  iconBg: string;
+  iconColor: string;
+  Icon: LucideIcon;
+  getCount: (d: DashboardData | undefined) => number | string;
+  getSubtitle?: (d: DashboardData | undefined) => string | undefined;
+}> = [
+  {
+    key: 'total',
+    label: 'Total',
+    filter: '',
+    iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-600 dark:text-blue-400',
+    Icon: FileText,
+    getCount: (d) => d?.total ?? '—',
+  },
+  {
+    key: 'a_vencer_30',
+    label: 'A vencer 30d',
+    filter: 'a_vencer_30',
+    iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
+    iconColor: 'text-yellow-600 dark:text-yellow-400',
+    Icon: Clock,
+    getCount: (d) => d?.aVencer30 ?? '—',
+  },
+  {
+    key: 'vencidos',
+    label: 'Vencidos',
+    filter: 'vencidos',
+    iconBg: 'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-600 dark:text-red-400',
+    Icon: AlertTriangle,
+    getCount: (d) => d?.vencidos ?? '—',
+  },
+  {
+    key: 'cobertura',
+    label: 'Cobertura (ativos)',
+    filter: 'cobertura',
+    iconBg: 'bg-green-100 dark:bg-green-900/30',
+    iconColor: 'text-green-600 dark:text-green-400',
+    Icon: CheckCircle,
+    getCount: (d) => (d?.cobertura != null ? `${d.cobertura.percentual}%` : '—'),
+    getSubtitle: (d) =>
+      d?.cobertura != null
+        ? `${d.cobertura.comAsoValido}/${d.cobertura.ativos} com ASO válido`
+        : undefined,
+  },
+];
 
 type PorFuncionarioStatus = 'validos' | 'a_vencer_30' | 'a_vencer_60' | 'vencidos' | 'sem_aso';
 
@@ -150,6 +207,7 @@ type FormState = {
   medicoResponsavel: string;
   crmMedico: string;
   clinica: string;
+  valor: string;
   observacoes: string;
 };
 
@@ -161,6 +219,7 @@ const EMPTY_FORM: FormState = {
   medicoResponsavel: '',
   crmMedico: '',
   clinica: '',
+  valor: '',
   observacoes: '',
 };
 
@@ -189,6 +248,20 @@ function formatDateBr(value?: string | null) {
   const [y, m, day] = d.split('-');
   if (!y || !m || !day) return value;
   return `${day}/${m}/${y}`;
+}
+
+function formatMoneyBr(value?: string | number | null) {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function valorToFormString(value?: string | number | null) {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return String(n);
 }
 
 function todayIso(): string {
@@ -249,6 +322,8 @@ export default function SegurancaDoTrabalhoPage() {
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showPrecosModal, setShowPrecosModal] = useState(false);
+  const [precosDraft, setPrecosDraft] = useState<Record<string, string>>({});
 
   // Filtros — Por funcionário
   const [pfSearch, setPfSearch] = useState('');
@@ -289,7 +364,41 @@ export default function SegurancaDoTrabalhoPage() {
     queryFn: async () => (await api.get('/aso/tipos')).data?.data || [],
   });
 
-  const { data: dashboard } = useQuery<DashboardData>({
+  const savePrecosMutation = useMutation({
+    mutationFn: async (draft: Record<string, string>) => {
+      await Promise.all(
+        Object.entries(draft).map(([id, valorPadrao]) =>
+          api.put(`/aso/tipos/${id}`, {
+            valorPadrao: valorPadrao.trim() === '' ? null : valorPadrao,
+          })
+        )
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['aso-tipos'] });
+      toast.success('Preços padrão atualizados');
+      setShowPrecosModal(false);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message || 'Não foi possível salvar os preços');
+    },
+  });
+
+  const openPrecosModal = () => {
+    const draft: Record<string, string> = {};
+    for (const t of tipos) {
+      draft[t.id] = valorToFormString(t.valorPadrao);
+    }
+    setPrecosDraft(draft);
+    setShowPrecosModal(true);
+  };
+
+  const valorPadraoDoTipo = (tipoAsoId: string) => {
+    const tipo = tipos.find((t) => t.id === tipoAsoId);
+    return valorToFormString(tipo?.valorPadrao);
+  };
+
+  const { data: dashboard, isLoading: loadingDashboard } = useQuery<DashboardData>({
     queryKey: ['aso-dashboard'],
     queryFn: async () => (await api.get('/aso/dashboard')).data?.data,
   });
@@ -669,6 +778,7 @@ export default function SegurancaDoTrabalhoPage() {
       medicoResponsavel: row.medicoResponsavel,
       crmMedico: row.crmMedico,
       clinica: row.clinica,
+      valor: valorToFormString(row.valor),
       observacoes: row.observacoes || '',
     });
     setAnexoFile(null);
@@ -691,6 +801,7 @@ export default function SegurancaDoTrabalhoPage() {
       medicoResponsavel: row.medicoResponsavel,
       crmMedico: row.crmMedico,
       clinica: row.clinica,
+      valor: valorPadraoDoTipo(row.tipoAsoId),
       observacoes: '',
     });
     setAnexoFile(null);
@@ -736,6 +847,7 @@ export default function SegurancaDoTrabalhoPage() {
         medicoResponsavel: form.medicoResponsavel,
         crmMedico: form.crmMedico,
         clinica: form.clinica,
+        valor: form.valor.trim() === '' ? null : form.valor.trim(),
         observacoes: form.observacoes || null,
       };
 
@@ -923,81 +1035,33 @@ export default function SegurancaDoTrabalhoPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {(
-              [
-                {
-                  label: 'Total',
-                  value: dashboard?.total ?? '—',
-                  sub: undefined,
-                  onClick: () => applyDashboardFilter(''),
-                  tone: undefined,
-                },
-                {
-                  label: 'A vencer 30d',
-                  value: dashboard?.aVencer30 ?? '—',
-                  sub: undefined,
-                  onClick: () => applyDashboardFilter('a_vencer_30'),
-                  tone: 'text-amber-600 dark:text-amber-400',
-                },
-                {
-                  label: 'A vencer 60d',
-                  value: dashboard?.aVencer60 ?? '—',
-                  sub: undefined,
-                  onClick: () => applyDashboardFilter('a_vencer_60'),
-                  tone: 'text-amber-600 dark:text-amber-400',
-                },
-                {
-                  label: 'Vencidos',
-                  value: dashboard?.vencidos ?? '—',
-                  sub: undefined,
-                  onClick: () => applyDashboardFilter('vencidos'),
-                  tone: 'text-red-600 dark:text-red-400',
-                },
-                {
-                  label: 'Validade padrão',
-                  value: dashboard?.validadePadrao ?? '—',
-                  sub: undefined,
-                  onClick: () => applyDashboardFilter('validade_padrao'),
-                  tone: undefined,
-                },
-                {
-                  label: 'Cobertura (ativos)',
-                  value: dashboard?.cobertura != null ? `${dashboard.cobertura.percentual}%` : '—',
-                  sub:
-                    dashboard?.cobertura != null
-                      ? `${dashboard.cobertura.comAsoValido}/${dashboard.cobertura.ativos} com ASO válido`
-                      : undefined,
-                  onClick: () => setTab('por-funcionario'),
-                  tone: 'text-emerald-600 dark:text-emerald-400',
-                },
-              ] as Array<{
-                label: string;
-                value: string | number;
-                sub?: string;
-                onClick: () => void;
-                tone?: string;
-              }>
-            ).map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={item.onClick}
-                className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-red-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:hover:border-red-800"
-              >
-                <p className="text-xs text-gray-500 dark:text-gray-400">{item.label}</p>
-                <p
-                  className={`mt-1 text-xl font-semibold ${
-                    item.tone || 'text-gray-900 dark:text-gray-100'
-                  }`}
-                >
-                  {item.value}
-                </p>
-                {item.sub ? (
-                  <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">{item.sub}</p>
-                ) : null}
-              </button>
-            ))}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+            {ASO_STAT_CARDS.map((card) => {
+              const isCobertura = card.filter === 'cobertura';
+              const isActive = isCobertura
+                ? tab === 'por-funcionario'
+                : tab === 'registros' && statusValidade === card.filter;
+              return (
+                <FilterStatCard
+                  key={card.key}
+                  label={card.label}
+                  count={card.getCount(dashboard)}
+                  icon={card.Icon}
+                  iconBg={card.iconBg}
+                  iconColor={card.iconColor}
+                  isActive={isActive}
+                  loading={loadingDashboard}
+                  subtitle={card.getSubtitle?.(dashboard)}
+                  onClick={() => {
+                    if (isCobertura) {
+                      setTab('por-funcionario');
+                      return;
+                    }
+                    applyDashboardFilter(card.filter as StatusValidadeFilter);
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -1056,6 +1120,13 @@ export default function SegurancaDoTrabalhoPage() {
                   <div className={cadastroListClasses.cardToolbar}>
                     <button
                       type="button"
+                      onClick={openPrecosModal}
+                      className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      Preços
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setShowImportModal(true)}
                       className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
                     >
@@ -1081,7 +1152,7 @@ export default function SegurancaDoTrabalhoPage() {
                     </button>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
@@ -1119,8 +1190,6 @@ export default function SegurancaDoTrabalhoPage() {
                     placeholder="Setor"
                     noFocusRing
                   />
-                </div>
-                <div className="mt-2 grid gap-2 sm:w-56">
                   <SingleSelectSearchDropdown
                     value={filterPosition}
                     onChange={setFilterPosition}
@@ -1166,7 +1235,7 @@ export default function SegurancaDoTrabalhoPage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className={cadastroListClasses.table}>
+                    <table className="w-full min-w-[56rem] text-sm">
                       <thead>
                         <tr>
                           <th className={cadastroListClasses.th}>Funcionário</th>
@@ -1174,7 +1243,10 @@ export default function SegurancaDoTrabalhoPage() {
                           <th className={cadastroListClasses.thCenter}>Exame</th>
                           <th className={cadastroListClasses.thCenter}>Validade</th>
                           <th className={cadastroListClasses.thCenter}>Resultado</th>
-                          <th className={cadastroListClasses.thRight}>Ação</th>
+                          <th className={cadastroListClasses.thNumeric}>Valor</th>
+                          <th className="min-w-[10rem] px-2 py-4 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-3">
+                            Ação
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1217,8 +1289,11 @@ export default function SegurancaDoTrabalhoPage() {
                             <td className="px-3 py-3 text-center text-sm">
                               {RESULTADO_LABEL[row.resultado]}
                             </td>
-                            <td className="px-3 py-3">
-                              <div className="flex justify-end gap-1">
+                            <td className={`${cadastroListClasses.tdNumeric} whitespace-nowrap`}>
+                              {formatMoneyBr(row.valor)}
+                            </td>
+                            <td className="min-w-[10rem] whitespace-nowrap px-2 py-3 align-middle sm:px-3">
+                              <div className="flex flex-nowrap justify-end gap-1">
                                 <button
                                   type="button"
                                   onClick={() => openRenovar(row)}
@@ -1722,7 +1797,16 @@ export default function SegurancaDoTrabalhoPage() {
               <label className="mb-1 block text-sm font-medium">Tipo de ASO *</label>
               <SingleSelectSearchDropdown
                 value={form.tipoAsoId}
-                onChange={(tipoAsoId) => setForm((f) => ({ ...f, tipoAsoId }))}
+                onChange={(tipoAsoId) =>
+                  setForm((f) => ({
+                    ...f,
+                    tipoAsoId,
+                    valor:
+                      !editing || !f.valor.trim()
+                        ? valorPadraoDoTipo(tipoAsoId)
+                        : f.valor,
+                  }))
+                }
                 options={tipoOptions}
                 placeholder="Selecionar tipo..."
                 noFocusRing
@@ -1764,15 +1848,33 @@ export default function SegurancaDoTrabalhoPage() {
                 ) : null}
               </div>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Resultado *</label>
-              <SingleSelectSearchDropdown
-                value={form.resultado}
-                onChange={(resultado) => setForm((f) => ({ ...f, resultado: resultado as AsoResultado }))}
-                options={resultadoOptions}
-                placeholder="Selecionar..."
-                noFocusRing
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium">Resultado *</label>
+                <SingleSelectSearchDropdown
+                  value={form.resultado}
+                  onChange={(resultado) => setForm((f) => ({ ...f, resultado: resultado as AsoResultado }))}
+                  options={resultadoOptions}
+                  placeholder="Selecionar..."
+                  noFocusRing
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Valor (R$)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="Ex.: 150,00"
+                  value={form.valor}
+                  onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Ao escolher o tipo, preenche com o preço padrão (se configurado).
+                </p>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
@@ -1901,6 +2003,7 @@ export default function SegurancaDoTrabalhoPage() {
                         </div>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           Exame em {formatDateBr(r.dataExame)} · {RESULTADO_LABEL[r.resultado]}
+                          {r.valor != null && r.valor !== '' ? ` · ${formatMoneyBr(r.valor)}` : ''}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
                           {r.medicoResponsavel} (CRM {r.crmMedico}) · {r.clinica}
@@ -1948,6 +2051,55 @@ export default function SegurancaDoTrabalhoPage() {
               className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"
             >
               Excluir
+            </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showPrecosModal}
+          onClose={() => setShowPrecosModal(false)}
+          title="Preços padrão por tipo de ASO"
+        >
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+            Defina o valor sugerido de cada tipo. Ao cadastrar um ASO, o campo Valor é preenchido
+            automaticamente com esse preço (você pode alterar no registro).
+          </p>
+          <div className="space-y-3">
+            {tipos.map((tipo) => (
+              <div key={tipo.id} className="flex items-center gap-3">
+                <label className="w-40 shrink-0 text-sm font-medium text-gray-800 dark:text-gray-200">
+                  {tipo.nome}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  value={precosDraft[tipo.id] ?? ''}
+                  onChange={(e) =>
+                    setPrecosDraft((d) => ({ ...d, [tipo.id]: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPrecosModal(false)}
+              className="rounded-lg border px-4 py-2 text-sm dark:border-gray-600"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => savePrecosMutation.mutate(precosDraft)}
+              disabled={savePrecosMutation.isPending}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {savePrecosMutation.isPending ? 'Salvando...' : 'Salvar preços'}
             </button>
           </div>
         </Modal>

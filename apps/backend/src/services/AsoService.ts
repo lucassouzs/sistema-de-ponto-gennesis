@@ -50,6 +50,25 @@ function todayDateOnly(): Date {
   return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
 }
 
+function parseValorMoney(value: unknown): Prisma.Decimal | null {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  if (value instanceof Prisma.Decimal) return value;
+  const raw = String(value)
+    .trim()
+    .replace(/R\$\s?/gi, '')
+    .replace(/\s/g, '');
+  if (!raw || raw === '-' || raw === '—' || raw.toLowerCase() === 'n/a') return null;
+  const normalized =
+    raw.includes(',') && raw.includes('.')
+      ? raw.replace(/\./g, '').replace(',', '.')
+      : raw.includes(',')
+        ? raw.replace(',', '.')
+        : raw;
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) return null;
+  return new Prisma.Decimal(num.toFixed(2));
+}
+
 function parseDateOnly(value: string | Date): Date {
   if (value instanceof Date) {
     return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
@@ -75,6 +94,24 @@ function classifyValidade(dataValidade: Date, today: Date, in30: Date, in60: Dat
 export class AsoService {
   async listTipos() {
     return prisma.asoTipo.findMany({ orderBy: { nome: 'asc' } });
+  }
+
+  async updateTipo(
+    id: string,
+    input: { valorPadrao?: unknown }
+  ) {
+    const existing = await prisma.asoTipo.findUnique({ where: { id } });
+    if (!existing) throw createError('Tipo de ASO não encontrado', 404);
+
+    const data: Prisma.AsoTipoUpdateInput = {};
+    if (Object.prototype.hasOwnProperty.call(input, 'valorPadrao')) {
+      data.valorPadrao = parseValorMoney(input.valorPadrao);
+    }
+
+    return prisma.asoTipo.update({
+      where: { id },
+      data,
+    });
   }
 
   async listCargosRisco() {
@@ -600,6 +637,7 @@ export class AsoService {
     medicoResponsavel: string;
     crmMedico: string;
     clinica: string;
+    valor?: unknown;
     anexoUrl?: string | null;
     observacoes?: string | null;
     criadoPorId?: string | null;
@@ -627,6 +665,11 @@ export class AsoService {
     const resolved = await this.resolvePeriodicidade(employee.position, employee.department);
     const dataValidade = addMonths(dataExame, resolved.periodicidadeMeses);
 
+    const valorInformado = Object.prototype.hasOwnProperty.call(input, 'valor')
+      ? parseValorMoney(input.valor)
+      : null;
+    const valor = valorInformado ?? tipo.valorPadrao ?? null;
+
     const todayUtc = todayDateOnly();
     const conflito = await prisma.asoRegistro.findFirst({
       where: {
@@ -647,6 +690,7 @@ export class AsoService {
         medicoResponsavel,
         crmMedico,
         clinica,
+        valor,
         anexoUrl: input.anexoUrl?.trim() || null,
         observacoes: input.observacoes?.trim() || null,
         validadePadrao: resolved.validadePadrao,
@@ -679,6 +723,7 @@ export class AsoService {
       medicoResponsavel: string;
       crmMedico: string;
       clinica: string;
+      valor: unknown;
       anexoUrl: string | null;
       observacoes: string | null;
       recalcularValidade: boolean;
@@ -745,6 +790,9 @@ export class AsoService {
           : {}),
         ...(input.crmMedico !== undefined ? { crmMedico: input.crmMedico.trim() } : {}),
         ...(input.clinica !== undefined ? { clinica: input.clinica.trim() } : {}),
+        ...(Object.prototype.hasOwnProperty.call(input, 'valor')
+          ? { valor: parseValorMoney(input.valor) }
+          : {}),
         ...(input.anexoUrl !== undefined
           ? { anexoUrl: input.anexoUrl?.trim() || null }
           : {}),
@@ -1014,6 +1062,7 @@ export class AsoService {
       medicoResponsavel: string;
       crmMedico: string;
       clinica: string;
+      valor?: unknown;
       anexoUrl?: string | null;
       observacoes?: string | null;
     }>,
@@ -1108,6 +1157,7 @@ export class AsoService {
           medicoResponsavel: row.medicoResponsavel,
           crmMedico: row.crmMedico,
           clinica: row.clinica,
+          valor: row.valor,
           anexoUrl: row.anexoUrl,
           observacoes: row.observacoes,
           criadoPorId,

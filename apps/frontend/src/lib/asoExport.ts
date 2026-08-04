@@ -9,6 +9,7 @@ export type AsoExportRow = {
   medicoResponsavel: string;
   crmMedico: string;
   clinica: string;
+  valor?: string | number | null;
   observacoes?: string | null;
   validadePadrao: boolean;
   tipoAso?: { nome: string } | null;
@@ -34,6 +35,13 @@ function formatDateBrExport(value?: string | null): string {
   return `${day}/${m}/${y}`;
 }
 
+function formatMoneyExport(value?: string | number | null): string {
+  if (value === null || value === undefined || value === '') return '';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function exportAsoRegistrosToExcel(rows: AsoExportRow[]): void {
   const today = new Date();
   const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
@@ -56,6 +64,7 @@ export function exportAsoRegistrosToExcel(rows: AsoExportRow[]): void {
       'Data de Validade': formatDateBrExport(row.dataValidade),
       'Status Validade': statusValidade,
       Resultado: RESULTADO_LABEL[row.resultado] || row.resultado,
+      Valor: formatMoneyExport(row.valor),
       'Médico Responsável': row.medicoResponsavel,
       CRM: row.crmMedico,
       Clínica: row.clinica,
@@ -76,6 +85,7 @@ export function exportAsoRegistrosToExcel(rows: AsoExportRow[]): void {
     { wch: 14 },
     { wch: 14 },
     { wch: 18 },
+    { wch: 12 },
     { wch: 22 },
     { wch: 12 },
     { wch: 22 },

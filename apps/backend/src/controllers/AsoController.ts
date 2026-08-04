@@ -34,6 +34,17 @@ export class AsoController {
     }
   }
 
+  async updateTipo(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const data = await asoService.updateTipo(req.params.id, {
+        valorPadrao: req.body?.valorPadrao,
+      });
+      return res.json({ success: true, data, message: 'Tipo de ASO atualizado' });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   async listCargosRisco(_req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = await asoService.listCargosRisco();
@@ -252,6 +263,7 @@ export class AsoController {
         medicoResponsavel,
         crmMedico,
         clinica,
+        valor,
         anexoUrl,
         observacoes,
       } = req.body;
@@ -271,6 +283,7 @@ export class AsoController {
         medicoResponsavel,
         crmMedico,
         clinica,
+        valor,
         anexoUrl,
         observacoes,
         criadoPorId: req.user?.id,
