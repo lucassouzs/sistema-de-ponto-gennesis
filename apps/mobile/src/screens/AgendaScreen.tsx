@@ -744,7 +744,7 @@ export default function AgendaScreen() {
                 return (
                   <TouchableOpacity
                     key={ev.id}
-                    style={[styles.eventCard, ongoing && styles.eventCardOngoing]}
+                    style={styles.eventCard}
                     onPress={() => canWrite && openEditEvent(ev)}
                     activeOpacity={0.75}
                   >
@@ -774,35 +774,6 @@ export default function AgendaScreen() {
                           ? ` · ${attendees.length} pessoa${attendees.length === 1 ? '' : 's'}`
                           : ''}
                       </Text>
-                      {attendees.length > 0 ? (
-                        <View style={styles.eventAvatars}>
-                          {attendees.slice(0, 3).map((u, i) => (
-                            <View
-                              key={u.id}
-                              style={[
-                                styles.eventAvatarWrap,
-                                { marginLeft: i === 0 ? 0 : -6, zIndex: 3 - i },
-                              ]}
-                            >
-                              <UserAvatar
-                                uri={u.profilePhotoUrl}
-                                size={22}
-                                backgroundColor={isDark ? '#374151' : '#e5e7eb'}
-                                iconColor={colors.textSecondary}
-                                borderColor={colors.surface}
-                                borderWidth={2}
-                              />
-                            </View>
-                          ))}
-                          {attendees.length > 3 ? (
-                            <View style={[styles.eventAvatarMore, { marginLeft: -6 }]}>
-                              <Text style={styles.eventAvatarMoreText}>
-                                +{attendees.length - 3}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                      ) : null}
                     </View>
 
                     <View style={[styles.eventColorDot, { backgroundColor: accent }]} />
@@ -1494,10 +1465,6 @@ function getStyles(colors: any, isDark: boolean) {
       paddingVertical: 11,
       paddingHorizontal: 12,
     },
-    eventCardOngoing: {
-      borderColor: `${colors.primary}55`,
-      backgroundColor: `${colors.primary}0F`,
-    },
     eventTimeChip: {
       minWidth: 52,
       paddingHorizontal: 8,
@@ -1532,30 +1499,6 @@ function getStyles(colors: any, isDark: boolean) {
       fontSize: 11,
       fontWeight: '600',
       color: colors.textSecondary,
-    },
-    eventAvatars: {
-      marginTop: 2,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    eventAvatarWrap: {
-      borderRadius: 11,
-    },
-    eventAvatarMore: {
-      minWidth: 22,
-      height: 22,
-      borderRadius: 11,
-      paddingHorizontal: 4,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: isDark ? '#4b5563' : '#d1d5db',
-      borderWidth: 2,
-      borderColor: colors.surface,
-    },
-    eventAvatarMoreText: {
-      fontSize: 9,
-      fontWeight: '700',
-      color: colors.text,
     },
     eventColorDot: {
       width: 8,

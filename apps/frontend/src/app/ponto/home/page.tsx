@@ -696,47 +696,43 @@ export default function HomePage() {
                       Nenhum evento para hoje.
                     </p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {visibleAgenda.map((item) => (
                         <Link
                           key={item.id}
                           href="/ponto/agenda"
-                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors hover:border-red-200 dark:hover:border-red-900/50 ${
-                            item.ongoing
-                              ? 'border-red-200/80 bg-red-50/70 dark:border-red-900/40 dark:bg-red-950/20'
-                              : 'border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-800/40'
-                          }`}
+                          className="group -mx-1 flex items-center gap-3 rounded-md px-1 py-2.5 transition-colors first:pt-1.5 last:pb-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                         >
                           <span
-                            className="inline-flex min-w-[3.25rem] items-center justify-center rounded-lg px-2 py-1.5 text-xs font-bold tabular-nums"
-                            style={{
-                              backgroundColor: `${item.accent}18`,
-                              color: item.accent,
-                            }}
-                          >
+                            className="w-0.5 self-stretch shrink-0 rounded-full"
+                            style={{ backgroundColor: item.accent }}
+                            aria-hidden
+                          />
+                          <span className="w-11 shrink-0 text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400">
                             {item.timeStart}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <span className="block truncate text-sm font-medium text-gray-900 group-hover:text-red-700 dark:text-gray-100 dark:group-hover:text-red-300">
                               {item.title}
                             </span>
-                            <span className="mt-0.5 block text-[11px] font-semibold text-gray-500 dark:text-gray-400">
+                            <span
+                              className={`mt-0.5 block text-xs ${
+                                item.ongoing
+                                  ? 'font-medium text-red-600 dark:text-red-400'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                            >
                               {item.ongoing
                                 ? 'Em andamento'
                                 : item.timeRange || item.timeStart}
                             </span>
                           </span>
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: item.accent }}
-                            aria-hidden
-                          />
                         </Link>
                       ))}
                       {hiddenAgenda > 0 ? (
                         <Link
                           href="/ponto/agenda"
-                          className="inline-block text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400"
+                          className="inline-block pt-2.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400"
                         >
                           Ver todos ({todayAgendaItems.length})
                         </Link>
@@ -786,40 +782,40 @@ export default function HomePage() {
                       Nenhuma tarefa pendente.
                     </p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="divide-y divide-gray-100 dark:divide-gray-800">
                       {visibleTarefas.map(({ task, dueLabel, overdue }) => {
                         const busy = busyTaskId === task.id;
                         return (
                           <div
                             key={task.id}
-                            className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800/40"
+                            className="group -mx-1 flex items-center gap-2.5 rounded-md px-1 py-2 first:pt-1.5 last:pb-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                           >
                             <button
                               type="button"
                               disabled={busy}
                               onClick={() => toggleTaskMut.mutate(task)}
                               aria-label={`Concluir ${task.title}`}
-                              className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-gray-300 bg-white outline-none transition-colors hover:border-red-400 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900 dark:hover:border-red-500"
+                              className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border border-gray-300 bg-white outline-none transition-colors hover:border-red-400 disabled:opacity-60 dark:border-gray-600 dark:bg-transparent dark:hover:border-red-500"
                             />
                             <Link
                               href="/ponto/agenda?view=tasks"
                               className="min-w-0 flex-1"
                             >
-                              <span className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                              <span className="block truncate text-sm text-gray-800 group-hover:text-gray-950 dark:text-gray-200 dark:group-hover:text-gray-50">
                                 {task.title}
                               </span>
-                              {dueLabel ? (
-                                <span
-                                  className={`mt-0.5 block text-[11px] font-semibold ${
-                                    overdue
-                                      ? 'text-red-600 dark:text-red-400'
-                                      : 'text-gray-500 dark:text-gray-400'
-                                  }`}
-                                >
-                                  {dueLabel}
-                                </span>
-                              ) : null}
                             </Link>
+                            {dueLabel ? (
+                              <span
+                                className={`shrink-0 text-xs tabular-nums ${
+                                  overdue
+                                    ? 'font-medium text-red-600 dark:text-red-400'
+                                    : 'text-gray-400 dark:text-gray-500'
+                                }`}
+                              >
+                                {dueLabel}
+                              </span>
+                            ) : null}
                             <button
                               type="button"
                               disabled={busy}
@@ -827,10 +823,10 @@ export default function HomePage() {
                               aria-label={
                                 task.starred ? 'Remover estrela' : 'Marcar com estrela'
                               }
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-amber-500 disabled:opacity-60 dark:hover:bg-gray-700"
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-gray-300 outline-none transition-colors hover:text-amber-500 disabled:opacity-60 dark:text-gray-600"
                             >
                               <Star
-                                className={`h-4 w-4 ${
+                                className={`h-3.5 w-3.5 ${
                                   task.starred
                                     ? 'fill-amber-400 text-amber-400'
                                     : ''
@@ -843,7 +839,7 @@ export default function HomePage() {
                       {hiddenTarefas > 0 ? (
                         <Link
                           href="/ponto/agenda?view=tasks"
-                          className="inline-block text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400"
+                          className="inline-block pt-2.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400"
                         >
                           Ver todas ({tarefaRows.length})
                         </Link>

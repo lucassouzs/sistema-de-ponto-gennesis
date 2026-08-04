@@ -144,31 +144,29 @@ export default function HomeAgendaCard() {
         <Text style={styles.empty}>Nenhum evento para hoje.</Text>
       ) : (
         <View style={styles.list}>
-          {visibleItems.map((item) => (
+          {visibleItems.map((item, index) => (
             <TouchableOpacity
               key={item.id}
-              style={[styles.eventRow, item.ongoing && styles.eventRowOngoing]}
+              style={[
+                styles.eventRow,
+                index === 0 && styles.eventRowFirst,
+              ]}
               onPress={openAgenda}
               activeOpacity={0.7}
             >
-              <View style={[styles.timeChip, { backgroundColor: `${item.accent}18` }]}>
-                <Text style={[styles.timeChipText, { color: item.accent }]}>
-                  {item.timeStart}
-                </Text>
-              </View>
-
+              <View style={[styles.accentBar, { backgroundColor: item.accent }]} />
+              <Text style={styles.timeText}>{item.timeStart}</Text>
               <View style={styles.eventMain}>
-                <Text style={styles.eventTitle} numberOfLines={2}>
+                <Text style={styles.eventTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={styles.eventMeta} numberOfLines={1}>
-                  {item.ongoing
-                    ? 'Em andamento'
-                    : item.timeRange || item.timeStart}
+                <Text
+                  style={[styles.eventMeta, item.ongoing && styles.eventMetaOngoing]}
+                  numberOfLines={1}
+                >
+                  {item.ongoing ? 'Em andamento' : item.timeRange || item.timeStart}
                 </Text>
               </View>
-
-              <View style={[styles.colorDot, { backgroundColor: item.accent }]} />
             </TouchableOpacity>
           ))}
 
@@ -246,36 +244,30 @@ const getStyles = (colors: any, isDark: boolean) =>
       color: colors.textSecondary,
       lineHeight: 20,
     },
-    list: {
-      gap: 8,
-    },
+    list: {},
     eventRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
-      borderRadius: 14,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8F9FB',
-      paddingVertical: 11,
-      paddingHorizontal: 12,
+      gap: 12,
+      paddingVertical: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
     },
-    eventRowOngoing: {
-      borderColor: `${colors.primary}55`,
-      backgroundColor: `${colors.primary}0F`,
+    eventRowFirst: {
+      borderTopWidth: 0,
+      paddingTop: 2,
     },
-    timeChip: {
-      minWidth: 52,
-      paddingHorizontal: 8,
-      paddingVertical: 6,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
+    accentBar: {
+      width: 2,
+      height: 28,
+      borderRadius: 1,
     },
-    timeChipText: {
+    timeText: {
+      width: 42,
       fontSize: 12,
-      fontWeight: '700',
+      fontWeight: '600',
       fontVariant: ['tabular-nums'],
+      color: colors.textSecondary,
     },
     eventMain: {
       flex: 1,
@@ -289,17 +281,16 @@ const getStyles = (colors: any, isDark: boolean) =>
       lineHeight: 19,
     },
     eventMeta: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 12,
+      fontWeight: '500',
       color: colors.textSecondary,
     },
-    colorDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+    eventMetaOngoing: {
+      fontWeight: '600',
+      color: colors.primary,
     },
     more: {
-      marginTop: 4,
+      marginTop: 8,
       fontSize: 12,
       fontWeight: '600',
       color: colors.primary,

@@ -167,10 +167,13 @@ export default function HomeTarefasCard() {
         <Text style={styles.empty}>Nenhuma tarefa pendente.</Text>
       ) : (
         <View style={styles.list}>
-          {visible.map(({ task, dueLabel, overdue }) => {
+          {visible.map(({ task, dueLabel, overdue }, index) => {
             const busy = busyId === task.id;
             return (
-              <View key={task.id} style={styles.taskRow}>
+              <View
+                key={task.id}
+                style={[styles.taskRow, index === 0 && styles.taskRowFirst]}
+              >
                 <TouchableOpacity
                   onPress={() => toggleMut.mutate(task)}
                   disabled={busy}
@@ -188,18 +191,19 @@ export default function HomeTarefasCard() {
                   onPress={openTarefas}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.taskTitle} numberOfLines={2}>
+                  <Text style={styles.taskTitle} numberOfLines={1}>
                     {task.title}
                   </Text>
-                  {dueLabel ? (
-                    <Text
-                      style={[styles.dueLabel, overdue && styles.dueOverdue]}
-                      numberOfLines={1}
-                    >
-                      {dueLabel}
-                    </Text>
-                  ) : null}
                 </TouchableOpacity>
+
+                {dueLabel ? (
+                  <Text
+                    style={[styles.dueLabel, overdue && styles.dueOverdue]}
+                    numberOfLines={1}
+                  >
+                    {dueLabel}
+                  </Text>
+                ) : null}
 
                 <TouchableOpacity
                   onPress={() => starMut.mutate(task)}
@@ -211,8 +215,14 @@ export default function HomeTarefasCard() {
                   }
                 >
                   <Star
-                    size={16}
-                    color={task.starred ? colors.warning || '#F59E0B' : colors.textSecondary}
+                    size={14}
+                    color={
+                      task.starred
+                        ? colors.warning || '#F59E0B'
+                        : isDark
+                          ? '#6B7280'
+                          : '#D1D5DB'
+                    }
                     fill={task.starred ? colors.warning || '#F59E0B' : 'transparent'}
                     strokeWidth={2}
                   />
@@ -294,24 +304,23 @@ const getStyles = (colors: any, isDark: boolean) =>
       color: colors.textSecondary,
       lineHeight: 20,
     },
-    list: {
-      gap: 8,
-    },
+    list: {},
     taskRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      borderRadius: 14,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : '#F8F9FB',
-      paddingVertical: 11,
-      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    taskRowFirst: {
+      borderTopWidth: 0,
+      paddingTop: 2,
     },
     check: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
+      width: 18,
+      height: 18,
+      borderRadius: 4,
       borderWidth: 1.5,
       borderColor: colors.border,
       alignItems: 'center',
@@ -324,30 +333,31 @@ const getStyles = (colors: any, isDark: boolean) =>
     taskMain: {
       flex: 1,
       minWidth: 0,
-      gap: 2,
     },
     taskTitle: {
       fontSize: 14,
-      fontWeight: '500',
+      fontWeight: '400',
       color: colors.text,
       lineHeight: 19,
     },
     dueLabel: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 12,
+      fontWeight: '500',
+      fontVariant: ['tabular-nums'],
       color: colors.textSecondary,
     },
     dueOverdue: {
+      fontWeight: '600',
       color: colors.primary,
     },
     starBtn: {
-      width: 28,
-      height: 28,
+      width: 24,
+      height: 24,
       alignItems: 'center',
       justifyContent: 'center',
     },
     more: {
-      marginTop: 4,
+      marginTop: 8,
       fontSize: 12,
       fontWeight: '600',
       color: colors.primary,
