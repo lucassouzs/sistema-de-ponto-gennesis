@@ -1414,7 +1414,7 @@ export default function SegurancaDoTrabalhoPage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className={cadastroListClasses.table}>
+                    <table className="w-full min-w-[64rem] text-sm">
                       <thead>
                         <tr>
                           <th className={cadastroListClasses.th}>Funcionário</th>
@@ -1423,8 +1423,12 @@ export default function SegurancaDoTrabalhoPage() {
                           <th className={cadastroListClasses.thCenter}>Setor</th>
                           <th className={cadastroListClasses.thCenter}>Último tipo</th>
                           <th className={cadastroListClasses.thCenter}>Exame</th>
-                          <th className={cadastroListClasses.thCenter}>Validade</th>
-                          <th className={cadastroListClasses.thRight}>Ação</th>
+                          <th className={`${cadastroListClasses.thCenter} whitespace-nowrap`}>
+                            Validade
+                          </th>
+                          <th className="min-w-[8rem] px-2 py-4 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-3">
+                            Ação
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1453,10 +1457,10 @@ export default function SegurancaDoTrabalhoPage() {
                               <td className="px-3 py-3 text-center text-sm">
                                 {item.ultimoAso?.tipoAso?.nome || '—'}
                               </td>
-                              <td className="px-3 py-3 text-center text-sm">
+                              <td className="px-3 py-3 text-center text-sm whitespace-nowrap">
                                 {item.ultimoAso ? formatDateBr(item.ultimoAso.dataExame) : '—'}
                               </td>
-                              <td className="px-3 py-3 text-center text-sm">
+                              <td className="px-3 py-3 text-center text-sm whitespace-nowrap">
                                 <span
                                   className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${badge.tone}`}
                                 >
@@ -1465,8 +1469,8 @@ export default function SegurancaDoTrabalhoPage() {
                                     : badge.label}
                                 </span>
                               </td>
-                              <td className="px-3 py-3">
-                                <div className="flex justify-end gap-1">
+                              <td className="min-w-[8rem] whitespace-nowrap px-2 py-3 align-middle sm:px-3">
+                                <div className="flex flex-nowrap justify-end gap-1">
                                   <button
                                     type="button"
                                     onClick={() => setHistoricoFuncionarioId(item.funcionarioId)}
