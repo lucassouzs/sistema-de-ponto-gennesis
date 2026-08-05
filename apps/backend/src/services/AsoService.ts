@@ -29,6 +29,10 @@ export type AsoListFilters = {
   funcionarioId?: string;
   department?: string;
   position?: string;
+  /** Ano do exame (YYYY) — gastos do ano */
+  ano?: string;
+  /** Mês do exame (1–12 ou 01–12) — sozinho ou com ano */
+  mes?: string;
   page?: number;
   limit?: number;
 };
@@ -77,6 +81,52 @@ function parseDateOnly(value: string | Date): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
   if (!m) throw createError('Data inválida', 400);
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+}
+
+/** Intervalo [início, fim) em UTC a partir de ano e/ou mês do exame. */
+function buildDataExameRange(filters: {
+  ano?: string;
+  mes?: string;
+}): Prisma.DateTimeFilter | Prisma.AsoRegistroWhereInput | null {
+  const anoRaw = String(filters.ano || '').trim();
+  const mesRaw = String(filters.mes || '').trim();
+  const ano = anoRaw ? Number(anoRaw) : NaN;
+  const mes = mesRaw ? Number(mesRaw) : NaN;
+  const hasAno = Number.isFinite(ano) && ano >= 2000 && ano <= 2100;
+  const hasMes = Number.isFinite(mes) && mes >= 1 && mes <= 12;
+
+  if (hasAno && hasMes) {
+    return {
+      gte: new Date(Date.UTC(ano, mes - 1, 1)),
+      lt: new Date(Date.UTC(ano, mes, 1)),
+    };
+  }
+
+  if (hasAno) {
+    return {
+      gte: new Date(Date.UTC(ano, 0, 1)),
+      lt: new Date(Date.UTC(ano + 1, 0, 1)),
+    };
+  }
+
+  if (hasMes) {
+    const now = new Date();
+    const startYear = Math.max(2020, now.getUTCFullYear() - 10);
+    const endYear = now.getUTCFullYear() + 1;
+    return {
+      OR: Array.from({ length: endYear - startYear + 1 }, (_, i) => {
+        const y = startYear + i;
+        return {
+          dataExame: {
+            gte: new Date(Date.UTC(y, mes - 1, 1)),
+            lt: new Date(Date.UTC(y, mes, 1)),
+          },
+        };
+      }),
+    };
+  }
+
+  return null;
 }
 
 /** Classifica a validade de uma data em relação a hoje (mesmas faixas usadas nos filtros/dashboard). */
@@ -519,6 +569,15 @@ export class AsoService {
     if (filters.resultado) where.resultado = filters.resultado;
     if (filters.funcionarioId) where.funcionarioId = filters.funcionarioId;
 
+    const exameRange = buildDataExameRange({ ano: filters.ano, mes: filters.mes });
+    if (exameRange) {
+      if ('OR' in exameRange) {
+        where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), exameRange];
+      } else {
+        where.dataExame = exameRange;
+      }
+    }
+
     const todayUtc = todayDateOnly();
     const in30 = addDays(todayUtc, 30);
     const in60 = addDays(todayUtc, 60);
@@ -821,49 +880,37 @@ export class AsoService {
     return { id };
   }
 
-  async dashboardCounts() {
+  async dashboardCounts(filters: { ano?: string; mes?: string } = {}) {
     const todayUtc = todayDateOnly();
     const in30 = addDays(todayUtc, 30);
     const in60 = addDays(todayUtc, 60);
+    const exameRange = buildDataExameRange({ ano: filters.ano, mes: filters.mes });
+    let valorWhere: Prisma.AsoRegistroWhereInput | undefined;
+    if (exameRange) {
+      if ('OR' in exameRange) {
+        valorWhere = exameRange;
+      } else {
+        valorWhere = { dataExame: exameRange };
+      }
+    }
 
-    const [total, vencidos, aVencer30, aVencer60, validadePadrao, activeEmployees, cargosRisco] =
+    const [total, vencidos, aVencer30, aVencer60, validadePadrao, valorAgg, activeEmployees, cargosRisco] =
       await Promise.all([
         prisma.asoRegistro.count(),
         prisma.asoRegistro.count({ where: { dataValidade: { lt: todayUtc } } }),
         prisma.asoRegistro.count({ where: { dataValidade: { gte: todayUtc, lte: in30 } } }),
         prisma.asoRegistro.count({ where: { dataValidade: { gte: todayUtc, lte: in60 } } }),
         prisma.asoRegistro.count({ where: { validadePadrao: true } }),
+        prisma.asoRegistro.aggregate({
+          where: valorWhere,
+          _sum: { valor: true },
+        }),
         prisma.employee.findMany({
           where: { user: { isActive: true } },
           select: { id: true, position: true, department: true },
         }),
         prisma.cargoRisco.findMany({ select: { cargo: true, setor: true } }),
       ]);
-
-    const activeIds = activeEmployees.map((e) => e.id);
-
-    const registrosAtivos = activeIds.length
-      ? await prisma.asoRegistro.findMany({
-          where: { funcionarioId: { in: activeIds } },
-          select: { funcionarioId: true, dataValidade: true, dataExame: true },
-          orderBy: [{ dataValidade: 'desc' }, { dataExame: 'desc' }],
-        })
-      : [];
-
-    const latestByFuncionario = new Map<string, Date>();
-    for (const r of registrosAtivos) {
-      if (!latestByFuncionario.has(r.funcionarioId)) {
-        latestByFuncionario.set(r.funcionarioId, r.dataValidade);
-      }
-    }
-
-    let comAsoValido = 0;
-    for (const validade of latestByFuncionario.values()) {
-      if (validade >= todayUtc) comAsoValido++;
-    }
-
-    const ativos = activeIds.length;
-    const percentual = ativos > 0 ? Math.round((comAsoValido / ativos) * 1000) / 10 : 0;
 
     const cargosRiscoNorm = new Set(
       cargosRisco.map((c) => cargoRiscoPairKey(c.cargo, c.setor))
@@ -876,13 +923,17 @@ export class AsoService {
       if (!cargosRiscoNorm.has(key)) cargosSemPeriodicidadeSet.add(key);
     }
 
+    const totalGasto = valorAgg._sum.valor != null ? Number(valorAgg._sum.valor) : 0;
+
     return {
       total,
       vencidos,
       aVencer30,
       aVencer60,
       validadePadrao,
-      cobertura: { ativos, comAsoValido, percentual },
+      totalGasto,
+      ano: filters.ano || null,
+      mes: filters.mes || null,
       cargosSemPeriodicidade: cargosSemPeriodicidadeSet.size,
     };
   }
