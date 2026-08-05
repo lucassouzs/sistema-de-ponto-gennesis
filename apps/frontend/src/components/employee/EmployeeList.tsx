@@ -146,6 +146,7 @@ export function EmployeeList({
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showBulkReactivateModal, setShowBulkReactivateModal] = useState(false);
   /** Menu flutuante: fixed + portal para não ser cortado pelo overflow-x da tabela */
   const [employeeActionMenu, setEmployeeActionMenu] = useState<{
     employeeId: string;
@@ -532,6 +533,42 @@ export function EmployeeList({
         error?.response?.data?.message ||
           error?.response?.data?.error ||
           'Erro ao desligar selecionados'
+      );
+    },
+  });
+
+  const bulkReactivateMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      let ok = 0;
+      let failed = 0;
+      for (const id of ids) {
+        try {
+          await api.put(`/users/${id}`, { isActive: true });
+          ok += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+      return { ok, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      if (ok > 0) {
+        toast.success(ok === 1 ? '1 funcionário ativado' : `${ok} funcionários ativados`);
+      }
+      if (failed > 0) {
+        toast.error(`${failed} não puderam ser ativados`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setSelectedIds(new Set());
+      setShowBulkReactivateModal(false);
+      setSelectedEmployee(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          'Erro ao ativar selecionados'
       );
     },
   });
@@ -1380,15 +1417,22 @@ export function EmployeeList({
   const paginatedEmployees = filteredEmployees.slice(startIndex, endIndex);
 
   const selectedCount = selectedIds.size;
+  const selectedEmployees = filteredEmployees.filter((e) => selectedIds.has(e.id));
+  const selectedActiveCount = selectedEmployees.filter((e) => e.isActive).length;
+  const selectedInactiveCount = selectedEmployees.filter((e) => !e.isActive).length;
+  const selectionIsAllInactive =
+    selectedCount > 0 && selectedInactiveCount === selectedCount;
+  const selectionIsAllActive =
+    selectedCount > 0 && selectedActiveCount === selectedCount;
   const allPageSelected =
     paginatedEmployees.length > 0 &&
     paginatedEmployees.every((employee) => selectedIds.has(employee.id));
   const somePageSelected = paginatedEmployees.some((employee) => selectedIds.has(employee.id));
-  const activeFilteredCount = filteredEmployees.filter((e) => e.isActive).length;
+  const filteredCount = filteredEmployees.length;
   const allFilteredSelected =
-    activeFilteredCount > 0 &&
+    filteredCount > 0 &&
     selectedCount > 0 &&
-    filteredEmployees.filter((e) => e.isActive).every((e) => selectedIds.has(e.id));
+    filteredEmployees.every((e) => selectedIds.has(e.id));
 
   const toggleSelectOne = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -1415,7 +1459,7 @@ export function EmployeeList({
   };
 
   const selectAllFiltered = () => {
-    const ids = filteredEmployees.filter((e) => e.isActive).map((e) => e.id);
+    const ids = filteredEmployees.map((e) => e.id);
     setSelectedIds(new Set(ids));
     toast.success(
       ids.length === 1 ? '1 funcionário selecionado' : `${ids.length} funcionários selecionados`
@@ -1681,7 +1725,10 @@ export function EmployeeList({
                         </label>
                         <StringSingleSelectDropdown
                           value={statusFilter}
-                          onChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}
+                          onChange={(v) => {
+                            setStatusFilter(v as 'active' | 'inactive' | 'all');
+                            setSelectedIds(new Set());
+                          }}
                           options={EMPLOYEE_STATUS_FILTER_OPTIONS}
                           allowEmpty={false}
                         />
@@ -1797,7 +1844,7 @@ export function EmployeeList({
             >
               <Filter className="h-4 w-4" />
             </button>
-            {canDeleteEmployees && showDeleteButton && selectedCount > 0 ? (
+            {canDeleteEmployees && showDeleteButton && selectionIsAllActive ? (
               <button
                 type="button"
                 onClick={() => setShowBulkDeleteModal(true)}
@@ -1806,6 +1853,19 @@ export function EmployeeList({
               >
                 <UserX className="h-4 w-4 shrink-0" />
                 <span>Desligar ({selectedCount})</span>
+              </button>
+            ) : null}
+            {(canEditEmployees || canDeleteEmployees) &&
+            showDeleteButton &&
+            selectionIsAllInactive ? (
+              <button
+                type="button"
+                onClick={() => setShowBulkReactivateModal(true)}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                title="Ativar selecionados"
+              >
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                <span>Ativar ({selectedCount})</span>
               </button>
             ) : null}
             <button
@@ -2110,7 +2170,7 @@ export function EmployeeList({
             {canDeleteEmployees &&
             showDeleteButton &&
             allPageSelected &&
-            activeFilteredCount > paginatedEmployees.length &&
+            filteredCount > paginatedEmployees.length &&
             !allFilteredSelected ? (
               <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
                 Todos os {paginatedEmployees.length} desta página estão selecionados.{' '}
@@ -2119,7 +2179,7 @@ export function EmployeeList({
                   onClick={selectAllFiltered}
                   className="font-semibold text-red-600 hover:underline dark:text-red-400"
                 >
-                  Selecionar todos os {activeFilteredCount} filtrados
+                  Selecionar todos os {filteredCount} filtrados
                 </button>
               </div>
             ) : null}
@@ -2277,7 +2337,10 @@ export function EmployeeList({
                       <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                       <StringSingleSelectDropdown
                         value={statusFilter}
-                        onChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}
+                        onChange={(v) => {
+                          setStatusFilter(v as 'active' | 'inactive' | 'all');
+                          setSelectedIds(new Set());
+                        }}
                         options={EMPLOYEE_STATUS_FILTER_OPTIONS}
                         allowEmpty={false}
                       />
@@ -2477,6 +2540,65 @@ export function EmployeeList({
                       <>
                         <UserX className="h-4 w-4" />
                         <span>Desligar {selectedCount}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showBulkReactivateModal && (
+          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => !bulkReactivateMutation.isPending && setShowBulkReactivateModal(false)}
+            />
+            <div className="relative mx-4 w-full max-w-md rounded-lg bg-white shadow-2xl dark:bg-gray-800">
+              <div className="p-6">
+                <div className="mb-4 flex items-center space-x-3">
+                  <div className="rounded-full bg-green-100 p-2 dark:bg-green-900/30">
+                    <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      Ativar selecionados
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {selectedCount} funcionário{selectedCount === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                </div>
+                <p className="mb-6 text-gray-700 dark:text-gray-300">
+                  Tem certeza que deseja ativar{' '}
+                  {selectedCount === 1 ? 'este funcionário' : 'estes funcionários'}? Eles voltarão a
+                  ficar ativos e poderão acessar o sistema.
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    disabled={bulkReactivateMutation.isPending}
+                    onClick={() => setShowBulkReactivateModal(false)}
+                    className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={bulkReactivateMutation.isPending || selectedCount === 0}
+                    onClick={() => bulkReactivateMutation.mutate(Array.from(selectedIds))}
+                    className="flex items-center space-x-2 rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-green-700 dark:hover:bg-green-800"
+                  >
+                    {bulkReactivateMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Ativando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4" />
+                        <span>Ativar {selectedCount}</span>
                       </>
                     )}
                   </button>

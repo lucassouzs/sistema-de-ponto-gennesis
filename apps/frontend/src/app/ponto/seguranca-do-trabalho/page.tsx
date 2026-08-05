@@ -5,11 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
-  CheckCircle,
+  CircleDollarSign,
   Clock,
   Download,
   Edit,
   FileText,
+  Filter,
   History,
   Paperclip,
   Plus,
@@ -106,14 +107,14 @@ type DashboardData = {
   aVencer30: number;
   aVencer60: number;
   validadePadrao: number;
-  cobertura: { ativos: number; comAsoValido: number; percentual: number };
+  totalGasto: number;
   cargosSemPeriodicidade: number;
 };
 
 const ASO_STAT_CARDS: Array<{
   key: string;
   label: string;
-  filter: StatusValidadeFilter | 'cobertura';
+  filter: StatusValidadeFilter | 'total_gasto';
   iconBg: string;
   iconColor: string;
   Icon: LucideIcon;
@@ -148,19 +149,56 @@ const ASO_STAT_CARDS: Array<{
     getCount: (d) => d?.vencidos ?? '—',
   },
   {
-    key: 'cobertura',
-    label: 'Cobertura (ativos)',
-    filter: 'cobertura',
+    key: 'total_gasto',
+    label: 'Total gasto',
+    filter: 'total_gasto',
     iconBg: 'bg-green-100 dark:bg-green-900/30',
     iconColor: 'text-green-600 dark:text-green-400',
-    Icon: CheckCircle,
-    getCount: (d) => (d?.cobertura != null ? `${d.cobertura.percentual}%` : '—'),
-    getSubtitle: (d) =>
-      d?.cobertura != null
-        ? `${d.cobertura.comAsoValido}/${d.cobertura.ativos} com ASO válido`
-        : undefined,
+    Icon: CircleDollarSign,
+    getCount: (d) => (d?.totalGasto != null ? formatMoneyBr(d.totalGasto) : '—'),
   },
 ];
+
+const MES_LABELS = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+] as const;
+
+const MES_FILTER_OPTIONS = MES_LABELS.map((label, idx) => ({
+  value: String(idx + 1),
+  label,
+}));
+
+function buildAnoOptions(yearsBack = 8): Array<{ value: string; label: string }> {
+  const y = new Date().getFullYear();
+  return Array.from({ length: yearsBack }, (_, i) => {
+    const year = String(y - i);
+    return { value: year, label: year };
+  });
+}
+
+function labelPeriodoGasto(ano: string, mes: string): string | undefined {
+  if (ano && mes) {
+    const idx = Number(mes) - 1;
+    if (idx >= 0 && idx < 12) return `${MES_LABELS[idx]}/${ano}`;
+  }
+  if (ano) return `Ano ${ano}`;
+  if (mes) {
+    const idx = Number(mes) - 1;
+    if (idx >= 0 && idx < 12) return MES_LABELS[idx];
+  }
+  return undefined;
+}
 
 type PorFuncionarioStatus = 'validos' | 'a_vencer_30' | 'a_vencer_60' | 'vencidos' | 'sem_aso';
 
@@ -319,6 +357,9 @@ export default function SegurancaDoTrabalhoPage() {
   const [filterResultado, setFilterResultado] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterPosition, setFilterPosition] = useState('');
+  const [filterMes, setFilterMes] = useState(() => String(new Date().getMonth() + 1));
+  const [filterAno, setFilterAno] = useState(() => String(new Date().getFullYear()));
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -399,8 +440,16 @@ export default function SegurancaDoTrabalhoPage() {
   };
 
   const { data: dashboard, isLoading: loadingDashboard } = useQuery<DashboardData>({
-    queryKey: ['aso-dashboard'],
-    queryFn: async () => (await api.get('/aso/dashboard')).data?.data,
+    queryKey: ['aso-dashboard', filterAno, filterMes],
+    queryFn: async () =>
+      (
+        await api.get('/aso/dashboard', {
+          params: {
+            ano: filterAno || undefined,
+            mes: filterMes || undefined,
+          },
+        })
+      ).data?.data,
   });
 
   const { data: employees = [] } = useQuery<EmployeeOption[]>({
@@ -432,6 +481,8 @@ export default function SegurancaDoTrabalhoPage() {
       filterResultado,
       filterDepartment,
       filterPosition,
+      filterAno,
+      filterMes,
       page,
     ],
     queryFn: async () => {
@@ -443,6 +494,8 @@ export default function SegurancaDoTrabalhoPage() {
           resultado: filterResultado || undefined,
           department: filterDepartment || undefined,
           position: filterPosition || undefined,
+          ano: filterAno || undefined,
+          mes: filterMes || undefined,
           page,
           limit: 20,
         },
@@ -684,6 +737,8 @@ export default function SegurancaDoTrabalhoPage() {
     []
   );
 
+  const anoOptions = useMemo(() => buildAnoOptions(8), []);
+
   const statusOptions = useMemo(
     () => [
       { value: '', label: 'Todas as validades' },
@@ -696,10 +751,35 @@ export default function SegurancaDoTrabalhoPage() {
     []
   );
 
+  const hasActiveFilters = Boolean(
+    statusValidade ||
+      filterTipoId ||
+      filterResultado ||
+      filterDepartment ||
+      filterPosition ||
+      filterAno ||
+      filterMes
+  );
+
   const activeFilterChips = useMemo(() => {
     const chips: Array<{ key: string; label: string; onClear: () => void }> = [];
     if (search.trim()) {
       chips.push({ key: 'search', label: `Busca: "${search.trim()}"`, onClear: () => setSearch('') });
+    }
+    if (filterAno) {
+      chips.push({
+        key: 'ano',
+        label: `Ano: ${filterAno}`,
+        onClear: () => setFilterAno(''),
+      });
+    }
+    if (filterMes) {
+      const mesLabel = MES_FILTER_OPTIONS.find((o) => o.value === filterMes)?.label || filterMes;
+      chips.push({
+        key: 'mes',
+        label: `Mês: ${mesLabel}`,
+        onClear: () => setFilterMes(''),
+      });
     }
     if (statusValidade) {
       const opt = statusOptions.find((o) => o.value === statusValidade);
@@ -739,7 +819,18 @@ export default function SegurancaDoTrabalhoPage() {
       });
     }
     return chips;
-  }, [search, statusValidade, filterTipoId, filterResultado, filterDepartment, filterPosition, statusOptions, tipoOptions]);
+  }, [
+    search,
+    filterAno,
+    filterMes,
+    statusValidade,
+    filterTipoId,
+    filterResultado,
+    filterDepartment,
+    filterPosition,
+    statusOptions,
+    tipoOptions,
+  ]);
 
   const clearAllFilters = () => {
     setSearch('');
@@ -748,6 +839,8 @@ export default function SegurancaDoTrabalhoPage() {
     setFilterResultado('');
     setFilterDepartment('');
     setFilterPosition('');
+    setFilterAno(String(new Date().getFullYear()));
+    setFilterMes(String(new Date().getMonth() + 1));
   };
 
   const resetFormState = () => {
@@ -957,7 +1050,16 @@ export default function SegurancaDoTrabalhoPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusValidade, filterTipoId, filterResultado, filterDepartment, filterPosition]);
+  }, [
+    search,
+    statusValidade,
+    filterTipoId,
+    filterResultado,
+    filterDepartment,
+    filterPosition,
+    filterAno,
+    filterMes,
+  ]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -970,6 +1072,8 @@ export default function SegurancaDoTrabalhoPage() {
           resultado: filterResultado || undefined,
           department: filterDepartment || undefined,
           position: filterPosition || undefined,
+          ano: filterAno || undefined,
+          mes: filterMes || undefined,
         },
       });
       const rows: AsoRegistro[] = res.data?.data || [];
@@ -1037,10 +1141,9 @@ export default function SegurancaDoTrabalhoPage() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             {ASO_STAT_CARDS.map((card) => {
-              const isCobertura = card.filter === 'cobertura';
-              const isActive = isCobertura
-                ? tab === 'por-funcionario'
-                : tab === 'registros' && statusValidade === card.filter;
+              const isTotalGasto = card.filter === 'total_gasto';
+              const isActive =
+                !isTotalGasto && tab === 'registros' && statusValidade === card.filter;
               return (
                 <FilterStatCard
                   key={card.key}
@@ -1051,10 +1154,16 @@ export default function SegurancaDoTrabalhoPage() {
                   iconColor={card.iconColor}
                   isActive={isActive}
                   loading={loadingDashboard}
-                  subtitle={card.getSubtitle?.(dashboard)}
+                  subtitle={
+                    card.key === 'total_gasto'
+                      ? labelPeriodoGasto(filterAno, filterMes)
+                      : card.getSubtitle?.(dashboard)
+                  }
                   onClick={() => {
-                    if (isCobertura) {
-                      setTab('por-funcionario');
+                    if (isTotalGasto) {
+                      setTab('registros');
+                      setStatusValidade('');
+                      setPage(1);
                       return;
                     }
                     applyDashboardFilter(card.filter as StatusValidadeFilter);
@@ -1118,6 +1227,41 @@ export default function SegurancaDoTrabalhoPage() {
                     </div>
                   </div>
                   <div className={cadastroListClasses.cardToolbar}>
+                    <div className="relative min-w-[200px] flex-1 sm:w-[280px] sm:flex-none">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Buscar funcionário, clínica..."
+                        className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                      />
+                      {search ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearch('')}
+                          aria-label="Limpar busca"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowFiltersModal(true)}
+                      className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                        hasActiveFilters
+                          ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                      aria-label="Abrir filtro"
+                      title={hasActiveFilters ? 'Filtro ativo' : 'Filtro'}
+                    >
+                      <Filter className="h-4 w-4" />
+                      {hasActiveFilters ? (
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+                      ) : null}
+                    </button>
                     <button
                       type="button"
                       onClick={openPrecosModal}
@@ -1128,19 +1272,25 @@ export default function SegurancaDoTrabalhoPage() {
                     <button
                       type="button"
                       onClick={() => setShowImportModal(true)}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      aria-label="Importar"
+                      title="Importar"
                     >
                       <Upload className="h-4 w-4" />
-                      Importar
                     </button>
                     <button
                       type="button"
                       onClick={handleExport}
                       disabled={exporting}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      aria-label={exporting ? 'Exportando...' : 'Exportar'}
+                      title={exporting ? 'Exportando...' : 'Exportar'}
                     >
-                      <Download className="h-4 w-4" />
-                      {exporting ? 'Exportando...' : 'Exportar'}
+                      {exporting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
                     </button>
                     <button
                       type="button"
@@ -1151,52 +1301,6 @@ export default function SegurancaDoTrabalhoPage() {
                       Novo ASO
                     </button>
                   </div>
-                </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Buscar funcionário, clínica..."
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                    />
-                  </div>
-                  <SingleSelectSearchDropdown
-                    value={statusValidade}
-                    onChange={(v) => setStatusValidade(v as StatusValidadeFilter)}
-                    options={statusOptions}
-                    placeholder="Validade"
-                    noFocusRing
-                  />
-                  <SingleSelectSearchDropdown
-                    value={filterTipoId}
-                    onChange={setFilterTipoId}
-                    options={[{ value: '', label: 'Todos os tipos' }, ...tipoOptions]}
-                    placeholder="Tipo de ASO"
-                    noFocusRing
-                  />
-                  <SingleSelectSearchDropdown
-                    value={filterResultado}
-                    onChange={setFilterResultado}
-                    options={[{ value: '', label: 'Todos os resultados' }, ...resultadoOptions]}
-                    placeholder="Resultado"
-                    noFocusRing
-                  />
-                  <SingleSelectSearchDropdown
-                    value={filterDepartment}
-                    onChange={setFilterDepartment}
-                    options={[{ value: '', label: 'Todos os setores' }, ...departmentFilterOptions]}
-                    placeholder="Setor"
-                    noFocusRing
-                  />
-                  <SingleSelectSearchDropdown
-                    value={filterPosition}
-                    onChange={setFilterPosition}
-                    options={[{ value: '', label: 'Todos os cargos' }, ...positionFilterOptions]}
-                    placeholder="Cargo"
-                    noFocusRing
-                  />
                 </div>
                 {activeFilterChips.length > 0 ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -2056,6 +2160,125 @@ export default function SegurancaDoTrabalhoPage() {
             >
               Excluir
             </button>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showFiltersModal}
+          onClose={() => setShowFiltersModal(false)}
+          title="Filtros"
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Ano do exame
+                </label>
+                <SingleSelectSearchDropdown
+                  value={filterAno}
+                  onChange={setFilterAno}
+                  options={[{ value: '', label: 'Todos os anos' }, ...anoOptions]}
+                  placeholder="Todos os anos"
+                  allowEmpty={false}
+                  noFocusRing
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Mês do exame
+                </label>
+                <SingleSelectSearchDropdown
+                  value={filterMes}
+                  onChange={setFilterMes}
+                  options={[{ value: '', label: 'Todos os meses' }, ...MES_FILTER_OPTIONS]}
+                  placeholder="Todos os meses"
+                  allowEmpty={false}
+                  noFocusRing
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Use ano, mês ou os dois juntos para ver a lista e o Total gasto do período.
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Validade
+              </label>
+              <SingleSelectSearchDropdown
+                value={statusValidade}
+                onChange={(v) => setStatusValidade(v as StatusValidadeFilter)}
+                options={statusOptions}
+                placeholder="Validade"
+                noFocusRing
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Tipo de ASO
+              </label>
+              <SingleSelectSearchDropdown
+                value={filterTipoId}
+                onChange={setFilterTipoId}
+                options={[{ value: '', label: 'Todos os tipos' }, ...tipoOptions]}
+                placeholder="Tipo de ASO"
+                noFocusRing
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Resultado
+              </label>
+              <SingleSelectSearchDropdown
+                value={filterResultado}
+                onChange={setFilterResultado}
+                options={[{ value: '', label: 'Todos os resultados' }, ...resultadoOptions]}
+                placeholder="Resultado"
+                noFocusRing
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Setor
+              </label>
+              <SingleSelectSearchDropdown
+                value={filterDepartment}
+                onChange={setFilterDepartment}
+                options={[{ value: '', label: 'Todos os setores' }, ...departmentFilterOptions]}
+                placeholder="Setor"
+                noFocusRing
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Cargo
+              </label>
+              <SingleSelectSearchDropdown
+                value={filterPosition}
+                onChange={setFilterPosition}
+                options={[{ value: '', label: 'Todos os cargos' }, ...positionFilterOptions]}
+                placeholder="Cargo"
+                noFocusRing
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  clearAllFilters();
+                  setShowFiltersModal(false);
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-600"
+              >
+                Limpar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowFiltersModal(false)}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Aplicar
+              </button>
+            </div>
           </div>
         </Modal>
 

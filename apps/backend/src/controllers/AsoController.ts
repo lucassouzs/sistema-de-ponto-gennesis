@@ -139,9 +139,11 @@ export class AsoController {
     }
   }
 
-  async dashboard(_req: AuthRequest, res: Response, next: NextFunction) {
+  async dashboard(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const data = await asoService.dashboardCounts();
+      const ano = req.query.ano ? String(req.query.ano) : undefined;
+      const mes = req.query.mes ? String(req.query.mes) : undefined;
+      const data = await asoService.dashboardCounts({ ano, mes });
       return res.json({ success: true, data });
     } catch (error) {
       return next(error);
@@ -158,6 +160,8 @@ export class AsoController {
         funcionarioId,
         department,
         position,
+        ano,
+        mes,
         page,
         limit,
       } = req.query;
@@ -174,6 +178,8 @@ export class AsoController {
         funcionarioId: funcionarioId ? String(funcionarioId) : undefined,
         department: department ? String(department) : undefined,
         position: position ? String(position) : undefined,
+        ano: ano ? String(ano) : undefined,
+        mes: mes ? String(mes) : undefined,
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
       });
@@ -186,8 +192,17 @@ export class AsoController {
 
   async exportRegistros(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { search, tipoAsoId, resultado, statusValidade, funcionarioId, department, position } =
-        req.query;
+      const {
+        search,
+        tipoAsoId,
+        resultado,
+        statusValidade,
+        funcionarioId,
+        department,
+        position,
+        ano,
+        mes,
+      } = req.query;
 
       if (resultado && !Object.values(AsoResultado).includes(resultado as AsoResultado)) {
         throw createError('Resultado inválido', 400);
@@ -201,6 +216,8 @@ export class AsoController {
         funcionarioId: funcionarioId ? String(funcionarioId) : undefined,
         department: department ? String(department) : undefined,
         position: position ? String(position) : undefined,
+        ano: ano ? String(ano) : undefined,
+        mes: mes ? String(mes) : undefined,
       });
 
       return res.json({ success: true, data });

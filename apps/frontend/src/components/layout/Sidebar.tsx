@@ -403,6 +403,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     children?: SidebarNavLeaf[];
   };
 
+  const sortNavItemsByName = <T extends { name: string; children?: SidebarNavLeaf[] }>(
+    items: T[]
+  ): T[] =>
+    [...items]
+      .map((item) =>
+        item.children?.length
+          ? { ...item, children: sortNavItemsByName(item.children) }
+          : item
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+
   const navItemIsVisible = (item: SidebarNavItem): boolean => {
     if (item.children?.length) {
       return item.children.some((child) => child.permission);
@@ -1125,7 +1136,10 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         .filter((category) => category !== null) as typeof menuCategories;
     }
 
-    return filteredCategories;
+    return filteredCategories.map((category) => ({
+      ...category,
+      items: sortNavItemsByName(category.items as SidebarNavItem[]),
+    }));
   };
 
   const menuItems = getMenuItems();
