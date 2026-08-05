@@ -18,7 +18,6 @@
     "@hookform/resolvers": "^3.3.2",
     "@sistema-ponto/permission-modules": "file:../../packages/permission-modules",
     "@tanstack/react-query": "^5.14.2",
-    "@tanstack/react-query-devtools": "5.14.2",
     "@xyflow/react": "^12.11.2",
     "axios": "^1.6.2",
     "bpmn-js": "^18.19.0",
