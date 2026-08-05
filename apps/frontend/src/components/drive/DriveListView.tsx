@@ -40,7 +40,7 @@ type DriveFile = {
 };
 
 /** ícone | nome | proprietário | tamanho | modificado | menu */
-const GRID_COLS = 'grid-cols-[auto,1fr,140px,100px,120px,44px]';
+const GRID_COLS = 'grid-cols-[auto,1fr,140px,100px,120px,56px]';
 
 type Props = {
   folders: DriveFolder[];
@@ -184,7 +184,7 @@ export function DriveListView({
           <div className="text-center">Proprietário</div>
           <div className="text-center">Tamanho</div>
           <div className="text-center">Modificado</div>
-          <div />
+          <div className="text-center">Ação</div>
         </div>
 
         {folders.map((folder) => {
@@ -236,10 +236,8 @@ export function DriveListView({
                   e.stopPropagation();
                   setOpenMenuId(menuOpen ? null : menuKey);
                 }}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-200 ${
-                  menuOpen
-                    ? 'bg-gray-200 text-gray-700 opacity-100 dark:bg-gray-600'
-                    : 'opacity-0 group-hover:opacity-100'
+                className={`mx-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-200 ${
+                  menuOpen ? 'bg-gray-200 text-gray-700 dark:bg-gray-600' : ''
                 }`}
                 aria-label={`Opções de ${folder.name}`}
               >
@@ -383,10 +381,8 @@ export function DriveListView({
                   e.stopPropagation();
                   setOpenMenuId(menuOpen ? null : menuKey);
                 }}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-200 ${
-                  menuOpen
-                    ? 'bg-gray-200 text-gray-700 opacity-100 dark:bg-gray-600'
-                    : 'opacity-0 group-hover:opacity-100'
+                className={`mx-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:hover:bg-gray-600 dark:hover:text-gray-200 ${
+                  menuOpen ? 'bg-gray-200 text-gray-700 dark:bg-gray-600' : ''
                 }`}
                 aria-label={`Opções de ${file.name}`}
               >
