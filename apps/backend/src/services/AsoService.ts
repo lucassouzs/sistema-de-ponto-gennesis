@@ -87,7 +87,10 @@ function parseDateOnly(value: string | Date): Date {
 function buildDataExameRange(filters: {
   ano?: string;
   mes?: string;
-}): Prisma.DateTimeFilter | Prisma.AsoRegistroWhereInput | null {
+}):
+  | { kind: 'date'; filter: Prisma.DateTimeFilter<'AsoRegistro'> }
+  | { kind: 'compound'; where: Prisma.AsoRegistroWhereInput }
+  | null {
   const anoRaw = String(filters.ano || '').trim();
   const mesRaw = String(filters.mes || '').trim();
   const ano = anoRaw ? Number(anoRaw) : NaN;
@@ -97,15 +100,21 @@ function buildDataExameRange(filters: {
 
   if (hasAno && hasMes) {
     return {
-      gte: new Date(Date.UTC(ano, mes - 1, 1)),
-      lt: new Date(Date.UTC(ano, mes, 1)),
+      kind: 'date',
+      filter: {
+        gte: new Date(Date.UTC(ano, mes - 1, 1)),
+        lt: new Date(Date.UTC(ano, mes, 1)),
+      },
     };
   }
 
   if (hasAno) {
     return {
-      gte: new Date(Date.UTC(ano, 0, 1)),
-      lt: new Date(Date.UTC(ano + 1, 0, 1)),
+      kind: 'date',
+      filter: {
+        gte: new Date(Date.UTC(ano, 0, 1)),
+        lt: new Date(Date.UTC(ano + 1, 0, 1)),
+      },
     };
   }
 
@@ -114,15 +123,18 @@ function buildDataExameRange(filters: {
     const startYear = Math.max(2020, now.getUTCFullYear() - 10);
     const endYear = now.getUTCFullYear() + 1;
     return {
-      OR: Array.from({ length: endYear - startYear + 1 }, (_, i) => {
-        const y = startYear + i;
-        return {
-          dataExame: {
-            gte: new Date(Date.UTC(y, mes - 1, 1)),
-            lt: new Date(Date.UTC(y, mes, 1)),
-          },
-        };
-      }),
+      kind: 'compound',
+      where: {
+        OR: Array.from({ length: endYear - startYear + 1 }, (_, i) => {
+          const y = startYear + i;
+          return {
+            dataExame: {
+              gte: new Date(Date.UTC(y, mes - 1, 1)),
+              lt: new Date(Date.UTC(y, mes, 1)),
+            },
+          };
+        }),
+      },
     };
   }
 
@@ -571,10 +583,13 @@ export class AsoService {
 
     const exameRange = buildDataExameRange({ ano: filters.ano, mes: filters.mes });
     if (exameRange) {
-      if ('OR' in exameRange) {
-        where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), exameRange];
+      if (exameRange.kind === 'compound') {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          exameRange.where,
+        ];
       } else {
-        where.dataExame = exameRange;
+        where.dataExame = exameRange.filter;
       }
     }
 
@@ -887,11 +902,10 @@ export class AsoService {
     const exameRange = buildDataExameRange({ ano: filters.ano, mes: filters.mes });
     let valorWhere: Prisma.AsoRegistroWhereInput | undefined;
     if (exameRange) {
-      if ('OR' in exameRange) {
-        valorWhere = exameRange;
-      } else {
-        valorWhere = { dataExame: exameRange };
-      }
+      valorWhere =
+        exameRange.kind === 'compound'
+          ? exameRange.where
+          : { dataExame: exameRange.filter };
     }
 
     const [total, vencidos, aVencer30, aVencer60, validadePadrao, valorAgg, activeEmployees, cargosRisco] =
