@@ -569,7 +569,7 @@ export default function EntregaLogisticaPageClient() {
                     </p>
                   </div>
                 </div>
-                <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
                       type="search"
@@ -623,7 +623,7 @@ export default function EntregaLogisticaPageClient() {
                       Página {listPage} de {totalPages}
                     </span>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full min-w-[52rem] table-fixed text-sm">
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>

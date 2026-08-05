@@ -4,10 +4,10 @@ import React from 'react';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 
 const navButtonClass =
-  'px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
+  'px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors sm:px-3 sm:py-2 sm:text-sm';
 
 function pageButtonClass(isActive: boolean) {
-  return `px-3 py-2 text-sm font-medium rounded-md ${
+  return `min-w-[2.25rem] px-2.5 py-1.5 text-xs font-medium rounded-md sm:min-w-0 sm:px-3 sm:py-2 sm:text-sm ${
     isActive
       ? 'bg-red-600 text-white'
       : 'text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'

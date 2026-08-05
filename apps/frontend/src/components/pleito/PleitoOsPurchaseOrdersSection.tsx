@@ -135,7 +135,7 @@ export function PleitoOsPurchaseOrdersSection({
                 {items.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">Sem itens cadastrados.</p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full table-fixed text-xs">
                       <colgroup>
                         <col />

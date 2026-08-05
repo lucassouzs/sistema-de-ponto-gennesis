@@ -885,7 +885,7 @@ export default function AlocacaoPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>

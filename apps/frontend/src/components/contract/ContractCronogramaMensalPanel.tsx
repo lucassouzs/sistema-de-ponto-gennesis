@@ -290,7 +290,7 @@ export function ContractCronogramaMensalPanel({
           Exportar PDF
         </button>
       </div>
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/50">
+      <div className="table-scroll rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900/50">
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="border-b border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-800">
             <tr>

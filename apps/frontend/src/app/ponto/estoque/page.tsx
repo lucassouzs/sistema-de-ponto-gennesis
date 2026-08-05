@@ -1879,7 +1879,7 @@ export default function EstoquePage() {
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                    <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
                         type="text"
@@ -1968,7 +1968,7 @@ export default function EstoquePage() {
                         Página {balanceCurrentPage} de {balanceTotalPages}
                       </span>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="table-scroll">
                       <table className="w-full text-sm">
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
@@ -2139,7 +2139,7 @@ export default function EstoquePage() {
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                    <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
                         type="text"
@@ -2194,7 +2194,7 @@ export default function EstoquePage() {
                         Página {historyCurrentPage} de {historyTotalPages}
                       </span>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="table-scroll">
                       <table className="w-full text-sm">
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
@@ -2458,7 +2458,7 @@ export default function EstoquePage() {
                       <span className="text-gray-800 dark:text-gray-200">{balanceDetail.lines.length}</span>
                     </p>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
                     <table className="w-full text-sm">
                       <thead className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/80">
                         <tr>
@@ -2723,7 +2723,7 @@ export default function EstoquePage() {
                     Selecione o tipo da movimentação (Total ou Parcial).
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
                     <table className={`${cadastroListClasses.table} min-w-[36rem] !table-auto`}>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>

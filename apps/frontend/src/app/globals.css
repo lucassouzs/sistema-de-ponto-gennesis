@@ -87,8 +87,12 @@
 @layer components {
   /** Wrapper para tabelas/listas largas — scroll horizontal sem estourar a viewport no mobile. */
   .table-scroll {
-    @apply w-full max-w-full overflow-x-auto overscroll-x-contain;
+    @apply -mx-1 w-full max-w-full overflow-x-auto overscroll-x-contain px-1 sm:mx-0 sm:px-0;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .table-scroll > table {
+    @apply min-w-[36rem];
   }
 
   .btn {

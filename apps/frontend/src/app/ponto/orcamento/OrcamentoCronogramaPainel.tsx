@@ -1194,7 +1194,7 @@ export function OrcamentoCronogramaPainel({
         )}
 
         {viewMode === 'tabela' && (
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className={`w-max min-w-full border-collapse table-auto ${gradeTableCls}`}>
               <thead className="sticky top-0 z-10 border-t-[0.5px] border-b border-gray-200/80 bg-gray-50 dark:border-gray-700/80 dark:bg-gray-800">
                 <tr className={gradeTableRowTrCls}>

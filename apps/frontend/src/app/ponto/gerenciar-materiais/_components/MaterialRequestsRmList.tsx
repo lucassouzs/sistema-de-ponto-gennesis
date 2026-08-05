@@ -253,7 +253,7 @@ export function MaterialRequestsRmList({
                 Página {listCurrentPage} de {listTotalPages}
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className={`${cadastroListClasses.table} text-sm`}>
                 <colgroup>
                   <col className="w-[4%]" />

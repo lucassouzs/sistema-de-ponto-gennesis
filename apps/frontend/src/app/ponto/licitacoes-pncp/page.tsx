@@ -1314,7 +1314,7 @@ function LicitacoesPncpPageContent() {
 
               <div
                 ref={tableScrollRef}
-                className={`overflow-x-auto transition-opacity ${
+                className={`table-scroll transition-opacity ${
                   query.isFetching && !showInitialLoading ? 'opacity-60' : ''
                 }`}
               >

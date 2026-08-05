@@ -300,7 +300,7 @@ export default function ContractPermissionsPage() {
                 </div>
 
                 <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-                  <div className="overflow-x-auto pt-4">
+                  <div className="table-scroll pt-4">
                     <table className="w-full min-w-[640px] table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">

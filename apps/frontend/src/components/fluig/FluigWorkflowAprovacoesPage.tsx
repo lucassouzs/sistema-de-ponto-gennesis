@@ -526,7 +526,7 @@ export function FluigWorkflowAprovacoesPage() {
                         currentPage={listPage}
                         totalPages={totalPages}
                       />
-                      <div className="overflow-x-auto">
+                      <div className="table-scroll">
                         <table className="w-full text-sm">
                           <colgroup>
                             <col className="w-[1%]" />

@@ -403,7 +403,7 @@ export default function ControleGeralContratosPage() {
                       </span>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div className="table-scroll">
                       <table className="w-full text-sm">
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
@@ -520,7 +520,7 @@ export default function ControleGeralContratosPage() {
                     </div>
 
                     {totalPages > 1 ? (
-                      <div className="mt-6 flex items-center justify-center space-x-2">
+                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
                         <button
                           type="button"
                           onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

@@ -1220,7 +1220,7 @@ export default function MapaCotacaoPage() {
                     </div>
                   ) : (
                     <>
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                           <table className={`${cadastroListClasses.table} min-w-[40rem] !table-auto text-sm`}>
                             <thead className="border-b border-gray-200 dark:border-gray-700">
                               <tr>
@@ -1542,7 +1542,7 @@ export default function MapaCotacaoPage() {
                   <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                     Itens da OC
                   </h4>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
                     <table className={`${cadastroListClasses.table} !table-auto text-sm`}>
                       <thead className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                         <tr>

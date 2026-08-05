@@ -1157,7 +1157,7 @@ export default function ReceitasPage() {
                     totalPages={totalPages}
                   />
 
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     {isResumo ? (
                       <table className={cadastroListClasses.table}>
                         <thead className="border-b border-gray-200 dark:border-gray-700">

@@ -482,7 +482,7 @@ function ArquivoCard({ arquivo, onToggle, onRemove }: ArquivoCardProps) {
 
       {/* Tabela de itens */}
       {arquivo.expandido && !arquivo.erro && arquivo.items.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800 border-y border-slate-200 dark:border-slate-700">

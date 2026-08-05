@@ -876,7 +876,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                   Revise e edite os dados antes de importar. Linhas em vermelho têm erros que precisam ser corrigidos.
                 </p>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900">
+                <div className="table-scroll max-h-[500px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900">
                   <table className="w-full text-sm" style={{ minWidth: '2000px' }}>
                     <thead className="bg-gray-50/50 dark:bg-gray-800/50 sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800">
                       <tr>

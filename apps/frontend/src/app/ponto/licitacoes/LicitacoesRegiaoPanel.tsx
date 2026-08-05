@@ -1612,7 +1612,7 @@ export function LicitacoesRegiaoPanel({
                 currentPage={currentPage}
                 totalPages={listRange.totalPages}
               />
-              <div ref={tableScrollRef} className="overflow-x-auto">
+              <div ref={tableScrollRef} className="table-scroll">
                 <table className="w-full min-w-[64rem] text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">

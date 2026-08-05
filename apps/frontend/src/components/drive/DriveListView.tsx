@@ -183,6 +183,8 @@ export function DriveListView({
   return (
     <div onClick={() => setOpenMenuId(null)}>
       <Card padding="none" className="!shadow-none">
+        <div className="table-scroll">
+          <div className="min-w-[40rem]">
         <div
           className={`grid ${GRID_COLS} gap-4 border-b border-gray-200 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:text-gray-400`}
         >
@@ -473,6 +475,8 @@ export function DriveListView({
             </div>
           );
         })}
+          </div>
+        </div>
       </Card>
     </div>
   );

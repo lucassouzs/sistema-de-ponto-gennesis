@@ -1783,7 +1783,7 @@ function ExtratoResumoTable({
             </span>
           ) : null}
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-scroll">
           <table className="w-full min-w-[36rem] text-sm">
             <thead className="border-b border-gray-200 dark:border-gray-700">
               <tr>
@@ -2211,7 +2211,7 @@ function ExtratoSearchFilterBar({
 }: ExtratoSearchFilterBarProps) {
   return (
     <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-2">
-      <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+      <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
         <input
           ref={searchInputRef}
@@ -2396,7 +2396,7 @@ function ExtratoItemsList({ items, emptyMessage }: ExtratoItemsListProps) {
                 Página {currentPage} de {totalPages}
               </span>
             </div>
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="min-w-[64rem] w-full text-sm">
               <thead className="border-b border-gray-200 dark:border-gray-700">
                 <tr>

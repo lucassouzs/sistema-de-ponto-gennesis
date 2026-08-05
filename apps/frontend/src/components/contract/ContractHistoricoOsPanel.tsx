@@ -428,7 +428,7 @@ export function ContractHistoricoOsPanel({ contractId }: ContractHistoricoOsPane
               currentPage={listPage}
               totalPages={listRange.totalPages}
             />
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full min-w-[960px] text-sm" data-cc-skip-column-customizer="1">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>

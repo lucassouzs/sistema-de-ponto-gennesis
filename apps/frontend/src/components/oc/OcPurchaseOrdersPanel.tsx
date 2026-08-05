@@ -1256,7 +1256,7 @@ function OcStockMovementHistoryList({
   );
 
   return (
-    <div className="overflow-x-auto">
+    <div className="table-scroll">
       <p className="text-xs font-medium text-gray-500 dark:text-gray-400 pb-3 border-b border-gray-200 dark:border-gray-700">
         {title}
       </p>
@@ -1330,7 +1330,7 @@ function totalOrder(items?: { totalPrice: number }[] | null) {
 
 function OcOrderMaterialsTable({ order }: { order: PurchaseOrder }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="table-scroll">
       <table className="w-full text-xs sm:text-sm">
         <thead>
           <tr className="text-left border-b border-gray-200 dark:border-gray-700">
@@ -4193,7 +4193,7 @@ export function OcPurchaseOrdersPanel({
                 <Loading message="Carregando ordens..." />
               </div>
             ) : (
-              <div className={isIntegratedFlux ? undefined : 'overflow-x-auto'}>
+              <div className={isIntegratedFlux ? undefined : 'table-scroll'}>
                 {isIntegratedFlux && integratedListCount > 0 && (
                   <div className="mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                     <span>
@@ -4263,7 +4263,7 @@ export function OcPurchaseOrdersPanel({
                     ) : null}
                   </div>
                 ) : (
-                <div className={isIntegratedFlux ? 'overflow-x-auto' : undefined}>
+                <div className={isIntegratedFlux ? 'table-scroll' : undefined}>
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
@@ -4978,7 +4978,7 @@ export function OcPurchaseOrdersPanel({
                 role="tablist"
                 aria-label="Seções da OC"
               >
-                <div className="flex gap-1 overflow-x-auto -mb-px">
+                <div className="flex gap-1 table-scroll -mb-px">
                   {OC_DETAIL_MODAL_TABS.map((tab) => {
                     const active = ocDetailTab === tab.id;
                     return (
@@ -5562,7 +5562,7 @@ export function OcPurchaseOrdersPanel({
                     <div className="space-y-6">
                       {hasReceipts ? (
                         <>
-                          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
+                          <div className="table-scroll rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
                             <table className="w-full text-xs sm:text-sm">
                               <thead>
                                 <tr className="text-left border-b border-gray-200 dark:border-gray-700">

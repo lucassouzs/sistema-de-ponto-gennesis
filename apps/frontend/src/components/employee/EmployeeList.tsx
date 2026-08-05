@@ -1815,7 +1815,7 @@ export function EmployeeList({
             </div>
           </div>
           <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-            <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+            <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
@@ -2029,8 +2029,8 @@ export function EmployeeList({
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="table-scroll">
+              <table className="w-full min-w-[36rem] text-sm">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>
                     {canDeleteEmployees && showDeleteButton ? (
@@ -2274,7 +2274,7 @@ export function EmployeeList({
 
             {/* Botões de paginação */}
             {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-center space-x-2">
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
@@ -3747,8 +3747,8 @@ export function EmployeeList({
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                       Revise os registros antes de importar. Você pode remover registros indesejados.
                     </p>
-                    <div className="overflow-x-auto max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                      <table className="w-full text-sm">
+                    <div className="table-scroll max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+                      <table className="w-full min-w-[36rem] text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-700/80 sticky top-0 z-10">
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider border-b border-gray-200 dark:border-gray-600">

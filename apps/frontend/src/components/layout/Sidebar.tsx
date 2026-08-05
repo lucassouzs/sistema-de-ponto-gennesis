@@ -1370,7 +1370,11 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       else closeSidebarPanel();
     };
     const onExpand = () => expandSidebarPanel();
-    const onOpenMobile = () => setIsOpen(true);
+    const onOpenMobile = () => {
+      window.dispatchEvent(new CustomEvent(LAYOUT_CHROME.CLOSE_PROFILE_MENU));
+      setIsOpen(true);
+    };
+    const onCloseMobile = () => setIsOpen(false);
     const onSetSearch = (event: Event) => {
       const detail = (event as CustomEvent<MenuSearchDetail>).detail;
       const term = detail?.term ?? '';
@@ -1381,25 +1385,27 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     window.addEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
     window.addEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
     window.addEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+    window.addEventListener(LAYOUT_CHROME.CLOSE_MOBILE_SIDEBAR, onCloseMobile);
     window.addEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
     return () => {
       window.removeEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
       window.removeEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
       window.removeEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+      window.removeEventListener(LAYOUT_CHROME.CLOSE_MOBILE_SIDEBAR, onCloseMobile);
       window.removeEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
     };
   }, [closeSidebarPanel, expandSidebarPanel, isCollapsed]);
 
-  // Ao mudar de rota: recolhe só em home/atalhos do rodapé; demais rotas mantêm o painel aberto
+  // Ao mudar de rota: fecha drawer mobile; recolhe painel só em home/atalhos do rodapé
   React.useEffect(() => {
     if (pathname === prevPathnameRef.current) return;
     prevPathnameRef.current = pathname;
     userPickedModuleRef.current = false;
     setSearchTerm('');
+    setIsOpen(false);
 
     if (onHomeRoute || onRailFooterRoute) {
       setCollapsed(true);
-      setIsOpen(false);
       return;
     }
 
@@ -1500,11 +1506,12 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
   return (
     <>
-      {/* Overlay mobile */}
+      {/* Overlay mobile — acima da TopNavbar para bloquear cliques com o menu aberto */}
       {isOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
           onClick={closeSidebarPanel}
+          aria-hidden
         />
       )}
 
@@ -1512,7 +1519,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       <div
         ref={sidebarRef}
         data-app-sidebar
-        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] max-w-[100vw] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
+        className={`fixed inset-y-0 left-0 z-[70] flex h-[100dvh] max-h-[100dvh] max-w-[100vw] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >

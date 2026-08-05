@@ -660,7 +660,7 @@ export default function FornecedoresPage() {
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                  <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
@@ -756,7 +756,7 @@ export default function FornecedoresPage() {
                     currentPage={currentPage}
                     totalPages={listRange.totalPages}
                   />
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className={cadastroListClasses.table}>
                       <colgroup>
                         <col className="w-[4.5rem]" />

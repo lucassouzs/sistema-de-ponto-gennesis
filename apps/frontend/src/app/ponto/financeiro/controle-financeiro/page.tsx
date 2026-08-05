@@ -1319,7 +1319,7 @@ function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthG
       </CardHeader>
       <div id={`month-list-${year}-${month}`}>
         <CardContent className="px-0 !pt-0 pb-0">
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="w-full text-sm">
             <thead className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               <tr>

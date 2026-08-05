@@ -195,32 +195,39 @@ export function RowActionMenuPortal({
  * números à direita (`thNumeric`/`tdNumeric`); ações à direita (`thRight` + `RowActionMenuCell`).
  */
 export const cadastroListClasses = {
-  card: 'w-full',
+  card: 'w-full min-w-0',
   cardHeader: 'border-b-0 pb-1',
-  cardContent: 'pt-2',
+  cardContent: 'min-w-0 pt-2',
   cardHeaderRow:
-    'flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between',
-  cardHeaderIconRow: 'flex items-center space-x-3',
-  cardToolbar: 'flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end',
+    'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+  cardHeaderIconRow: 'flex min-w-0 items-center space-x-3',
+  cardToolbar:
+    'flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end',
+  /** Campo de busca das toolbars — ocupa a largura no mobile sem forçar overflow. */
+  searchField: 'relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none',
+  /** Wrapper de tabela — scroll horizontal no mobile sem estourar a viewport. */
+  tableScroll: 'table-scroll',
   listSummary:
     'mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2',
-  pagination: 'mt-6 flex items-center justify-center space-x-2',
-  table: 'w-full table-fixed text-sm',
-  th: 'px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6',
+  pagination:
+    'mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6',
+  /** min-w garante scroll horizontal legível no mobile; table-fixed no desktop. */
+  table: 'w-full min-w-[36rem] table-fixed text-sm',
+  th: 'px-2 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6 sm:py-4',
   thCenter:
-    'px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6',
+    'px-2 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6 sm:py-4',
   thNumeric:
-    'px-3 py-4 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6',
+    'px-2 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6 sm:py-4',
   thRight: listTableRowClasses.actionTh,
-  td: 'px-3 py-4 text-sm text-gray-900 dark:text-gray-100 sm:px-6',
-  tdMuted: 'px-3 py-4 text-sm text-gray-600 dark:text-gray-400 sm:px-6',
+  td: 'px-2 py-3 text-sm text-gray-900 dark:text-gray-100 sm:px-6 sm:py-4',
+  tdMuted: 'px-2 py-3 text-sm text-gray-600 dark:text-gray-400 sm:px-6 sm:py-4',
   tdMono:
-    'whitespace-nowrap px-3 py-4 font-mono text-sm text-gray-900 dark:text-gray-100 sm:px-6',
+    'whitespace-nowrap px-2 py-3 font-mono text-sm text-gray-900 dark:text-gray-100 sm:px-6 sm:py-4',
   tdCenter:
-    'whitespace-nowrap px-3 py-4 text-center text-sm text-gray-900 dark:text-gray-100 sm:px-6',
+    'whitespace-nowrap px-2 py-3 text-center text-sm text-gray-900 dark:text-gray-100 sm:px-6 sm:py-4',
   tdNumeric:
-    'whitespace-nowrap px-3 py-4 text-right text-sm text-gray-600 dark:text-gray-400 sm:px-6',
-  tdTruncate: 'min-w-0 px-3 py-4 sm:px-6',
+    'whitespace-nowrap px-2 py-3 text-right text-sm text-gray-600 dark:text-gray-400 sm:px-6 sm:py-4',
+  tdTruncate: 'min-w-0 px-2 py-3 sm:px-6 sm:py-4',
 } as const;
 
 export {

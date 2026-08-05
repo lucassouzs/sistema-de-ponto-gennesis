@@ -25,7 +25,7 @@ import { usePageTitleOverride } from '@/context/PageTitleContext';
 import { CircularPhotoCropModal } from '@/components/conversas/CircularPhotoCropModal';
 import { NotificationsDropdown } from '@/components/layout/NotificationsDropdown';
 import { NavSearch } from '@/components/layout/NavSearch';
-import { dispatchOpenMobileSidebar } from '@/lib/layoutChrome';
+import { dispatchOpenMobileSidebar, dispatchCloseMobileSidebar, LAYOUT_CHROME } from '@/lib/layoutChrome';
 
 interface TopNavbarProps {
   userName: string;
@@ -230,6 +230,12 @@ export function TopNavbar({
   }, [profileMenuOpen, updateProfileMenuPos]);
 
   useEffect(() => {
+    const onCloseProfile = () => setProfileMenuOpen(false);
+    window.addEventListener(LAYOUT_CHROME.CLOSE_PROFILE_MENU, onCloseProfile);
+    return () => window.removeEventListener(LAYOUT_CHROME.CLOSE_PROFILE_MENU, onCloseProfile);
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -253,7 +259,10 @@ export function TopNavbar({
         {/* Mobile menu */}
         <button
           type="button"
-          onClick={() => dispatchOpenMobileSidebar()}
+          onClick={() => {
+            setProfileMenuOpen(false);
+            dispatchOpenMobileSidebar();
+          }}
           className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 lg:hidden"
           aria-label="Abrir menu"
         >
@@ -326,7 +335,12 @@ export function TopNavbar({
             aria-haspopup="true"
             aria-expanded={profileMenuOpen}
             aria-label="Conta e configurações"
-            onClick={() => setProfileMenuOpen((v) => !v)}
+            onClick={() => {
+              setProfileMenuOpen((v) => {
+                if (!v) dispatchCloseMobileSidebar();
+                return !v;
+              });
+            }}
             className={`profile-avatar-btn relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 sm:size-10 ${
               profileReady && profilePhotoHref
                 ? 'bg-transparent'

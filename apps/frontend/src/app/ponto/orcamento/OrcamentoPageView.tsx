@@ -8127,7 +8127,7 @@ export function OrcamentoPageView({
                     </div>
                     <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                       {!carregandoListaOrcamentos && listaOrcamentos.length > 0 && (
-                        <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                        <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                           <input
                             type="text"
@@ -8177,7 +8177,7 @@ export function OrcamentoPageView({
                         </span>
                         <span>Página 1 de 1</span>
                       </div>
-                      <div className="overflow-x-auto">
+                      <div className="table-scroll">
                         <table className="w-full table-fixed text-sm">
                           <thead className="border-b border-gray-200 dark:border-gray-700">
                             <tr>
@@ -8514,7 +8514,7 @@ export function OrcamentoPageView({
                       />
                     ) : (
                     <>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                    <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                       <table className={`min-w-full border-collapse ${gradeTableCls}`}>
                         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                           <tr className={gradeTableRowTrCls}>
@@ -8922,7 +8922,7 @@ export function OrcamentoPageView({
                       />
                     ) : (
                         <>
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                        <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                           <table className={`min-w-full border-collapse ${gradeTableCls}`}>
                             <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                               <tr className={gradeTableRowTrCls}>
@@ -10186,7 +10186,7 @@ export function OrcamentoPageView({
                     </div>
                     <div
                       ref={montagemOrcamentoTableRef}
-                      className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                      className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
                     >
                       <table className={`min-w-[1254px] w-full border-collapse text-sm ${gradeTableCls}`}>
                         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
@@ -10967,7 +10967,7 @@ export function OrcamentoPageView({
                               Nenhuma composição encontrada neste orçamento.
                             </p>
                           ) : (
-                            <div className="overflow-x-auto">
+                            <div className="table-scroll">
                               <table className="w-full min-w-[980px] text-xs border-collapse">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">
@@ -11069,7 +11069,7 @@ export function OrcamentoPageView({
                           orcafascioOrcamentoLinhaCatalogo.items.length === 0 ? (
                             <p className="text-xs text-gray-400 py-6 text-center">Sem insumos/serviços nesta composição.</p>
                           ) : (
-                            <div className="overflow-x-auto">
+                            <div className="table-scroll">
                               <table className="w-full min-w-[900px] text-xs border-collapse">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">
@@ -11533,7 +11533,7 @@ export function OrcamentoPageView({
                             {orcafascioDetalhe.items.length === 0 ? (
                               <p className="text-xs text-gray-400 px-2">Sem linhas analíticas.</p>
                             ) : (
-                              <div className="overflow-x-auto">
+                              <div className="table-scroll">
                                 <table className="w-full text-[11px] border-collapse min-w-[280px]">
                                   <thead>
                                     <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">

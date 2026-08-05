@@ -1201,7 +1201,7 @@ export function BancoCatsPanel() {
                       />
                     ) : (
                       <>
-                        <div className="overflow-x-auto">
+                        <div className="table-scroll">
                           <table className="w-full min-w-[48rem] text-sm">
                             <thead>
                               <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -1527,7 +1527,7 @@ export function BancoCatsPanel() {
                 currentPage={currentPage}
                 totalPages={listRange.totalPages}
               />
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full min-w-[56rem] text-sm">
                   <thead>
                     <tr className="border-b border-gray-200 dark:border-gray-700">

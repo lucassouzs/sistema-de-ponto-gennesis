@@ -1467,7 +1467,7 @@ export function UserPermissionsEditor({
             ) : (
               displayCategories.map(({ category, modules }) => (
                 <div key={category} className="border-t border-gray-100 first:border-t-0 dark:border-gray-700/80">
-                  <div className="overflow-x-auto pt-6 first:pt-4">
+                  <div className="table-scroll pt-6 first:pt-4">
                     {activeTab === 'controle' ? (
                       <table className="w-full min-w-[320px] table-fixed text-sm">
                         <thead>
@@ -1676,7 +1676,7 @@ export function UserPermissionsEditor({
               </div>
             ) : (
               <div>
-                <div className="max-h-[min(28rem,60vh)] overflow-x-auto overflow-y-auto pt-2 sm:pt-4">
+                <div className="max-h-[min(28rem,60vh)] table-scroll overflow-y-auto pt-2 sm:pt-4">
                   <table className="w-full min-w-[760px] table-fixed text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">

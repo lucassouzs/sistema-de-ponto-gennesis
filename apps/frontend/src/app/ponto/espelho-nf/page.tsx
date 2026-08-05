@@ -3362,7 +3362,7 @@ export default function EspelhoNfPage() {
                           <span>Página 1 de 1</span>
                         </div>
 
-                        <div className="overflow-x-auto">
+                        <div className="table-scroll">
                           <table className="w-full text-sm">
                             <thead className="border-b border-gray-200 dark:border-gray-700">
                               <tr>

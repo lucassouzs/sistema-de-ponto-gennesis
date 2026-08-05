@@ -703,7 +703,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               Detalhamento da Folha
             </h3>
             
-            <div className="overflow-x-auto shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg">
+            <div className="table-scroll shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg">
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">

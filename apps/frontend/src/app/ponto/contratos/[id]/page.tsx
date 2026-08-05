@@ -3841,7 +3841,7 @@ export default function ContractDetailPage() {
               ) : null}
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 {isAllYears ? (
                   <table className="w-full" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -4327,7 +4327,7 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
                 <div className={cadastroListClasses.cardToolbar}>
-                  <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
                       type="search"
@@ -4422,7 +4422,7 @@ export default function ContractDetailPage() {
                     currentPage={productionListPage}
                     totalPages={productionListRange.totalPages}
                   />
-                <div className="overflow-x-auto">
+                <div className="table-scroll">
                   <table className="w-full" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
@@ -4605,7 +4605,7 @@ export default function ContractDetailPage() {
                         </span>
                       </button>
                     )}
-                    <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
                         type="search"
@@ -4752,7 +4752,7 @@ export default function ContractDetailPage() {
                     currentPage={pleitosListPage}
                     totalPages={pleitosListRange.totalPages}
                   />
-                <div className="overflow-x-auto">
+                <div className="table-scroll">
                   <table className="w-full text-sm" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
@@ -5016,7 +5016,7 @@ export default function ContractDetailPage() {
                       </span>
                     </button>
                   ) : null}
-                  <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
                       type="search"
@@ -5116,7 +5116,7 @@ export default function ContractDetailPage() {
                     currentPage={billingsListPage}
                     totalPages={billingsListRange.totalPages}
                   />
-                <div className="overflow-x-auto">
+                <div className="table-scroll">
                   <table className="w-full text-sm" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
@@ -5290,7 +5290,7 @@ export default function ContractDetailPage() {
                   : 'Nenhuma natureza com lançamento detalhado neste mês.'}
               </p>
             ) : (
-              <div className="overflow-x-auto max-h-[70vh]">
+              <div className="table-scroll max-h-[70vh]">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                     <tr>
@@ -5359,7 +5359,7 @@ export default function ContractDetailPage() {
                                     Reinicie a API após atualizar o backend se o detalhe ainda não carregar.
                                   </p>
                                 ) : (
-                                  <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
                                     <table className="min-w-full text-sm">
                                       <thead className="bg-white dark:bg-gray-900">
                                         <tr>
@@ -6381,7 +6381,7 @@ export default function ContractDetailPage() {
                   {contract && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{contract.name} - nº {contract.number}</p>
                   )}
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -6708,7 +6708,7 @@ export default function ContractDetailPage() {
             title="Todos os faturamentos"
             size="xl"
           >
-            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
               <table className="w-full text-sm" data-cc-skip-column-customizer="1">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>

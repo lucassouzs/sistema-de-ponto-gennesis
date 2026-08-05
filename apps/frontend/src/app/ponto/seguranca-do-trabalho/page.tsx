@@ -1338,7 +1338,7 @@ export default function SegurancaDoTrabalhoPage() {
                     Nenhum registro de ASO encontrado.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full min-w-[56rem] text-sm">
                       <thead>
                         <tr>
@@ -1517,7 +1517,7 @@ export default function SegurancaDoTrabalhoPage() {
                     Nenhum funcionário encontrado.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full min-w-[64rem] text-sm">
                       <thead>
                         <tr>
@@ -1757,7 +1757,7 @@ export default function SegurancaDoTrabalhoPage() {
                       padrão.
                     </p>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <div className="table-scroll">
                       <table className={cadastroListClasses.table}>
                         <thead>
                           <tr>

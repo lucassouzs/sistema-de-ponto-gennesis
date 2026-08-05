@@ -265,7 +265,7 @@ function BoletoParcelasListInner({
             const isPendingEditable = !locked && st === 'PENDING_BOLETO' && !parallelFlow;
             return !isPendingEditable;
           }).some(Boolean) ? (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
+            <div className="table-scroll rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
               <table className="w-full text-xs sm:text-sm">
                 <thead>
                   <tr className="text-left border-b border-gray-200 dark:border-gray-700">
@@ -537,7 +537,7 @@ function BoletoParcelasListInner({
           </div>
         </div>
       ) : (
-      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
+      <div className="table-scroll rounded-xl border border-gray-200 dark:border-gray-700 px-4 sm:px-5">
         <table className="w-full text-xs sm:text-sm">
           <thead>
             <tr className="text-left border-b border-gray-200 dark:border-gray-700">

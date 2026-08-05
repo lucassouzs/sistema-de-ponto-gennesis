@@ -664,7 +664,7 @@ export default function ContratosPage() {
                   </div>
 
                   <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-                    <div className="overflow-x-auto pt-4 first:pt-4">
+                    <div className="table-scroll pt-4 first:pt-4">
                       <table className="w-full min-w-[640px] table-fixed text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
@@ -787,7 +787,7 @@ export default function ContratosPage() {
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                  <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
@@ -823,7 +823,7 @@ export default function ContratosPage() {
                 </span>
                 <span>Página 1 de 1</span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full table-fixed text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>

@@ -399,7 +399,7 @@ export function ExtratoCaixaAjustesPanel({
                   </span>
                 ) : null}
               </div>
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full min-w-[56rem] text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>

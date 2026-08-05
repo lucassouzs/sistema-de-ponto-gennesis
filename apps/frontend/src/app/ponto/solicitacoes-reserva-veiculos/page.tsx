@@ -626,7 +626,7 @@ export default function SolicitacoesReservaVeiculosPage() {
                       Página {currentPage} de {totalPages}
                     </span>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full text-sm">
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>

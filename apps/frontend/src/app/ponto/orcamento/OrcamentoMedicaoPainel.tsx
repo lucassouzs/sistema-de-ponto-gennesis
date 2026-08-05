@@ -674,7 +674,7 @@ export function OrcamentoMedicaoPainel({
     '[&_tbody_tr:last-child_td]:!border-b-0 [&_td:last-child]:!border-r-0 [&_thead_th:last-child]:!border-r-0';
 
   const tabelaEnvoltorio = (children: React.ReactNode) => (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+    <div className="table-scroll rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
       <table
         className={`w-full min-w-[56rem] table-fixed border-collapse text-sm ${gradeTableCls} ${gradeTabelaMemorialBordaCls}`}
       >

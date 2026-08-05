@@ -40,7 +40,7 @@ export function ContractOsPleitoListPanel({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
       <table className="w-full text-sm">
         <thead className="border-b border-gray-200 dark:border-gray-700">
           <tr>

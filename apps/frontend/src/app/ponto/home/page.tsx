@@ -441,26 +441,26 @@ export default function HomePage() {
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <div className="relative min-h-[calc(100vh-6rem)]">
-        <div className="w-full">
+      <div className="relative min-h-[calc(100vh-6rem)] min-w-0">
+        <div className="w-full min-w-0">
           {/* Cabeçalho de boas-vindas */}
-          <div className="animate-home-fade-in flex flex-col gap-4 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+          <div className="animate-home-fade-in flex flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-8">
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
+              <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
                 {greeting}, <span className="text-red-600 dark:text-red-500">{firstName}</span>!
               </h1>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{formattedDate}</p>
             </div>
-            <blockquote className="max-w-xl shrink-0 border-l-2 border-red-500/70 pl-4 sm:max-w-md sm:border-l-0 sm:border-r-2 sm:pl-0 sm:pr-4 md:max-w-lg lg:max-w-xl">
-              <p className="text-base font-medium leading-snug text-gray-700 dark:text-gray-200 sm:text-right sm:text-lg">
+            <blockquote className="min-w-0 max-w-full border-l-2 border-red-500/70 pl-3 sm:max-w-md sm:border-l-0 sm:border-r-2 sm:pl-0 sm:pr-4 md:max-w-lg lg:max-w-xl">
+              <p className="text-sm font-medium leading-snug text-gray-700 dark:text-gray-200 sm:text-right sm:text-base md:text-lg">
                 “{dailyQuote}”
               </p>
             </blockquote>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:mt-6 sm:gap-6 lg:grid-cols-3 lg:items-start">
             {canSeePncp && (
-              <Card className="flex h-full flex-col lg:col-span-2">
+              <Card className="flex h-full min-w-0 flex-col lg:col-span-2">
                 <CardHeader className="border-b-0 pb-1">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex min-w-0 items-center space-x-3">
@@ -468,16 +468,16 @@ export default function HomePage() {
                         <Gavel className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
                           Captações
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 sm:text-sm">
                           Envios para análise · semana vs. anterior
                         </p>
                       </div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-3 sm:gap-4 lg:justify-end">
-                      <div className="flex items-center gap-3 text-xs font-medium text-gray-600 dark:text-gray-400">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4 lg:justify-end">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400 sm:gap-3">
                         <span className="inline-flex items-center gap-1.5">
                           <span
                             className="size-2.5 shrink-0 rounded-full"
@@ -506,7 +506,7 @@ export default function HomePage() {
                         >
                           <ChevronLeft className="h-4 w-4" />
                         </button>
-                        <span className="min-w-[8.5rem] text-center text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300">
+                        <span className="min-w-[7.5rem] text-center text-xs font-medium tabular-nums text-gray-600 dark:text-gray-300 sm:min-w-[8.5rem]">
                           {formatWeekRangeLabel(pncpWeekMonday, pncpWeekFriday)}
                         </span>
                         <button
@@ -527,8 +527,8 @@ export default function HomePage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex min-h-0 flex-1 flex-col">
-                  <div className="h-[260px] w-full flex-1 font-sans text-xs text-gray-500 dark:text-gray-400 sm:min-h-[320px] sm:h-auto">
+                <CardContent className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  <div className="h-[220px] w-full min-w-0 flex-1 font-sans text-xs text-gray-500 dark:text-gray-400 sm:h-auto sm:min-h-[320px]">
                     {pncpSemanaLoading ? (
                       <p className="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
                         Carregando…
@@ -537,8 +537,8 @@ export default function HomePage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={pncpWeekChartData}
-                          margin={{ top: 20, right: 12, left: 8, bottom: 8 }}
-                          barCategoryGap="28%"
+                          margin={{ top: 16, right: 4, left: 0, bottom: 4 }}
+                          barCategoryGap="20%"
                           barGap={0}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
@@ -586,7 +586,7 @@ export default function HomePage() {
                             tick={chartAxisTick}
                             axisLine={false}
                             tickLine={false}
-                            width={44}
+                            width={32}
                           />
                           <Tooltip
                             cursor={{ fill: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}
@@ -638,7 +638,7 @@ export default function HomePage() {
                             name="anterior"
                             fill={chartBarAnterior}
                             radius={[6, 6, 0, 0]}
-                            maxBarSize={48}
+                            maxBarSize={36}
                             minPointSize={2}
                           />
                           <Bar
@@ -646,7 +646,7 @@ export default function HomePage() {
                             name="atual"
                             fill={chartBarAtual}
                             radius={[6, 6, 0, 0]}
-                            maxBarSize={48}
+                            maxBarSize={36}
                             minPointSize={2}
                           />
                         </BarChart>
@@ -658,11 +658,11 @@ export default function HomePage() {
             )}
 
             <div
-              className={`flex flex-col gap-6 ${
+              className={`flex min-w-0 flex-col gap-4 sm:gap-6 ${
                 canSeePncp ? '' : 'lg:col-span-3 lg:grid lg:grid-cols-2'
               }`}
             >
-              <Card className="flex flex-col">
+              <Card className="flex min-w-0 flex-col">
                 <CardHeader className="border-b-0 pb-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center space-x-3">
@@ -670,10 +670,10 @@ export default function HomePage() {
                         <CalendarClock className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
                           Agenda
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                        <p className="truncate text-xs text-gray-600 dark:text-gray-400 sm:text-sm">
                           {formattedDate}
                         </p>
                       </div>
@@ -742,7 +742,7 @@ export default function HomePage() {
                 </CardContent>
               </Card>
 
-              <Card className="flex flex-col">
+              <Card className="flex min-w-0 flex-col">
                 <CardHeader className="border-b-0 pb-1">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center space-x-3">
@@ -750,7 +750,7 @@ export default function HomePage() {
                         <CheckSquare className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
                           Tarefas
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400">

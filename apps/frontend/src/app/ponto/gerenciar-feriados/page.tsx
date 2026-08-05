@@ -545,7 +545,7 @@ export default function GerenciarFeriadosPage() {
                 <p className="text-gray-500 dark:text-gray-400">Nenhum feriado encontrado</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="w-full">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
