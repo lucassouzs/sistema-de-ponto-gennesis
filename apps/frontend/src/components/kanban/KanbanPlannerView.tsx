@@ -34,6 +34,7 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { TimePickerField } from '@/components/ui/TimePickerField';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useTheme } from '@/context/ThemeContext';
 import {
   createPlannerEvent,
   deletePlannerEvent,
@@ -578,13 +579,14 @@ function EventBlock({
   onDelete?: (event: PlannerEvent) => void;
   canDelete?: boolean;
 }) {
-  const pastel = plannerPastelFromColor(event.color || COLOR_OPTIONS[0]);
+  const { isDark } = useTheme();
+  const pastel = plannerPastelFromColor(event.color || COLOR_OPTIONS[0], isDark);
   const attendees = event.attendees || [];
   const timeLabel = formatEventTimeRange(event.startAt, event.endAt);
   /** Layout em coluna (ícone → título → horário → avatar), como o card de referência. */
-  const isSpacious = height >= 96;
-  const showMeta = height >= 52;
-  const showFooter = height >= 80;
+  const isSpacious = height >= 100;
+  const showMeta = height >= 70;
+  const showFooter = height >= 92;
 
   return (
     <div
@@ -601,20 +603,20 @@ function EventBlock({
           onEdit(event);
         }
       }}
-      className={`pointer-events-auto absolute left-1 right-1 z-10 flex cursor-pointer flex-col overflow-visible text-left shadow-sm transition-shadow hover:shadow-md ${
-        isSpacious ? 'rounded-2xl px-3 py-2.5' : 'rounded-xl px-2 py-1.5'
+      className={`pointer-events-auto absolute left-1 right-1 z-10 flex cursor-pointer flex-col overflow-hidden text-left shadow-sm transition-shadow hover:shadow-md ${
+        isSpacious ? 'rounded-2xl px-3 py-2.5' : 'rounded-xl px-2 py-1'
       }`}
       style={{
         top,
         height,
         backgroundColor: pastel.bg,
         color: pastel.text,
-        minHeight: attendees.length > 0 ? 80 : 36,
+        minHeight: attendees.length > 0 ? 92 : 52,
       }}
       aria-label={event.ataFileUrl ? `${event.title} · Ata PDF anexada` : event.title}
     >
       {isSpacious ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="flex shrink-0 items-center gap-1.5">
             <PlannerEventIconView
               icon={event.icon}
@@ -625,7 +627,7 @@ function EventBlock({
               <FileText className="h-4 w-4 shrink-0 opacity-80" style={{ color: pastel.muted }} />
             ) : null}
           </div>
-          <span className="mt-2 line-clamp-3 text-sm font-bold leading-snug tracking-tight sm:text-[15px]">
+          <span className="mt-2 line-clamp-3 break-words text-sm font-bold leading-snug tracking-tight sm:text-[15px]">
             {event.title}
           </span>
           {timeLabel ? (
@@ -656,19 +658,32 @@ function EventBlock({
           ) : null}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-0.5">
-          <div className="flex items-start gap-1.5">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 items-start gap-1.5">
             <PlannerEventIconView
               icon={event.icon}
-              className="mt-0.5 h-4 w-4 shrink-0"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0"
               style={{ color: pastel.text }}
             />
             {event.ataFileUrl ? (
-              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80" style={{ color: pastel.muted }} />
+              <FileText
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-80"
+                style={{ color: pastel.muted }}
+              />
             ) : null}
-            <span className="line-clamp-2 min-w-0 flex-1 text-xs font-bold leading-snug sm:text-[13px]">
-              {event.title}
-            </span>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-0.5">
+              <span className="line-clamp-2 break-words text-xs font-bold leading-tight sm:text-[13px]">
+                {event.title}
+              </span>
+              {showMeta && timeLabel ? (
+                <span
+                  className="truncate text-[10px] font-medium leading-tight"
+                  style={{ color: pastel.muted }}
+                >
+                  {timeLabel}
+                </span>
+              ) : null}
+            </div>
             {showFooter && attendees.length === 0 ? (
               <EventBlockMenu
                 event={event}
@@ -680,13 +695,8 @@ function EventBlock({
               />
             ) : null}
           </div>
-          {showMeta && timeLabel ? (
-            <span className="truncate text-[11px] font-medium" style={{ color: pastel.muted }}>
-              {timeLabel}
-            </span>
-          ) : null}
           {showFooter && attendees.length > 0 ? (
-            <div className="mt-auto flex items-center justify-between pt-1">
+            <div className="mt-1 flex shrink-0 items-center justify-between">
               <EventAttendeeAvatars
                 attendees={attendees}
                 ringColor={pastel.bg}
@@ -725,6 +735,7 @@ export function KanbanPlannerView({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user: meUser } = usePermissions();
+  const { isDark } = useTheme();
   const [view, setView] = useState<CalendarView>('week');
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [formOpen, setFormOpen] = useState(false);
@@ -1474,7 +1485,7 @@ export function KanbanPlannerView({
                         const clampedEnd = Math.min(endMinutes, gridEnd);
                         if (clampedEnd <= clampedStart) return null;
                         const top = ((clampedStart - gridStart) / 60) * ROW_HEIGHT;
-                        const minH = (ev.attendees?.length || 0) > 0 ? 72 : 36;
+                        const minH = (ev.attendees?.length || 0) > 0 ? 92 : 52;
                         const height = Math.max(
                           minH,
                           ((clampedEnd - clampedStart) / 60) * ROW_HEIGHT - 2
@@ -1616,7 +1627,7 @@ export function KanbanPlannerView({
                       );
                     })}
                     {dayEvents.slice(0, 3).map((ev) => {
-                      const pastel = plannerPastelFromColor(ev.color || COLOR_OPTIONS[0]);
+                      const pastel = plannerPastelFromColor(ev.color || COLOR_OPTIONS[0], isDark);
                       return (
                         <button
                           key={ev.id}

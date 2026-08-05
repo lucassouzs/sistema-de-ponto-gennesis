@@ -81,13 +81,16 @@ export type PlannerEventsMeta = {
 };
 
 /** Mapeia a cor sólida do evento para fundo pastel + texto (cards estilo referência). */
-export function plannerPastelFromColor(color: string): {
+export function plannerPastelFromColor(
+  color: string,
+  dark = false,
+): {
   bg: string;
   text: string;
   muted: string;
 } {
   const c = (color || '#3B82F6').toUpperCase();
-  const map: Record<string, { bg: string; text: string; muted: string }> = {
+  const light: Record<string, { bg: string; text: string; muted: string }> = {
     '#3B82F6': { bg: '#DBEAFE', text: '#1E3A8A', muted: '#3B82F6' },
     '#22C55E': { bg: '#DCFCE7', text: '#166534', muted: '#16A34A' },
     '#F59E0B': { bg: '#FEF3C7', text: '#92400E', muted: '#D97706' },
@@ -96,7 +99,19 @@ export function plannerPastelFromColor(color: string): {
     '#06B6D4': { bg: '#CFFAFE', text: '#155E75', muted: '#0891B2' },
     '#EC4899': { bg: '#FCE7F3', text: '#9D174D', muted: '#DB2777' },
   };
-  return map[c] || { bg: '#E0F2FE', text: '#0C4A6E', muted: '#0284C7' };
+  const darkMap: Record<string, { bg: string; text: string; muted: string }> = {
+    '#3B82F6': { bg: '#1E3A8A', text: '#DBEAFE', muted: '#93C5FD' },
+    '#22C55E': { bg: '#14532D', text: '#DCFCE7', muted: '#86EFAC' },
+    '#F59E0B': { bg: '#78350F', text: '#FEF3C7', muted: '#FCD34D' },
+    '#EF4444': { bg: '#7F1D1D', text: '#FEE2E2', muted: '#FCA5A5' },
+    '#A855F7': { bg: '#581C87', text: '#F3E8FF', muted: '#D8B4FE' },
+    '#06B6D4': { bg: '#164E63', text: '#CFFAFE', muted: '#67E8F9' },
+    '#EC4899': { bg: '#831843', text: '#FCE7F3', muted: '#F9A8D4' },
+  };
+  if (dark) {
+    return darkMap[c] || { bg: '#0C4A6E', text: '#E0F2FE', muted: '#7DD3FC' };
+  }
+  return light[c] || { bg: '#E0F2FE', text: '#0C4A6E', muted: '#0284C7' };
 }
 
 export async function fetchPlannerAgendas(): Promise<PlannerAgenda[]> {
