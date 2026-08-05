@@ -574,9 +574,19 @@ export class DriveService {
     const body = result.Body;
     if (!body) throw new Error('Conteúdo indisponível');
 
-    const buffer = Buffer.isBuffer(body)
-      ? body
-      : Buffer.from(body as ArrayBuffer | Uint8Array);
+    let buffer: Buffer;
+    if (Buffer.isBuffer(body)) {
+      buffer = body;
+    } else if (body instanceof Uint8Array) {
+      buffer = Buffer.from(body);
+    } else if (body instanceof ArrayBuffer) {
+      buffer = Buffer.from(new Uint8Array(body));
+    } else if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === 'function') {
+      const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+      buffer = Buffer.from(bytes);
+    } else {
+      buffer = Buffer.from(Uint8Array.from(body as ArrayLike<number>));
+    }
 
     return {
       buffer,

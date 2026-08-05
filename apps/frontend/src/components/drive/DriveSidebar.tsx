@@ -8,6 +8,7 @@ import {
   Share2,
   Star,
   Trash2,
+  type LucideIcon,
 } from 'lucide-react';
 
 export type DriveSidebarView =
@@ -41,7 +42,7 @@ function formatUsed(bytes: number): string {
 const NAV: Array<{
   id: DriveSidebarView;
   label: string;
-  Icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  Icon: LucideIcon;
 }> = [
   { id: 'meu-drive', label: 'Meu Drive', Icon: HardDrive },
   { id: 'shared', label: 'Compartilhados comigo', Icon: Share2 },
