@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useCallback, useRef, useMemo, useEffect, useLayoutEffect, Suspense } from 'react';
 import { createPortal } from 'react-dom';
@@ -45,6 +45,7 @@ import {
   DriveSidebar,
   type DriveSidebarView,
 } from '@/components/drive/DriveSidebar';
+import { DriveListView } from '@/components/drive/DriveListView';
 import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
 import { getDropdownPortalRoot } from '@/lib/zIndex';
 import {
@@ -72,6 +73,8 @@ interface DriveFolder {
   name: string;
   parentId: string | null;
   ownerId: string;
+  ownerName?: string | null;
+  ownerPhotoUrl?: string | null;
   starred?: boolean;
   trashedAt?: string | null;
   createdAt: string;
@@ -91,6 +94,8 @@ interface DriveFile {
   mimeType: string;
   folderId: string | null;
   ownerId: string;
+  ownerName?: string | null;
+  ownerPhotoUrl?: string | null;
   starred?: boolean;
   trashedAt?: string | null;
   createdAt: string;
@@ -1435,7 +1440,7 @@ function DrivePageContent() {
             currentUserId={user?.id}
           />
         ) : (
-          <ListView
+          <DriveListView
             folders={folders}
             files={files}
             onOpenFolder={openFolder}
@@ -2144,220 +2149,6 @@ function GridView({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Vista em lista ────────────────────────────────────────────────────────────
-
-function ListView({
-  folders,
-  files,
-  onOpenFolder,
-  onDownload,
-  onRename,
-  onDelete,
-  onOpenShare,
-  onToggleStar,
-  onRestore,
-  trashMode,
-  currentUserId,
-}: {
-  folders: DriveFolder[];
-  files: DriveFile[];
-  onOpenFolder: (id: string) => void;
-  onDownload: (f: DriveFile) => void;
-  onRename: (type: 'folder' | 'file', id: string, name: string) => void;
-  onDelete: (type: 'folder' | 'file', id: string, name: string) => void;
-  onOpenShare?: (folder: DriveFolder) => void;
-  onToggleStar?: (type: 'folder' | 'file', id: string, starred: boolean) => void;
-  onRestore?: (type: 'folder' | 'file', id: string) => void;
-  trashMode?: boolean;
-  currentUserId?: string;
-}) {
-  const canManage = (f: DriveFolder) =>
-    f.canManageShares ?? (!!currentUserId && f.ownerId === currentUserId);
-  const isOwnerFile = (f: DriveFile) => !!currentUserId && f.ownerId === currentUserId;
-
-  return (
-    <div>
-      <Card padding="none">
-      <div className="grid grid-cols-[auto,1fr,100px,120px,120px] gap-4 border-b border-gray-200 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:text-gray-400">
-        <div />
-        <div>Nome</div>
-        <div className="text-right">Tamanho</div>
-        <div>Modificado</div>
-        <div />
-      </div>
-
-      {folders.map((folder) => (
-        <div
-          key={folder.id}
-          onClick={() => { if (!trashMode) onOpenFolder(folder.id); }}
-          className="group grid grid-cols-[auto,1fr,100px,120px,120px] gap-4 items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-700/50 last:border-0"
-        >
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 dark:bg-red-950/40">
-            <Folder className="h-4 w-4 text-red-500 dark:text-red-400" strokeWidth={1.75} />
-          </span>
-          <div className="min-w-0 flex items-center gap-1.5">
-            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-              {folder.name}
-            </span>
-            {folder.starred && !trashMode && (
-              <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500" />
-            )}
-          </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500 text-right">—</span>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(folder.updatedAt)}</span>
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {trashMode ? (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onRestore?.('folder', folder.id); }}
-                  title="Restaurar"
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onDelete('folder', folder.id, folder.name); }}
-                  title="Excluir permanentemente"
-                  className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-500 dark:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                {canManage(folder) && onToggleStar && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar('folder', folder.id, !folder.starred);
-                    }}
-                    title={folder.starred ? 'Remover estrela' : 'Com estrela'}
-                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-amber-500"
-                  >
-                    <Star className={`h-3.5 w-3.5 ${folder.starred ? 'fill-amber-400' : ''}`} />
-                  </button>
-                )}
-                {canManage(folder) && onOpenShare && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onOpenShare(folder); }}
-                    title="Quem tem acesso"
-                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-red-600 dark:text-red-400"
-                  >
-                    <Users className="h-3.5 w-3.5" />
-                  </button>
-                )}
-                {canManage(folder) && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onRename('folder', folder.id, folder.name); }}
-                      title="Renomear"
-                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onDelete('folder', folder.id, folder.name); }}
-                      title="Excluir"
-                      className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-500 dark:text-red-400"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-
-      {files.map((file) => (
-        <div
-          key={file.id}
-          onClick={() => { if (!trashMode) onDownload(file); }}
-          className="group grid grid-cols-[auto,1fr,100px,120px,120px] gap-4 items-center px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-700/50 last:border-0"
-        >
-          <DriveMimeIcon mimeType={file.mimeType} fileName={file.name} className="h-8 w-8" />
-          <div className="min-w-0 flex items-center gap-1.5">
-            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-              {file.name}
-            </span>
-            {file.starred && !trashMode && (
-              <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500" />
-            )}
-          </div>
-          <span className="text-xs text-gray-400 dark:text-gray-500 text-right">
-            {formatBytes(file.size)}
-          </span>
-          <span className="text-xs text-gray-400 dark:text-gray-500">{formatDate(file.updatedAt)}</span>
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {trashMode ? (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRestore?.('file', file.id); }}
-                  title="Restaurar"
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete('file', file.id, file.name); }}
-                  title="Excluir permanentemente"
-                  className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-500 dark:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDownload(file); }}
-                  title="Baixar"
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-                {isOwnerFile(file) && onToggleStar && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar('file', file.id, !file.starred);
-                    }}
-                    title={file.starred ? 'Remover estrela' : 'Com estrela'}
-                    className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-amber-500"
-                  >
-                    <Star className={`h-3.5 w-3.5 ${file.starred ? 'fill-amber-400' : ''}`} />
-                  </button>
-                )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onRename('file', file.id, file.name); }}
-                  title="Renomear"
-                  className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-500 dark:text-gray-400"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete('file', file.id, file.name); }}
-                  title="Excluir"
-                  className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-500 dark:text-red-400"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
-    </Card>
     </div>
   );
 }

@@ -231,13 +231,49 @@ export class DriveService {
     return [...owned, ...extra];
   }
 
-  private mapFolder(f: any, userId: string, shareCount: number) {
-    const { _count: _c, ...rest } = f;
+  private async resolveOwnerInfo(
+    ownerIds: string[],
+  ): Promise<Map<string, { name: string; profilePhotoUrl: string | null }>> {
+    const unique = [...new Set(ownerIds.filter(Boolean))];
+    const map = new Map<string, { name: string; profilePhotoUrl: string | null }>();
+    if (unique.length === 0) return map;
+    const users = await prisma.user.findMany({
+      where: { id: { in: unique } },
+      select: { id: true, name: true, profilePhotoUrl: true },
+    });
+    for (const u of users) {
+      map.set(u.id, { name: u.name, profilePhotoUrl: u.profilePhotoUrl ?? null });
+    }
+    return map;
+  }
+
+  private mapFolder(
+    f: any,
+    userId: string,
+    shareCount: number,
+    ownerInfo?: Map<string, { name: string; profilePhotoUrl: string | null }>,
+  ) {
+    const { _count: _c, owner: _owner, ...rest } = f;
+    const info = ownerInfo?.get(f.ownerId);
     return {
       ...rest,
       isOwner: f.ownerId === userId,
       canManageShares: f.ownerId === userId,
       shareCount,
+      ownerName: info?.name ?? f.owner?.name ?? null,
+      ownerPhotoUrl: info?.profilePhotoUrl ?? f.owner?.profilePhotoUrl ?? null,
+    };
+  }
+
+  private mapFile(
+    f: DriveFile,
+    ownerInfo?: Map<string, { name: string; profilePhotoUrl: string | null }>,
+  ) {
+    const info = ownerInfo?.get(f.ownerId);
+    return {
+      ...f,
+      ownerName: info?.name ?? null,
+      ownerPhotoUrl: info?.profilePhotoUrl ?? null,
     };
   }
 
@@ -246,7 +282,7 @@ export class DriveService {
     parentId?: string,
   ): Promise<{
     folders: Array<Record<string, unknown>>;
-    files: DriveFile[];
+    files: Array<Record<string, unknown>>;
   }> {
     if (parentId === undefined || parentId === null) {
       const foldersRaw = await this.listRootFoldersForUser(userId);
@@ -255,9 +291,15 @@ export class DriveService {
         where: { ownerId: userId, folderId: null, ...NOT_TRASHED },
         orderBy: { name: 'asc' },
       });
+      const ownerNames = await this.resolveOwnerInfo([
+        ...foldersRaw.map((f) => f.ownerId),
+        ...files.map((f) => f.ownerId),
+      ]);
       return {
-        folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
-        files,
+        folders: foldersRaw.map((f) =>
+          this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+        ),
+        files: files.map((f) => this.mapFile(f, ownerNames)),
       };
     }
 
@@ -276,9 +318,15 @@ export class DriveService {
       }),
     ]);
     const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    const ownerNames = await this.resolveOwnerInfo([
+      ...foldersRaw.map((f) => f.ownerId),
+      ...allFiles.map((f) => f.ownerId),
+    ]);
     return {
-      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
-      files: allFiles,
+      folders: foldersRaw.map((f) =>
+        this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+      ),
+      files: allFiles.map((f) => this.mapFile(f, ownerNames)),
     };
   }
 
@@ -305,7 +353,8 @@ export class DriveService {
     if (!f) return null;
     const shareMap = await this.getShareCountsByFolderIds([folderId]);
     const canWrite = await this.canUserWriteInFolder(userId, folderId);
-    return { ...this.mapFolder(f, userId, shareMap.get(folderId) ?? 0), canWrite };
+    const ownerNames = await this.resolveOwnerInfo([f.ownerId]);
+    return { ...this.mapFolder(f, userId, shareMap.get(folderId) ?? 0, ownerNames), canWrite };
   }
 
   async createFolder(name: string, userId: string, parentId?: string) {
@@ -730,23 +779,33 @@ export class DriveService {
     ]);
     const shareMap = await this.getShareCountsByFolderIds(folderCandidates.map((f) => f.id));
 
-    const folders: any[] = [];
+    const accessibleFolders: typeof folderCandidates = [];
     for (const f of folderCandidates) {
       if (await this.canUserAccessFolder(userId, f.id)) {
-        folders.push(this.mapFolder(f, userId, shareMap.get(f.id) ?? 0));
+        accessibleFolders.push(f);
       }
     }
 
-    const files: DriveFile[] = [];
+    const accessibleFiles: DriveFile[] = [];
     for (const f of fileCandidates) {
       if (f.folderId) {
-        if (await this.canUserAccessFolder(userId, f.folderId)) files.push(f);
+        if (await this.canUserAccessFolder(userId, f.folderId)) accessibleFiles.push(f);
       } else if (f.ownerId === userId) {
-        files.push(f);
+        accessibleFiles.push(f);
       }
     }
 
-    return { folders, files };
+    const ownerNames = await this.resolveOwnerInfo([
+      ...accessibleFolders.map((f) => f.ownerId),
+      ...accessibleFiles.map((f) => f.ownerId),
+    ]);
+
+    return {
+      folders: accessibleFolders.map((f) =>
+        this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+      ),
+      files: accessibleFiles.map((f) => this.mapFile(f, ownerNames)),
+    };
   }
 
   // ── Views da sidebar ──────────────────────────────────────────────────
@@ -763,9 +822,12 @@ export class DriveService {
 
     const foldersRaw = shareRows.map((s) => s.folder);
     const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    const ownerNames = await this.resolveOwnerInfo(foldersRaw.map((f) => f.ownerId));
     return {
-      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
-      files: [] as DriveFile[],
+      folders: foldersRaw.map((f) =>
+        this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+      ),
+      files: [] as Array<Record<string, unknown>>,
     };
   }
 
@@ -775,7 +837,11 @@ export class DriveService {
       orderBy: { updatedAt: 'desc' },
       take: limit,
     });
-    return { folders: [] as Array<Record<string, unknown>>, files };
+    const ownerNames = await this.resolveOwnerInfo(files.map((f) => f.ownerId));
+    return {
+      folders: [] as Array<Record<string, unknown>>,
+      files: files.map((f) => this.mapFile(f, ownerNames)),
+    };
   }
 
   async listStarred(userId: string) {
@@ -790,9 +856,15 @@ export class DriveService {
       }),
     ]);
     const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    const ownerNames = await this.resolveOwnerInfo([
+      ...foldersRaw.map((f) => f.ownerId),
+      ...files.map((f) => f.ownerId),
+    ]);
     return {
-      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
-      files,
+      folders: foldersRaw.map((f) =>
+        this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+      ),
+      files: files.map((f) => this.mapFile(f, ownerNames)),
     };
   }
 
@@ -808,9 +880,15 @@ export class DriveService {
       }),
     ]);
     const shareMap = await this.getShareCountsByFolderIds(foldersRaw.map((f) => f.id));
+    const ownerNames = await this.resolveOwnerInfo([
+      ...foldersRaw.map((f) => f.ownerId),
+      ...files.map((f) => f.ownerId),
+    ]);
     return {
-      folders: foldersRaw.map((f) => this.mapFolder(f, userId, shareMap.get(f.id) ?? 0)),
-      files,
+      folders: foldersRaw.map((f) =>
+        this.mapFolder(f, userId, shareMap.get(f.id) ?? 0, ownerNames),
+      ),
+      files: files.map((f) => this.mapFile(f, ownerNames)),
     };
   }
 
