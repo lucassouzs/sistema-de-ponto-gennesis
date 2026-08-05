@@ -39,8 +39,8 @@ type DriveFile = {
   updatedAt: string;
 };
 
-/** ícone | nome | proprietário | tamanho | modificado | menu */
-const GRID_COLS = 'grid-cols-[auto,1fr,140px,100px,120px,56px]';
+/** ícone | nome | proprietário | modificado | tamanho | menu */
+const GRID_COLS = 'grid-cols-[auto,1fr,140px,150px,100px,56px]';
 
 type Props = {
   folders: DriveFolder[];
@@ -65,10 +65,12 @@ function formatBytes(bytes: number): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', {
+  return new Date(iso).toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -182,8 +184,8 @@ export function DriveListView({
           </div>
           <div />
           <div className="text-center">Proprietário</div>
-          <div className="text-center">Tamanho</div>
           <div className="text-center">Modificado</div>
+          <div className="text-right">Tamanho</div>
           <div className="text-center">Ação</div>
         </div>
 
@@ -226,10 +228,10 @@ export function DriveListView({
                 ownerPhotoUrl={folder.ownerPhotoUrl}
                 currentUserId={currentUserId}
               />
-              <span className="text-center text-xs text-gray-400 dark:text-gray-500">—</span>
               <span className="text-center text-xs text-gray-400 dark:text-gray-500">
                 {formatDate(folder.updatedAt)}
               </span>
+              <span className="text-right text-xs text-gray-400 dark:text-gray-500">—</span>
               <button
                 type="button"
                 onClick={(e) => {
@@ -370,10 +372,10 @@ export function DriveListView({
                 currentUserId={currentUserId}
               />
               <span className="text-center text-xs text-gray-400 dark:text-gray-500">
-                {formatBytes(file.size)}
-              </span>
-              <span className="text-center text-xs text-gray-400 dark:text-gray-500">
                 {formatDate(file.updatedAt)}
+              </span>
+              <span className="text-right text-xs tabular-nums text-gray-400 dark:text-gray-500">
+                {formatBytes(file.size)}
               </span>
               <button
                 type="button"
