@@ -115,7 +115,7 @@ export const Modal: React.FC<ModalProps> = ({
     xl: 'max-w-4xl',
     '5xl': 'max-w-5xl',
     '2xl': 'max-w-6xl',
-    full: 'max-w-full mx-4',
+    full: 'max-w-full mx-2 sm:mx-4',
   };
 
   const stopScrollChain = (event: React.WheelEvent | React.TouchEvent) => {
@@ -131,7 +131,7 @@ export const Modal: React.FC<ModalProps> = ({
         elevated ? 'z-[2100]' : 'z-[2000]',
       )}
     >
-      <div className="flex h-full min-h-0 items-center justify-center p-4 overflow-hidden">
+      <div className="flex h-full min-h-0 items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4 overflow-hidden">
         {/* Overlay */}
         <div
           className="fixed inset-0 z-0 bg-black bg-opacity-50 transition-opacity touch-none"
@@ -145,14 +145,14 @@ export const Modal: React.FC<ModalProps> = ({
         {/* Modal */}
         <div
           className={clsx(
-            'relative z-10 bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full flex flex-col',
-            'max-h-[calc(100vh-2rem)] overflow-hidden',
+            'relative z-10 bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-lg shadow-xl w-full flex flex-col',
+            'max-h-[min(92dvh,calc(100vh-1.5rem))] sm:max-h-[calc(100dvh-2rem)] overflow-hidden',
             sizeClasses[size]
           )}
         >
           {/* Header */}
           {(title || showCloseButton || headerActions) && (
-            <div className="flex items-center gap-3 p-6 border-b border-gray-200 dark:border-gray-700 shrink-0 w-full">
+            <div className="flex items-center gap-3 p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700 shrink-0 w-full">
               {title ? (
                 <div className="flex-1 min-w-0 pr-2">
                   {typeof title === 'string' ? (

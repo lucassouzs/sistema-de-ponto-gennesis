@@ -44,17 +44,30 @@ function getInitials(name: string | undefined | null) {
 
 function ThemeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
-      title={isDark ? 'Modo claro' : 'Modo escuro'}
-      className={`theme-toggle relative flex h-10 w-[4.5rem] shrink-0 items-center rounded-full p-1 transition-[background-color,box-shadow] duration-500 ease-out ${
-        isDark
-          ? 'bg-slate-800 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65),inset_0_-1px_2px_rgba(255,255,255,0.06)]'
-          : 'bg-sky-100 shadow-[inset_0_2px_6px_rgba(15,23,42,0.22),inset_0_-1px_2px_rgba(255,255,255,0.7)]'
-      }`}
-    >
+    <>
+      {/* Mobile: botão compacto */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        title={isDark ? 'Modo claro' : 'Modo escuro'}
+        className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-700 transition-colors hover:bg-gray-200/80 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 sm:hidden"
+      >
+        {isDark ? <Sun className="h-5 w-5 text-amber-400" /> : <Moon className="h-5 w-5" />}
+      </button>
+
+      {/* Desktop: pill animado */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={isDark ? 'Ativar modo claro' : 'Ativar modo escuro'}
+        title={isDark ? 'Modo claro' : 'Modo escuro'}
+        className={`theme-toggle relative hidden h-10 w-[4.5rem] shrink-0 items-center rounded-full p-1 transition-[background-color,box-shadow] duration-500 ease-out sm:flex ${
+          isDark
+            ? 'bg-slate-800 shadow-[inset_0_2px_6px_rgba(0,0,0,0.65),inset_0_-1px_2px_rgba(255,255,255,0.06)]'
+            : 'bg-sky-100 shadow-[inset_0_2px_6px_rgba(15,23,42,0.22),inset_0_-1px_2px_rgba(255,255,255,0.7)]'
+        }`}
+      >
       {/* Brilho do céu / noite — clipado pra não vazar do pill */}
       <span
         aria-hidden
@@ -109,6 +122,7 @@ function ThemeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => vo
         </span>
       </span>
     </button>
+    </>
   );
 }
 
@@ -219,7 +233,11 @@ export function TopNavbar({
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        if (window.matchMedia('(max-width: 639px)').matches) {
+          window.dispatchEvent(new CustomEvent('app:open-mobile-search'));
+        } else {
+          searchInputRef.current?.focus();
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -230,7 +248,7 @@ export function TopNavbar({
     <>
       <header
         data-app-topnav
-        className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 lg:gap-4 lg:px-6"
+        className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 pt-[env(safe-area-inset-top)] dark:border-gray-800 dark:bg-gray-900 sm:h-16 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6"
       >
         {/* Mobile menu */}
         <button
@@ -242,9 +260,9 @@ export function TopNavbar({
           <Menu className="h-5 w-5" />
         </button>
 
-        {/* Breadcrumb */}
+        {/* Breadcrumb — no mobile só o último item */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <nav aria-label="Breadcrumb" className="min-w-0 max-w-[14rem] sm:max-w-[20rem] xl:max-w-[28rem]">
+          <nav aria-label="Breadcrumb" className="min-w-0 max-w-full sm:max-w-[20rem] xl:max-w-[28rem]">
             <ol className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
               {breadcrumbs.length === 0 ? (
                 <li className="truncate font-semibold text-gray-900 dark:text-gray-100">Gennesis</li>
@@ -252,7 +270,10 @@ export function TopNavbar({
                 breadcrumbs.map((crumb, index) => {
                   const isLast = index === breadcrumbs.length - 1;
                   return (
-                    <li key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-1">
+                    <li
+                      key={`${crumb.label}-${index}`}
+                      className={`min-w-0 items-center gap-1 ${isLast ? 'flex' : 'hidden sm:flex'}`}
+                    >
                       {index > 0 ? (
                         <ChevronRight
                           className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500"
@@ -292,7 +313,7 @@ export function TopNavbar({
         </div>
 
         {/* Busca + ações + perfil */}
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <NavSearch inputRef={searchInputRef} />
 
           <NotificationsDropdown chatUnreadCount={chatUnreadCount} />
@@ -306,7 +327,7 @@ export function TopNavbar({
             aria-expanded={profileMenuOpen}
             aria-label="Conta e configurações"
             onClick={() => setProfileMenuOpen((v) => !v)}
-            className={`profile-avatar-btn relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 ${
+            className={`profile-avatar-btn relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-0 sm:size-10 ${
               profileReady && profilePhotoHref
                 ? 'bg-transparent'
                 : 'bg-red-600'

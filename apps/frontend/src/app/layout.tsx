@@ -22,7 +22,7 @@ export default function RootLayout({
         <meta name="description" content="Plataforma integrada de gestão da Gennesis Engenharia" />
         <meta name="keywords" content="ponto, frequência, engenharia, controle, horas" />
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="icon" href="/logopv.png" type="image/png" />
         <link rel="shortcut icon" href="/logopv.png" type="image/png" />
       </head>

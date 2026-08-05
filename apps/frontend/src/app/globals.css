@@ -69,6 +69,7 @@
     @apply bg-background text-foreground font-sans;
     min-height: 100vh;
     min-height: 100dvh;
+    overflow-x: clip;
   }
   
   html.dark body {
@@ -79,10 +80,17 @@
     scroll-behavior: smooth;
     min-height: 100%;
     min-height: 100dvh;
+    overflow-x: clip;
   }
 }
 
 @layer components {
+  /** Wrapper para tabelas/listas largas — scroll horizontal sem estourar a viewport no mobile. */
+  .table-scroll {
+    @apply w-full max-w-full overflow-x-auto overscroll-x-contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .btn {
     @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none disabled:opacity-50 disabled:pointer-events-none;
   }

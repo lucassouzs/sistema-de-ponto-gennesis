@@ -1512,7 +1512,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       <div
         ref={sidebarRef}
         data-app-sidebar
-        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-[100dvh] max-h-[100dvh] max-w-[100vw] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >

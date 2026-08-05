@@ -110,7 +110,7 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
 
   return (
     <NativeCallProvider value={nativeCall}>
-      <div className="min-h-[100dvh] bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900">
       {/* Sidebar */}
       <Sidebar 
         userRole={userRole} 
@@ -122,7 +122,7 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
       
       {/* Main Content — mesma duração/easing do painel tier 2 da sidebar */}
       <div
-        className={`${
+        className={`min-w-0 max-w-full ${
           layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
         } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
       >
@@ -131,7 +131,13 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
           onLogout={handleLogout}
           onOpenChangePassword={handleOpenChangePassword}
         />
-        <main className={isFullBleedRoute ? 'p-0' : 'p-4 lg:p-8'}>
+        <main
+          className={
+            isFullBleedRoute
+              ? 'min-w-0 p-0'
+              : 'min-w-0 px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
+          }
+        >
           {children}
         </main>
       </div>
