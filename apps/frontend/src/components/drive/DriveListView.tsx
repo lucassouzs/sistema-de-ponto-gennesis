@@ -18,24 +18,33 @@ import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 type DriveFolder = {
   id: string;
   name: string;
+  parentId: string | null;
   ownerId: string;
   ownerName?: string | null;
   ownerPhotoUrl?: string | null;
   starred?: boolean;
+  trashedAt?: string | null;
+  createdAt: string;
   updatedAt: string;
   isOwner?: boolean;
   canManageShares?: boolean;
+  canWrite?: boolean;
 };
 
 type DriveFile = {
   id: string;
   name: string;
+  originalName: string;
+  s3Key: string;
   size: number;
   mimeType: string;
+  folderId: string | null;
   ownerId: string;
   ownerName?: string | null;
   ownerPhotoUrl?: string | null;
   starred?: boolean;
+  trashedAt?: string | null;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -46,7 +55,7 @@ type Props = {
   folders: DriveFolder[];
   files: DriveFile[];
   onOpenFolder: (id: string) => void;
-  onDownload: (f: DriveFile) => void;
+  onDownload: (f: DriveFile) => void | Promise<void>;
   onRename: (type: 'folder' | 'file', id: string, name: string) => void;
   onDelete: (type: 'folder' | 'file', id: string, name: string) => void;
   onOpenShare?: (folder: DriveFolder) => void;
