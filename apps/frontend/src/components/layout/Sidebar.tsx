@@ -67,6 +67,7 @@ import {
   Fuel,
   Car,
   CalendarRange,
+  Wrench,
   Workflow,
   ChevronDown,
   type LucideIcon,
@@ -281,6 +282,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel'));
   const canSeeVehicleReservationSupplies =
     isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-reserva-veiculos'));
+  const canSeeToolRentalSupplies =
+    isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-ferramentas'));
   const canSeeEntregaLogistica =
     isAdministrator || can(pk('/ponto/entrega-logistica'));
 
@@ -351,6 +354,19 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     staleTime: 20_000,
   });
 
+  const { data: toolRentalSuppliesPendingCount = 0 } = useQuery({
+    queryKey: ['tool-rental-supplies-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/tool-rental-requests/supplies-pending-count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeToolRentalSupplies && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
   const { data: entregaLogisticaPendingCount = 0 } = useQuery({
     queryKey: ['logistics-delivery-pending-count'],
     queryFn: async () => {
@@ -385,6 +401,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     if (href === '/ponto/recebimento-entregas') return recebimentoPendingCount;
     if (href === '/ponto/solicitacoes-combustivel') return fuelSuppliesPendingCount;
     if (href === '/ponto/solicitacoes-reserva-veiculos') return vehicleReservationSuppliesPendingCount;
+    if (href === '/ponto/solicitacoes-ferramentas') return toolRentalSuppliesPendingCount;
     if (href === '/ponto/entrega-logistica') return entregaLogisticaPendingCount;
     return 0;
   };
@@ -798,6 +815,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: PackageCheck,
             description: 'Confirmar recebimento de material na obra',
             permission: canAccessRecebimentoEntregasRoutePage
+          },
+          {
+            name: 'Solicitação de Ferramentas',
+            href: '/ponto/solicitar-ferramentas',
+            icon: Wrench,
+            description: 'Solicitar locação, renovação, devolução ou compra de equipamentos',
+            permission: isAdministrator || can(pk('/ponto/solicitar-ferramentas'))
           }
         ]
       },
@@ -970,6 +994,16 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator ||
               isDepartmentCompras ||
               can(pk('/ponto/solicitacoes-reserva-veiculos'))
+          },
+          {
+            name: 'Solicitações de Ferramentas',
+            href: '/ponto/solicitacoes-ferramentas',
+            icon: Wrench,
+            description: 'Analisar solicitações de locação, renovação, devolução ou compra',
+            permission:
+              isAdministrator ||
+              isDepartmentCompras ||
+              can(pk('/ponto/solicitacoes-ferramentas'))
           },
         ]
       },

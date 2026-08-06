@@ -240,6 +240,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/aprovacao-fds',
       '/ponto/recebimento-entregas',
       '/ponto/solicitar-materiais',
+      '/ponto/solicitar-ferramentas',
     ].some((p) => h === p)
   ) {
     return 'Engenharia';
@@ -268,6 +269,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/fds-aprovadas',
       '/ponto/solicitacoes-combustivel',
       '/ponto/solicitacoes-reserva-veiculos',
+      '/ponto/solicitacoes-ferramentas',
     ].some((p) => h === p)
   ) {
     return 'Suprimentos';

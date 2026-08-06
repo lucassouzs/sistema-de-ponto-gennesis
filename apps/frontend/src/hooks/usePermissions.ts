@@ -608,6 +608,8 @@ export function useRoutePermission(route: string) {
     '/ponto/controle-pagamentos-art': isAdministrator || can(pk('/ponto/controle-pagamentos-art')),
     '/ponto/contratos/medicao': isAdministrator || can(pk('/ponto/contratos/medicao')),
     '/ponto/solicitar-materiais': isAdministrator || can(pk('/ponto/solicitar-materiais')),
+    '/ponto/solicitar-ferramentas':
+      isAdministrator || can(pk('/ponto/solicitar-ferramentas')),
     '/ponto/gerenciar-materiais': isAdministrator || isDepartmentCompras || can(pk('/ponto/gerenciar-materiais')),
     '/ponto/mapa-cotacao': isAdministrator || isDepartmentCompras || can(pk('/ponto/mapa-cotacao')),
     '/ponto/ordem-de-compra': isAdministrator || isDepartmentCompras || can(pk('/ponto/ordem-de-compra')),
@@ -625,6 +627,8 @@ export function useRoutePermission(route: string) {
       isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel')),
     '/ponto/solicitacoes-reserva-veiculos':
       isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-reserva-veiculos')),
+    '/ponto/solicitacoes-ferramentas':
+      isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-ferramentas')),
     '/ponto/fornecedores': isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores')),
     '/ponto/veiculos': isAdministrator || isDepartmentCompras || can(pk('/ponto/veiculos')),
     '/ponto/regioes-postos-combustivel':

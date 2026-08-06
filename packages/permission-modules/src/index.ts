@@ -176,6 +176,12 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     href: '/ponto/solicitar-materiais',
     category: 'Engenharia',
   },
+  {
+    key: pathToModuleKey('/ponto/solicitar-ferramentas'),
+    name: 'Solicitação de Ferramentas',
+    href: '/ponto/solicitar-ferramentas',
+    category: 'Engenharia',
+  },
   // Jurídico
   { key: pathToModuleKey('/ponto/juridico'), name: 'Processos Trabalhistas', href: '/ponto/juridico', category: 'Jurídico' },
   // Suprimentos
@@ -198,6 +204,12 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     key: pathToModuleKey('/ponto/solicitacoes-reserva-veiculos'),
     name: 'Reservas de Veículos',
     href: '/ponto/solicitacoes-reserva-veiculos',
+    category: 'Suprimentos',
+  },
+  {
+    key: pathToModuleKey('/ponto/solicitacoes-ferramentas'),
+    name: 'Solicitações de Ferramentas',
+    href: '/ponto/solicitacoes-ferramentas',
     category: 'Suprimentos',
   },
   // Cadastros

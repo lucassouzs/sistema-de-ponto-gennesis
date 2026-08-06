@@ -5,6 +5,7 @@ import { userHasDpApprovePermission } from '../lib/dpApprovalAccess';
 import { userHasFuelApprovePermission } from '../lib/fuelApprovalAccess';
 import { userHasFuelSuppliesAccess } from '../lib/fuelSuppliesAccess';
 import { userHasVehicleReservationSuppliesAccess } from '../lib/vehicleReservationSuppliesAccess';
+import { userHasToolRentalSuppliesAccess } from '../lib/toolRentalSuppliesAccess';
 import { userHasLogisticsDeliveryAccess } from '../lib/logisticsDeliveryAccess';
 import {
   userHasLogisticsDeliveryCompletionAccess,
@@ -140,6 +141,26 @@ export const requireVehicleReservationSuppliesAccess = async (
       return next(createError('Usuário não autenticado', 401));
     }
     const ok = await userHasVehicleReservationSuppliesAccess(req.user.id, req.user.isAdmin);
+    if (!ok) {
+      return next(createError('Você não tem permissão para esta ação', 403));
+    }
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
+
+/** Fila Suprimentos — locações de ferramentas. */
+export const requireToolRentalSuppliesAccess = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      return next(createError('Usuário não autenticado', 401));
+    }
+    const ok = await userHasToolRentalSuppliesAccess(req.user.id, req.user.isAdmin);
     if (!ok) {
       return next(createError('Você não tem permissão para esta ação', 403));
     }

@@ -109,6 +109,10 @@ model User {
   flowDiagrams                            FlowDiagram[]        @relation("FlowDiagramOwner")
   licitacoesCreated                       Licitacao[]          @relation("LicitacaoCreator")
   asoRegistrosCreated                     AsoRegistro[]        @relation("AsoRegistroCreator")
+  toolRentalRequestsCreated               ToolRentalRequest[]  @relation("ToolRentalRequestCreator")
+  toolRentalRequestsAssigned              ToolRentalRequest[]  @relation("ToolRentalRequestAssignedUser")
+  toolRentalRequestsSuppliesApproved      ToolRentalRequest[]  @relation("ToolRentalRequestSuppliesApprover")
+  toolRentalRequestEvents                 ToolRentalRequestEvent[] @relation("ToolRentalRequestEventActor")
 
   @@map("users")
 }
@@ -1686,6 +1690,7 @@ model Supplier {
   quoteMapWinnerItems   QuoteMapWinnerItem[]   @relation("QuoteMapWinnerSupplier")
   materialDeliveries    MaterialDelivery[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
+  toolRentalRequests    ToolRentalRequest[]
 
   @@index([code])
   @@index([isActive])
@@ -3659,4 +3664,93 @@ model AsoRegistro {
   @@index([resultado])
   @@index([createdAt])
   @@map("aso_registros")
+}
+
+enum ToolRentalDemandType {
+  NOVA_LOCACAO
+  RENOVACAO
+  DEVOLUCAO
+  COMPRA
+}
+
+enum ToolRentalPriority {
+  NORMAL
+  URGENT
+}
+
+enum ToolRentalLogisticsMode {
+  ENTREGA_LOGISTICA
+  RETIRADA_LOGISTICA
+  ENTREGA_FORNECEDOR
+  RETIRADA_FORNECEDOR
+}
+
+enum ToolRentalRequestStatus {
+  OPEN
+  SUPPLIER_RELATION
+  AWAITING_PAYMENT
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+/// Solicitações de ferramentas (Engenharia → fluxo Suprimentos até pagamento)
+model ToolRentalRequest {
+  id                      String                    @id @default(cuid())
+  code                    String                    @unique
+  polo                    String
+  contrato                String
+  obra                    String
+  titulo                  String
+  assignedUserId          String
+  supplierId              String?
+  supplierName            String?
+  priority                ToolRentalPriority        @default(NORMAL)
+  logisticsMode           ToolRentalLogisticsMode
+  demandType              ToolRentalDemandType
+  equipamento             String
+  periodoInicio           DateTime                  @db.Date
+  periodoFim              DateTime                  @db.Date
+  linkSugestao            String?
+  status                  ToolRentalRequestStatus   @default(OPEN)
+  ocMirrorUrl             String?
+  ocMirrorName            String?
+  paymentProofUrl         String?
+  paymentProofName        String?
+  suppliesApprovedById    String?
+  suppliesApprovedAt      DateTime?
+  suppliesApprovalComment String?
+  suppliesRejectionReason String?
+  createdById             String?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+
+  assignedUser       User      @relation("ToolRentalRequestAssignedUser", fields: [assignedUserId], references: [id], onDelete: Restrict)
+  createdBy          User?     @relation("ToolRentalRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  suppliesApprovedBy User?     @relation("ToolRentalRequestSuppliesApprover", fields: [suppliesApprovedById], references: [id], onDelete: SetNull)
+  supplier           Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  events             ToolRentalRequestEvent[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([assignedUserId])
+  @@index([createdAt])
+  @@map("tool_rental_requests")
+}
+
+/// Histórico de etapas da solicitação de ferramentas (timeline)
+model ToolRentalRequestEvent {
+  id         String                   @id @default(cuid())
+  requestId  String
+  fromStatus ToolRentalRequestStatus?
+  toStatus   ToolRentalRequestStatus
+  note       String?
+  actorId    String?
+  createdAt  DateTime                 @default(now())
+
+  request ToolRentalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User?             @relation("ToolRentalRequestEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, createdAt])
+  @@map("tool_rental_request_events")
 }
