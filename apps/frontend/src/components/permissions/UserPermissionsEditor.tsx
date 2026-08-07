@@ -5,10 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
-  ChevronDown,
+  Copy,
   FileText,
   LayoutDashboard,
   Layers,
+  MoreVertical,
+  RotateCcw,
   ShieldCheck,
   User,
   Wallet,
@@ -29,10 +31,13 @@ import {
   pathToModuleKey,
   type PermissionModuleDef,
 } from '@sistema-ponto/permission-modules';
-import { Card, CardContent } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
-import api from '@/lib/api';
+import { Modal } from '@/components/ui/Modal';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
+import api from '@/lib/api';
 
 /** Orçamento e relatórios fotográficos: só pela aba «Contratos», não pela matriz «Acesso». */
 const HIDDEN_FROM_ACCESS_MATRIX = new Set<string>([
@@ -70,8 +75,18 @@ type PermissionUserListItem = {
   id: string;
   name: string;
   email: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
   employee?: { position?: string; department?: string };
 };
+
+function formatPermissionUserCpf(cpf?: string | null) {
+  const digits = (cpf || '').replace(/\D/g, '');
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  return cpf?.trim() || '—';
+}
 
 export type PermissionsTargetPreview = {
   id: string;
@@ -408,16 +423,15 @@ export function UserPermissionsTabBar({
   className?: string;
 }) {
   const items = [
-    { id: 'gerais' as const, label: 'Acesso', icon: ShieldCheck, disabled: false as const },
-    { id: 'contratos' as const, label: 'Contratos', icon: FileText, disabled: !showContracts },
-    { id: 'controle' as const, label: 'Controle', icon: Settings, disabled: false as const },
+    { id: 'gerais' as const, label: 'Acesso', disabled: false as const },
+    { id: 'contratos' as const, label: 'Contratos', disabled: !showContracts },
+    { id: 'controle' as const, label: 'Controle', disabled: false as const },
   ];
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-6 border-b border-gray-200 dark:border-gray-700">
         {items.map((t) => {
-          const Icon = t.icon;
           const isActive = !t.disabled && activeTab === t.id;
           return (
             <button
@@ -429,15 +443,14 @@ export function UserPermissionsTabBar({
               disabled={t.disabled}
               aria-disabled={t.disabled}
               title={t.disabled ? 'Ative o módulo Contratos na aba Acesso' : undefined}
-              className={`flex items-center gap-2 px-4 py-2 font-medium transition-colors rounded-t-lg ${
+              className={`-mb-px border-b-2 pb-3 text-sm font-medium transition-colors ${
                 t.disabled
-                  ? 'cursor-not-allowed text-gray-400 opacity-70 dark:text-gray-500'
+                  ? 'cursor-not-allowed border-transparent text-gray-400 opacity-70 dark:text-gray-500'
                   : isActive
-                    ? 'bg-red-600 text-white dark:bg-red-600'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    ? 'border-red-600 text-red-600 dark:border-red-500 dark:text-red-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
               }`}
             >
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : ''}`} />
               {t.label}
             </button>
           );
@@ -447,83 +460,33 @@ export function UserPermissionsTabBar({
   );
 }
 
-function UserSearchSelect({
-  users,
-  searchValue,
-  onSearchValueChange,
-  selectedUserId,
-  onSelectUserId,
-  onActivate,
+function PermissionPageHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  actions,
 }: {
-  users: PermissionUserListItem[];
-  searchValue: string;
-  onSearchValueChange: (value: string) => void;
-  selectedUserId: string;
-  onSelectUserId: (id: string) => void;
-  /** Dispara ao focar o campo (ex.: lazy-load da lista de usuários). */
-  onActivate?: () => void;
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedUser = useMemo(() => users.find((u) => u.id === selectedUserId) ?? null, [users, selectedUserId]);
-  const query = searchValue.trim().toLowerCase();
-  const filteredUsers = useMemo(() => {
-    if (!query) return users;
-    return users.filter((u) => u.name.toLowerCase().includes(query));
-  }, [users, query]);
-
   return (
-    <div className="relative w-full">
-      <input
-        type="text"
-        value={searchValue}
-        onFocus={() => {
-          onActivate?.();
-          setIsOpen(true);
-        }}
-        onBlur={() => setTimeout(() => setIsOpen(false), 120)}
-        onChange={(e) => {
-          onActivate?.();
-          onSearchValueChange(e.target.value);
-          onSelectUserId('');
-          if (!isOpen) setIsOpen(true);
-        }}
-        placeholder="Selecionar usuário..."
-        className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-      />
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-
-      {isOpen && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-          {filteredUsers.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-              {users.length === 0 ? 'Carregando usuários...' : 'Nenhum funcionário encontrado.'}
-            </div>
-          ) : (
-            filteredUsers.map((u) => {
-              const isSelected = u.id === selectedUserId || (!selectedUserId && selectedUser?.id === u.id);
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onSelectUserId(u.id);
-                    onSearchValueChange(u.name);
-                    setIsOpen(false);
-                  }}
-                  className={`block w-full px-3 py-2 text-left text-sm transition-colors ${
-                    isSelected
-                      ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                      : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {u.name}
-                </button>
-              );
-            })
-          )}
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center space-x-3">
+        <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+          <Icon className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
         </div>
-      )}
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{subtitle}</p>
+        </div>
+      </div>
+      {actions ? (
+        <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -548,7 +511,7 @@ interface UserPermissionsEditorProps {
 
 export function UserPermissionsEditor({
   userId,
-  preview,
+  preview: _preview,
   onBack,
   hideTopNavigation = false,
   permissionTab: permissionTabProp,
@@ -565,12 +528,12 @@ export function UserPermissionsEditor({
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string>>(new Set());
   const [selectedDpApprovalContractIds, setSelectedDpApprovalContractIds] = useState<Set<string>>(new Set());
   const [contractModuleFlags, setContractModuleFlags] = useState<Record<string, ContractModuleFlags>>({});
-  const [copyFromUserIdGeneral, setCopyFromUserIdGeneral] = useState('');
-  const [copyFromUserIdContracts, setCopyFromUserIdContracts] = useState('');
-  const [copyGeneralSearch, setCopyGeneralSearch] = useState('');
-  const [copyContractsSearch, setCopyContractsSearch] = useState('');
-  const [isApplyingCopyGeneral, setIsApplyingCopyGeneral] = useState(false);
-  const [isApplyingCopyContracts, setIsApplyingCopyContracts] = useState(false);
+  const [permissionActionModal, setPermissionActionModal] = useState<'menu' | 'copy' | 'restore' | null>(
+    null
+  );
+  const [copyModalUserId, setCopyModalUserId] = useState('');
+  const [isApplyingCopy, setIsApplyingCopy] = useState(false);
+  const [isRestoringDefaults, setIsRestoringDefaults] = useState(false);
   const [internalTab, setInternalTab] = useState<PermissionEditorTab>('gerais');
   const tabsControlled = typeof onPermissionTabChange === 'function';
   const activeTab = tabsControlled ? (permissionTabProp ?? 'gerais') : internalTab;
@@ -655,11 +618,34 @@ export function UserPermissionsEditor({
     () =>
       permissionUsers.filter((u) => {
         if (u.id === userId) return false;
+        if (isGennecyBotUser(u)) return false;
         const position = (u.employee?.position || '').trim().toLowerCase();
         const name = (u.name || '').trim().toLowerCase();
         return position !== 'administrador' && name !== 'administrador';
       }),
     [permissionUsers, userId]
+  );
+
+  const copyUserSelectOptions = useMemo(
+    () =>
+      copyableUsers.map((u) => {
+        const initials = u.name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+        const cpfLabel = formatPermissionUserCpf(u.cpf);
+        return {
+          value: u.id,
+          label: u.name,
+          description: cpfLabel,
+          searchText: `${u.name} ${u.cpf || ''} ${cpfLabel}`,
+          avatarUrl: resolveApiMediaUrl(u.profilePhotoUrl ?? null),
+          avatarFallback: initials || '?',
+        };
+      }),
+    [copyableUsers]
   );
 
   useEffect(() => {
@@ -1082,124 +1068,205 @@ export function UserPermissionsEditor({
     return source;
   };
 
-  const handleCopyGeneralFromUser = async () => {
-    if (!copyFromUserIdGeneral) return;
-    if (!isPositionMode && copyFromUserIdGeneral === userId) {
-      toast('Selecione outro usuário para copiar.');
-      return;
-    }
-    try {
-      setIsApplyingCopyGeneral(true);
-      const source = await fetchSourceUserPermissions(copyFromUserIdGeneral);
-      if (!source) {
-        toast.error('Não é possível copiar de usuário Administrador.');
-        return;
-      }
-      const nextGeneral = new Set<string>(
-        (source.permissions || [])
-          .filter((p) => p.action === PERMISSION_ACCESS_ACTION)
-          .map((p) => p.module)
-      );
-      DEPRECATED_CONTROLE_KEYS.forEach((k) => nextGeneral.delete(k));
-      PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => nextGeneral.delete(k));
-      PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => nextGeneral.delete(k));
-      const nextContractActions = new Set<ContractAction>();
-      const nextEmployeeActions = new Set<ContractAction>();
-      for (const p of source.permissions || []) {
-        if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextContractActions.add(p.action as ContractAction);
-        }
-        if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextEmployeeActions.add(p.action as ContractAction);
-        }
-      }
-      setSelectedSet(nextGeneral);
-      setContractActionsSet(nextContractActions);
-      setEmployeeActionsSet(nextEmployeeActions);
-      const allowedSrc = new Set(source.allowedContractIds ?? []);
-      setSelectedDpApprovalContractIds(
-        new Set(
-          [...(source.dpApprovalContractIds ?? [])].filter(
-            (id) => allowedSrc.has(id) && selectedContractIdsRef.current.has(id)
-          )
-        )
-      );
-      toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
-    } catch (error) {
-      const msg =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(msg || 'Não foi possível copiar permissões de acesso.');
-    } finally {
-      setIsApplyingCopyGeneral(false);
-    }
+  const closePermissionActionModal = () => {
+    setPermissionActionModal(null);
+    setCopyModalUserId('');
   };
 
-  const handleCopyContractsFromUser = async () => {
-    if (!copyFromUserIdContracts) return;
-    if (!isPositionMode && copyFromUserIdContracts === userId) {
-      toast('Selecione outro usuário para copiar.');
-      return;
-    }
-    try {
-      setIsApplyingCopyContracts(true);
-      const source = await fetchSourceUserPermissions(copyFromUserIdContracts);
-      if (!source) {
-        toast.error('Não é possível copiar de usuário Administrador.');
-        return;
-      }
-      const nextContract = new Set<ContractAction>();
-      for (const p of source.permissions || []) {
-        if (p.module !== CONTRACTS_MODULE_KEY) continue;
-        if (CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextContract.add(p.action as ContractAction);
-        }
-      }
-      const nextContractIds = new Set(source.allowedContractIds || []);
-      const rawDp = new Set(source.dpApprovalContractIds || []);
-      const nextDp = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
-      const sourceHasContractsModule = (source.permissions || []).some((p) => p.module === CONTRACTS_MODULE_KEY);
-      const srcFlags = (source as UserPermissionPayload).contractModuleFlags ?? {};
-      const defaultFlags: ContractModuleFlags = {
-        orcamento: false,
-        relatorios: false,
-        ordemServico: false,
-        producaoSemanal: false,
-      };
-      const nextFlags: Record<string, ContractModuleFlags> = {};
-      for (const id of Array.from(nextContractIds)) {
-        nextFlags[id] = srcFlags[id] ?? { ...defaultFlags };
-      }
-      setContractActionsSet(nextContract);
-      setSelectedContractIds(nextContractIds);
-      setSelectedDpApprovalContractIds(nextDp);
-      setContractModuleFlags(nextFlags);
-      setSelectedSet((prev) => {
-        const next = new Set(prev);
-        if (sourceHasContractsModule || nextContract.size > 0 || nextContractIds.size > 0) {
-          next.add(CONTRACTS_MODULE_KEY);
-        } else {
-          next.delete(CONTRACTS_MODULE_KEY);
-        }
-        return next;
-      });
-      toast.success('Permissões de contratos copiadas. Salvamento automático em andamento.');
-    } catch (error) {
-      const msg =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(msg || 'Não foi possível copiar permissões de contratos.');
-    } finally {
-      setIsApplyingCopyContracts(false);
-    }
+  const openPermissionActionsMenu = () => {
+    setPermissionActionModal('menu');
   };
 
-  const handleRestoreDefaults = () => {
-    toast(
-      'Padrões por cargo podem ser ajustados pelo administrador no cadastro de cargos ou no fluxo de permissões do funcionário, quando disponível.'
+  const applyPermissionsPayload = (source: {
+    permissions: PermissionItem[];
+    allowedContractIds?: string[];
+    dpApprovalContractIds?: string[];
+    contractModuleFlags?: Record<string, ContractModuleFlags>;
+  }) => {
+    const perms = source.permissions ?? [];
+    const next = new Set<string>(
+      perms.filter((p) => p.action === PERMISSION_ACCESS_ACTION).map((p) => p.module)
     );
+    DEPRECATED_CONTROLE_KEYS.forEach((k) => next.delete(k));
+    PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => next.delete(k));
+    PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => next.delete(k));
+    const nextContract = new Set<ContractAction>();
+    const nextEmployee = new Set<ContractAction>();
+    for (const p of perms) {
+      if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContract.add(p.action as ContractAction);
+      }
+      if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextEmployee.add(p.action as ContractAction);
+      }
+    }
+    const nextContractIds = new Set(source.allowedContractIds ?? []);
+    const rawDp = new Set(source.dpApprovalContractIds ?? []);
+    const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const rawFlags = source.contractModuleFlags ?? {};
+    const emptyFlags = (): ContractModuleFlags => ({
+      orcamento: false,
+      relatorios: false,
+      ordemServico: false,
+      producaoSemanal: false,
+    });
+    const nextFlags: Record<string, ContractModuleFlags> = {};
+    for (const id of Array.from(nextContractIds)) {
+      nextFlags[id] = rawFlags[id] ?? emptyFlags();
+    }
+    setSelectedSet(next);
+    setContractActionsSet(nextContract);
+    setEmployeeActionsSet(nextEmployee);
+    setSelectedContractIds(nextContractIds);
+    setSelectedDpApprovalContractIds(nextDpApproval);
+    setContractModuleFlags(nextFlags);
+  };
+
+  const copyGeneralFromUser = async (sourceUserId: string) => {
+    if (!sourceUserId) return;
+    if (!isPositionMode && sourceUserId === userId) {
+      toast('Selecione outro usuário para copiar.');
+      return;
+    }
+    const source = await fetchSourceUserPermissions(sourceUserId);
+    if (!source) {
+      toast.error('Não é possível copiar de usuário Administrador.');
+      return;
+    }
+    const nextGeneral = new Set<string>(
+      (source.permissions || [])
+        .filter((p) => p.action === PERMISSION_ACCESS_ACTION)
+        .map((p) => p.module)
+    );
+    DEPRECATED_CONTROLE_KEYS.forEach((k) => nextGeneral.delete(k));
+    PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => nextGeneral.delete(k));
+    PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => nextGeneral.delete(k));
+    const nextContractActions = new Set<ContractAction>();
+    const nextEmployeeActions = new Set<ContractAction>();
+    for (const p of source.permissions || []) {
+      if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContractActions.add(p.action as ContractAction);
+      }
+      if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextEmployeeActions.add(p.action as ContractAction);
+      }
+    }
+    setSelectedSet(nextGeneral);
+    setContractActionsSet(nextContractActions);
+    setEmployeeActionsSet(nextEmployeeActions);
+    const allowedSrc = new Set(source.allowedContractIds ?? []);
+    setSelectedDpApprovalContractIds(
+      new Set(
+        [...(source.dpApprovalContractIds ?? [])].filter(
+          (id) => allowedSrc.has(id) && selectedContractIdsRef.current.has(id)
+        )
+      )
+    );
+    toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
+  };
+
+  const copyContractsFromUser = async (sourceUserId: string) => {
+    if (!sourceUserId) return;
+    if (!isPositionMode && sourceUserId === userId) {
+      toast('Selecione outro usuário para copiar.');
+      return;
+    }
+    const source = await fetchSourceUserPermissions(sourceUserId);
+    if (!source) {
+      toast.error('Não é possível copiar de usuário Administrador.');
+      return;
+    }
+    const nextContract = new Set<ContractAction>();
+    for (const p of source.permissions || []) {
+      if (p.module !== CONTRACTS_MODULE_KEY) continue;
+      if (CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContract.add(p.action as ContractAction);
+      }
+    }
+    const nextContractIds = new Set(source.allowedContractIds || []);
+    const rawDp = new Set(source.dpApprovalContractIds || []);
+    const nextDp = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const sourceHasContractsModule = (source.permissions || []).some((p) => p.module === CONTRACTS_MODULE_KEY);
+    const srcFlags = source.contractModuleFlags ?? {};
+    const defaultFlags: ContractModuleFlags = {
+      orcamento: false,
+      relatorios: false,
+      ordemServico: false,
+      producaoSemanal: false,
+    };
+    const nextFlags: Record<string, ContractModuleFlags> = {};
+    for (const id of Array.from(nextContractIds)) {
+      nextFlags[id] = srcFlags[id] ?? { ...defaultFlags };
+    }
+    setContractActionsSet(nextContract);
+    setSelectedContractIds(nextContractIds);
+    setSelectedDpApprovalContractIds(nextDp);
+    setContractModuleFlags(nextFlags);
+    setSelectedSet((prev) => {
+      const next = new Set(prev);
+      if (sourceHasContractsModule || nextContract.size > 0 || nextContractIds.size > 0) {
+        next.add(CONTRACTS_MODULE_KEY);
+      } else {
+        next.delete(CONTRACTS_MODULE_KEY);
+      }
+      return next;
+    });
+    toast.success('Permissões de contratos copiadas. Salvamento automático em andamento.');
+  };
+
+  const handleConfirmCopyFromUser = async () => {
+    if (!copyModalUserId) return;
+    try {
+      setIsApplyingCopy(true);
+      if (activeTab === 'contratos') {
+        await copyContractsFromUser(copyModalUserId);
+      } else {
+        await copyGeneralFromUser(copyModalUserId);
+      }
+      closePermissionActionModal();
+    } catch (error) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(msg || 'Não foi possível copiar permissões.');
+    } finally {
+      setIsApplyingCopy(false);
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    const position = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
+    if (!position) {
+      toast.error('Este funcionário não possui cargo definido.');
+      return;
+    }
+    try {
+      setIsRestoringDefaults(true);
+      const res = await api.get('/permissions/position-template', { params: { position } });
+      const data = res.data?.data as {
+        permissions?: PermissionItem[];
+        allowedContractIds?: string[];
+        dpApprovalContractIds?: string[];
+        contractModuleFlags?: Record<string, ContractModuleFlags>;
+      };
+      applyPermissionsPayload({
+        permissions: data?.permissions ?? [],
+        allowedContractIds: data?.allowedContractIds ?? [],
+        dpApprovalContractIds: data?.dpApprovalContractIds ?? [],
+        contractModuleFlags: data?.contractModuleFlags ?? {},
+      });
+      toast.success('Padrões do cargo restaurados. Salvamento automático em andamento.');
+      closePermissionActionModal();
+    } catch (error) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(msg || 'Não foi possível restaurar os padrões do cargo.');
+    } finally {
+      setIsRestoringDefaults(false);
+    }
   };
 
   const hasPendingChanges =
@@ -1284,19 +1351,6 @@ export function UserPermissionsEditor({
     );
   }
 
-  const displayName = userPermissionData?.user?.name ?? preview.name;
-  const displayPosition =
-    userPermissionData?.user?.employee?.position ?? preview.position ?? 'Sem cargo definido';
-  const displayPhotoHref = resolveApiMediaUrl(
-    userPermissionData?.user?.profilePhotoUrl ?? preview.profilePhotoUrl ?? null,
-  );
-  const displayInitials = displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   const labelFor = (mod: PermissionModuleDef) => displayModuleName(mod);
 
   /** Em contratos, "Ver" representa o acesso ao módulo. */
@@ -1351,6 +1405,20 @@ export function UserPermissionsEditor({
       ? controleModulesByGroup.map(({ group, modules }) => ({ category: group, modules }))
       : modulesByCategory;
 
+  const employeePosition = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
+
+  const permissionActionsButton = !isPositionMode ? (
+    <button
+      type="button"
+      onClick={openPermissionActionsMenu}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+      aria-label="Ações"
+      title="Ações"
+    >
+      <MoreVertical className="h-5 w-5" aria-hidden />
+    </button>
+  ) : undefined;
+
   return (
     <div className="w-full space-y-0">
       {!hideTopNavigation && (
@@ -1366,7 +1434,7 @@ export function UserPermissionsEditor({
         </div>
       )}
 
-      <Card className="relative w-full overflow-hidden border-gray-200/80 shadow-sm dark:border-gray-700/80" padding="none">
+      <Card className="relative w-full overflow-hidden border-gray-200/80 shadow-sm dark:border-gray-700/80">
         {isSavingPermissions ? (
           <div
             className="pointer-events-none absolute right-4 top-3 z-10 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300"
@@ -1375,114 +1443,52 @@ export function UserPermissionsEditor({
             Salvando...
           </div>
         ) : null}
-        {/* Perfil */}
-        <div className="border-b border-gray-200 bg-white px-4 py-5 dark:border-gray-700 dark:bg-gray-800 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600">
-                {displayPhotoHref ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={displayPhotoHref}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <span className="text-sm font-bold text-white">{displayInitials}</span>
-                )}
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{displayName}</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <span className="text-gray-700 dark:text-gray-300">{displayPosition}</span>
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={handleRestoreDefaults}
-                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-              >
-                Restaurar padrões do cargo
-              </button>
-            </div>
-          </div>
-        </div>
 
         {!tabsControlled && (
           <UserPermissionsTabBar
             activeTab={activeTab}
             onChange={setActiveTab}
             showContracts={contractsTabAvailable}
-            className="w-full bg-white px-4 pb-0 pt-2 dark:bg-gray-800 sm:px-6"
+            className="mb-2 w-full"
           />
         )}
 
         {activeTab === 'gerais' || activeTab === 'controle' ? (
-          <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-            {activeTab === 'gerais' && !isPositionMode && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">Copiar permissões de acesso</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Copia as permissões de acesso do usuário selecionado.
-                    </p>
-                  </div>
-                  <div className="w-full sm:w-auto sm:min-w-[560px]">
-                    <div className="grid gap-2 sm:grid-cols-[1fr,auto] sm:items-center">
-                      <UserSearchSelect
-                        users={copyableUsers}
-                        searchValue={copyGeneralSearch}
-                        onSearchValueChange={setCopyGeneralSearch}
-                        selectedUserId={copyFromUserIdGeneral}
-                        onSelectUserId={setCopyFromUserIdGeneral}
-                        onActivate={() => setLoadCopyUsers(true)}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyGeneralFromUser}
-                        disabled={!copyFromUserIdGeneral || isApplyingCopyGeneral}
-                        className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                      >
-                        {isApplyingCopyGeneral ? 'Copiando...' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {activeTab === 'controle' && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ações administrativas que não são páginas do menu, como alterar permissões, auditoria, exportações e
-                  criar solicitações restritas. Você pode restringir essas ações independentemente do acesso às telas.
-                </p>
-              </div>
-            )}
+          <>
+            <CardHeader className="!border-b-0 pb-1">
+              <PermissionPageHeader
+                icon={activeTab === 'controle' ? Settings : ShieldCheck}
+                title={activeTab === 'controle' ? 'Controle' : 'Acesso'}
+                subtitle={
+                  activeTab === 'controle'
+                    ? 'Ações administrativas que não aparecem no menu.'
+                    : 'Defina quais módulos e ações este usuário pode usar.'
+                }
+                actions={activeTab === 'gerais' ? permissionActionsButton : undefined}
+              />
+            </CardHeader>
+            <CardContent className="space-y-5">
             {displayCategories.length === 0 ? (
               <div className="py-14 text-center text-sm text-gray-500 dark:text-gray-400">
                 Nenhum módulo disponível para configurar.
               </div>
             ) : (
               displayCategories.map(({ category, modules }) => (
-                <div key={category} className="border-t border-gray-100 first:border-t-0 dark:border-gray-700/80">
-                  <div className="table-scroll pt-6 first:pt-4">
+                <div key={category} className="pt-5 first:pt-0">
+                  <div className="overflow-x-auto overscroll-x-contain">
                     {activeTab === 'controle' ? (
-                      <table className="w-full min-w-[320px] table-fixed text-sm">
+                      <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                             <th
                               scope="col"
-                              className="w-[72%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                              className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                             >
                               {category}
                             </th>
                             <th
                               scope="col"
-                              className="w-[28%] px-1 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
+                              className="w-28 pb-3 pl-4 pr-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
                             >
                               Liberado
                             </th>
@@ -1498,7 +1504,7 @@ export function UserPermissionsEditor({
                                 key={mod.key}
                                 className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                               >
-                                <td className="py-3.5 pl-1 pr-4">
+                                <td className="py-3.5 pr-4">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                       <Icon className="h-4 w-4 stroke-[1.5]" aria-hidden />
@@ -1508,8 +1514,8 @@ export function UserPermissionsEditor({
                                     </span>
                                   </div>
                                 </td>
-                                <td className="px-1 py-3.5 text-center align-middle">
-                                  <div className="flex justify-center">
+                                <td className="py-3.5 pl-4 pr-2 text-right align-middle">
+                                  <div className="inline-flex justify-end">
                                     <PermissionMatrixCheckbox
                                       checked={liberado}
                                       onCheckedChange={(next) => {
@@ -1526,12 +1532,12 @@ export function UserPermissionsEditor({
                         </tbody>
                       </table>
                     ) : (
-                      <table className="w-full min-w-[640px] table-fixed text-sm">
+                      <table className="w-full min-w-[640px] text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                             <th
                               scope="col"
-                              className="w-[42%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                              className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                             >
                               {category}
                             </th>
@@ -1539,7 +1545,7 @@ export function UserPermissionsEditor({
                               <th
                                 key={h}
                                 scope="col"
-                                className="w-[14.5%] px-1 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
+                                className="w-32 px-3 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
                               >
                                 {h}
                               </th>
@@ -1563,7 +1569,7 @@ export function UserPermissionsEditor({
                                 key={mod.key}
                                 className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                               >
-                                <td className="py-3.5 pl-1 pr-4">
+                                <td className="py-3.5 pr-4">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                       <Icon className="h-4 w-4 stroke-[1.5]" />
@@ -1573,7 +1579,7 @@ export function UserPermissionsEditor({
                                     </span>
                                   </div>
                                 </td>
-                                <td className="px-1 py-3.5 text-center align-middle">
+                                <td className="px-3 py-3.5 text-center align-middle">
                                   <div className="flex justify-center">
                                     <PermissionMatrixCheckbox
                                       checked={verOn}
@@ -1594,7 +1600,7 @@ export function UserPermissionsEditor({
                                   </div>
                                 </td>
                                 {(['criar', 'editar', 'excluir'] as const).map((gran) => (
-                                  <td key={gran} className="px-1 py-3.5 text-center align-middle">
+                                  <td key={gran} className="px-3 py-3.5 text-center align-middle">
                                     <div className="flex justify-center">
                                       <PermissionMatrixCheckbox
                                         disabled={!granularRow}
@@ -1630,41 +1636,19 @@ export function UserPermissionsEditor({
                 </div>
               ))
             )}
-          </div>
+            </CardContent>
+          </>
         ) : (
-          <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-            {!isPositionMode && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">Copiar permissões de contratos</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Copia ações de contratos, contratos liberados e coluna Gestor do usuário selecionado.
-                    </p>
-                  </div>
-                  <div className="w-full sm:w-auto sm:min-w-[560px]">
-                    <div className="grid gap-2 sm:grid-cols-[1fr,auto] sm:items-center">
-                      <UserSearchSelect
-                        users={copyableUsers}
-                        searchValue={copyContractsSearch}
-                        onSearchValueChange={setCopyContractsSearch}
-                        selectedUserId={copyFromUserIdContracts}
-                        onSelectUserId={setCopyFromUserIdContracts}
-                        onActivate={() => setLoadCopyUsers(true)}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyContractsFromUser}
-                        disabled={!copyFromUserIdContracts || isApplyingCopyContracts}
-                        className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                      >
-                        {isApplyingCopyContracts ? 'Copiando...' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <>
+            <CardHeader className="!border-b-0 pb-1">
+              <PermissionPageHeader
+                icon={FileText}
+                title="Contratos"
+                subtitle="Libere contratos e recursos específicos para este usuário."
+                actions={permissionActionsButton}
+              />
+            </CardHeader>
+            <CardContent>
             {!selectedSet.has(CONTRACTS_MODULE_KEY) ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
@@ -1678,13 +1662,13 @@ export function UserPermissionsEditor({
               </div>
             ) : (
               <div>
-                <div className="max-h-[min(28rem,60vh)] table-scroll overflow-y-auto pt-2 sm:pt-4">
-                  <table className="w-full min-w-[760px] table-fixed text-sm">
+                <div className="overflow-x-auto overscroll-x-contain">
+                  <table className="w-full min-w-[760px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                         <th
                           scope="col"
-                          className="w-[30%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                          className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                         >
                           Contratos
                         </th>
@@ -1746,7 +1730,7 @@ export function UserPermissionsEditor({
                             key={c.id}
                             className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                           >
-                            <td className="py-3.5 pl-1 pr-4">
+                            <td className="py-3.5 pr-4">
                               <div className="flex min-w-0 items-center gap-3">
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                   <FileText className="h-4 w-4 stroke-[1.5]" />
@@ -1832,9 +1816,124 @@ export function UserPermissionsEditor({
                 </div>
               </div>
             )}
-          </div>
+            </CardContent>
+          </>
         )}
       </Card>
+
+      <Modal
+        isOpen={permissionActionModal === 'menu'}
+        onClose={closePermissionActionModal}
+        title="Permissões"
+        size="sm"
+      >
+        <p className="mb-5 text-sm text-gray-600 dark:text-gray-400">
+          Escolha como deseja alterar as permissões deste usuário.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setLoadCopyUsers(true);
+              setPermissionActionModal('copy');
+            }}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 dark:hover:bg-red-500"
+          >
+            <Copy className="h-4 w-4 shrink-0" aria-hidden />
+            Copiar de outro usuário
+          </button>
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('restore')}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+            Restaurar padrões do cargo
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={permissionActionModal === 'copy'}
+        onClose={closePermissionActionModal}
+        title="Copiar permissões"
+        size="sm"
+        contentOverflowVisible
+      >
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          {activeTab === 'contratos'
+            ? 'Copia ações, contratos liberados e coluna Gestor de outro usuário.'
+            : 'Copia as permissões de acesso e controle de outro usuário.'}
+        </p>
+        <StringSingleSelectDropdown
+          value={copyModalUserId || undefined}
+          onChange={(id) => {
+            setLoadCopyUsers(true);
+            setCopyModalUserId(id);
+          }}
+          options={copyUserSelectOptions}
+          placeholder="Selecionar usuário..."
+          searchPlaceholder="Pesquisar funcionário..."
+          emptyOptionsMessage={loadCopyUsers ? 'Nenhum funcionário encontrado.' : 'Carregando usuários...'}
+          allowEmpty={false}
+          matchTriggerWidth
+          className="w-full"
+        />
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('menu')}
+            disabled={isApplyingCopy}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmCopyFromUser}
+            disabled={!copyModalUserId || isApplyingCopy}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-500"
+          >
+            {isApplyingCopy ? 'Copiando...' : 'Confirmar cópia'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={permissionActionModal === 'restore'}
+        onClose={closePermissionActionModal}
+        title="Restaurar padrões do cargo"
+        size="sm"
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          {employeePosition ? (
+            <>
+              As permissões atuais serão substituídas pelo template do cargo{' '}
+              <span className="font-medium text-gray-900 dark:text-gray-100">{employeePosition}</span>.
+            </>
+          ) : (
+            'Este funcionário não possui cargo definido. Defina o cargo antes de restaurar os padrões.'
+          )}
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('menu')}
+            disabled={isRestoringDefaults}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={handleRestoreDefaults}
+            disabled={!employeePosition || isRestoringDefaults}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-500"
+          >
+            {isRestoringDefaults ? 'Restaurando...' : 'Restaurar'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

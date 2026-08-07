@@ -8,14 +8,20 @@ import {
   DATE_PICKER_FOOTER_ACTION_CLS,
   DATE_PICKER_FOOTER_CLEAR_CLS,
   DATE_PICKER_FOOTER_CLS,
+  DATE_PICKER_HEADER_LABEL_BTN_CLS,
+  DATE_PICKER_MONTHS_SHORT,
   DATE_PICKER_NAV_BTN_CLS,
   DATE_PICKER_POPOVER_CLS,
   DATE_PICKER_WEEKDAY_ROW_CLS,
   DATE_PICKER_WEEKDAYS,
+  DATE_PICKER_YEAR_PAGE_SIZE,
   datePickerCalendarIconCls,
   datePickerDayButtonCls,
+  datePickerMonthYearButtonCls,
   datePickerTriggerCls,
   datePickerTriggerTextCls,
+  datePickerYearPageStart,
+  type DatePickerPanel,
 } from '@/components/ui/datePickerDropdownUi';
 
 export type DateTimePickerFieldProps = {
@@ -337,6 +343,7 @@ export function DateTimePickerField({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<DatePickerPanel>('days');
   const [draft, setDraft] = useState<DateTimeParts>(() => parseDateTimeLocal(value) ?? nowParts());
   const [viewDate, setViewDate] = useState(() => parseYmd(value.split('T')[0]) ?? new Date());
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 420 });
@@ -393,6 +400,10 @@ export function DateTimePickerField({
   }, [open, updatePosition, value]);
 
   useEffect(() => {
+    if (!open) setPanel('days');
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -400,7 +411,13 @@ export function DateTimePickerField({
       setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        if (panel !== 'days') {
+          setPanel(panel === 'years' ? 'months' : 'days');
+          return;
+        }
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKey);
@@ -408,11 +425,11 @@ export function DateTimePickerField({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, panel]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
-  const monthLabel = viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const monthName = viewDate.toLocaleDateString('pt-BR', { month: 'long' });
   const todayYmd = toYmd(new Date());
   const startWeekday = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -420,8 +437,36 @@ export function DateTimePickerField({
   for (let index = 0; index < startWeekday; index++) cells.push(null);
   for (let day = 1; day <= daysInMonth; day++) cells.push(day);
 
+  const yearPageStart = datePickerYearPageStart(year);
+  const yearPageEnd = yearPageStart + DATE_PICKER_YEAR_PAGE_SIZE - 1;
+  const yearOptions = Array.from({ length: DATE_PICKER_YEAR_PAGE_SIZE }, (_, i) => yearPageStart + i);
+
   const pickDay = (day: number) => {
     commit({ ...draft, ymd: toYmd(new Date(year, month, day, 12, 0, 0, 0)) });
+  };
+
+  const navigatePrev = () => {
+    if (panel === 'years') {
+      setViewDate(new Date(year - DATE_PICKER_YEAR_PAGE_SIZE, month, 1));
+      return;
+    }
+    if (panel === 'months') {
+      setViewDate(new Date(year - 1, month, 1));
+      return;
+    }
+    setViewDate(new Date(year, month - 1, 1));
+  };
+
+  const navigateNext = () => {
+    if (panel === 'years') {
+      setViewDate(new Date(year + DATE_PICKER_YEAR_PAGE_SIZE, month, 1));
+      return;
+    }
+    if (panel === 'months') {
+      setViewDate(new Date(year + 1, month, 1));
+      return;
+    }
+    setViewDate(new Date(year, month + 1, 1));
   };
 
   const popover = open ? (
@@ -435,54 +480,135 @@ export function DateTimePickerField({
     >
       <div className="flex items-stretch gap-3">
         <div className="min-w-0 flex-1">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between gap-1">
             <button
               type="button"
-              onClick={() => setViewDate(new Date(year, month - 1, 1))}
+              onClick={navigatePrev}
               className={DATE_PICKER_NAV_BTN_CLS}
-              aria-label="Mês anterior"
+              aria-label={
+                panel === 'years' ? 'Anos anteriores' : panel === 'months' ? 'Ano anterior' : 'Mês anterior'
+              }
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">
-              {monthLabel}
-            </span>
+            <div className="flex min-w-0 items-center justify-center gap-0.5">
+              {panel === 'days' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setPanel('months')}
+                    className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+                    aria-label="Escolher mês"
+                  >
+                    {monthName}
+                  </button>
+                  <span className="px-0.5 text-sm font-semibold text-gray-500 dark:text-gray-400" aria-hidden>
+                    de
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPanel('years')}
+                    className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+                    aria-label="Escolher ano"
+                  >
+                    {year}
+                  </button>
+                </>
+              )}
+              {panel === 'months' && (
+                <button
+                  type="button"
+                  onClick={() => setPanel('years')}
+                  className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+                  aria-label="Escolher ano"
+                >
+                  {year}
+                </button>
+              )}
+              {panel === 'years' && (
+                <span className="px-1.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                  {yearPageStart}–{yearPageEnd}
+                </span>
+              )}
+            </div>
             <button
               type="button"
-              onClick={() => setViewDate(new Date(year, month + 1, 1))}
+              onClick={navigateNext}
               className={DATE_PICKER_NAV_BTN_CLS}
-              aria-label="Próximo mês"
+              aria-label={
+                panel === 'years' ? 'Próximos anos' : panel === 'months' ? 'Próximo ano' : 'Próximo mês'
+              }
             >
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
-          <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
-            {WEEKDAYS.map((weekday) => (
-              <span key={weekday} className="py-1">
-                {weekday}
-              </span>
-            ))}
-          </div>
+          {panel === 'days' && (
+            <>
+              <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
+                {WEEKDAYS.map((weekday) => (
+                  <span key={weekday} className="py-1">
+                    {weekday}
+                  </span>
+                ))}
+              </div>
 
-          <div className="grid grid-cols-7 gap-0.5">
-            {cells.map((day, index) => {
-              if (day === null) return <span key={`empty-${index}`} aria-hidden />;
-              const ymd = toYmd(new Date(year, month, day, 12, 0, 0, 0));
-              const selected = draft.ymd === ymd;
-              const isToday = ymd === todayYmd;
-              return (
+              <div className="grid grid-cols-7 gap-0.5">
+                {cells.map((day, index) => {
+                  if (day === null) return <span key={`empty-${index}`} aria-hidden />;
+                  const ymd = toYmd(new Date(year, month, day, 12, 0, 0, 0));
+                  const selected = draft.ymd === ymd;
+                  const isToday = ymd === todayYmd;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => pickDay(day)}
+                      className={datePickerDayButtonCls(selected, isToday)}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {panel === 'months' && (
+            <div className="grid grid-cols-3 gap-1 py-1">
+              {DATE_PICKER_MONTHS_SHORT.map((label, index) => (
                 <button
-                  key={day}
+                  key={label}
                   type="button"
-                  onClick={() => pickDay(day)}
-                  className={datePickerDayButtonCls(selected, isToday)}
+                  onClick={() => {
+                    setViewDate(new Date(year, index, 1));
+                    setPanel('days');
+                  }}
+                  className={datePickerMonthYearButtonCls(index === month)}
                 >
-                  {day}
+                  {label}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {panel === 'years' && (
+            <div className="grid grid-cols-3 gap-1 py-1">
+              {yearOptions.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => {
+                    setViewDate(new Date(y, month, 1));
+                    setPanel('months');
+                  }}
+                  className={datePickerMonthYearButtonCls(y === year)}
+                >
+                  {y}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div
@@ -525,6 +651,7 @@ export function DateTimePickerField({
             const current = nowParts();
             commit(current);
             setViewDate(parseYmd(current.ymd) ?? new Date());
+            setPanel('days');
             setOpen(false);
           }}
           className={DATE_PICKER_FOOTER_ACTION_CLS}

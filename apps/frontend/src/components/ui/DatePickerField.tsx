@@ -8,14 +8,20 @@ import {
   DATE_PICKER_FOOTER_ACTION_CLS,
   DATE_PICKER_FOOTER_CLEAR_CLS,
   DATE_PICKER_FOOTER_CLS,
+  DATE_PICKER_HEADER_LABEL_BTN_CLS,
+  DATE_PICKER_MONTHS_SHORT,
   DATE_PICKER_NAV_BTN_CLS,
   DATE_PICKER_POPOVER_CLS,
   DATE_PICKER_WEEKDAY_ROW_CLS,
   DATE_PICKER_WEEKDAYS,
+  DATE_PICKER_YEAR_PAGE_SIZE,
   datePickerCalendarIconCls,
   datePickerDayButtonCls,
+  datePickerMonthYearButtonCls,
   datePickerTriggerCls,
   datePickerTriggerTextCls,
+  datePickerYearPageStart,
+  type DatePickerPanel,
 } from '@/components/ui/datePickerDropdownUi';
 
 export type DatePickerFieldProps = {
@@ -70,6 +76,7 @@ export function DatePickerField({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<DatePickerPanel>('days');
   const [viewDate, setViewDate] = useState(() => parseYmd(value) ?? new Date());
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 280 });
 
@@ -97,6 +104,10 @@ export function DatePickerField({
   }, [value]);
 
   useEffect(() => {
+    if (!open) setPanel('days');
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     updatePosition();
     const onScrollOrResize = () => updatePosition();
@@ -116,7 +127,13 @@ export function DatePickerField({
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        if (panel !== 'days') {
+          setPanel(panel === 'years' ? 'months' : 'days');
+          return;
+        }
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKey);
@@ -124,11 +141,11 @@ export function DatePickerField({
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, panel]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
-  const monthLabel = viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const monthName = viewDate.toLocaleDateString('pt-BR', { month: 'long' });
   const todayYmd = toYmd(new Date());
   const firstDay = new Date(year, month, 1);
   const startWeekday = firstDay.getDay();
@@ -137,9 +154,37 @@ export function DatePickerField({
   for (let i = 0; i < startWeekday; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
+  const yearPageStart = datePickerYearPageStart(year);
+  const yearPageEnd = yearPageStart + DATE_PICKER_YEAR_PAGE_SIZE - 1;
+  const yearOptions = Array.from({ length: DATE_PICKER_YEAR_PAGE_SIZE }, (_, i) => yearPageStart + i);
+
   const pickDay = (day: number) => {
     onChange(toYmd(new Date(year, month, day, 12, 0, 0, 0)));
     setOpen(false);
+  };
+
+  const navigatePrev = () => {
+    if (panel === 'years') {
+      setViewDate(new Date(year - DATE_PICKER_YEAR_PAGE_SIZE, month, 1));
+      return;
+    }
+    if (panel === 'months') {
+      setViewDate(new Date(year - 1, month, 1));
+      return;
+    }
+    setViewDate(new Date(year, month - 1, 1));
+  };
+
+  const navigateNext = () => {
+    if (panel === 'years') {
+      setViewDate(new Date(year + DATE_PICKER_YEAR_PAGE_SIZE, month, 1));
+      return;
+    }
+    if (panel === 'months') {
+      setViewDate(new Date(year + 1, month, 1));
+      return;
+    }
+    setViewDate(new Date(year, month + 1, 1));
   };
 
   const triggerAppearance = appearance === 'inline' ? 'inline' : size === 'table' ? 'table' : 'field';
@@ -153,52 +198,137 @@ export function DatePickerField({
       className={DATE_PICKER_POPOVER_CLS}
       style={{ top: coords.top, left: coords.left, width: coords.width }}
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-1">
         <button
           type="button"
-          onClick={() => setViewDate(new Date(year, month - 1, 1))}
+          onClick={navigatePrev}
           className={DATE_PICKER_NAV_BTN_CLS}
-          aria-label="Mês anterior"
+          aria-label={
+            panel === 'years' ? 'Anos anteriores' : panel === 'months' ? 'Ano anterior' : 'Mês anterior'
+          }
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <span className="text-sm font-semibold capitalize text-gray-900 dark:text-gray-100">{monthLabel}</span>
+
+        <div className="flex min-w-0 items-center justify-center gap-0.5">
+          {panel === 'days' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setPanel('months')}
+                className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+                aria-label="Escolher mês"
+              >
+                {monthName}
+              </button>
+              <span className="px-0.5 text-sm font-semibold text-gray-500 dark:text-gray-400" aria-hidden>
+                de
+              </span>
+              <button
+                type="button"
+                onClick={() => setPanel('years')}
+                className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+                aria-label="Escolher ano"
+              >
+                {year}
+              </button>
+            </>
+          )}
+          {panel === 'months' && (
+            <button
+              type="button"
+              onClick={() => setPanel('years')}
+              className={DATE_PICKER_HEADER_LABEL_BTN_CLS}
+              aria-label="Escolher ano"
+            >
+              {year}
+            </button>
+          )}
+          {panel === 'years' && (
+            <span className="px-1.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+              {yearPageStart}–{yearPageEnd}
+            </span>
+          )}
+        </div>
+
         <button
           type="button"
-          onClick={() => setViewDate(new Date(year, month + 1, 1))}
+          onClick={navigateNext}
           className={DATE_PICKER_NAV_BTN_CLS}
-          aria-label="Próximo mês"
+          aria-label={
+            panel === 'years' ? 'Próximos anos' : panel === 'months' ? 'Próximo ano' : 'Próximo mês'
+          }
         >
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
-      <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
-        {WEEKDAYS.map((d) => (
-          <span key={d} className="py-1">
-            {d}
-          </span>
-        ))}
-      </div>
+      {panel === 'days' && (
+        <>
+          <div className={DATE_PICKER_WEEKDAY_ROW_CLS}>
+            {WEEKDAYS.map((d) => (
+              <span key={d} className="py-1">
+                {d}
+              </span>
+            ))}
+          </div>
 
-      <div className="grid grid-cols-7 gap-0.5">
-        {cells.map((day, i) => {
-          if (day === null) return <span key={`e-${i}`} aria-hidden />;
-          const ymd = toYmd(new Date(year, month, day, 12, 0, 0, 0));
-          const selected = value === ymd;
-          const isToday = ymd === todayYmd;
-          return (
+          <div className="grid grid-cols-7 gap-0.5">
+            {cells.map((day, i) => {
+              if (day === null) return <span key={`e-${i}`} aria-hidden />;
+              const ymd = toYmd(new Date(year, month, day, 12, 0, 0, 0));
+              const selected = value === ymd;
+              const isToday = ymd === todayYmd;
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => pickDay(day)}
+                  className={datePickerDayButtonCls(selected, isToday)}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {panel === 'months' && (
+        <div className="grid grid-cols-3 gap-1 py-1">
+          {DATE_PICKER_MONTHS_SHORT.map((label, index) => (
             <button
-              key={day}
+              key={label}
               type="button"
-              onClick={() => pickDay(day)}
-              className={datePickerDayButtonCls(selected, isToday)}
+              onClick={() => {
+                setViewDate(new Date(year, index, 1));
+                setPanel('days');
+              }}
+              className={datePickerMonthYearButtonCls(index === month)}
             >
-              {day}
+              {label}
             </button>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {panel === 'years' && (
+        <div className="grid grid-cols-3 gap-1 py-1">
+          {yearOptions.map((y) => (
+            <button
+              key={y}
+              type="button"
+              onClick={() => {
+                setViewDate(new Date(y, month, 1));
+                setPanel('months');
+              }}
+              className={datePickerMonthYearButtonCls(y === year)}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className={DATE_PICKER_FOOTER_CLS}>
         <button
@@ -216,6 +346,7 @@ export function DatePickerField({
           onClick={() => {
             onChange(todayYmd);
             setViewDate(new Date());
+            setPanel('days');
             setOpen(false);
           }}
           className={DATE_PICKER_FOOTER_ACTION_CLS}

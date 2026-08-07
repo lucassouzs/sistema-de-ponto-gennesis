@@ -1210,6 +1210,9 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       // Detalhe do contrato e subpáginas (orçamento, permissões, etc.)
       return /^\/ponto\/contratos\/[^/]+/.test(pathname);
     }
+    if (href === '/ponto/funcionarios') {
+      return pathname === href || pathname.startsWith(`${href}/`);
+    }
 
     return pathname === href;
   };

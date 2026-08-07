@@ -118,6 +118,26 @@ function computeFloatingPos(trigger: HTMLElement, options?: FloatingPosOptions):
   };
 }
 
+function OptionAvatar({
+  url,
+  fallback,
+}: {
+  url?: string | null;
+  fallback?: string;
+}) {
+  if (!url && !fallback) return null;
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-red-600 text-xs font-semibold text-white">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+      ) : (
+        (fallback || '?').slice(0, 2).toUpperCase()
+      )}
+    </span>
+  );
+}
+
 function OptionLabelContent({ opt, noTruncate = false }: { opt: MultiSelectSearchOption; noTruncate?: boolean }) {
   const labelClass = noTruncate ? 'whitespace-nowrap' : 'truncate';
   const label = opt.labelClassName ? (
@@ -128,7 +148,14 @@ function OptionLabelContent({ opt, noTruncate = false }: { opt: MultiSelectSearc
     </span>
   );
 
-  const primary = opt.swatchColor ? (
+  const hasAvatar = Boolean(opt.avatarUrl || opt.avatarFallback);
+
+  const primary = hasAvatar ? (
+    <span className="flex min-w-0 flex-1 items-center gap-3">
+      <OptionAvatar url={opt.avatarUrl} fallback={opt.avatarFallback} />
+      {label}
+    </span>
+  ) : opt.swatchColor ? (
     <span className="flex min-w-0 flex-1 items-center gap-2.5">
       <span
         className="h-5 w-5 shrink-0 rounded-md border border-black/15 shadow-sm dark:border-white/20"
@@ -148,6 +175,41 @@ function OptionLabelContent({ opt, noTruncate = false }: { opt: MultiSelectSearc
     .filter(Boolean);
 
   if (statusSegments.length === 0 && descriptionLines.length === 0) return primary;
+
+  if (hasAvatar) {
+    return (
+      <span className="flex min-w-0 flex-1 items-center gap-3 text-left">
+        <OptionAvatar url={opt.avatarUrl} fallback={opt.avatarFallback} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-0.5">
+          {label}
+          {statusSegments.length > 0 ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] font-medium leading-tight">
+              {statusSegments.map((segment, index) => (
+                <span key={`${segment.text}-${index}`} className="inline-flex min-w-0 items-center gap-x-1.5">
+                  {index > 0 ? (
+                    <span className="text-gray-400 dark:text-gray-500" aria-hidden>
+                      ·
+                    </span>
+                  ) : null}
+                  <span className={`${noTruncate ? 'whitespace-nowrap' : 'truncate'} ${segment.className || 'text-gray-600 dark:text-gray-300'}`}>
+                    {segment.text}
+                  </span>
+                </span>
+              ))}
+            </span>
+          ) : null}
+          {descriptionLines.map((line) => (
+            <span
+              key={line}
+              className={`${noTruncate ? 'whitespace-nowrap' : 'truncate'} text-[11px] font-normal leading-tight text-gray-500 dark:text-gray-400`}
+            >
+              {line}
+            </span>
+          ))}
+        </span>
+      </span>
+    );
+  }
 
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-1 py-0.5 text-left">

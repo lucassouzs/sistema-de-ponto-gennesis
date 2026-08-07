@@ -4,6 +4,25 @@ import { singleSelectTriggerBorderClass, singleSelectTriggerTextClass } from './
 
 export const DATE_PICKER_WEEKDAYS = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'] as const;
 
+export const DATE_PICKER_MONTHS_SHORT = [
+  'jan',
+  'fev',
+  'mar',
+  'abr',
+  'mai',
+  'jun',
+  'jul',
+  'ago',
+  'set',
+  'out',
+  'nov',
+  'dez',
+] as const;
+
+export type DatePickerPanel = 'days' | 'months' | 'years';
+
+export const DATE_PICKER_YEAR_PAGE_SIZE = 12;
+
 export const DATE_PICKER_POPOVER_CLS =
   'fixed z-[9999] rounded-xl border border-gray-200 bg-white p-3 shadow-xl dark:border-gray-600 dark:bg-gray-800';
 
@@ -22,6 +41,13 @@ export const DATE_PICKER_FOOTER_CLEAR_CLS =
 export const DATE_PICKER_FOOTER_ACTION_CLS =
   'text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300';
 
+export const DATE_PICKER_HEADER_LABEL_BTN_CLS =
+  'rounded-md px-1.5 py-0.5 text-sm font-semibold capitalize text-gray-900 transition-colors hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700';
+
+export function datePickerYearPageStart(year: number) {
+  return Math.floor(year / DATE_PICKER_YEAR_PAGE_SIZE) * DATE_PICKER_YEAR_PAGE_SIZE;
+}
+
 export function datePickerDayButtonCls(selected: boolean, isToday: boolean) {
   return clsx(
     'flex h-9 items-center justify-center rounded-lg text-sm transition-colors',
@@ -33,6 +59,15 @@ export function datePickerDayButtonCls(selected: boolean, isToday: boolean) {
     !selected &&
       !isToday &&
       'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/80'
+  );
+}
+
+export function datePickerMonthYearButtonCls(selected: boolean) {
+  return clsx(
+    'flex h-10 items-center justify-center rounded-lg text-sm capitalize transition-colors',
+    selected
+      ? 'font-semibold text-red-600 ring-1 ring-inset ring-red-500 dark:text-red-400 dark:ring-red-400'
+      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700/80'
   );
 }
 

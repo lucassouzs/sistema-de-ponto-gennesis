@@ -162,6 +162,8 @@ router.get('/users', requirePermissionManagerOrAdministrator, async (_req, res, 
         id: true,
         name: true,
         email: true,
+        cpf: true,
+        profilePhotoUrl: true,
         employee: {
           select: {
             position: true,

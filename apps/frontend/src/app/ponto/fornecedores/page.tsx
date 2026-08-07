@@ -759,7 +759,7 @@ export default function FornecedoresPage() {
                   <div className="table-scroll">
                     <table className={cadastroListClasses.table}>
                       <colgroup>
-                        <col className="w-[4.5rem]" />
+                        <col className="w-[11rem]" />
                         <col />
                         <col className="w-[10rem]" />
                         <col className="w-[9rem]" />
@@ -788,7 +788,12 @@ export default function FornecedoresPage() {
                               setDetailSupplier(s);
                             }}
                           >
-                            <td className={cadastroListClasses.tdMono}>{s.code || '—'}</td>
+                            <td
+                              className={`${cadastroListClasses.tdMono} max-w-0 truncate`}
+                              title={s.code || undefined}
+                            >
+                              {s.code || '—'}
+                            </td>
                             <td className={`${cadastroListClasses.tdTruncate} min-w-[12rem]`}>
                               <ListRowNavigableLabel className="block whitespace-normal break-words">
                                 {cell(s.tradeName)}

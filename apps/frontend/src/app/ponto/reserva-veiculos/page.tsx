@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Car, CheckCircle, ClipboardCheck, Clock, Eye, FileText, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -141,13 +141,58 @@ function formatDateLabel(value: string): string {
   return format(date, 'dd/MM/yyyy HH:mm', { locale: ptBR });
 }
 
+function formatDateOnlyLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return format(date, 'dd/MM/yyyy', { locale: ptBR });
+}
+
+function formatTimeOnlyLabel(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return format(date, 'HH:mm', { locale: ptBR });
+}
+
 function formatDateTimeLabel(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
   return format(date, 'dd/MM/yyyy HH:mm:ss', { locale: ptBR });
 }
 
-type ReservationCardFilter = 'all' | 'pending' | 'CONCLUDED' | 'CANCELLED';
+function UsoPeriodLabel({ inicio, fim }: { inicio: string; fim: string }) {
+  const start = new Date(inicio);
+  const end = new Date(fim);
+  const startValid = !Number.isNaN(start.getTime());
+  const endValid = !Number.isNaN(end.getTime());
+
+  if (!startValid) {
+    return <span className="whitespace-nowrap">—</span>;
+  }
+
+  if (endValid && isSameDay(start, end) && inicio !== fim) {
+    return (
+      <>
+        <span className="whitespace-nowrap">{formatDateOnlyLabel(inicio)}</span>
+        <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+          {formatTimeOnlyLabel(inicio)} às {formatTimeOnlyLabel(fim)}
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <span className="whitespace-nowrap">{formatDateLabel(inicio)}</span>
+      {fim !== inicio ? (
+        <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+          até {formatDateLabel(fim)}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+type ReservationCardFilter = 'all' | 'pending' | 'IN_USE' | 'CONCLUDED' | 'CANCELLED';
 
 const DEFAULT_CARD_FILTER: ReservationCardFilter = 'all';
 
@@ -175,8 +220,15 @@ const RESERVATION_CARD_LIST_CONFIG: Record<
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
   },
+  IN_USE: {
+    title: 'Reservas em uso',
+    subtitle: 'Veículos aprovados e em utilização.',
+    Icon: Car,
+    iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+    iconColor: 'text-purple-600 dark:text-purple-400',
+  },
   CONCLUDED: {
-    title: 'Reservas concluídas',
+    title: 'Reservas vistoriadas',
     subtitle: 'Reservas vistoriadas e finalizadas.',
     Icon: CheckCircle,
     iconBg: 'bg-green-100 dark:bg-green-900/30',
@@ -197,7 +249,7 @@ const RESERVATION_STAT_CARDS: {
   iconBg: string;
   iconColor: string;
   Icon: LucideIcon;
-  countKey: keyof { total: number; pending: number; concluded: number; cancelled: number };
+  countKey: keyof { total: number; pending: number; inUse: number; concluded: number; cancelled: number };
 }[] = [
   {
     filter: 'all',
@@ -216,8 +268,16 @@ const RESERVATION_STAT_CARDS: {
     countKey: 'pending',
   },
   {
+    filter: 'IN_USE',
+    label: 'Em Uso',
+    iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+    iconColor: 'text-purple-600 dark:text-purple-400',
+    Icon: Car,
+    countKey: 'inUse',
+  },
+  {
     filter: 'CONCLUDED',
-    label: 'Concluídas',
+    label: 'Vistoriadas',
     iconBg: 'bg-green-100 dark:bg-green-900/30',
     iconColor: 'text-green-600 dark:text-green-400',
     Icon: CheckCircle,
@@ -236,6 +296,7 @@ const RESERVATION_STAT_CARDS: {
 function cardFilterToApiParam(filter: ReservationCardFilter): string | undefined {
   if (filter === 'all') return undefined;
   if (filter === 'pending') return 'PENDING_SUPPLIES,COMPLETED';
+  if (filter === 'IN_USE') return 'APPROVED';
   if (filter === 'CONCLUDED') return 'INSPECTED';
   return 'CANCELLED,REJECTED';
 }
@@ -317,11 +378,12 @@ export default function ReservaVeiculosPage() {
     const pending = list.filter(
       (r) => r.status === 'PENDING_SUPPLIES' || r.status === 'COMPLETED'
     ).length;
+    const inUse = list.filter((r) => r.status === 'APPROVED').length;
     const concluded = list.filter((r) => r.status === 'INSPECTED').length;
     const cancelled = list.filter(
       (r) => r.status === 'CANCELLED' || r.status === 'REJECTED'
     ).length;
-    return { total: list.length, pending, concluded, cancelled };
+    return { total: list.length, pending, inUse, concluded, cancelled };
   }, [statsData]);
 
   const listHeader = RESERVATION_CARD_LIST_CONFIG[cardFilter];
@@ -570,7 +632,7 @@ export default function ReservaVeiculosPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 2xl:grid-cols-5">
             {RESERVATION_STAT_CARDS.map((card) => (
               <FilterStatCard
                 key={card.filter}
@@ -662,12 +724,22 @@ export default function ReservaVeiculosPage() {
                   />
                   <div className="table-scroll">
                     <table className={cadastroListClasses.table}>
+                      <colgroup>
+                        <col className="w-[4%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[16%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[4%]" />
+                      </colgroup>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
                           <th className={cadastroListClasses.th}>ID</th>
                           <th className={cadastroListClasses.th}>Solicitante</th>
                           <th className={cadastroListClasses.th}>Motorista</th>
-                          <th className={cadastroListClasses.th}>Veículo</th>
+                          <th className={cadastroListClasses.thCenter}>Veículo</th>
                           <th className={cadastroListClasses.thCenter}>Uso</th>
                           <th className={cadastroListClasses.thCenter}>Contrato</th>
                           <th className={cadastroListClasses.thCenter}>Status</th>
@@ -689,9 +761,17 @@ export default function ReservaVeiculosPage() {
                                 )}
                               </ListRowNavigableLabel>
                             </td>
-                            <td className={cadastroListClasses.td}>{reservation.solicitante}</td>
-                            <td className={cadastroListClasses.td}>{reservation.motorista}</td>
-                            <td className={cadastroListClasses.td}>
+                            <td className={cadastroListClasses.tdTruncate}>
+                              <span className="block truncate text-sm text-gray-900 dark:text-gray-100">
+                                {reservation.solicitante}
+                              </span>
+                            </td>
+                            <td className={cadastroListClasses.tdTruncate}>
+                              <span className="block truncate text-sm text-gray-900 dark:text-gray-100">
+                                {reservation.motorista}
+                              </span>
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
                               {reservation.vehicle
                                 ? formatPlacaDisplay(reservation.vehicle.placaVeic)
                                 : reservation.status === 'PENDING_SUPPLIES'
@@ -700,17 +780,16 @@ export default function ReservaVeiculosPage() {
                             </td>
                             <td className={`${cadastroListClasses.tdCenter} !whitespace-normal`}>
                               <div className="inline-flex flex-col items-center gap-0.5 leading-tight">
-                                <span className="whitespace-nowrap">
-                                  {formatDateLabel(reservation.dataUsoInicio)}
-                                </span>
-                                {reservation.dataUsoFim !== reservation.dataUsoInicio ? (
-                                  <span className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
-                                    até {formatDateLabel(reservation.dataUsoFim)}
-                                  </span>
-                                ) : null}
+                                <UsoPeriodLabel
+                                  inicio={reservation.dataUsoInicio}
+                                  fim={reservation.dataUsoFim}
+                                />
                               </div>
                             </td>
-                            <td className={cadastroListClasses.tdCenter}>
+                            <td
+                              className={`${cadastroListClasses.tdCenter} max-w-0 truncate`}
+                              title={reservation.contrato || undefined}
+                            >
                               {reservation.contrato || '—'}
                             </td>
                             <td className={cadastroListClasses.tdCenter}>

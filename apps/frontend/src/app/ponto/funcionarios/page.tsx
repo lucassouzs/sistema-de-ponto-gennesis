@@ -3,15 +3,9 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Upload, Download, AlertCircle, CheckCircle, X, Loader2, Edit2, Trash2, FileSpreadsheet, ArrowLeft } from 'lucide-react';
+import { Upload, Download, AlertCircle, CheckCircle, X, Loader2, Trash2, FileSpreadsheet } from 'lucide-react';
 import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
 import { EmployeeList } from '@/components/employee/EmployeeList';
-import {
-  UserPermissionsEditor,
-  UserPermissionsTabBar,
-  type PermissionEditorTab,
-  type PermissionsTargetPreview,
-} from '@/components/permissions/UserPermissionsEditor';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -94,15 +88,6 @@ export default function FuncionariosPage() {
   const { canCreateEmployees } = usePermissions();
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [permissionsTarget, setPermissionsTarget] = useState<PermissionsTargetPreview | null>(null);
-  const [permissionTab, setPermissionTab] = useState<PermissionEditorTab>('gerais');
-  const [showContractsTab, setShowContractsTab] = useState(false);
-
-  const closePermissionsEditor = () => {
-    setPermissionsTarget(null);
-    setPermissionTab('gerais');
-    setShowContractsTab(false);
-  };
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -116,15 +101,6 @@ export default function FuncionariosPage() {
     localStorage.removeItem('token');
     sessionStorage.removeItem('token');
     router.push('/auth/login');
-  };
-
-  const handleEmployeeCreated = () => {
-    queryClient.invalidateQueries({ queryKey: ['employees'] });
-    setIsCreateEmployeeOpen(false);
-  };
-
-  const handleEmployeeUpdated = () => {
-    queryClient.invalidateQueries({ queryKey: ['employees'] });
   };
 
   // Mostrar loading no padrão das outras páginas
@@ -142,50 +118,6 @@ export default function FuncionariosPage() {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
-
-  if (permissionsTarget) {
-    return (
-      <ProtectedRoute route="/ponto/funcionarios">
-        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-        <div className="w-full space-y-6">
-          <div className="relative flex min-h-[3.25rem] items-center justify-center py-1">
-            <button
-              type="button"
-              onClick={closePermissionsEditor}
-              className="absolute left-0 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-2 rounded-lg px-1 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            >
-              <ArrowLeft className="h-4 w-4 shrink-0" />
-              Voltar
-            </button>
-            <div className="w-full max-w-3xl px-14 text-center sm:px-20">
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
-                Permissões de funcionário
-              </h1>
-              <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">
-                Defina o que este colaborador pode acessar no sistema
-              </p>
-            </div>
-          </div>
-          <UserPermissionsTabBar
-            activeTab={permissionTab}
-            onChange={setPermissionTab}
-            showContracts={showContractsTab}
-            className="w-full pb-2"
-          />
-          <UserPermissionsEditor
-            userId={permissionsTarget.id}
-            preview={permissionsTarget}
-            onBack={closePermissionsEditor}
-            hideTopNavigation
-            permissionTab={permissionTab}
-            onPermissionTabChange={setPermissionTab}
-            onContractsTabAvailabilityChange={setShowContractsTab}
-          />
-        </div>
-      </MainLayout>
-      </ProtectedRoute>
-    );
-  }
 
   return (
     <ProtectedRoute route="/ponto/funcionarios">
@@ -211,17 +143,6 @@ export default function FuncionariosPage() {
           showDeleteButton={true}
           onImportEmployees={canCreateEmployees ? () => setIsImportModalOpen(true) : undefined}
           onCreateEmployee={canCreateEmployees ? () => setIsCreateEmployeeOpen(true) : undefined}
-          onManagePermissions={(emp) => {
-            setPermissionTab('gerais');
-            setShowContractsTab(false);
-            setPermissionsTarget({
-              id: emp.id,
-              name: emp.name,
-              email: emp.email || '',
-              position: emp.employee?.position,
-              profilePhotoUrl: emp.profilePhotoUrl ?? null,
-            });
-          }}
         />
 
         {/* Modal de Criar Funcionário */}
