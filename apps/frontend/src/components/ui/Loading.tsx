@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useIsInsideMainLayoutShell } from '@/components/layout/MainLayoutShellContext';
 
 interface LoadingProps {
   message?: string;
@@ -16,6 +17,8 @@ export function Loading({
   size = 'md',
   className = ''
 }: LoadingProps) {
+  const insideShell = useIsInsideMainLayoutShell();
+
   const sizeClasses = {
     sm: 'w-6 h-6',
     md: 'w-10 h-10',
@@ -34,6 +37,15 @@ export function Loading({
   );
 
   if (fullScreen) {
+    // Dentro do shell persistente: não cobre a sidebar com overlay fixed.
+    if (insideShell) {
+      return (
+        <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
+          {spinner}
+        </div>
+      );
+    }
+
     return (
       <div className="fixed inset-0 bg-white dark:bg-gray-900 bg-opacity-95 dark:bg-opacity-95 flex items-center justify-center z-50">
         {spinner}

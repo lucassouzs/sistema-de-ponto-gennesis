@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +27,10 @@ import { NativeCallOverlay } from '@/components/conversas/NativeCallOverlay';
 import { NativeCallProvider } from '@/contexts/NativeCallContext';
 import { useModalOverlayObserver } from '@/hooks/useModalOverlayObserver';
 import { syncModalOpenClass } from '@/lib/modalBodyLock';
+import { MainLayoutShellContext } from './MainLayoutShellContext';
+import { PageEnter } from './PageEnter';
+
+export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
 
 const ChatWidgetLazy = dynamic(
   () => import('../chat/ChatWidget').then((m) => ({ default: m.ChatWidget })),
@@ -72,6 +82,24 @@ function useDeferredRealtimeReady(delayMs = 2500): boolean {
 }
 
 export function MainLayout({ children, userRole, userName, onLogout }: MainLayoutProps) {
+  const insideShell = useContext(MainLayoutShellContext);
+  // Páginas legadas ainda envolvem MainLayout; sob o layout de /ponto só repassam o conteúdo.
+  if (insideShell) {
+    return <>{children}</>;
+  }
+
+  return (
+    <MainLayoutShell
+      userRole={userRole}
+      userName={userName}
+      onLogout={onLogout}
+    >
+      {children}
+    </MainLayoutShell>
+  );
+}
+
+function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutProps) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const defaultLogout = useLogout();
@@ -80,6 +108,8 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
   const [layoutSynced, setLayoutSynced] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const { user } = usePermissions();
+  const displayName = userName || user?.name || '';
+  const displayRole = (userRole || user?.role || 'EMPLOYEE') as MainLayoutProps['userRole'];
   const realtimeReady = useDeferredRealtimeReady();
   const realtimeUserId = realtimeReady ? user?.id : undefined;
   const nativeCall = useNativeWebRTCCall({ userId: realtimeUserId });
@@ -109,57 +139,57 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
   );
 
   return (
-    <NativeCallProvider value={nativeCall}>
-      <div className="min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900">
-      {/* Sidebar */}
-      <Sidebar 
-        userRole={userRole} 
-        userName={userName} 
-        onLogout={handleLogout}
-        onMenuToggle={handleMenuToggle}
-        onOpenChangePassword={handleOpenChangePassword}
-      />
-      
-      {/* Main Content — mesma duração/easing do painel tier 2 da sidebar */}
-      <div
-        className={`min-w-0 max-w-full ${
-          layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
-        } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
-      >
-        <TopNavbar
-          userName={userName}
-          onLogout={handleLogout}
-          onOpenChangePassword={handleOpenChangePassword}
-        />
-        <main
-          className={
-            isFullBleedRoute
-              ? 'min-w-0 p-0'
-              : 'min-w-0 px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
-          }
-        >
-          {children}
-        </main>
-      </div>
+    <MainLayoutShellContext.Provider value={true}>
+      <NativeCallProvider value={nativeCall}>
+        <div className="min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900">
+          <Sidebar
+            userRole={displayRole}
+            userName={displayName}
+            onLogout={handleLogout}
+            onMenuToggle={handleMenuToggle}
+            onOpenChangePassword={handleOpenChangePassword}
+          />
 
-      {/* Chat flutuante só quando habilitado — evita JS/polls no boot */}
-      {SHOW_CHAT_FLOAT_BUTTON ? <ChatWidgetLazy /> : null}
+          {/* Main Content — mesma duração/easing do painel tier 2 da sidebar */}
+          <div
+            className={`min-w-0 max-w-full ${
+              layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
+            } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
+          >
+            <TopNavbar
+              userName={displayName}
+              onLogout={handleLogout}
+              onOpenChangePassword={handleOpenChangePassword}
+            />
+            <main
+              className={
+                isFullBleedRoute
+                  ? 'min-w-0 p-0'
+                  : 'min-w-0 px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
+              }
+            >
+              {isFullBleedRoute ? children : <PageEnter>{children}</PageEnter>}
+            </main>
+          </div>
 
-        <NativeCallOverlay
-          call={nativeCall}
-          localAvatarUrl={user?.profilePhotoUrl ?? null}
-          localDisplayName={user?.name ?? null}
-        />
+          {SHOW_CHAT_FLOAT_BUTTON ? <ChatWidgetLazy /> : null}
 
-        <ChangePasswordModal
-          isOpen={isChangePasswordOpen}
-          onClose={() => setIsChangePasswordOpen(false)}
-          onSuccess={() => {
-            setIsChangePasswordOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['user'] });
-          }}
-        />
-      </div>
-    </NativeCallProvider>
+          <NativeCallOverlay
+            call={nativeCall}
+            localAvatarUrl={user?.profilePhotoUrl ?? null}
+            localDisplayName={user?.name ?? null}
+          />
+
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            onSuccess={() => {
+              setIsChangePasswordOpen(false);
+              queryClient.invalidateQueries({ queryKey: ['user'] });
+            }}
+          />
+        </div>
+      </NativeCallProvider>
+    </MainLayoutShellContext.Provider>
   );
 }

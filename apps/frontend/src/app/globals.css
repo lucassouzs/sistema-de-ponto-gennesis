@@ -943,6 +943,155 @@
   }
 }
 
+/* Páginas de listagem — entrada do conteúdo (só main, não o chrome) */
+@keyframes page-enter-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes page-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Classes manuais (páginas que quiserem controlar) */
+.animate-page-enter-title {
+  animation: page-enter-fade 0.5s ease-out both;
+}
+
+.animate-page-enter-card {
+  animation: page-enter-up 0.45s ease-out both;
+}
+
+.animate-page-enter-panel {
+  animation: page-enter-up 0.55s ease-out 0.18s both;
+}
+
+/**
+ * Entrada automática em todas as páginas via MainLayout > PageEnter.
+ * - Fallback: conteúdo inteiro sobe/fade
+ * - Com space-y-*: seções em stagger (título → cards → tabela)
+ * - Grids: cards com delay em cascata
+ */
+.page-enter:not(:has(> .space-y-4, > .space-y-5, > .space-y-6, > .space-y-8)) {
+  animation: page-enter-up 0.45s ease-out both;
+}
+
+.page-enter > .space-y-4 > *,
+.page-enter > .space-y-5 > *,
+.page-enter > .space-y-6 > *,
+.page-enter > .space-y-8 > * {
+  animation: page-enter-up 0.5s ease-out both;
+}
+
+.page-enter > .space-y-4 > *:nth-child(1),
+.page-enter > .space-y-5 > *:nth-child(1),
+.page-enter > .space-y-6 > *:nth-child(1),
+.page-enter > .space-y-8 > *:nth-child(1) {
+  animation-name: page-enter-fade;
+  animation-duration: 0.45s;
+  animation-delay: 0ms;
+}
+
+.page-enter > .space-y-4 > *:nth-child(2),
+.page-enter > .space-y-5 > *:nth-child(2),
+.page-enter > .space-y-6 > *:nth-child(2),
+.page-enter > .space-y-8 > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.page-enter > .space-y-4 > *:nth-child(3),
+.page-enter > .space-y-5 > *:nth-child(3),
+.page-enter > .space-y-6 > *:nth-child(3),
+.page-enter > .space-y-8 > *:nth-child(3) {
+  animation-delay: 150ms;
+}
+
+.page-enter > .space-y-4 > *:nth-child(n + 4),
+.page-enter > .space-y-5 > *:nth-child(n + 4),
+.page-enter > .space-y-6 > *:nth-child(n + 4),
+.page-enter > .space-y-8 > *:nth-child(n + 4) {
+  animation-delay: 200ms;
+}
+
+.page-enter > .space-y-4 > .grid > *,
+.page-enter > .space-y-5 > .grid > *,
+.page-enter > .space-y-6 > .grid > *,
+.page-enter > .space-y-8 > .grid > * {
+  animation: page-enter-up 0.4s ease-out both;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(1),
+.page-enter > .space-y-5 > .grid > *:nth-child(1),
+.page-enter > .space-y-6 > .grid > *:nth-child(1),
+.page-enter > .space-y-8 > .grid > *:nth-child(1) {
+  animation-delay: 90ms;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(2),
+.page-enter > .space-y-5 > .grid > *:nth-child(2),
+.page-enter > .space-y-6 > .grid > *:nth-child(2),
+.page-enter > .space-y-8 > .grid > *:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(3),
+.page-enter > .space-y-5 > .grid > *:nth-child(3),
+.page-enter > .space-y-6 > .grid > *:nth-child(3),
+.page-enter > .space-y-8 > .grid > *:nth-child(3) {
+  animation-delay: 200ms;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(4),
+.page-enter > .space-y-5 > .grid > *:nth-child(4),
+.page-enter > .space-y-6 > .grid > *:nth-child(4),
+.page-enter > .space-y-8 > .grid > *:nth-child(4) {
+  animation-delay: 250ms;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(5),
+.page-enter > .space-y-5 > .grid > *:nth-child(5),
+.page-enter > .space-y-6 > .grid > *:nth-child(5),
+.page-enter > .space-y-8 > .grid > *:nth-child(5) {
+  animation-delay: 300ms;
+}
+
+.page-enter > .space-y-4 > .grid > *:nth-child(n + 6),
+.page-enter > .space-y-5 > .grid > *:nth-child(n + 6),
+.page-enter > .space-y-6 > .grid > *:nth-child(n + 6),
+.page-enter > .space-y-8 > .grid > *:nth-child(n + 6) {
+  animation-delay: 340ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-page-enter-title,
+  .animate-page-enter-card,
+  .animate-page-enter-panel,
+  .page-enter,
+  .page-enter > .space-y-4 > *,
+  .page-enter > .space-y-5 > *,
+  .page-enter > .space-y-6 > *,
+  .page-enter > .space-y-8 > *,
+  .page-enter > .space-y-4 > .grid > *,
+  .page-enter > .space-y-5 > .grid > *,
+  .page-enter > .space-y-6 > .grid > *,
+  .page-enter > .space-y-8 > .grid > * {
+    animation: none !important;
+  }
+}
+
 /* Kanban — drag & drop */
 @keyframes kanban-column-settle {
   0% {

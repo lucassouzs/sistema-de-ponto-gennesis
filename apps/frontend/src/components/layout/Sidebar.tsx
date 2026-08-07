@@ -86,6 +86,7 @@ import {
   writeSidebarCollapsed,
   isHomeRoute,
   isRailFooterRoute,
+  shouldForceSidebarCollapsed,
 } from '@/lib/sidebarStorage';
 import {
   LAYOUT_CHROME,
@@ -1526,10 +1527,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     const savedModule = readSelectedModuleId();
     if (savedModule) setSelectedModuleId(savedModule);
 
-    let collapsed = readSidebarCollapsed();
-    if (isHomeRoute(pathname) || isRailFooterRoute(pathname)) {
-      collapsed = true;
-    }
+    const forceCollapsed = shouldForceSidebarCollapsed(pathname);
+    const collapsed = forceCollapsed || readSidebarCollapsed();
     setIsCollapsedState(collapsed);
     onMenuToggle?.(collapsed);
     setSidebarHydrated(true);
