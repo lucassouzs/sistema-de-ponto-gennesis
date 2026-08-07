@@ -487,6 +487,8 @@ export default function ReservaVeiculosPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-vehicles'] });
       setReturnReservation(null);
       setReturnFormData(EMPTY_RETURN_FORM());
       toast.success('Baixa registrada! Aguardando vistoria do Suprimentos.');

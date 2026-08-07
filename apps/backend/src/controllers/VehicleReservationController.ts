@@ -335,6 +335,29 @@ export class VehicleReservationController {
         throw createError('Esta reserva não está aguardando aprovação do Suprimentos', 400);
       }
 
+      const vehicleInUse = await prisma.vehicleReservation.findFirst({
+        where: {
+          vehicleId,
+          status: VehicleReservationStatus.APPROVED,
+          NOT: { id }
+        },
+        select: {
+          id: true,
+          code: true,
+          solicitante: true,
+          motorista: true
+        }
+      });
+      if (vehicleInUse) {
+        const who =
+          vehicleInUse.motorista || vehicleInUse.solicitante || 'outro colaborador';
+        const codeLabel = vehicleInUse.code ? ` #${vehicleInUse.code}` : '';
+        throw createError(
+          `Este veículo já está em uso (reserva${codeLabel} — ${who}). Aguarde a devolução ou escolha outro.`,
+          400
+        );
+      }
+
       const reservation = await prisma.vehicleReservation.update({
         where: { id },
         data: {

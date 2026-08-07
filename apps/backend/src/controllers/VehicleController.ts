@@ -164,9 +164,44 @@ export class VehicleController {
         prisma.vehicle.count({ where })
       ]);
 
+      const vehicleIds = vehicles.map((v) => v.id);
+      const activeReservations =
+        vehicleIds.length === 0
+          ? []
+          : await prisma.vehicleReservation.findMany({
+              where: {
+                vehicleId: { in: vehicleIds },
+                status: 'APPROVED'
+              },
+              select: {
+                id: true,
+                code: true,
+                vehicleId: true,
+                solicitante: true,
+                motorista: true,
+                dataUsoInicio: true,
+                dataUsoFim: true
+              }
+            });
+
+      const activeByVehicleId = new Map(
+        activeReservations
+          .filter((r) => r.vehicleId)
+          .map((r) => [r.vehicleId as string, r])
+      );
+
+      const data = vehicles.map((vehicle) => {
+        const activeReservation = activeByVehicleId.get(vehicle.id) ?? null;
+        return {
+          ...vehicle,
+          inUse: Boolean(activeReservation),
+          activeReservation
+        };
+      });
+
       res.json({
         success: true,
-        data: vehicles,
+        data,
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -184,7 +219,31 @@ export class VehicleController {
       const { id } = req.params;
       const vehicle = await prisma.vehicle.findUnique({ where: { id } });
       if (!vehicle) throw createError('Veículo não encontrado', 404);
-      res.json({ success: true, data: vehicle });
+
+      const activeReservation = await prisma.vehicleReservation.findFirst({
+        where: {
+          vehicleId: id,
+          status: 'APPROVED'
+        },
+        select: {
+          id: true,
+          code: true,
+          vehicleId: true,
+          solicitante: true,
+          motorista: true,
+          dataUsoInicio: true,
+          dataUsoFim: true
+        }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          ...vehicle,
+          inUse: Boolean(activeReservation),
+          activeReservation
+        }
+      });
     } catch (error) {
       next(error);
     }

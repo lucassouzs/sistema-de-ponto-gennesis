@@ -66,6 +66,15 @@ interface Vehicle {
   responsavel?: string | null;
   frotaPartic?: VehicleUsageType | null;
   isActive: boolean;
+  inUse?: boolean;
+  activeReservation?: {
+    id: string;
+    code: string | null;
+    solicitante?: string | null;
+    motorista?: string | null;
+    dataUsoInicio?: string | null;
+    dataUsoFim?: string | null;
+  } | null;
 }
 
 type VehicleFormState = {
@@ -695,6 +704,7 @@ export default function VeiculosPage() {
                           <th className={cadastroListClasses.th}>ID</th>
                           <th className={cadastroListClasses.th}>Modelo</th>
                           <th className={cadastroListClasses.thCenter}>Placa</th>
+                          <th className={cadastroListClasses.thCenter}>Status</th>
                           <th className={cadastroListClasses.thCenter}>Contrato</th>
                           <th className={cadastroListClasses.thCenter}>Responsável</th>
                           <th className={cadastroListClasses.thCenter}>Frota / Particular</th>
@@ -721,6 +731,28 @@ export default function VeiculosPage() {
                             <td className={cadastroListClasses.td}>{formatVehicleModel(vehicle)}</td>
                             <td className={`${cadastroListClasses.tdMono} text-center`}>
                               {formatPlacaDisplay(vehicle.placaVeic)}
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
+                              {vehicle.inUse ? (
+                                <span
+                                  className="inline-flex whitespace-nowrap rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800 dark:bg-violet-900/40 dark:text-violet-200"
+                                  title={
+                                    vehicle.activeReservation
+                                      ? `Em uso — ${
+                                          vehicle.activeReservation.motorista ||
+                                          vehicle.activeReservation.solicitante ||
+                                          'reserva ativa'
+                                        }`
+                                      : 'Em uso'
+                                  }
+                                >
+                                  Em uso
+                                </span>
+                              ) : (
+                                <span className="inline-flex whitespace-nowrap rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                  Disponível
+                                </span>
+                              )}
                             </td>
                             <td className={`${cadastroListClasses.td} text-center`}>
                               {formatVehicleContratoLabel(vehicle.contrato)}

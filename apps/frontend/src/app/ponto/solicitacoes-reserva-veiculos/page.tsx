@@ -44,6 +44,13 @@ type VehicleOption = {
   marcaVeic?: string | null;
   modeloVeic: string;
   placaVeic: string;
+  inUse?: boolean;
+  activeReservation?: {
+    id: string;
+    code: string | null;
+    solicitante?: string | null;
+    motorista?: string | null;
+  } | null;
 };
 
 type VehicleReservation = {
@@ -310,6 +317,8 @@ export default function SolicitacoesReservaVeiculosPage() {
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-vehicles'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicles'] });
   };
 
   const approveMutation = useMutation({
@@ -397,18 +406,45 @@ export default function SolicitacoesReservaVeiculosPage() {
       selected?.status === 'PENDING_SUPPLIES' &&
         (!selectedDetail || selectedDetail.status === 'PENDING_SUPPLIES')
     ),
-    staleTime: 5 * 60 * 1000
+    staleTime: 30 * 1000
   });
 
   const vehicleSelectOptions = useMemo<MultiSelectSearchOption[]>(
     () =>
-      (vehiclesData || []).map((vehicle) => ({
-        value: vehicle.id,
-        label: formatVehicleSelectLabel(vehicle),
-        searchText: [vehicle.placaVeic, vehicle.marcaVeic, vehicle.modeloVeic, vehicle.code]
-          .filter(Boolean)
-          .join(' ')
-      })),
+      (vehiclesData || []).map((vehicle) => {
+        const inUse = Boolean(vehicle.inUse);
+        const who =
+          vehicle.activeReservation?.motorista ||
+          vehicle.activeReservation?.solicitante ||
+          null;
+        return {
+          value: vehicle.id,
+          label: formatVehicleSelectLabel(vehicle),
+          searchText: [
+            vehicle.placaVeic,
+            vehicle.marcaVeic,
+            vehicle.modeloVeic,
+            vehicle.code,
+            inUse ? 'em uso' : 'disponível'
+          ]
+            .filter(Boolean)
+            .join(' '),
+          disabled: inUse,
+          statusSegments: inUse
+            ? [
+                {
+                  text: who ? `Em uso — ${who}` : 'Em uso',
+                  className: 'text-violet-600 dark:text-violet-300'
+                }
+              ]
+            : [
+                {
+                  text: 'Disponível',
+                  className: 'text-emerald-600 dark:text-emerald-300'
+                }
+              ]
+        };
+      }),
     [vehiclesData]
   );
 
@@ -1035,10 +1071,13 @@ export default function SolicitacoesReservaVeiculosPage() {
                               ? 'Carregando veículos...'
                               : 'Selecionar veículo da frota...'
                           }
-                          searchPlaceholder="Pesquisar por placa ou modelo..."
+                          searchPlaceholder="Pesquisar por placa, modelo ou status..."
                           emptyOptionsMessage="Nenhum veículo ativo cadastrado."
                           noFocusRing
                         />
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Veículos em uso aparecem bloqueados até a devolução.
+                        </p>
                       </div>
                       <Input
                         label="Observação (opcional)"
