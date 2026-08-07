@@ -24,11 +24,19 @@ model User {
   profilePhotoUrl  String?
   /// Chave no S3 (quando usar armazenamento em nuvem)
   profilePhotoKey  String?
+  /// Último login bem-sucedido
+  lastLoginAt       DateTime?
+  /// Última atividade observada (page view / heartbeat)
+  lastSeenAt        DateTime?
+  lastActivityPath  String?
+  lastActivityLabel String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Relacionamentos
   employee     Employee?
+  loginEvents  UserLoginEvent[]
+  pageVisits   UserPageVisit[]
   timeRecords  TimeRecord[]
   vacations    Vacation[]
   overtime     Overtime[]
@@ -335,6 +343,37 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@map("audit_logs")
+}
+
+/// Histórico de logins (web / mobile)
+model UserLoginEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  success   Boolean  @default(true)
+  source    String?  // web | mobile
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_login_events")
+}
+
+/// Páginas visitadas no sistema (web)
+model UserPageVisit {
+  id        String   @id @default(cuid())
+  userId    String
+  path      String
+  label     String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, path, createdAt])
+  @@map("user_page_visits")
 }
 
 // Enums

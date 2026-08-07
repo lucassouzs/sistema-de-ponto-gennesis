@@ -3,6 +3,7 @@ import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permis
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { requireEmployeesModuleAccess } from '../middleware/permissionAuth';
 import { UserController } from '../controllers/UserController';
+import { UserActivityController } from '../controllers/UserActivityController';
 import { getBirthdayEmployees } from '../controllers/EmployeeController';
 import { importEmployees, importEmployeesPreview, importEmployeesBulk } from '../controllers/EmployeeImportController';
 import { uploadImport, handleUploadError } from '../middleware/upload';
@@ -12,6 +13,7 @@ import { Response, NextFunction } from 'express';
 
 const router = express.Router();
 const userController = new UserController();
+const userActivityController = new UserActivityController();
 const CHANGE_EMPLOYEE_PASSWORD_MODULE_KEY = pathToModuleKey('/ponto/controle/alterar-senha-funcionarios');
 
 // Todas as rotas precisam de autenticação
@@ -39,6 +41,7 @@ router.get('/check-email', requireEmployeesModuleAccess, userController.checkEma
 router.get('/', requireEmployeesModuleAccess, userController.getAllUsers);
 router.get('/me/employee', userController.getMyEmployeeData);
 router.put('/me/employee', userController.updateMyEmployeeData);
+router.post('/me/page-view', userActivityController.recordPageView);
 router.post('/', requireEmployeesModuleAccess, userController.createUser);
 
 // Rotas para funcionários
@@ -76,6 +79,7 @@ router.put(
   },
   userController.updateUserPassword
 );
+router.get('/:id/activity', requireEmployeesModuleAccess, userActivityController.getUserActivity);
 router.get('/:id', requireEmployeesModuleAccess, userController.getUserById);
 router.put('/:id', requireEmployeesModuleAccess, userController.updateUser);
 router.delete('/:id', requireEmployeesModuleAccess, userController.deleteUser);

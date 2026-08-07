@@ -12,7 +12,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
 
-const VALID_TABS: EmployeeDetailTab[] = ['info', 'remuneration', 'records', 'permissions'];
+const VALID_TABS: EmployeeDetailTab[] = ['info', 'remuneration', 'records', 'permissions', 'activity'];
 
 function parseTab(value: string | null): EmployeeDetailTab {
   if (value && VALID_TABS.includes(value as EmployeeDetailTab)) {

@@ -26,6 +26,7 @@ import { useChatSounds } from '@/hooks/useChatSounds';
 import { NativeCallOverlay } from '@/components/conversas/NativeCallOverlay';
 import { NativeCallProvider } from '@/contexts/NativeCallContext';
 import { useModalOverlayObserver } from '@/hooks/useModalOverlayObserver';
+import { usePageActivityTracker } from '@/hooks/usePageActivityTracker';
 import { syncModalOpenClass } from '@/lib/modalBodyLock';
 import { MainLayoutShellContext } from './MainLayoutShellContext';
 import { PageEnter } from './PageEnter';
@@ -115,6 +116,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
   const nativeCall = useNativeWebRTCCall({ userId: realtimeUserId });
   useChatSounds({ userId: realtimeUserId, callPhase: nativeCall.phase });
   useModalOverlayObserver();
+  usePageActivityTracker();
 
   useLayoutEffect(() => {
     setIsCollapsed(resolveInitialSidebarCollapsed(pathname));

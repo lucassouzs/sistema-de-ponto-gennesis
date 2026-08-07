@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { comparePassword, hashPassword } from '../lib/passwordHash';
 import { ChatService } from '../services/ChatService';
+import { recordSuccessfulLogin } from './UserActivityController';
 
 const chatUploadService = new ChatService();
 
@@ -18,6 +19,10 @@ const userMeSelect = {
   isFirstLogin: true,
   profilePhotoUrl: true,
   profilePhotoKey: true,
+  lastLoginAt: true,
+  lastSeenAt: true,
+  lastActivityPath: true,
+  lastActivityLabel: true,
   createdAt: true,
   updatedAt: true,
   employee: true,
@@ -124,13 +129,23 @@ export class AuthController {
         { expiresIn: '7d' }
       );
 
+      try {
+        await recordSuccessfulLogin(req, user.id, req.body?.source);
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar histórico de login:', trackErr);
+      }
+
       // Remover senha da resposta
       const { password: _, ...userWithoutPassword } = user;
 
       return res.json({
         success: true,
         data: {
-          user: userWithoutPassword,
+          user: {
+            ...userWithoutPassword,
+            lastLoginAt: new Date(),
+            lastSeenAt: new Date(),
+          },
           token,
           isFirstLogin: user.isFirstLogin,
         },

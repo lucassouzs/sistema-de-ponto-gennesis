@@ -49,7 +49,7 @@ class AuthService {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(credentials),
+      body: JSON.stringify({ ...credentials, source: 'web' }),
     });
 
     const body = await this.parseJson(response);

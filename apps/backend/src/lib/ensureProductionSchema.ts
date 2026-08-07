@@ -884,6 +884,82 @@ async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): P
   `);
 }
 
+async function ensureUserActivityTracking(prisma: PrismaClient): Promise<void> {
+  if (await tableExists(prisma, 'users')) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3);`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP(3);`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastActivityPath" TEXT;`
+    );
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastActivityLabel" TEXT;`
+    );
+  }
+
+  if (!(await tableExists(prisma, 'user_login_events'))) {
+    console.warn('[Schema] Tabela user_login_events ausente — criando automaticamente.');
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "user_login_events" (
+        "id" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "success" BOOLEAN NOT NULL DEFAULT true,
+        "source" TEXT,
+        "ipAddress" TEXT,
+        "userAgent" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "user_login_events_pkey" PRIMARY KEY ("id")
+      );
+    `);
+  }
+
+  if (!(await tableExists(prisma, 'user_page_visits'))) {
+    console.warn('[Schema] Tabela user_page_visits ausente — criando automaticamente.');
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "user_page_visits" (
+        "id" TEXT NOT NULL,
+        "userId" TEXT NOT NULL,
+        "path" TEXT NOT NULL,
+        "label" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "user_page_visits_pkey" PRIMARY KEY ("id")
+      );
+    `);
+  }
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "user_login_events_userId_createdAt_idx"
+    ON "user_login_events"("userId", "createdAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "user_page_visits_userId_createdAt_idx"
+    ON "user_page_visits"("userId", "createdAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "user_page_visits_userId_path_createdAt_idx"
+    ON "user_page_visits"("userId", "path", "createdAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE "user_login_events" ADD CONSTRAINT "user_login_events_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      ALTER TABLE "user_page_visits" ADD CONSTRAINT "user_page_visits_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+}
+
 async function ensureDriveStarTrashColumns(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "drive_folders" ADD COLUMN IF NOT EXISTS "starred" BOOLEAN NOT NULL DEFAULT false;
@@ -944,6 +1020,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureLicitacaoOrcamentosTable(prisma);
     await ensureControleGeralTetoOrcamentarioTable(prisma);
     await ensureDriveStarTrashColumns(prisma);
+    await ensureUserActivityTracking(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ import { AdjustmentForm } from './AdjustmentForm';
 import { DiscountsList } from './DiscountsList';
 import { DiscountForm } from './DiscountForm';
 import { EditEmployeeForm } from './EditEmployeeForm';
+import { EmployeeActivityTab } from './EmployeeActivityTab';
 import {
   UserPermissionsEditor,
   UserPermissionsTabBar,
@@ -115,7 +116,7 @@ interface Employee {
   };
 }
 
-export type EmployeeDetailTab = 'info' | 'remuneration' | 'records' | 'permissions';
+export type EmployeeDetailTab = 'info' | 'remuneration' | 'records' | 'permissions' | 'activity';
 
 function InfoCardHeader({
   icon: Icon,
@@ -211,6 +212,7 @@ export function EmployeeDetailView({
   const [parsedRecords, setParsedRecords] = useState<Array<{date: string; time: string; type: 'ENTRY' | 'LUNCH_START' | 'LUNCH_END' | 'EXIT'; observation?: string}>>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
+  const headerMoreRef = useRef<HTMLDivElement>(null);
   const [permissionTab, setPermissionTab] = useState<PermissionEditorTab>('gerais');
   const [showContractsTab, setShowContractsTab] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -1122,14 +1124,20 @@ export function EmployeeDetailView({
 
   useEffect(() => {
     if (!headerMoreOpen) return;
-    const close = () => setHeaderMoreOpen(false);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (headerMoreRef.current?.contains(target)) return;
+      setHeaderMoreOpen(false);
     };
-    window.addEventListener('click', close);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setHeaderMoreOpen(false);
+    };
+    // pointerdown + contains evita fechar antes do clique no item
+    // e contorna overlapping de stacking (abas sobre o menu).
+    document.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('click', close);
+      document.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKey);
     };
   }, [headerMoreOpen]);
@@ -1173,6 +1181,7 @@ export function EmployeeDetailView({
 
   const tabItems: { id: EmployeeDetailTab; label: string }[] = [
     { id: 'info', label: 'Informações' },
+    { id: 'activity', label: 'Rastreio' },
     ...(canManageUserPermissions ? [{ id: 'permissions' as const, label: 'Permissões' }] : []),
   ];
 
@@ -1182,7 +1191,8 @@ export function EmployeeDetailView({
 
   return (
     <div className="w-full space-y-6 pb-12">
-      <div className="flex items-center gap-5">
+      {/* z-50 com menu aberto: a animação page-enter deixa transform nas seções e as abas ficavam por cima do dropdown */}
+      <div className={`flex items-center gap-5 ${headerMoreOpen ? 'relative z-50' : ''}`}>
         <div className="relative shrink-0">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-red-600 text-xl font-semibold text-white sm:h-24 sm:w-24 sm:text-2xl">
             {selectedEmployeePhotoHref ? (
@@ -1223,7 +1233,10 @@ export function EmployeeDetailView({
           </p>
         </div>
 
-        <div className="relative shrink-0 self-center">
+        <div
+          ref={headerMoreRef}
+          className={`relative shrink-0 self-center ${headerMoreOpen ? 'z-50' : ''}`}
+        >
           <button
             type="button"
             onClick={(e) => {
@@ -1232,14 +1245,12 @@ export function EmployeeDetailView({
             }}
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             aria-label="Mais ações"
+            aria-expanded={headerMoreOpen}
           >
             <MoreVertical className="h-5 w-5" />
           </button>
           {headerMoreOpen && (
-            <div
-              className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
               {canChangeEmployeePassword && selectedEmployee.isActive && (
                 <button
                   type="button"
@@ -2008,6 +2019,10 @@ export function EmployeeDetailView({
                   </div>
                 )}
                   </>
+                )}
+
+                {detailsTab === 'activity' && (
+                  <EmployeeActivityTab userId={selectedEmployee.id} />
                 )}
 
                 {detailsTab === 'permissions' && canManageUserPermissions && (
