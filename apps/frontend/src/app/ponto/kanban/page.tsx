@@ -14,6 +14,7 @@ import { KanbanBoardShareModal } from '@/components/kanban/KanbanBoardShareModal
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import {
   originFromElement,
   useCelebratePulse,
@@ -94,6 +95,7 @@ import {
 import {
   Plus,
   MoreHorizontal,
+  MoreVertical,
   X,
   Search,
   Filter,
@@ -2400,7 +2402,7 @@ function KanbanBoardPicker({
         aria-haspopup="listbox"
         aria-label={`Quadro atual: ${currentBoardName}`}
         title={currentBoardName}
-        className="inline-flex h-10 max-w-[min(18rem,calc(100vw-8rem))] items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+        className="inline-flex h-9 max-w-[min(18rem,calc(100vw-8rem))] items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
       >
         <LayoutGrid className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400" />
         <span className="min-w-0 truncate">{currentBoardName}</span>
@@ -2792,6 +2794,8 @@ function KanbanPage() {
   const [exportingBoard, setExportingBoard] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
+  const [boardToolsOpen, setBoardToolsOpen] = useState(false);
+  const boardToolsRef = useRef<HTMLDivElement>(null);
   const [unarchivingCardId, setUnarchivingCardId] = useState<string | null>(null);
   const [importFileName, setImportFileName] = useState('');
   const [importPayload, setImportPayload] = useState<unknown>(null);
@@ -2807,6 +2811,24 @@ function KanbanPage() {
     });
     return () => window.cancelAnimationFrame(id);
   }, [searchExpanded]);
+
+  useEffect(() => {
+    if (!boardToolsOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!boardToolsRef.current?.contains(e.target as Node)) {
+        setBoardToolsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBoardToolsOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [boardToolsOpen]);
 
   const handleExportTrello = async () => {
     if (!boardScopeKey && !board) {
@@ -3929,60 +3951,35 @@ function KanbanPage() {
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
       <div
         className={clsx(
-          'flex flex-col -mx-2 sm:-mx-4',
+          'flex flex-col gap-3 -mx-2 sm:-mx-4',
           isChecklistBoard &&
             'mb-[-1rem] h-[calc(100dvh-5rem)] overflow-hidden lg:mb-[-2rem] lg:h-[calc(100dvh-6rem)]',
         )}
       >
         {/* ── Toolbar ── */}
-        <div className="mb-4 flex-shrink-0 px-4">
+        <div className="flex-shrink-0 px-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Esquerda: visão + quadros */}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <div
-                className="relative inline-flex h-10 w-20 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
-                role="group"
+              <SegmentedControl
+                value={cardViewMode}
+                onChange={setCardViewModePersist}
                 aria-label="Versão de visualização dos cards"
-              >
-                <span
-                  aria-hidden
-                  className={clsx(
-                    'pointer-events-none absolute inset-y-0 left-0 w-1/2 rounded-[7px] bg-red-600',
-                    'transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                    cardViewMode === 'checklist' ? 'translate-x-full' : 'translate-x-0',
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setCardViewModePersist('classic')}
-                  title="Versão clássica"
-                  aria-label="Versão clássica"
-                  aria-pressed={cardViewMode === 'classic'}
-                  className={clsx(
-                    'relative z-[1] inline-flex h-full w-10 items-center justify-center transition-colors duration-300',
-                    cardViewMode === 'classic'
-                      ? 'text-white'
-                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
-                  )}
-                >
-                  <Columns className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCardViewModePersist('checklist')}
-                  title="Versão nova"
-                  aria-label="Versão nova"
-                  aria-pressed={cardViewMode === 'checklist'}
-                  className={clsx(
-                    'relative z-[1] inline-flex h-full w-10 items-center justify-center transition-colors duration-300',
-                    cardViewMode === 'checklist'
-                      ? 'text-white'
-                      : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white',
-                  )}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
+                options={[
+                  {
+                    value: 'classic',
+                    title: 'Versão clássica',
+                    ariaLabel: 'Versão clássica',
+                    label: <Columns className="h-4 w-4" />,
+                  },
+                  {
+                    value: 'checklist',
+                    title: 'Versão nova',
+                    ariaLabel: 'Versão nova',
+                    label: <List className="h-4 w-4" />,
+                  },
+                ]}
+              />
               <KanbanBoardPicker
                 boards={boardsList ?? []}
                 currentDepartmentKey={board?.departmentKey}
@@ -4004,7 +4001,7 @@ function KanbanPage() {
               {boardReadOnly ? (
                 <span
                   title="Somente leitura"
-                  className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 text-xs font-medium text-gray-500 dark:border-gray-700 dark:text-gray-400"
                 >
                   <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   Somente leitura
@@ -4012,14 +4009,14 @@ function KanbanPage() {
               ) : null}
             </div>
 
-            {/* Direita: busca + filtro + arquivo + export/import + etiquetas */}
+            {/* Direita: busca + filtro + mais opções */}
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {/* Search — colapsável com animação de largura */}
               <div
                 className={clsx(
-                  'relative h-10 shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800',
+                  'relative h-9 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900',
                   'transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]',
-                  searchExpanded ? 'w-[min(100%,280px)] sm:w-[280px]' : 'w-10',
+                  searchExpanded ? 'w-[min(100%,280px)] sm:w-[280px]' : 'w-9',
                 )}
               >
                 <button
@@ -4028,8 +4025,8 @@ function KanbanPage() {
                   aria-hidden={searchExpanded}
                   onClick={() => setSearchOpen(true)}
                   className={clsx(
-                    'absolute inset-0 z-10 inline-flex items-center justify-center text-gray-700 outline-none transition-opacity duration-200 focus:ring-0 dark:text-gray-200',
-                    'hover:bg-gray-50 dark:hover:bg-gray-700',
+                    'absolute inset-0 z-10 inline-flex items-center justify-center text-gray-500 outline-none transition-opacity duration-200 focus:ring-0 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100',
+                    'hover:bg-gray-50 dark:hover:bg-gray-800',
                     searchExpanded ? 'pointer-events-none opacity-0' : 'opacity-100',
                   )}
                   title="Pesquisar cards"
@@ -4089,10 +4086,10 @@ function KanbanPage() {
                 type="button"
                 onClick={() => setIsFiltersModalOpen(true)}
                 className={clsx(
-                  'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors outline-none focus:ring-0',
+                  'relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors outline-none focus:ring-0',
                   hasActiveKanbanFilters
-                    ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700',
+                    ? 'border-gray-200 bg-white font-medium text-red-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-red-400 dark:hover:bg-gray-800'
+                    : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                 )}
                 aria-label="Abrir filtro"
                 title={hasActiveKanbanFilters ? 'Filtro (ativo)' : 'Filtro'}
@@ -4102,56 +4099,84 @@ function KanbanPage() {
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 )}
               </button>
-              <button
-                type="button"
-                onClick={() => setArchivedModalOpen(true)}
-                title="Cartões arquivados"
-                aria-label="Cartões arquivados"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 outline-none transition-colors hover:bg-gray-50 focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                <Archive className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleExportTrello()}
-                disabled={exportingBoard || showBoardSkeleton || !board}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors outline-none hover:bg-gray-50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                title={exportingBoard ? 'Exportando...' : 'Exportar'}
-                aria-label={exportingBoard ? 'Exportando' : 'Exportar'}
-              >
-                <Download className="h-4 w-4" />
-              </button>
-              {!boardReadOnly && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImportModalOpen(true);
-                      setImportPayload(null);
-                      setImportFileName('');
-                      setImportReplace(true);
-                    }}
-                    disabled={showBoardSkeleton || !board}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors outline-none hover:bg-gray-50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                    title="Importar"
-                    aria-label="Importar"
+              <div ref={boardToolsRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setBoardToolsOpen((v) => !v)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                  title="Mais opções"
+                  aria-label="Mais opções"
+                  aria-expanded={boardToolsOpen}
+                  aria-haspopup="menu"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </button>
+                {boardToolsOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-40 mt-1.5 min-w-[220px] overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
                   >
-                    <Upload className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLabelSettingsHeader({ title: 'Etiquetas', showBack: false });
-                      setLabelSettingsOpen(true);
-                    }}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors outline-none hover:bg-gray-50 focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                    title="Configurar etiquetas deste setor"
-                    aria-label="Etiquetas"
-                  >
-                    <Tag className="h-4 w-4" />
-                  </button>
-                </>
-              )}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setBoardToolsOpen(false);
+                        setArchivedModalOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      <Archive className="h-4 w-4 shrink-0 text-gray-500" />
+                      Cartões arquivados
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={exportingBoard || showBoardSkeleton || !board}
+                      onClick={() => {
+                        setBoardToolsOpen(false);
+                        void handleExportTrello();
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-800"
+                    >
+                      <Download className="h-4 w-4 shrink-0 text-gray-500" />
+                      {exportingBoard ? 'Exportando…' : 'Exportar'}
+                    </button>
+                    {!boardReadOnly && (
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={showBoardSkeleton || !board}
+                          onClick={() => {
+                            setBoardToolsOpen(false);
+                            setImportModalOpen(true);
+                            setImportPayload(null);
+                            setImportFileName('');
+                            setImportReplace(true);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-800"
+                        >
+                          <Upload className="h-4 w-4 shrink-0 text-gray-500" />
+                          Importar
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setBoardToolsOpen(false);
+                            setLabelSettingsHeader({ title: 'Etiquetas', showBack: false });
+                            setLabelSettingsOpen(true);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                        >
+                          <Tag className="h-4 w-4 shrink-0 text-gray-500" />
+                          Etiquetas
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -4162,8 +4187,8 @@ function KanbanPage() {
           className={clsx(
             'overflow-x-auto bg-transparent px-4',
             isChecklistBoard
-              ? 'min-h-0 flex-1 overflow-y-hidden pt-5 pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
-              : 'scrollbar-hide py-5 pb-4',
+              ? 'min-h-0 flex-1 overflow-y-hidden pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
+              : 'scrollbar-hide pb-4',
           )}
         >
           <div

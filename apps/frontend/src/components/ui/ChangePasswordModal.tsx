@@ -107,7 +107,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   return createPortal(
     <div className="app-modal-overlay fixed inset-0 z-[99999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
+      <div className="app-modal-panel relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">

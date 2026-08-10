@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 import { MODAL_OVERLAY_CLASS } from '@/lib/zIndex';
 import { syncModalOpenClass } from '@/lib/modalBodyLock';
+import { useOpenTransition } from '@/hooks/useOpenTransition';
 
 let modalScrollLockCount = 0;
 
@@ -34,6 +35,8 @@ function lockPageScroll() {
 function unlockPageScroll() {
   modalScrollLockCount = Math.max(0, modalScrollLockCount - 1);
 }
+
+const MODAL_ANIM_MS = 220;
 
 export interface ModalProps {
   isOpen: boolean;
@@ -72,6 +75,7 @@ export const Modal: React.FC<ModalProps> = ({
   contentClassName,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
+  const { present, visible } = useOpenTransition(isOpen, MODAL_ANIM_MS);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,7 +110,7 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose, closeOnEscape]);
 
-  if (!isOpen) return null;
+  if (!present) return null;
 
   const sizeClasses = {
     sm: 'max-w-md',
@@ -125,18 +129,24 @@ export const Modal: React.FC<ModalProps> = ({
   const modalContent = (
     <div
       ref={rootRef}
+      data-modal-anim="controlled"
+      data-state={visible ? 'open' : 'closed'}
       className={clsx(
         MODAL_OVERLAY_CLASS,
         'fixed inset-0 overflow-hidden overscroll-none touch-none',
         elevated ? 'z-[2100]' : 'z-[2000]',
+        !isOpen && 'pointer-events-none',
       )}
     >
       <div className="flex h-full min-h-0 items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4 overflow-hidden">
         {/* Overlay */}
         <div
-          className="fixed inset-0 z-0 bg-black bg-opacity-50 transition-opacity touch-none"
+          className={clsx(
+            'app-modal-backdrop fixed inset-0 z-0 bg-black/50 touch-none',
+            visible ? 'app-modal-backdrop--open' : 'app-modal-backdrop--closed',
+          )}
           onMouseDown={(e) => {
-            if (closeOnOverlayClick && e.target === e.currentTarget) onClose();
+            if (closeOnOverlayClick && isOpen && e.target === e.currentTarget) onClose();
           }}
           onWheel={stopScrollChain}
           onTouchMove={stopScrollChain}
@@ -144,10 +154,13 @@ export const Modal: React.FC<ModalProps> = ({
 
         {/* Modal */}
         <div
+          role="dialog"
+          aria-modal="true"
           className={clsx(
-            'relative z-10 bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-lg shadow-xl w-full flex flex-col',
+            'app-modal-panel relative z-10 bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-lg shadow-xl w-full flex flex-col',
             'max-h-[min(92dvh,calc(100vh-1.5rem))] sm:max-h-[calc(100dvh-2rem)] overflow-hidden',
-            sizeClasses[size]
+            sizeClasses[size],
+            visible ? 'app-modal-panel--open' : 'app-modal-panel--closed',
           )}
         >
           {/* Header */}

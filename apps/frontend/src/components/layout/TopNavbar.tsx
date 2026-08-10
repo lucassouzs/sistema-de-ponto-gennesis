@@ -402,7 +402,7 @@ export function TopNavbar({
                 right: profileMenuPos.right,
                 zIndex: 9999,
               }}
-              className="w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
+              className="app-popover-panel w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
             >
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <button
@@ -486,7 +486,7 @@ export function TopNavbar({
       {showLogoutConfirm && (
         <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowLogoutConfirm(false)} />
-          <div className="relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+          <div className="app-modal-panel relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
             <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
               Deseja sair?
             </h3>

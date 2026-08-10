@@ -377,7 +377,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
                 right: pos.right,
                 zIndex: 9999,
               }}
-              className="flex w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
+              className="app-popover-panel flex w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
             >
               <div className="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
