@@ -10,6 +10,7 @@ export const CONTROLE_NFS_TABS: ControleNfsTab[] = [
     sheetName: 'CAPITANIA FLUVIAL'
   },
   { key: 'confea', label: 'CONFEA', sheetName: 'CONFEA' },
+  { key: 'mapa', label: 'MAPA', sheetName: 'MAPA' },
   { key: 'fhe-df', label: 'FHE DF', sheetName: 'FHE DF' },
   { key: 'hfa', label: 'HFA', sheetName: 'HFA' },
   { key: 'itamaraty', label: 'ITAMARATY', sheetName: 'ITAMARATY' },

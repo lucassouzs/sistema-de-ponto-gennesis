@@ -839,16 +839,126 @@ async function ensureLicitacaoOrcamentosTable(prisma: PrismaClient): Promise<voi
     ON "licitacao_orcamentos"("updatedAt");
   `);
 
-  try {
-    await prisma.$executeRawUnsafe(`
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
       ALTER TABLE "licitacao_orcamentos"
       ADD CONSTRAINT "licitacao_orcamentos_licitacaoId_fkey"
       FOREIGN KEY ("licitacaoId") REFERENCES "licitacoes"("id")
       ON DELETE CASCADE ON UPDATE CASCADE;
-    `);
-  } catch {
-    // constraint already exists
-  }
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+}
+
+async function ensurePncpTables(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "pncp_contratacoes" (
+      "id" TEXT NOT NULL,
+      "numeroControlePNCP" TEXT NOT NULL,
+      "sequencialCompra" INTEGER,
+      "processo" TEXT,
+      "objeto" TEXT,
+      "objetoNorm" TEXT,
+      "orgao" TEXT,
+      "cnpjOrgao" TEXT,
+      "unidadeCompradora" TEXT,
+      "codigoUnidadeCompradora" TEXT,
+      "uf" TEXT NOT NULL,
+      "municipio" TEXT,
+      "modalidade" TEXT,
+      "codigoModalidade" INTEGER NOT NULL,
+      "situacao" TEXT,
+      "modoDisputa" TEXT,
+      "plataforma" TEXT,
+      "srp" BOOLEAN,
+      "valorEstimado" DOUBLE PRECISION,
+      "valorHomologado" DOUBLE PRECISION,
+      "dataInclusao" TIMESTAMP(3),
+      "dataAberturaProposta" TIMESTAMP(3),
+      "dataEncerramentoProposta" TIMESTAMP(3),
+      "amparoLegal" TEXT,
+      "linkSistemaOrigem" TEXT,
+      "linkPncp" TEXT,
+      "syncedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "pncp_contratacoes_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "pncp_contratacoes_numeroControlePNCP_key"
+    ON "pncp_contratacoes"("numeroControlePNCP");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_contratacoes_uf_idx"
+    ON "pncp_contratacoes"("uf");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_contratacoes_codigoModalidade_idx"
+    ON "pncp_contratacoes"("codigoModalidade");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_contratacoes_dataInclusao_idx"
+    ON "pncp_contratacoes"("dataInclusao");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_contratacoes_uf_codigoModalidade_dataInclusao_idx"
+    ON "pncp_contratacoes"("uf", "codigoModalidade", "dataInclusao");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_contratacoes_syncedAt_idx"
+    ON "pncp_contratacoes"("syncedAt");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "pncp_sync_runs" (
+      "id" TEXT NOT NULL,
+      "status" TEXT NOT NULL,
+      "trigger" TEXT NOT NULL,
+      "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "finishedAt" TIMESTAMP(3),
+      "lookbackDays" INTEGER NOT NULL,
+      "pagesFetched" INTEGER NOT NULL DEFAULT 0,
+      "upserted" INTEGER NOT NULL DEFAULT 0,
+      "pruned" INTEGER NOT NULL DEFAULT 0,
+      "rateLimitHits" INTEGER NOT NULL DEFAULT 0,
+      "errorMessage" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "pncp_sync_runs_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_sync_runs_startedAt_idx"
+    ON "pncp_sync_runs"("startedAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_sync_runs_status_idx"
+    ON "pncp_sync_runs"("status");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "pncp_sync_uf_states" (
+      "uf" TEXT NOT NULL,
+      "lastSuccessAt" TIMESTAMP(3),
+      "lastAttemptAt" TIMESTAMP(3),
+      "lastDataFinal" TEXT,
+      "lastStatus" TEXT NOT NULL DEFAULT 'pending',
+      "lastErrorMessage" TEXT,
+      "lastRunId" TEXT,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "pncp_sync_uf_states_pkey" PRIMARY KEY ("uf")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_sync_uf_states_lastStatus_idx"
+    ON "pncp_sync_uf_states"("lastStatus");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "pncp_sync_uf_states_lastSuccessAt_idx"
+    ON "pncp_sync_uf_states"("lastSuccessAt");
+  `);
 }
 
 async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): Promise<void> {
@@ -1057,6 +1167,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureBancoCatsServicosTable(prisma);
     await ensureLicitacaoConfigTable(prisma);
     await ensureLicitacaoOrcamentosTable(prisma);
+    await ensurePncpTables(prisma);
     await ensureControleGeralTetoOrcamentarioTable(prisma);
     await ensureDriveStarTrashColumns(prisma);
     await ensureUserActivityTracking(prisma);

@@ -20,6 +20,14 @@ export const CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES = [
   'NORDESTE'
 ] as const satisfies readonly GastosOperacionaisLocality[];
 
+/**
+ * Contratos extras sempre mesclados no Controle Geral (fora das localidades padrão),
+ * ex.: contratos de sócios em outras regiões.
+ */
+export const CONTROLE_GERAL_EXTRA_CONTRACTS = [
+  'MAPA - UMIPI DE JEQUIE'
+] as const;
+
 export function resolveVisibleLocalityItems(
   visibleLocalities?: readonly string[],
   catalog: ReadonlyArray<{ key: string; label: string }> = GASTOS_OPERACIONAIS_LOCALITIES

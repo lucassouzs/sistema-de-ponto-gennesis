@@ -762,6 +762,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission: isAdministrator || can(pk('/ponto/contratos/controle-geral'))
           },
           {
+            name: 'Contratos Sócios',
+            href: '/ponto/contratos/socios',
+            icon: Users,
+            description: 'Controle dos contratos compartilhados com sócios',
+            permission: isAdministrator || can(pk('/ponto/contratos/socios'))
+          },
+          {
             name: 'Gastos Operacionais',
             href: '/ponto/contratos/gastos-operacionais',
             icon: Wallet,
@@ -1204,6 +1211,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       // Rotas fixas sob /ponto/contratos (ex.: controle geral) — não marcam "Contratos", só o item próprio.
       if (
         pathname.startsWith('/ponto/contratos/controle-geral') ||
+        pathname.startsWith('/ponto/contratos/socios') ||
         pathname.startsWith('/ponto/contratos/gastos-operacionais')
       ) {
         return false;

@@ -9,6 +9,7 @@ export const NFS_TAB_GASTOS_COST_CENTERS: Record<string, readonly string[]> = {
   codevasf: ['CODEVASF'],
   'capitania-fluvial': ['CAPITANIA FLUVIAL - GO'],
   confea: ['CONFEA - 508 NORTE', 'CONFEA - 516 NORTE'],
+  mapa: ['MAPA - UMIPI DE JEQUIE'],
   'fhe-df': ['FHE - DF'],
   hfa: ['HFA - MÃO DE OBRA', 'HFA - SERVIÇOS EVENTUAIS'],
   itamaraty: ['ITAMARATY - MÃO DE OBRA', 'ITAMARATY - SERVIÇOS EVENTUAIS'],

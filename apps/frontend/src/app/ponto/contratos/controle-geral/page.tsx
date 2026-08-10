@@ -17,6 +17,7 @@ import {
   filterTotvsGastosDetailRowsForControleGeral,
   mergeControleGeralGastosDetailRows
 } from './buildQueryGastosRows';
+import { CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES, CONTROLE_GERAL_EXTRA_CONTRACTS } from './gastosOperacionaisContractOrder';
 import {
   fetchGastosOperacionaisTotvs,
   GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
@@ -310,6 +311,8 @@ export default function ControleGeralContratosPage() {
               void refetchTotvsGastos();
             }}
             dataRefreshNonce={dataRefreshNonce}
+            visibleLocalities={CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES}
+            extraContracts={CONTROLE_GERAL_EXTRA_CONTRACTS}
             enableRowExclusion
             panelTitle="Controle de Contratos"
             panelDescription={
@@ -321,6 +324,7 @@ export default function ControleGeralContratosPage() {
             showFaturamentoColumn
             showTetoOrcamentarioColumn
             showPdfExport
+            showPrevisaoGastosMensal
             showContractDetails
             contractsForDetailLookup={rawList}
             enableContractFluxoModal

@@ -39,6 +39,7 @@ import {
   EMPTY_GASTOS_OPERACIONAIS_FILTERS,
   filterGastosDetailRows,
   filterGastosDetailRowsByPolo,
+  filterRowsByAllowedContracts,
   formatGastosPeriodFilterLabel,
   getGastosFilterOptions,
   getGastosPoloFilterOptions,
@@ -118,6 +119,7 @@ import {
   ControleGeralTetoOrcamentarioModal,
   type TetoOrcamentarioFormPrefill
 } from './ControleGeralTetoOrcamentarioModal';
+import { ControleGeralPrevisaoGastosMensalPanel } from './ControleGeralPrevisaoGastosMensalPanel';
 import {
   buildTetoOrcamentarioLookup,
   resolveContractTetoOrcamentario,
@@ -194,6 +196,15 @@ type ControleGeralGastosOperacionaisPanelProps = {
   primaryExportButton?: boolean;
   /** Habilita modal de detalhes/gráficos ao clicar no contrato (Controle Geral). */
   enableContractFluxoModal?: boolean;
+  /** Exibe o quadrante Previsão de Gastos Mensal (mesmos CC / filtros / ocultos). */
+  showPrevisaoGastosMensal?: boolean;
+  /**
+   * Quando definido, restringe o painel a esses contratos (allowlist).
+   * Usado no módulo de sócios para não expor os demais CCs.
+   */
+  allowedContracts?: readonly string[];
+  /** Contratos adicionais sempre incluídos (ex.: MAPA no Controle Geral). */
+  extraContracts?: readonly string[];
   /** Dados da seção "Controle geral" para incluir no PDF completo. */
   overviewForExport?: {
     contracts: Array<{
@@ -670,6 +681,9 @@ export function ControleGeralGastosOperacionaisPanel({
   inlineFilters = false,
   primaryExportButton = false,
   enableContractFluxoModal = false,
+  showPrevisaoGastosMensal = false,
+  allowedContracts,
+  extraContracts,
   overviewForExport
 }: ControleGeralGastosOperacionaisPanelProps) {
   const nfsMetricColumnCount = showFaturamentoColumn ? 4 : 0;
@@ -851,8 +865,6 @@ export function ControleGeralGastosOperacionaisPanel({
     [areDfcBranchLeafGroupsVisible, collapsedNaturezaSections]
   );
 
-  const enableNaturezaBreakdown = naturezaDetailRows.length > 0;
-
   const emissaoFilter = useMemo(
     () => deriveEmissaoMonthYearFromPeriod(filters.periodFrom, filters.periodTo),
     [filters.periodFrom, filters.periodTo]
@@ -867,7 +879,7 @@ export function ControleGeralGastosOperacionaisPanel({
   } = useQuery({
     enabled: showFaturamentoColumn,
     queryKey: [
-      'controle-geral-faturamento-by-contract-v24-conta-vinculada-total',
+      'controle-geral-faturamento-by-contract-v26-mapa-umipi',
       emissaoFilterMonths,
       emissaoFilterYears,
       dataRefreshNonce
@@ -930,18 +942,30 @@ export function ControleGeralGastosOperacionaisPanel({
     [visibleLocalities, localitiesCatalog]
   );
 
+  const scopedDetailRows = useMemo(
+    () => filterRowsByAllowedContracts(detailRows, allowedContracts),
+    [detailRows, allowedContracts]
+  );
+
+  const scopedNaturezaDetailRows = useMemo(
+    () => filterRowsByAllowedContracts(naturezaDetailRows, allowedContracts),
+    [naturezaDetailRows, allowedContracts]
+  );
+
+  const enableNaturezaBreakdown = scopedNaturezaDetailRows.length > 0;
+
   const filterOptions = useMemo(
     () =>
       readOnlyPoloColumn
-        ? getGastosPoloFilterOptions(detailRows, { polos: filters.polos })
+        ? getGastosPoloFilterOptions(scopedDetailRows, { polos: filters.polos })
         : getGastosFilterOptions(
-            detailRows,
+            scopedDetailRows,
             { localities: filters.localities },
             inferredLocalityOverrides,
             visibleLocalities
           ),
     [
-      detailRows,
+      scopedDetailRows,
       filters.localities,
       filters.polos,
       inferredLocalityOverrides,
@@ -978,15 +1002,22 @@ export function ControleGeralGastosOperacionaisPanel({
     [filterOptions, readOnlyPoloColumn]
   );
 
-  const contractFilterOptions = useMemo(
-    () =>
-      filterOptions.contracts.map((contract) => ({
-        value: contract,
-        label: contract,
-        searchText: contract
-      })),
-    [filterOptions.contracts]
-  );
+  const contractFilterOptions = useMemo(() => {
+    const source =
+      allowedContracts?.length
+        ? Array.from(
+            new Set([
+              ...allowedContracts.map((name) => name.trim()).filter(Boolean),
+              ...filterOptions.contracts
+            ])
+          ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        : filterOptions.contracts;
+    return source.map((contract) => ({
+      value: contract,
+      label: contract,
+      searchText: contract
+    }));
+  }, [allowedContracts, filterOptions.contracts]);
 
   const hasActiveFilters =
     (readOnlyPoloColumn ? filters.polos.length > 0 : filters.localities.length > 0) ||
@@ -1024,8 +1055,14 @@ export function ControleGeralGastosOperacionaisPanel({
 
   const displayRows = useMemo(() => {
     const filtered = readOnlyPoloColumn
-      ? filterGastosDetailRowsByPolo(detailRows, filters)
-      : filterGastosDetailRows(detailRows, filters, inferredLocalityOverrides, visibleLocalities);
+      ? filterGastosDetailRowsByPolo(scopedDetailRows, filters)
+      : filterGastosDetailRows(
+          scopedDetailRows,
+          filters,
+          inferredLocalityOverrides,
+          visibleLocalities,
+          allowedContracts?.length ? undefined : extraContracts
+        );
     const aggregated = aggregateGastosDetailRows(filtered);
     return mergeCatalogContractsIntoGastosRows(aggregated, visibleLocalities, {
       databaseContracts: contractsForDetailLookup,
@@ -1034,10 +1071,12 @@ export function ControleGeralGastosOperacionaisPanel({
       resolveExcludedLabel: (key) =>
         contractLabelByKey.get(key) ?? contractLabelByKey.get(normalizeContractOrderKey(key)) ?? key,
       localityOverrides: inferredLocalityOverrides,
-      localitiesCatalog
+      localitiesCatalog,
+      allowedContracts,
+      extraContracts: allowedContracts?.length ? undefined : extraContracts
     });
   }, [
-    detailRows,
+    scopedDetailRows,
     filters,
     inferredLocalityOverrides,
     readOnlyPoloColumn,
@@ -1047,7 +1086,9 @@ export function ControleGeralGastosOperacionaisPanel({
     enableRowExclusion,
     excludedContracts,
     contractLabelByKey,
-    localitiesCatalog
+    localitiesCatalog,
+    allowedContracts,
+    extraContracts
   ]);
 
   const visibleRows = useMemo(() => {
@@ -1125,16 +1166,24 @@ export function ControleGeralGastosOperacionaisPanel({
   const fluxoModalGastosRows = useMemo(() => {
     if (!fluxoModalContract) return [];
     const filtered = readOnlyPoloColumn
-      ? filterGastosDetailRowsByPolo(detailRows, filters)
-      : filterGastosDetailRows(detailRows, filters, inferredLocalityOverrides, visibleLocalities);
+      ? filterGastosDetailRowsByPolo(scopedDetailRows, filters)
+      : filterGastosDetailRows(
+          scopedDetailRows,
+          filters,
+          inferredLocalityOverrides,
+          visibleLocalities,
+          allowedContracts?.length ? undefined : extraContracts
+        );
     return filterGastosDetailRowsForContract(filtered, fluxoModalContract);
   }, [
-    detailRows,
+    scopedDetailRows,
     filters,
     fluxoModalContract,
     inferredLocalityOverrides,
     readOnlyPoloColumn,
-    visibleLocalities
+    visibleLocalities,
+    allowedContracts,
+    extraContracts
   ]);
 
   const fluxoModalNfsTotals = useMemo(() => {
@@ -1190,13 +1239,13 @@ export function ControleGeralGastosOperacionaisPanel({
   const naturezaModalRows = useMemo(() => {
     if (!naturezaModalContract) return [];
     return aggregateGastosNaturezaForContract(
-      naturezaDetailRows,
+      scopedNaturezaDetailRows,
       naturezaModalContract.contract,
       filters.periodFrom,
       filters.periodTo
     );
   }, [
-    naturezaDetailRows,
+    scopedNaturezaDetailRows,
     naturezaModalContract,
     filters.periodFrom,
     filters.periodTo
@@ -1738,6 +1787,7 @@ export function ControleGeralGastosOperacionaisPanel({
   ]);
 
   return (
+    <>
     <Card>
       <CardHeader className="border-b-0 pb-1">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1891,7 +1941,7 @@ export function ControleGeralGastosOperacionaisPanel({
               </button>
             ) : null}
           </div>
-        ) : detailRows.length === 0 ? (
+        ) : scopedDetailRows.length === 0 && !(allowedContracts?.length) ? (
           <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
             Nenhum gasto operacional encontrado.
           </div>
@@ -2689,5 +2739,20 @@ export function ControleGeralGastosOperacionaisPanel({
         />
       ) : null}
     </Card>
+
+    {showPrevisaoGastosMensal ? (
+      <ControleGeralPrevisaoGastosMensalPanel
+        isLoading={isPanelLoading}
+        isError={isError}
+        errorMessage={errorMessage}
+        onRetry={onRetry}
+        localityGroups={localityGroups}
+        year={
+          getSingleYearFromPeriod(filters.periodFrom, filters.periodTo) ??
+          new Date().getFullYear()
+        }
+      />
+    ) : null}
+    </>
   );
 }

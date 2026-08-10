@@ -119,6 +119,7 @@ export const CONTROLE_NFS_SHEET_TABS: ControleNfsSheetTab[] = [
     sheetName: 'CAPITANIA FLUVIAL'
   },
   { key: 'confea', label: 'CONFEA', sheetName: 'CONFEA' },
+  { key: 'mapa', label: 'MAPA', sheetName: 'MAPA' },
   { key: 'fhe-df', label: 'FHE DF', sheetName: 'FHE DF' },
   { key: 'hfa', label: 'HFA', sheetName: 'HFA' },
   { key: 'itamaraty', label: 'ITAMARATY', sheetName: 'ITAMARATY' },
@@ -167,8 +168,8 @@ type SheetCacheEntry = {
 };
 const sheetCache = new Map<string, SheetCacheEntry>();
 let totalsSummaryCache: { expiresAt: number; data: ControleNfsTotalsSummary } | null = null;
-/** Invalida caches em memória após mudanças no cálculo (ex.: Conta Vinculada). */
-const NFS_TOTALS_CACHE_VERSION = 4;
+/** Invalida caches em memória após mudanças no cálculo (ex.: Conta Vinculada / aba MAPA). */
+const NFS_TOTALS_CACHE_VERSION = 6;
 let loadedNfsTotalsCacheVersion = 0;
 
 function invalidateStaleNfsTotalsCache(): void {
@@ -1069,8 +1070,20 @@ export async function loadProcessedNfsSheetsByTabKey(
     CONTROLE_NFS_SHEET_TABS.map(async (tab) => {
       try {
         return await getProcessedSheetForTab(tab);
-      } catch {
-        return { headers: [] as string[], rows: [] as string[][] };
+      } catch (firstError) {
+        // Retry único: carga paralela de muitas abas pode falhar por rate-limit do Google.
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 400 + Math.floor(Math.random() * 600)));
+          return await getProcessedSheetForTab(tab);
+        } catch (retryError) {
+          console.warn(
+            `[controle-nfs] Falha ao carregar aba "${tab.sheetName}" (${tab.key}):`,
+            retryError instanceof Error ? retryError.message : retryError,
+            '| 1ª tentativa:',
+            firstError instanceof Error ? firstError.message : firstError
+          );
+          return { headers: [] as string[], rows: [] as string[][] };
+        }
       }
     })
   );
@@ -1145,6 +1158,7 @@ export async function fetchControleNfsTotalsSummary(
   const useFilters = hasActiveTotalsFilters(filters);
 
   if (
+    !preloadedByTabKey &&
     !useFilters &&
     !forceRefresh &&
     totalsSummaryCache &&

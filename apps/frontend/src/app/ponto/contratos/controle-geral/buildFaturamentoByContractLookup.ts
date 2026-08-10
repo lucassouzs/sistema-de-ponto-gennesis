@@ -1,4 +1,5 @@
 import {
+  getGastosContractAggregateKey,
   normalizeContractOrderKey,
   normalizeGastosOperacionaisContractName
 } from './gastosOperacionaisContractOrder';
@@ -26,21 +27,33 @@ const EMPTY_NFS_TOTALS: NfsContractTotals = {
   contaVinculada: null
 };
 
+function lookupKeysForContract(contract: string): string[] {
+  const raw = contract.trim();
+  if (!raw) return [];
+  const normalized = normalizeGastosOperacionaisContractName(raw);
+  const keys = [
+    getGastosContractAggregateKey(raw),
+    normalizeContractOrderKey(normalized),
+    normalizeContractOrderKey(raw)
+  ];
+  return Array.from(new Set(keys.filter(Boolean)));
+}
+
 export function buildFaturamentoByContractLookup(
   entries: readonly FaturamentoByGastosContractEntry[]
 ): Map<string, NfsContractTotals> {
   const map = new Map<string, NfsContractTotals>();
 
   for (const entry of entries) {
-    const key = normalizeContractOrderKey(
-      normalizeGastosOperacionaisContractName(entry.contract)
-    );
-    map.set(key, {
+    const totals: NfsContractTotals = {
       faturamento: entry.faturamento,
       liquido: entry.liquido,
       recebido: entry.recebido,
       contaVinculada: entry.contaVinculada ?? null
-    });
+    };
+    for (const key of lookupKeysForContract(entry.contract)) {
+      map.set(key, totals);
+    }
   }
 
   return map;
@@ -72,6 +85,9 @@ export function resolveContractNfsTotals(
   contract: string,
   lookup: Map<string, NfsContractTotals>
 ): NfsContractTotals {
-  const key = normalizeContractOrderKey(normalizeGastosOperacionaisContractName(contract));
-  return lookup.get(key) ?? EMPTY_NFS_TOTALS;
+  for (const key of lookupKeysForContract(contract)) {
+    const hit = lookup.get(key);
+    if (hit) return hit;
+  }
+  return EMPTY_NFS_TOTALS;
 }

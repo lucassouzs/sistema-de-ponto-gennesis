@@ -9,7 +9,8 @@ import {
   resolveCanonicalGastosContractName,
   resolveVisibleLocalityItems,
   sortContractNamesByCustomOrder,
-  sortContractsByCustomOrder
+  sortContractsByCustomOrder,
+  GASTOS_OPERACIONAIS_LOCALITIES
 } from './gastosOperacionaisContractOrder';
 import {
   contractMatchesLocalitiesWithOverrides,
@@ -581,13 +582,25 @@ export function filterGastosDetailRows(
   detailRows: QueryGastosDetailRow[],
   filters: GastosOperacionaisFilters,
   localityOverrides: GastosOperacionaisLocalityOverrideMap = {},
-  visibleLocalities?: readonly string[]
+  visibleLocalities?: readonly string[],
+  extraContracts?: readonly string[]
 ): QueryGastosDetailRow[] {
+  const extraKeys = new Set(
+    (extraContracts ?? [])
+      .map((name) => getGastosContractAggregateKey(name))
+      .filter((key) => key.length > 0)
+  );
+
   return detailRows.filter((row) => {
-    if (!isContractInVisibleLocalities(row.contract, visibleLocalities, localityOverrides)) {
+    const isExtra = extraKeys.has(getGastosContractAggregateKey(row.contract));
+    if (
+      !isExtra &&
+      !isContractInVisibleLocalities(row.contract, visibleLocalities, localityOverrides)
+    ) {
       return false;
     }
     if (
+      !isExtra &&
       filters.localities.length &&
       !contractMatchesLocalitiesWithOverrides(row.contract, filters.localities, localityOverrides)
     ) {
@@ -597,6 +610,21 @@ export function filterGastosDetailRows(
     if (filters.contracts.length && !filters.contracts.includes(row.contract)) return false;
     return true;
   });
+}
+
+/** Mantém apenas linhas cujo contrato casa com a allowlist (chave canônica). */
+export function filterRowsByAllowedContracts<T extends { contract: string }>(
+  rows: readonly T[],
+  allowedContracts: readonly string[] | undefined
+): T[] {
+  if (!allowedContracts?.length) return rows.slice();
+  const allowedKeys = new Set(
+    allowedContracts
+      .map((name) => getGastosContractAggregateKey(name))
+      .filter((key) => key.length > 0)
+  );
+  if (allowedKeys.size === 0) return rows.slice();
+  return rows.filter((row) => allowedKeys.has(getGastosContractAggregateKey(row.contract)));
 }
 
 export function aggregateGastosDetailRows(detailRows: QueryGastosDetailRow[]): GastosOperacionaisRow[] {
@@ -709,6 +737,10 @@ export function mergeCatalogContractsIntoGastosRows(
     resolveExcludedLabel?: (key: string) => string | undefined;
     localityOverrides?: GastosOperacionaisLocalityOverrideMap;
     localitiesCatalog?: ReadonlyArray<{ key: string; label: string }>;
+    /** Quando definido, só esses contratos entram no merge (ignora catálogo completo). */
+    allowedContracts?: readonly string[];
+    /** Contratos adicionais sempre mesclados (ex.: MAPA no Controle Geral). */
+    extraContracts?: readonly string[];
   }
 ): GastosOperacionaisRow[] {
   const byKey = new Map<string, GastosOperacionaisRow>();
@@ -719,41 +751,56 @@ export function mergeCatalogContractsIntoGastosRows(
   const localityOverrides = options?.localityOverrides ?? {};
   const namesToMerge = new Set<string>();
 
-  for (const contract of listContractsForLocalities(
-    visibleLocalities,
-    options?.localitiesCatalog
-  )) {
-    namesToMerge.add(contract);
-  }
-
-  for (const entry of options?.databaseContracts ?? []) {
-    const name = entry.name?.trim();
-    if (!name) continue;
-    if (!shouldMergeContractForVisibleLocalities(name, visibleLocalities, localityOverrides, entry.costCenter)) {
-      continue;
+  if (options?.allowedContracts?.length) {
+    for (const contract of options.allowedContracts) {
+      const name = contract?.trim();
+      if (name) namesToMerge.add(name);
     }
-    namesToMerge.add(name);
-  }
-
-  for (const contract of options?.spreadsheetContracts ?? []) {
-    const name = contract?.trim();
-    if (!name) continue;
-    if (!shouldMergeContractForVisibleLocalities(name, visibleLocalities, localityOverrides)) {
-      continue;
+  } else {
+    for (const contract of listContractsForLocalities(
+      visibleLocalities,
+      options?.localitiesCatalog
+    )) {
+      namesToMerge.add(contract);
     }
-    namesToMerge.add(name);
-  }
 
-  for (const excludedKey of options?.excludedContractKeys ?? []) {
-    const label = options?.resolveExcludedLabel?.(excludedKey)?.trim() || excludedKey.trim();
-    if (label) namesToMerge.add(label);
+    for (const entry of options?.databaseContracts ?? []) {
+      const name = entry.name?.trim();
+      if (!name) continue;
+      if (!shouldMergeContractForVisibleLocalities(name, visibleLocalities, localityOverrides, entry.costCenter)) {
+        continue;
+      }
+      namesToMerge.add(name);
+    }
+
+    for (const contract of options?.spreadsheetContracts ?? []) {
+      const name = contract?.trim();
+      if (!name) continue;
+      if (!shouldMergeContractForVisibleLocalities(name, visibleLocalities, localityOverrides)) {
+        continue;
+      }
+      namesToMerge.add(name);
+    }
+
+    for (const excludedKey of options?.excludedContractKeys ?? []) {
+      const label = options?.resolveExcludedLabel?.(excludedKey)?.trim() || excludedKey.trim();
+      if (label) namesToMerge.add(label);
+    }
+
+    for (const contract of options?.extraContracts ?? []) {
+      const name = contract?.trim();
+      if (name) namesToMerge.add(name);
+    }
   }
 
   for (const contract of Array.from(namesToMerge)) {
     mergeContractNameIntoRows(byKey, contract);
   }
 
-  return sortContractsByCustomOrder(Array.from(byKey.values()));
+  const merged = sortContractsByCustomOrder(Array.from(byKey.values()));
+  return options?.allowedContracts?.length
+    ? filterRowsByAllowedContracts(merged, options.allowedContracts)
+    : merged;
 }
 
 export function buildGastosRowsFromSheetRows(rows: string[][]): GastosOperacionaisRow[] {
@@ -794,6 +841,7 @@ export function groupGastosRowsByLocality(
       rows: sortContractsByCustomOrder(groupRows),
       subtotal: Math.abs(groupRows.reduce((sum, row) => sum + row.totalAcumulado, 0))
     });
+    buckets.delete(locality.key);
   }
 
   const outros = buckets.get('OUTROS');
@@ -803,6 +851,30 @@ export function groupGastosRowsByLocality(
       localityLabel: 'Sem localidade',
       rows: sortContractsByCustomOrder(outros),
       subtotal: Math.abs(outros.reduce((sum, row) => sum + row.totalAcumulado, 0))
+    });
+    buckets.delete('OUTROS');
+  }
+
+  // Contratos extras fora das localidades padrão (ex.: MAPA / Nordeste no Controle Geral).
+  for (const locality of GASTOS_OPERACIONAIS_LOCALITIES) {
+    const groupRows = buckets.get(locality.key);
+    if (!groupRows?.length) continue;
+    groups.push({
+      localityKey: locality.key,
+      localityLabel: locality.label,
+      rows: sortContractsByCustomOrder(groupRows),
+      subtotal: Math.abs(groupRows.reduce((sum, row) => sum + row.totalAcumulado, 0))
+    });
+    buckets.delete(locality.key);
+  }
+
+  const leftoverOutros = buckets.get('OUTROS');
+  if (leftoverOutros?.length) {
+    groups.push({
+      localityKey: 'OUTROS',
+      localityLabel: 'Outros',
+      rows: sortContractsByCustomOrder(leftoverOutros),
+      subtotal: Math.abs(leftoverOutros.reduce((sum, row) => sum + row.totalAcumulado, 0))
     });
   }
 
