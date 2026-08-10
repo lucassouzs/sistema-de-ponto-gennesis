@@ -566,16 +566,22 @@ export async function loadRecordBeforeWrite(
   model: string,
   where: unknown
 ): Promise<unknown | null> {
-  const client = baseClient as unknown as Record<string, { findUnique?: Function; findFirst?: Function }>;
+  const client = baseClient as unknown as Record<
+    string,
+    { findUnique?: (args: { where: unknown }) => Promise<unknown>; findFirst?: (args: { where: unknown }) => Promise<unknown> }
+  >;
   if (!client || !where || typeof where !== 'object') return null;
   const key = prismaDelegateKey(model);
   const delegate = client[key];
-  if (!delegate?.findUnique && !delegate?.findFirst) return null;
+  if (!delegate) return null;
   try {
-    if (delegate.findUnique) {
+    if (typeof delegate.findUnique === 'function') {
       return await delegate.findUnique({ where });
     }
-    return await delegate.findFirst({ where });
+    if (typeof delegate.findFirst === 'function') {
+      return await delegate.findFirst({ where });
+    }
+    return null;
   } catch {
     return null;
   }
