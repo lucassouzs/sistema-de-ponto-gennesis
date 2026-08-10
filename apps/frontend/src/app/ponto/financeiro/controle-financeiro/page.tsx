@@ -43,6 +43,7 @@ import {
 } from '@/components/financeiro/financialControlEntry';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import api from '@/lib/api';
 import { formatDateBr, parseDateSafe } from '@/lib/dateTimeBr';
 import {
@@ -217,6 +218,24 @@ function matchesEmissionRange(
   return Boolean(fromYmd || toYmd);
 }
 
+function toLocalYmd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Período padrão do filtro: últimos 6 meses até hoje. */
+function getDefaultEmissionPeriod(ref: Date = new Date()) {
+  const to = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  const from = new Date(to);
+  from.setMonth(from.getMonth() - 6);
+  return {
+    emissionFrom: toLocalYmd(from),
+    emissionTo: toLocalYmd(to),
+  };
+}
+
 /**
  * Converte a string digitada pelo usuário (ex.: "5000", "5.000,00", "5000,5") em um número.
  * Retorna null para valores inválidos/vazios.
@@ -346,15 +365,17 @@ export default function ControleFinanceiroPage() {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
+  const defaultEmissionPeriod = useMemo(() => getDefaultEmissionPeriod(), []);
 
-  const [filters, setFilters] = useState({
-    year: currentYear,
-    month: currentMonth,
-    emissionFrom: '',
-    emissionTo: '',
-    status: '' as '' | FinancialControlStatus,
-    search: '',
-    overdueOnly: false,
+  const [filters, setFilters] = useState(() => {
+    const period = getDefaultEmissionPeriod();
+    return {
+      emissionFrom: period.emissionFrom,
+      emissionTo: period.emissionTo,
+      status: '' as '' | FinancialControlStatus,
+      search: '',
+      overdueOnly: false,
+    };
   });
   const [consorcio, setConsorcio] = useState<FinancialControlConsorcio>('brasilia');
 
@@ -397,17 +418,12 @@ export default function ControleFinanceiroPage() {
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.append('consorcio', consorcio);
-    // Com filtro de emissão, não restringe paymentYear/Month na API.
-    if (!hasEmissionFilter) {
-      if (filters.year > 0) params.append('year', String(filters.year));
-      if (filters.month > 0) params.append('month', String(filters.month));
-    }
     if (filters.status && filters.status !== 'AGUARDAR_NOTA') {
       params.append('status', filters.status);
     }
     if (filters.search.trim()) params.append('search', filters.search.trim());
     return params.toString();
-  }, [consorcio, filters, hasEmissionFilter]);
+  }, [consorcio, filters]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['financial-control', consorcio, queryParams],
@@ -483,38 +499,6 @@ export default function ControleFinanceiroPage() {
     return stats.byStatus[key];
   }
 
-  const availableYears = useMemo(() => {
-    const setYears = new Set<number>();
-    const minYear = 2023;
-    const maxYear = Math.max(
-      currentYear,
-      ...rawEntries.map((e) => e.paymentYear),
-      ...listEntries.map((e) => e.paymentYear),
-    );
-    for (let y = minYear; y <= maxYear; y++) {
-      setYears.add(y);
-    }
-    return Array.from(setYears).sort((a, b) => b - a);
-  }, [listEntries, rawEntries, currentYear]);
-
-  const yearFilterOptions = useMemo(
-    () =>
-      labeledToSelectOptions([
-        { value: '0', label: 'Todos os anos' },
-        ...availableYears.map((year) => ({ value: String(year), label: String(year) })),
-      ]),
-    [availableYears],
-  );
-
-  const monthFilterOptions = useMemo(
-    () =>
-      labeledToSelectOptions([
-        { value: '0', label: 'Todos os meses' },
-        ...MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label })),
-      ]),
-    []
-  );
-
   const statusFilterOptions = useMemo(() => {
     const present = new Set(rawEntries.map((entry) => entry.status));
     const hasAguardarNota = present.has('AGUARDAR_NOTA') || present.has('PAGO');
@@ -528,10 +512,12 @@ export default function ControleFinanceiroPage() {
     ]);
   }, [rawEntries]);
 
+  const isDefaultEmissionPeriod =
+    filters.emissionFrom === defaultEmissionPeriod.emissionFrom &&
+    filters.emissionTo === defaultEmissionPeriod.emissionTo;
+
   const hasActivePeriodFilter =
-    filters.year !== currentYear ||
-    filters.month !== currentMonth ||
-    hasEmissionFilter ||
+    (!isDefaultEmissionPeriod && hasEmissionFilter) ||
     filters.status !== '' ||
     filters.overdueOnly;
 
@@ -547,14 +533,6 @@ export default function ControleFinanceiroPage() {
       if (from && to) parts.push(`Emissão: ${from} a ${to}`);
       else if (from) parts.push(`Emissão: a partir de ${from}`);
       else if (to) parts.push(`Emissão: até ${to}`);
-    } else {
-      if (filters.year > 0) parts.push(`Ano: ${filters.year}`);
-      else parts.push('Ano: todos');
-      if (filters.month > 0) {
-        parts.push(`Mês: ${MONTHS_PT[filters.month - 1] ?? filters.month}`);
-      } else {
-        parts.push('Mês: todos');
-      }
     }
     if (filters.status) {
       const label =
@@ -660,15 +638,12 @@ export default function ControleFinanceiroPage() {
   };
 
   const buildExportSuffix = () => {
-    const yearPart = filters.year > 0 ? String(filters.year) : 'todos-anos';
-    const monthPart =
-      filters.month > 0 ? `-${String(filters.month).padStart(2, '0')}` : '';
     const emissionPart =
       filters.emissionFrom || filters.emissionTo
         ? `-emissao-${filters.emissionFrom || 'inicio'}_a_${filters.emissionTo || 'fim'}`
         : '';
     const statusPart = filters.status ? `-${filters.status.toLowerCase()}` : '';
-    return `${consorcio}-${yearPart}${monthPart}${emissionPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
+    return `${consorcio}${emissionPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
   };
 
   const openExportModal = () => {
@@ -943,9 +918,9 @@ export default function ControleFinanceiroPage() {
             </Card>
           ) : (
             <MonthGroup
-              key={`${consorcio}-${filters.year}-${filters.month}-${filters.emissionFrom}-${filters.emissionTo}`}
-              year={filters.year}
-              month={filters.month}
+              key={`${consorcio}-${filters.emissionFrom}-${filters.emissionTo}`}
+              year={0}
+              month={0}
               emissionFrom={filters.emissionFrom}
               emissionTo={filters.emissionTo}
               items={listEntries}
@@ -960,8 +935,8 @@ export default function ControleFinanceiroPage() {
           isOpen={isModalOpen}
           onClose={closeModal}
           editingEntry={editingEntry}
-          defaultPaymentMonth={filters.month || currentMonth}
-          defaultPaymentYear={filters.year || currentYear}
+          defaultPaymentMonth={currentMonth}
+          defaultPaymentYear={currentYear}
         />
 
         {/* Modal de Filtros */}
@@ -973,99 +948,39 @@ export default function ControleFinanceiroPage() {
         >
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ano
-                </label>
-                <StringSingleSelectDropdown
-                  value={String(filters.year)}
-                  onChange={(v) =>
-                    setFilters({
-                      ...filters,
-                      year: parseInt(v, 10),
-                      emissionFrom: '',
-                      emissionTo: '',
-                    })
-                  }
-                  options={yearFilterOptions}
-                  allowEmpty={false}
-                  disabled={hasEmissionFilter}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Mês
-                </label>
-                <StringSingleSelectDropdown
-                  value={String(filters.month)}
-                  onChange={(v) =>
-                    setFilters({
-                      ...filters,
-                      month: parseInt(v, 10),
-                      emissionFrom: '',
-                      emissionTo: '',
-                    })
-                  }
-                  options={monthFilterOptions}
-                  allowEmpty={false}
-                  disabled={hasEmissionFilter}
-                />
-              </div>
-
               <div className="sm:col-span-2">
                 <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   Data de emissão
                 </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label
-                      htmlFor="cf-emission-from"
-                      className="mb-2 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                    >
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       De
                     </label>
-                    <input
-                      id="cf-emission-from"
-                      type="date"
+                    <DatePickerField
                       value={filters.emissionFrom}
-                      max={filters.emissionTo || undefined}
-                      onChange={(e) => {
-                        const emissionFrom = e.target.value;
-                        setFilters({
-                          ...filters,
-                          emissionFrom,
-                          year: emissionFrom || filters.emissionTo ? 0 : filters.year || currentYear,
-                          month:
-                            emissionFrom || filters.emissionTo ? 0 : filters.month || currentMonth,
-                        });
-                      }}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-red-400"
+                      onChange={(emissionFrom) =>
+                        setFilters({ ...filters, emissionFrom })
+                      }
+                      placeholder="dd/mm/aaaa"
+                      noFocusRing
+                      aria-label="Data de emissão inicial"
+                      className="w-full"
                     />
                   </div>
                   <div>
-                    <label
-                      htmlFor="cf-emission-to"
-                      className="mb-2 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                    >
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Até
                     </label>
-                    <input
-                      id="cf-emission-to"
-                      type="date"
+                    <DatePickerField
                       value={filters.emissionTo}
-                      min={filters.emissionFrom || undefined}
-                      onChange={(e) => {
-                        const emissionTo = e.target.value;
-                        setFilters({
-                          ...filters,
-                          emissionTo,
-                          year: filters.emissionFrom || emissionTo ? 0 : filters.year || currentYear,
-                          month:
-                            filters.emissionFrom || emissionTo ? 0 : filters.month || currentMonth,
-                        });
-                      }}
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-red-400"
+                      onChange={(emissionTo) =>
+                        setFilters({ ...filters, emissionTo })
+                      }
+                      placeholder="dd/mm/aaaa"
+                      noFocusRing
+                      aria-label="Data de emissão final"
+                      className="w-full"
                     />
                   </div>
                 </div>
@@ -1137,10 +1052,8 @@ export default function ControleFinanceiroPage() {
                 type="button"
                 onClick={() => {
                   setFilters({
-                    year: currentYear,
-                    month: currentMonth,
-                    emissionFrom: '',
-                    emissionTo: '',
+                    emissionFrom: defaultEmissionPeriod.emissionFrom,
+                    emissionTo: defaultEmissionPeriod.emissionTo,
                     status: '',
                     search: filters.search,
                     overdueOnly: false,
@@ -1568,7 +1481,7 @@ function MonthGroup({
 
   useEffect(() => {
     setPage(1);
-  }, [items.length, year, month]);
+  }, [items.length, year, month, emissionFrom, emissionTo]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
