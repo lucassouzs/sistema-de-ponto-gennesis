@@ -172,8 +172,6 @@ const PIE_COLORS_LIGHT = ['#e11d48', '#0d9488', '#2563eb'];
 const PIE_COLORS_DARK = ['#fb7185', '#2dd4bf', '#60a5fa'];
 const PIE_OTHERS_LIGHT = '#cbd5e1';
 const PIE_OTHERS_DARK = '#475569';
-const PIE_TRACK_LIGHT = '#f1f5f9';
-const PIE_TRACK_DARK = '#334155';
 
 type TopPageSlice = {
   path: string;
@@ -285,7 +283,7 @@ export function EmployeeActivityInsights({
     ];
   }, [topPagesFiltered, isDark, topPagesTotal]);
 
-  const pieTrack = isDark ? PIE_TRACK_DARK : PIE_TRACK_LIGHT;
+  const legendTrack = isDark ? '#334155' : '#f1f5f9';
   const pieCenterMain = isDark ? '#f8fafc' : '#0f172a';
   const pieCenterMuted = isDark ? '#94a3b8' : '#64748b';
 
@@ -378,17 +376,6 @@ export function EmployeeActivityInsights({
                     <div className="relative h-[220px] w-[220px] shrink-0">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie
-                            data={[{ value: 1 }]}
-                            dataKey="value"
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={62}
-                            outerRadius={96}
-                            fill={pieTrack}
-                            stroke="none"
-                            isAnimationActive={false}
-                          />
                           <Pie
                             data={topPagesData}
                             dataKey="count"
@@ -519,7 +506,7 @@ export function EmployeeActivityInsights({
                         </div>
                         <div
                           className="h-1.5 w-full overflow-hidden rounded-full"
-                          style={{ backgroundColor: pieTrack }}
+                          style={{ backgroundColor: legendTrack }}
                         >
                           <div
                             className="h-full rounded-full transition-[width] duration-500"
