@@ -5,7 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { comparePassword, hashPassword } from '../lib/passwordHash';
 import { ChatService } from '../services/ChatService';
-import { recordSuccessfulLogin } from './UserActivityController';
+import { recordSuccessfulLogin, recordSuccessfulLogout } from './UserActivityController';
 
 const chatUploadService = new ChatService();
 
@@ -235,7 +235,13 @@ export class AuthController {
 
   async logout(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Em uma implementação completa, poderíamos invalidar o token (blacklist)
+      if (req.user?.id) {
+        try {
+          await recordSuccessfulLogout(req, req.user.id, req.body?.source);
+        } catch (trackError) {
+          console.error('Falha ao registrar logout:', trackError);
+        }
+      }
       return res.json({
         success: true,
         message: 'Logout realizado com sucesso'

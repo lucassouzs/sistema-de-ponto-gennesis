@@ -79,6 +79,11 @@ router.put(
   },
   userController.updateUserPassword
 );
+router.get(
+  '/:id/activity/insights',
+  requireEmployeesModuleAccess,
+  userActivityController.getUserActivityInsights.bind(userActivityController)
+);
 router.get('/:id/activity', requireEmployeesModuleAccess, userActivityController.getUserActivity);
 router.get('/:id', requireEmployeesModuleAccess, userController.getUserById);
 router.put('/:id', requireEmployeesModuleAccess, userController.updateUser);

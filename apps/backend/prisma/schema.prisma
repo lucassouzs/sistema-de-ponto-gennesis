@@ -345,10 +345,12 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-/// Histórico de logins (web / mobile)
+/// Histórico de logins / logouts (web / mobile)
 model UserLoginEvent {
   id        String   @id @default(cuid())
   userId    String
+  /// login | logout
+  type      String   @default("login")
   success   Boolean  @default(true)
   source    String?  // web | mobile
   ipAddress String?

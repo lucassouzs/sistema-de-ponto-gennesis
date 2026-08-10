@@ -24,10 +24,12 @@ import {
 } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
+import { EmployeeActivityInsights } from '@/components/employee/EmployeeActivityInsights';
 import api from '@/lib/api';
 
 type LoginEvent = {
   id: string;
+  type?: string | null;
   success: boolean;
   source?: string | null;
   ipAddress?: string | null;
@@ -66,8 +68,10 @@ function toYmd(date: Date): string {
 }
 
 function defaultPeriod() {
-  const today = toYmd(new Date());
-  return { from: today, to: today };
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 6);
+  return { from: toYmd(from), to: toYmd(to) };
 }
 
 function formatDateTime(value?: string | null): string {
@@ -110,6 +114,10 @@ function sourceLabel(source?: string | null): string {
   if (source === 'mobile') return 'App mobile';
   if (source === 'web') return 'Web';
   return source || '—';
+}
+
+function eventTypeLabel(type?: string | null): string {
+  return String(type || 'login').toLowerCase() === 'logout' ? 'Saída' : 'Login';
 }
 
 function SectionHeader({
@@ -249,12 +257,28 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
   const initialPeriod = useMemo(() => defaultPeriod(), []);
   const [loginsPage, setLoginsPage] = useState(1);
   const [visitsPage, setVisitsPage] = useState(1);
-  const [loginsFrom, setLoginsFrom] = useState(initialPeriod.from);
-  const [loginsTo, setLoginsTo] = useState(initialPeriod.to);
-  const [visitsFrom, setVisitsFrom] = useState(initialPeriod.from);
-  const [visitsTo, setVisitsTo] = useState(initialPeriod.to);
+  const [periodFrom, setPeriodFrom] = useState(initialPeriod.from);
+  const [periodTo, setPeriodTo] = useState(initialPeriod.to);
   const loginsLimit = 20;
   const visitsLimit = 20;
+
+  const applyPeriodFrom = (value: string) => {
+    setPeriodFrom(value);
+    setLoginsPage(1);
+    setVisitsPage(1);
+  };
+  const applyPeriodTo = (value: string) => {
+    setPeriodTo(value);
+    setLoginsPage(1);
+    setVisitsPage(1);
+  };
+  const resetPeriod = () => {
+    const period = defaultPeriod();
+    setPeriodFrom(period.from);
+    setPeriodTo(period.to);
+    setLoginsPage(1);
+    setVisitsPage(1);
+  };
 
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: [
@@ -262,10 +286,8 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
       userId,
       loginsPage,
       visitsPage,
-      loginsFrom,
-      loginsTo,
-      visitsFrom,
-      visitsTo,
+      periodFrom,
+      periodTo,
     ],
     queryFn: async () => {
       const res = await api.get(`/users/${userId}/activity`, {
@@ -274,10 +296,10 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
           visitsPage,
           loginsLimit,
           visitsLimit,
-          loginsFrom: loginsFrom || undefined,
-          loginsTo: loginsTo || undefined,
-          visitsFrom: visitsFrom || undefined,
-          visitsTo: visitsTo || undefined,
+          loginsFrom: periodFrom || undefined,
+          loginsTo: periodTo || undefined,
+          visitsFrom: periodFrom || undefined,
+          visitsTo: periodTo || undefined,
         },
       });
       return res.data?.data as ActivityResponse;
@@ -411,41 +433,36 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <EmployeeActivityInsights
+        userId={userId}
+        from={periodFrom}
+        to={periodTo}
+        periodFilter={
+          <PeriodFilterButton
+            from={periodFrom}
+            to={periodTo}
+            title="Filtrar período"
+            onFromChange={applyPeriodFrom}
+            onToChange={applyPeriodTo}
+            onReset={resetPeriod}
+          />
+        }
+      />
+
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         <Card className={cadastroListClasses.card}>
           <CardHeader className={cadastroListClasses.cardHeader}>
-            <div className={cadastroListClasses.cardHeaderRow}>
-              <SectionHeader
-                icon={History}
-                title="Histórico de logins"
-                subtitle="Logins no período selecionado"
-              />
-              <PeriodFilterButton
-                from={loginsFrom}
-                to={loginsTo}
-                title="Filtrar período"
-                onFromChange={(value) => {
-                  setLoginsFrom(value);
-                  setLoginsPage(1);
-                }}
-                onToChange={(value) => {
-                  setLoginsTo(value);
-                  setLoginsPage(1);
-                }}
-                onReset={() => {
-                  const period = defaultPeriod();
-                  setLoginsFrom(period.from);
-                  setLoginsTo(period.to);
-                  setLoginsPage(1);
-                }}
-              />
-            </div>
+            <SectionHeader
+              icon={History}
+              title="Histórico de acessos"
+              subtitle="Logins e saídas no período selecionado"
+            />
           </CardHeader>
           <CardContent className={cadastroListClasses.cardContent}>
             {logins.items.length === 0 ? (
               <CadastroListEmpty
                 icon={LogIn}
-                title="Nenhum login no período"
+                title="Nenhum acesso no período"
                 hint="Ajuste o filtro de datas ou aguarde o próximo login"
               />
             ) : (
@@ -454,17 +471,25 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
                   startItem={loginsRange.startItem}
                   endItem={loginsRange.endItem}
                   total={logins.pagination.total}
-                  itemLabel="login"
-                  itemLabelPlural="logins"
+                  itemLabel="acesso"
+                  itemLabelPlural="acessos"
                   currentPage={logins.pagination.page}
                   totalPages={logins.pagination.totalPages}
                 />
                 <div className="w-full max-w-full overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full table-fixed text-sm">
+                    <colgroup>
+                      <col className="w-[22%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[30%]" />
+                    </colgroup>
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
                         <th className={cadastroListClasses.th}>Data</th>
                         <th className={cadastroListClasses.thCenter}>Hora</th>
+                        <th className={cadastroListClasses.thCenter}>Evento</th>
                         <th className={cadastroListClasses.thCenter}>Origem</th>
                         <th className={cadastroListClasses.thCenter}>IP</th>
                       </tr>
@@ -477,6 +502,9 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
                           </td>
                           <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
                             {formatTimeOnly(login.createdAt)}
+                          </td>
+                          <td className={cadastroListClasses.tdCenter}>
+                            {eventTypeLabel(login.type)}
                           </td>
                           <td className={cadastroListClasses.tdCenter}>
                             {sourceLabel(login.source)}
@@ -502,32 +530,11 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
 
         <Card className={cadastroListClasses.card}>
           <CardHeader className={cadastroListClasses.cardHeader}>
-            <div className={cadastroListClasses.cardHeaderRow}>
-              <SectionHeader
-                icon={Globe}
-                title="Páginas visitadas"
-                subtitle="Navegação no período selecionado"
-              />
-              <PeriodFilterButton
-                from={visitsFrom}
-                to={visitsTo}
-                title="Filtrar período"
-                onFromChange={(value) => {
-                  setVisitsFrom(value);
-                  setVisitsPage(1);
-                }}
-                onToChange={(value) => {
-                  setVisitsTo(value);
-                  setVisitsPage(1);
-                }}
-                onReset={() => {
-                  const period = defaultPeriod();
-                  setVisitsFrom(period.from);
-                  setVisitsTo(period.to);
-                  setVisitsPage(1);
-                }}
-              />
-            </div>
+            <SectionHeader
+              icon={Globe}
+              title="Páginas visitadas"
+              subtitle="Navegação no período selecionado"
+            />
           </CardHeader>
           <CardContent className={cadastroListClasses.cardContent}>
             {pageVisits.items.length === 0 ? (
@@ -550,9 +557,9 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
                 <div className="w-full max-w-full overflow-x-auto">
                   <table className="w-full table-fixed text-sm">
                     <colgroup>
-                      <col className="w-[46%]" />
-                      <col className="w-[27%]" />
-                      <col className="w-[27%]" />
+                      <col className="w-[58%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[20%]" />
                     </colgroup>
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>

@@ -906,6 +906,7 @@ async function ensureUserActivityTracking(prisma: PrismaClient): Promise<void> {
       CREATE TABLE IF NOT EXISTS "user_login_events" (
         "id" TEXT NOT NULL,
         "userId" TEXT NOT NULL,
+        "type" TEXT NOT NULL DEFAULT 'login',
         "success" BOOLEAN NOT NULL DEFAULT true,
         "source" TEXT,
         "ipAddress" TEXT,
@@ -915,6 +916,10 @@ async function ensureUserActivityTracking(prisma: PrismaClient): Promise<void> {
       );
     `);
   }
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "user_login_events" ADD COLUMN IF NOT EXISTS "type" TEXT NOT NULL DEFAULT 'login';`
+  );
 
   if (!(await tableExists(prisma, 'user_page_visits'))) {
     console.warn('[Schema] Tabela user_page_visits ausente — criando automaticamente.');

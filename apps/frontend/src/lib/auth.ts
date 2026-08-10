@@ -105,7 +105,9 @@ class AuthService {
         headers: {
           Authorization: `Bearer ${this.getToken()}`,
           Accept: 'application/json',
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ source: 'web' }),
       });
     } catch (error) {
       console.error('Erro ao fazer logout:', error);

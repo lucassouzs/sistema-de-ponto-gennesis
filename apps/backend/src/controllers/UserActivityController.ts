@@ -186,7 +186,7 @@ export class UserActivityController {
             take: visitsLimit
           }),
           prisma.userPageVisit.count({ where: visitsWhere }),
-          prisma.userLoginEvent.count({ where: { userId: id } }),
+          prisma.userLoginEvent.count({ where: { userId: id, type: 'login' } }),
           prisma.userPageVisit.count({ where: { userId: id } })
         ]);
 
@@ -225,6 +225,177 @@ export class UserActivityController {
       next(error);
     }
   }
+
+  /**
+   * Insights do período: top páginas, origem, clientes, horário de pico e linha do tempo.
+   */
+  async getUserActivityInsights(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const dateFilter =
+        parseDateRangeFilter(req.query.from, req.query.to) ||
+        parseDateRangeFilter(todayYmdSaoPaulo(), todayYmdSaoPaulo());
+
+      const user = await prisma.user.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!user) throw createError('Usuário não encontrado', 404);
+
+      const where = {
+        userId: id,
+        ...(dateFilter ? { createdAt: dateFilter } : {}),
+      };
+
+      const [logins, visits] = await Promise.all([
+        prisma.userLoginEvent.findMany({
+          where,
+          select: {
+            id: true,
+            type: true,
+            source: true,
+            userAgent: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 2500,
+        }),
+        prisma.userPageVisit.findMany({
+          where,
+          select: {
+            id: true,
+            path: true,
+            label: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 2500,
+        }),
+      ]);
+
+      const pageCounts = new Map<string, { path: string; label: string | null; count: number }>();
+      for (const visit of visits) {
+        const current = pageCounts.get(visit.path);
+        if (current) {
+          current.count += 1;
+          if (!current.label && visit.label) current.label = visit.label;
+        } else {
+          pageCounts.set(visit.path, {
+            path: visit.path,
+            label: visit.label,
+            count: 1,
+          });
+        }
+      }
+      const topPages = Array.from(pageCounts.values())
+        .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path))
+        .slice(0, 5);
+
+      const bySource = { web: 0, mobile: 0, other: 0 };
+      const byClientMap = new Map<string, number>();
+      for (const login of logins) {
+        if (String(login.type || 'login').toLowerCase() !== 'login') continue;
+        const src = String(login.source || '').toLowerCase();
+        if (src === 'web') bySource.web += 1;
+        else if (src === 'mobile') bySource.mobile += 1;
+        else bySource.other += 1;
+
+        const client = parseClientLabel(login.userAgent, login.source);
+        byClientMap.set(client, (byClientMap.get(client) || 0) + 1);
+      }
+      const byClient = Array.from(byClientMap.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+      const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, total: 0 }));
+      for (const login of logins) {
+        byHour[hourInSaoPaulo(login.createdAt)].total += 1;
+      }
+      for (const visit of visits) {
+        byHour[hourInSaoPaulo(visit.createdAt)].total += 1;
+      }
+
+      const sourceSubtitle = (source?: string | null) =>
+        String(source || '').toLowerCase() === 'mobile'
+          ? 'App mobile'
+          : String(source || '').toLowerCase() === 'web'
+            ? 'Web'
+            : source || null;
+
+      const timeline = [
+        ...logins.map((login) => {
+          const isLogout = String(login.type || 'login').toLowerCase() === 'logout';
+          return {
+            id: `${isLogout ? 'logout' : 'login'}-${login.id}`,
+            type: (isLogout ? 'logout' : 'login') as 'login' | 'logout',
+            at: login.createdAt,
+            title: isLogout ? 'Saída' : 'Login',
+            subtitle: sourceSubtitle(login.source),
+          };
+        }),
+        ...visits.map((visit) => ({
+          id: `visit-${visit.id}`,
+          type: 'visit' as const,
+          at: visit.createdAt,
+          title: visit.label || visit.path,
+          subtitle: visit.label ? visit.path : null,
+        })),
+      ]
+        .sort((a, b) => b.at.getTime() - a.at.getTime())
+        .slice(0, 40)
+        .map((item) => ({
+          ...item,
+          at: item.at.toISOString(),
+        }));
+
+      res.json({
+        success: true,
+        data: {
+          topPages,
+          bySource,
+          byClient,
+          byHour,
+          timeline,
+          totals: {
+            logins: logins.filter((e) => String(e.type || 'login').toLowerCase() === 'login').length,
+            visits: visits.length,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+}
+
+function todayYmdSaoPaulo(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+function hourInSaoPaulo(date: Date): number {
+  const hourRaw = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: 'numeric',
+    hourCycle: 'h23',
+  }).format(date);
+  const hour = Number(hourRaw);
+  if (!Number.isFinite(hour)) return 0;
+  return Math.min(23, Math.max(0, hour === 24 ? 0 : hour));
+}
+
+function parseClientLabel(userAgent?: string | null, source?: string | null): string {
+  const ua = String(userAgent || '').toLowerCase();
+  const src = String(source || '').toLowerCase();
+  if (src === 'mobile' || ua.includes('okhttp') || ua.includes('gennesis')) {
+    return 'App mobile';
+  }
+  if (!ua) return 'Desconhecido';
+  if (ua.includes('edg/') || ua.includes('edgios')) return 'Edge';
+  if (ua.includes('chrome') && !ua.includes('chromium')) return 'Chrome';
+  if (ua.includes('firefox') || ua.includes('fxios')) return 'Firefox';
+  if (ua.includes('safari') && !ua.includes('chrome')) return 'Safari';
+  if (ua.includes('opera') || ua.includes('opr/')) return 'Opera';
+  return 'Outro';
 }
 
 /** Grava evento de login + atualiza lastLoginAt (não bloqueia o login se falhar). */
@@ -253,6 +424,7 @@ export async function recordSuccessfulLogin(
     prisma.userLoginEvent.create({
       data: {
         userId,
+        type: 'login',
         success: true,
         source,
         ipAddress: clientIp(req),
@@ -260,4 +432,30 @@ export async function recordSuccessfulLogin(
       }
     })
   ]);
+}
+
+/** Grava evento de logout (não bloqueia o logout se falhar). */
+export async function recordSuccessfulLogout(
+  req: Request,
+  userId: string,
+  sourceHint?: unknown
+): Promise<void> {
+  const source =
+    parseSource(sourceHint) ||
+    parseSource(req.headers['x-client-source']) ||
+    (String(req.headers['user-agent'] || '').toLowerCase().includes('okhttp') ||
+    String(req.headers['user-agent'] || '').toLowerCase().includes('gennesis')
+      ? 'mobile'
+      : 'web');
+
+  await prisma.userLoginEvent.create({
+    data: {
+      userId,
+      type: 'logout',
+      success: true,
+      source,
+      ipAddress: clientIp(req),
+      userAgent: clientUserAgent(req),
+    },
+  });
 }
