@@ -1572,7 +1572,7 @@ function KanbanColumnComponent({
         >
           <span className="[writing-mode:vertical-lr] [text-orientation:mixed] text-[15px] font-semibold leading-relaxed text-gray-900 dark:text-gray-100 whitespace-normal break-normal">
             {column.title}
-            <span className="inline-block ps-3 font-medium tabular-nums text-gray-400 dark:text-gray-500">
+            <span className="inline-block ps-3 font-medium tabular-nums text-gray-600 dark:text-gray-300">
               {column.cards.length}
             </span>
           </span>
@@ -1658,7 +1658,7 @@ function KanbanColumnComponent({
           <h3 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 truncate">
             {column.title}
           </h3>
-          <span className="text-[15px] font-medium text-gray-400 dark:text-gray-500 tabular-nums">
+          <span className="text-[15px] font-medium text-gray-600 dark:text-gray-300 tabular-nums">
             {column.cards.length}
           </span>
         </div>
