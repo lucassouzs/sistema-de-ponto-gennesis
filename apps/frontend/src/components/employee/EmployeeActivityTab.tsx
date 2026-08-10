@@ -447,164 +447,165 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
             onReset={resetPeriod}
           />
         }
+        belowCharts={
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+            <Card className={cadastroListClasses.card}>
+              <CardHeader className={cadastroListClasses.cardHeader}>
+                <SectionHeader
+                  icon={History}
+                  title="Histórico de acessos"
+                  subtitle="Logins e saídas no período selecionado"
+                />
+              </CardHeader>
+              <CardContent className={cadastroListClasses.cardContent}>
+                {logins.items.length === 0 ? (
+                  <CadastroListEmpty
+                    icon={LogIn}
+                    title="Nenhum acesso no período"
+                    hint="Ajuste o filtro de datas ou aguarde o próximo login"
+                  />
+                ) : (
+                  <>
+                    <CadastroListSummary
+                      startItem={loginsRange.startItem}
+                      endItem={loginsRange.endItem}
+                      total={logins.pagination.total}
+                      itemLabel="acesso"
+                      itemLabelPlural="acessos"
+                      currentPage={logins.pagination.page}
+                      totalPages={logins.pagination.totalPages}
+                    />
+                    <div className="w-full max-w-full overflow-x-auto">
+                      <table className="w-full table-fixed text-sm">
+                        <colgroup>
+                          <col className="w-[22%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[16%]" />
+                          <col className="w-[18%]" />
+                          <col className="w-[30%]" />
+                        </colgroup>
+                        <thead className="border-b border-gray-200 dark:border-gray-700">
+                          <tr>
+                            <th className={cadastroListClasses.th}>Data</th>
+                            <th className={cadastroListClasses.thCenter}>Hora</th>
+                            <th className={cadastroListClasses.thCenter}>Evento</th>
+                            <th className={cadastroListClasses.thCenter}>Origem</th>
+                            <th className={cadastroListClasses.thCenter}>IP</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                          {logins.items.map((login) => (
+                            <tr key={login.id}>
+                              <td className={`${cadastroListClasses.td} whitespace-nowrap`}>
+                                {formatDateOnly(login.createdAt)}
+                              </td>
+                              <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
+                                {formatTimeOnly(login.createdAt)}
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>
+                                {eventTypeLabel(login.type)}
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>
+                                {sourceLabel(login.source)}
+                              </td>
+                              <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
+                                {login.ipAddress || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ListPagination
+                      currentPage={logins.pagination.page}
+                      totalPages={logins.pagination.totalPages}
+                      onPageChange={setLoginsPage}
+                      className={`${cadastroListClasses.pagination}${isFetching ? ' opacity-70' : ''}`}
+                    />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className={cadastroListClasses.card}>
+              <CardHeader className={cadastroListClasses.cardHeader}>
+                <SectionHeader
+                  icon={Globe}
+                  title="Páginas visitadas"
+                  subtitle="Navegação no período selecionado"
+                />
+              </CardHeader>
+              <CardContent className={cadastroListClasses.cardContent}>
+                {pageVisits.items.length === 0 ? (
+                  <CadastroListEmpty
+                    icon={Globe}
+                    title="Nenhuma página no período"
+                    hint="Ajuste o filtro de datas ou navegue no sistema"
+                  />
+                ) : (
+                  <>
+                    <CadastroListSummary
+                      startItem={visitsRange.startItem}
+                      endItem={visitsRange.endItem}
+                      total={pageVisits.pagination.total}
+                      itemLabel="página"
+                      itemLabelPlural="páginas"
+                      currentPage={pageVisits.pagination.page}
+                      totalPages={pageVisits.pagination.totalPages}
+                    />
+                    <div className="w-full max-w-full overflow-x-auto">
+                      <table className="w-full table-fixed text-sm">
+                        <colgroup>
+                          <col className="w-[58%]" />
+                          <col className="w-[22%]" />
+                          <col className="w-[20%]" />
+                        </colgroup>
+                        <thead className="border-b border-gray-200 dark:border-gray-700">
+                          <tr>
+                            <th className={cadastroListClasses.th}>Página</th>
+                            <th className={cadastroListClasses.thCenter}>Data</th>
+                            <th className={cadastroListClasses.thCenter}>Hora</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                          {pageVisits.items.map((visit) => (
+                            <tr key={visit.id}>
+                              <td className={`${cadastroListClasses.td} max-w-0`}>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    {visit.label || visit.path}
+                                  </p>
+                                  {visit.label ? (
+                                    <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                                      {visit.path}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
+                                {formatDateOnly(visit.createdAt)}
+                              </td>
+                              <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
+                                {formatTimeOnly(visit.createdAt)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <ListPagination
+                      currentPage={pageVisits.pagination.page}
+                      totalPages={pageVisits.pagination.totalPages}
+                      onPageChange={setVisitsPage}
+                      className={`${cadastroListClasses.pagination}${isFetching ? ' opacity-70' : ''}`}
+                    />
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        }
       />
-
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
-        <Card className={cadastroListClasses.card}>
-          <CardHeader className={cadastroListClasses.cardHeader}>
-            <SectionHeader
-              icon={History}
-              title="Histórico de acessos"
-              subtitle="Logins e saídas no período selecionado"
-            />
-          </CardHeader>
-          <CardContent className={cadastroListClasses.cardContent}>
-            {logins.items.length === 0 ? (
-              <CadastroListEmpty
-                icon={LogIn}
-                title="Nenhum acesso no período"
-                hint="Ajuste o filtro de datas ou aguarde o próximo login"
-              />
-            ) : (
-              <>
-                <CadastroListSummary
-                  startItem={loginsRange.startItem}
-                  endItem={loginsRange.endItem}
-                  total={logins.pagination.total}
-                  itemLabel="acesso"
-                  itemLabelPlural="acessos"
-                  currentPage={logins.pagination.page}
-                  totalPages={logins.pagination.totalPages}
-                />
-                <div className="w-full max-w-full overflow-x-auto">
-                  <table className="w-full table-fixed text-sm">
-                    <colgroup>
-                      <col className="w-[22%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[30%]" />
-                    </colgroup>
-                    <thead className="border-b border-gray-200 dark:border-gray-700">
-                      <tr>
-                        <th className={cadastroListClasses.th}>Data</th>
-                        <th className={cadastroListClasses.thCenter}>Hora</th>
-                        <th className={cadastroListClasses.thCenter}>Evento</th>
-                        <th className={cadastroListClasses.thCenter}>Origem</th>
-                        <th className={cadastroListClasses.thCenter}>IP</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                      {logins.items.map((login) => (
-                        <tr key={login.id}>
-                          <td className={`${cadastroListClasses.td} whitespace-nowrap`}>
-                            {formatDateOnly(login.createdAt)}
-                          </td>
-                          <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
-                            {formatTimeOnly(login.createdAt)}
-                          </td>
-                          <td className={cadastroListClasses.tdCenter}>
-                            {eventTypeLabel(login.type)}
-                          </td>
-                          <td className={cadastroListClasses.tdCenter}>
-                            {sourceLabel(login.source)}
-                          </td>
-                          <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
-                            {login.ipAddress || '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <ListPagination
-                  currentPage={logins.pagination.page}
-                  totalPages={logins.pagination.totalPages}
-                  onPageChange={setLoginsPage}
-                  className={`${cadastroListClasses.pagination}${isFetching ? ' opacity-70' : ''}`}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={cadastroListClasses.card}>
-          <CardHeader className={cadastroListClasses.cardHeader}>
-            <SectionHeader
-              icon={Globe}
-              title="Páginas visitadas"
-              subtitle="Navegação no período selecionado"
-            />
-          </CardHeader>
-          <CardContent className={cadastroListClasses.cardContent}>
-            {pageVisits.items.length === 0 ? (
-              <CadastroListEmpty
-                icon={Globe}
-                title="Nenhuma página no período"
-                hint="Ajuste o filtro de datas ou navegue no sistema"
-              />
-            ) : (
-              <>
-                <CadastroListSummary
-                  startItem={visitsRange.startItem}
-                  endItem={visitsRange.endItem}
-                  total={pageVisits.pagination.total}
-                  itemLabel="página"
-                  itemLabelPlural="páginas"
-                  currentPage={pageVisits.pagination.page}
-                  totalPages={pageVisits.pagination.totalPages}
-                />
-                <div className="w-full max-w-full overflow-x-auto">
-                  <table className="w-full table-fixed text-sm">
-                    <colgroup>
-                      <col className="w-[58%]" />
-                      <col className="w-[22%]" />
-                      <col className="w-[20%]" />
-                    </colgroup>
-                    <thead className="border-b border-gray-200 dark:border-gray-700">
-                      <tr>
-                        <th className={cadastroListClasses.th}>Página</th>
-                        <th className={cadastroListClasses.thCenter}>Data</th>
-                        <th className={cadastroListClasses.thCenter}>Hora</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                      {pageVisits.items.map((visit) => (
-                        <tr key={visit.id}>
-                          <td className={`${cadastroListClasses.td} max-w-0`}>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                                {visit.label || visit.path}
-                              </p>
-                              {visit.label ? (
-                                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                                  {visit.path}
-                                </p>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
-                            {formatDateOnly(visit.createdAt)}
-                          </td>
-                          <td className={`${cadastroListClasses.tdCenter} whitespace-nowrap`}>
-                            {formatTimeOnly(visit.createdAt)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <ListPagination
-                  currentPage={pageVisits.pagination.page}
-                  totalPages={pageVisits.pagination.totalPages}
-                  onPageChange={setVisitsPage}
-                  className={`${cadastroListClasses.pagination}${isFetching ? ' opacity-70' : ''}`}
-                />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
