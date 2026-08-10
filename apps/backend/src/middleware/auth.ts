@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { createError } from './errorHandler';
 import { prisma } from '../lib/prisma';
+import { runWithRequestContext } from '../lib/requestContext';
 
 const PERMISOES_MODULE_KEY = pathToModuleKey('/ponto/permissoes');
 const CONTROLE_ALTERAR_PERMISSOES_KEY = pathToModuleKey('/ponto/controle/alterar-permissoes');
@@ -81,7 +82,22 @@ export const authenticate = async (
       isAdmin: (user.employee?.position || '').toLowerCase() === 'administrador',
     };
 
-    next();
+    const forwarded = req.headers['x-forwarded-for'];
+    const ipAddress =
+      (typeof forwarded === 'string' && forwarded.split(',')[0]?.trim()) ||
+      (Array.isArray(forwarded) && String(forwarded[0] || '').split(',')[0]?.trim()) ||
+      req.ip ||
+      req.socket?.remoteAddress ||
+      null;
+
+    runWithRequestContext(
+      {
+        userId: user.id,
+        ipAddress,
+        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      },
+      () => next()
+    );
   } catch (error: any) {
     // Se for erro de JWT, retornar erro de autenticação
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {

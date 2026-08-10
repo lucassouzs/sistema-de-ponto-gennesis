@@ -2,6 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import {
+  buildAuditSummary,
+  enrichTimelineRefs,
+  entityLabel,
+  resolveTimelineRef,
+  type AuditAction,
+} from '../lib/auditLog';
 
 function clientIp(req: Request): string | null {
   const forwarded = req.headers['x-forwarded-for'];
@@ -247,7 +254,7 @@ export class UserActivityController {
         ...(dateFilter ? { createdAt: dateFilter } : {}),
       };
 
-      const [logins, visits] = await Promise.all([
+      const [logins, visits, audits] = await Promise.all([
         prisma.userLoginEvent.findMany({
           where,
           select: {
@@ -271,6 +278,25 @@ export class UserActivityController {
           orderBy: { createdAt: 'desc' },
           take: 2500,
         }),
+        prisma.auditLog.findMany({
+          where: {
+            userId: id,
+            action: { in: ['CREATE', 'DELETE', 'APPROVE', 'REJECT'] },
+            ...(dateFilter ? { createdAt: dateFilter } : {}),
+          },
+          select: {
+            id: true,
+            action: true,
+            entity: true,
+            entityId: true,
+            summary: true,
+            newData: true,
+            oldData: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 2500,
+        }),
       ]);
 
       const pageCounts = new Map<string, { path: string; label: string | null; count: number }>();
@@ -287,9 +313,19 @@ export class UserActivityController {
           });
         }
       }
+
+      const isHomePage = (path: string, label: string | null) => {
+        const normalized = String(path || '').replace(/\/+$/, '').toLowerCase();
+        const labelNorm = String(label || '').trim().toLowerCase();
+        if (normalized === '/ponto/home' || normalized === '/home') return true;
+        if (labelNorm === 'início' || labelNorm === 'inicio') return true;
+        return false;
+      };
+
       const topPages = Array.from(pageCounts.values())
+        .filter((item) => !isHomePage(item.path, item.label))
         .sort((a, b) => b.count - a.count || a.path.localeCompare(b.path))
-        .slice(0, 5);
+        .slice(0, 40);
 
       const bySource = { web: 0, mobile: 0, other: 0 };
       const byClientMap = new Map<string, number>();
@@ -322,6 +358,16 @@ export class UserActivityController {
             ? 'Web'
             : source || null;
 
+      const auditType = (action: string): 'create' | 'delete' | 'approve' | 'reject' => {
+        const a = String(action || '').toUpperCase();
+        if (a === 'DELETE') return 'delete';
+        if (a === 'APPROVE') return 'approve';
+        if (a === 'REJECT') return 'reject';
+        return 'create';
+      };
+
+      const enrichedRefs = await enrichTimelineRefs(audits);
+
       const timeline = [
         ...logins.map((login) => {
           const isLogout = String(login.type || 'login').toLowerCase() === 'logout';
@@ -340,6 +386,27 @@ export class UserActivityController {
           title: visit.label || visit.path,
           subtitle: visit.label ? visit.path : null,
         })),
+        ...audits.map((audit) => {
+          const type = auditType(audit.action);
+          const action = String(audit.action || 'CREATE').toUpperCase() as AuditAction;
+          const title =
+            audit.summary ||
+            buildAuditSummary(
+              ['CREATE', 'DELETE', 'APPROVE', 'REJECT'].includes(action) ? action : 'CREATE',
+              audit.entity
+            );
+          const ref =
+            resolveTimelineRef(audit.action, audit.newData, audit.oldData) ||
+            (audit.entityId ? enrichedRefs.get(`${audit.entity}:${audit.entityId}`) : null) ||
+            null;
+          return {
+            id: `audit-${audit.id}`,
+            type,
+            at: audit.createdAt,
+            title,
+            subtitle: ref || entityLabel(audit.entity),
+          };
+        }),
       ]
         .sort((a, b) => b.at.getTime() - a.at.getTime())
         .slice(0, 40)
@@ -359,6 +426,7 @@ export class UserActivityController {
           totals: {
             logins: logins.filter((e) => String(e.type || 'login').toLowerCase() === 'login').length,
             visits: visits.length,
+            actions: audits.length,
           },
         },
       });

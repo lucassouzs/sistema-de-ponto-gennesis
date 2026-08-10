@@ -714,16 +714,6 @@
 }
 
 /* Logo do rail */
-@keyframes sidebar-logo-float {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-2px) scale(1.03);
-  }
-}
-
 @keyframes sidebar-logo-spin {
   0% {
     transform: rotate(0deg) scale(1);
@@ -744,7 +734,6 @@
 }
 
 .sidebar-logo-btn__img {
-  animation: sidebar-logo-float 3.6s ease-in-out infinite;
   transform-origin: center;
 }
 

@@ -884,6 +884,40 @@ async function ensureControleGeralTetoOrcamentarioTable(prisma: PrismaClient): P
   `);
 }
 
+async function ensureAuditLogTracking(prisma: PrismaClient): Promise<void> {
+  if (!(await tableExists(prisma, 'audit_logs'))) {
+    console.warn('[Schema] Tabela audit_logs ausente — criando automaticamente.');
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "audit_logs" (
+        "id" TEXT NOT NULL,
+        "userId" TEXT,
+        "action" TEXT NOT NULL,
+        "entity" TEXT NOT NULL,
+        "entityId" TEXT,
+        "summary" TEXT,
+        "oldData" JSONB,
+        "newData" JSONB,
+        "ipAddress" TEXT,
+        "userAgent" TEXT,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+      );
+    `);
+  }
+
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "audit_logs" ADD COLUMN IF NOT EXISTS "summary" TEXT;`
+  );
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "audit_logs_userId_createdAt_idx"
+    ON "audit_logs"("userId", "createdAt");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "audit_logs_entity_createdAt_idx"
+    ON "audit_logs"("entity", "createdAt");
+  `);
+}
+
 async function ensureUserActivityTracking(prisma: PrismaClient): Promise<void> {
   if (await tableExists(prisma, 'users')) {
     await prisma.$executeRawUnsafe(
@@ -1026,6 +1060,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureControleGeralTetoOrcamentarioTable(prisma);
     await ensureDriveStarTrashColumns(prisma);
     await ensureUserActivityTracking(prisma);
+    await ensureAuditLogTracking(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);

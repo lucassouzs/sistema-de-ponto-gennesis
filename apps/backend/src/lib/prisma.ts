@@ -1,6 +1,15 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import dotenv from 'dotenv';
 import path from 'path';
+import {
+  auditAfterWrite,
+  detectApproveRejectAction,
+  extractDisplayNumber,
+  loadRecordBeforeWrite,
+  prismaDelegateKey,
+  setAuditBaseClient,
+  shouldAuditModel,
+} from './auditLog';
 
 // Garante .env antes de montar o client (imports do index são hoisted e rodam antes do dotenv.config).
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -47,6 +56,86 @@ const prismaLogLevels: Prisma.LogLevel[] = process.env.PRISMA_LOG_QUERIES === 't
   ? ['query', 'error', 'warn'] 
   : ['error', 'warn'];
 
+function withAuditExtension(base: PrismaClient): PrismaClient {
+  setAuditBaseClient(base);
+  const extended = base.$extends({
+    query: {
+      $allModels: {
+        async create({ model, args, query }) {
+          const result = await query(args);
+          auditAfterWrite({ model, operation: 'create', args, result });
+          return result;
+        },
+        async createMany({ model, args, query }) {
+          const result = await query(args);
+          auditAfterWrite({ model, operation: 'createMany', args, result });
+          return result;
+        },
+        async update({ model, args, query }) {
+          const isApproval =
+            shouldAuditModel(model) && Boolean(detectApproveRejectAction(args.data));
+          let before: unknown = null;
+          if (isApproval) {
+            before = await loadRecordBeforeWrite(model, args.where);
+          }
+          const result = await query(args);
+          // Garante número/nome mesmo se o update vier só com { status } (ex.: OC em transaction).
+          if (
+            isApproval &&
+            !extractDisplayNumber(result) &&
+            !extractDisplayNumber(before)
+          ) {
+            before = await loadRecordBeforeWrite(model, args.where);
+          }
+          auditAfterWrite({ model, operation: 'update', args, result, before });
+          return result;
+        },
+        async updateMany({ model, args, query }) {
+          const result = await query(args);
+          auditAfterWrite({ model, operation: 'updateMany', args, result });
+          return result;
+        },
+        async upsert({ model, args, query }) {
+          const result = await query(args);
+          auditAfterWrite({
+            model,
+            operation: 'upsert',
+            args: { data: args.update, where: args.where },
+            result,
+          });
+          return result;
+        },
+        async delete({ model, args, query }) {
+          const before = shouldAuditModel(model)
+            ? await loadRecordBeforeWrite(model, args.where)
+            : null;
+          const result = await query(args);
+          auditAfterWrite({ model, operation: 'delete', args, result, before });
+          return result;
+        },
+        async deleteMany({ model, args, query }) {
+          let before: unknown = null;
+          if (shouldAuditModel(model) && args.where) {
+            try {
+              const key = prismaDelegateKey(model);
+              const delegate = (base as unknown as Record<string, { findFirst?: Function }>)[key];
+              before = delegate?.findFirst
+                ? await delegate.findFirst({ where: args.where })
+                : null;
+            } catch {
+              before = null;
+            }
+          }
+          const result = await query(args);
+          auditAfterWrite({ model, operation: 'deleteMany', args, result, before });
+          return result;
+        },
+      },
+    },
+  });
+  return extended as unknown as PrismaClient;
+}
+
 function buildPrismaClient(): PrismaClient {
   const url = databaseUrl || process.env.DATABASE_URL;
   if (!url) {
@@ -54,7 +143,7 @@ function buildPrismaClient(): PrismaClient {
       'DATABASE_URL não configurada. Verifique o arquivo apps/backend/.env e reinicie o backend.'
     );
   }
-  return new PrismaClient({
+  const base = new PrismaClient({
     datasources: {
       db: {
         url,
@@ -62,6 +151,7 @@ function buildPrismaClient(): PrismaClient {
     },
     log: prismaLogLevels,
   });
+  return withAuditExtension(base) as PrismaClient;
 }
 
 let prisma = buildPrismaClient();

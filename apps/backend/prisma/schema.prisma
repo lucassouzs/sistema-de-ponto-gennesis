@@ -336,12 +336,15 @@ model AuditLog {
   action    String
   entity    String
   entityId  String?
+  summary   String?
   oldData   Json?
   newData   Json?
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
 
+  @@index([userId, createdAt])
+  @@index([entity, createdAt])
   @@map("audit_logs")
 }
 
