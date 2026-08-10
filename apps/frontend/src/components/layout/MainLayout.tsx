@@ -140,10 +140,20 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     pathname.startsWith('/ponto/flow')
   );
 
+  const isKanbanRoute =
+    pathname != null &&
+    (pathname === '/ponto/kanban' || pathname.startsWith('/ponto/kanban/'));
+
   return (
     <MainLayoutShellContext.Provider value={true}>
       <NativeCallProvider value={nativeCall}>
-        <div className="min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900">
+        <div
+          className={
+            isKanbanRoute
+              ? 'min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-white dark:bg-gray-900'
+              : 'min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900'
+          }
+        >
           <Sidebar
             userRole={displayRole}
             userName={displayName}

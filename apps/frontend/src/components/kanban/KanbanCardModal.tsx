@@ -21,6 +21,11 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
 import {
+  originFromElement,
+  useCelebratePulse,
+  usePaperConfetti,
+} from '@/components/ui/PaperConfettiBurst';
+import {
   type Priority,
   type KanbanCardLabel,
   type KanbanCardMember,
@@ -252,6 +257,9 @@ export function KanbanCardModal({
   completeCheckDisabled = false,
 }: KanbanCardModalProps) {
   const queryClient = useQueryClient();
+  const { fire: firePaperConfetti, host: paperConfettiHost } = usePaperConfetti();
+  const { celebrating, trigger: triggerCelebrate } = useCelebratePulse();
+  const completeCheckRef = useRef<HTMLButtonElement>(null);
   const [mode, setMode] = useState<'create' | 'detail'>(initialMode);
   const [cardId, setCardId] = useState<string | undefined>(initialCardId);
 
@@ -1370,15 +1378,21 @@ export function KanbanCardModal({
       <div className="flex w-full min-w-0 items-start gap-2.5">
         {showCompleteCheck ? (
           <button
+            ref={completeCheckRef}
             type="button"
             disabled={completeCheckDisabled || !cardId || isOptimisticKanbanCardId(cardId)}
             title={isCardCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
             aria-label={isCardCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
             onClick={() => {
+              if (!isCardCompleted) {
+                triggerCelebrate();
+                firePaperConfetti(originFromElement(completeCheckRef.current), 50);
+              }
               void handleToggleCardComplete();
             }}
             className={clsx(
               'mt-1.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all',
+              celebrating && 'kanban-complete-celebrate',
               isCardCompleted
                 ? 'border-[#61BD4F] bg-[#61BD4F] text-white'
                 : 'border-gray-400 bg-transparent hover:border-[#61BD4F] dark:border-gray-500 dark:hover:border-[#61BD4F]',
@@ -1386,7 +1400,15 @@ export function KanbanCardModal({
                 'cursor-default opacity-60',
             )}
           >
-            {isCardCompleted ? <Check className="h-2.5 w-2.5 stroke-[3]" aria-hidden /> : null}
+            {isCardCompleted ? (
+              <Check
+                className={clsx(
+                  'h-2.5 w-2.5 stroke-[3]',
+                  celebrating && 'kanban-complete-check-pop',
+                )}
+                aria-hidden
+              />
+            ) : null}
           </button>
         ) : null}
         <input
@@ -1531,6 +1553,7 @@ export function KanbanCardModal({
 
   return (
     <>
+    {paperConfettiHost}
     <Modal
       isOpen
       onClose={handleClose}

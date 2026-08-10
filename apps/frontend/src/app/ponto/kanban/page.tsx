@@ -14,6 +14,11 @@ import { KanbanBoardShareModal } from '@/components/kanban/KanbanBoardShareModal
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
+import {
+  originFromElement,
+  useCelebratePulse,
+  usePaperConfetti,
+} from '@/components/ui/PaperConfettiBurst';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import {
@@ -78,6 +83,7 @@ import { KanbanPriorityBars } from '@/components/kanban/KanbanPriorityBars';
 import {
   getKanbanLabelPalette,
   getKanbanLabelTextColor,
+  getKanbanColumnSurfaceStyle,
   normalizeKanbanLabels,
   type KanbanLabelPreset,
 } from '@/components/kanban/kanbanLabels';
@@ -605,9 +611,9 @@ function CardMetaRow({ card }: { card: KanbanCard }) {
 
 function KanbanBoardSkeleton() {
   const columns = [
-    { cards: [0, 1], color: 'bg-gray-400 dark:bg-gray-500' },
-    { cards: [0, 1, 2], color: 'bg-teal-500/70' },
-    { cards: [0, 1], color: 'bg-blue-500/70' },
+    { cards: [0, 1], color: '#6B7280' },
+    { cards: [0, 1, 2], color: '#14B8A6' },
+    { cards: [0, 1], color: '#3B82F6' },
   ] as const;
 
   return (
@@ -615,17 +621,25 @@ function KanbanBoardSkeleton() {
       {columns.map((col, colIdx) => (
         <div
           key={colIdx}
-          className="relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl bg-[#F9FAFB] dark:bg-gray-800/60"
+          className={clsx(
+            'relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl',
+            '[background-color:color-mix(in_srgb,var(--kanban-column-accent)_22%,#FFFFFF)]',
+            'dark:[background-color:color-mix(in_srgb,var(--kanban-column-accent)_28%,rgb(31_41_55))]',
+          )}
+          style={getKanbanColumnSurfaceStyle(col.color)}
         >
           <div className="flex items-center justify-between px-4 pb-2 pt-4">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className={clsx('h-2 w-2 flex-shrink-0 rounded-full', col.color)} />
-              <div className="h-4 w-20 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
-              <div className="h-4 w-5 animate-pulse rounded bg-gray-200/80 dark:bg-gray-700/80" />
+              <span
+                className="h-2 w-2 flex-shrink-0 rounded-full"
+                style={{ backgroundColor: col.color }}
+              />
+              <div className="h-4 w-20 animate-pulse rounded bg-black/10 dark:bg-white/15" />
+              <div className="h-4 w-5 animate-pulse rounded bg-black/[0.07] dark:bg-white/10" />
             </div>
             <div className="flex items-center gap-1">
-              <div className="h-7 w-7 animate-pulse rounded-lg bg-gray-200/80 dark:bg-gray-700/70" />
-              <div className="h-7 w-7 animate-pulse rounded-lg bg-gray-200/80 dark:bg-gray-700/70" />
+              <div className="h-7 w-7 animate-pulse rounded-lg bg-black/[0.07] dark:bg-white/10" />
+              <div className="h-7 w-7 animate-pulse rounded-lg bg-black/[0.07] dark:bg-white/10" />
             </div>
           </div>
 
@@ -664,7 +678,7 @@ function KanbanBoardSkeleton() {
           </div>
 
           <div className="px-3 pb-3">
-            <div className="h-10 w-full animate-pulse rounded-xl bg-gray-200/70 dark:bg-gray-700/50" />
+            <div className="h-10 w-full animate-pulse rounded-xl bg-black/[0.06] dark:bg-white/10" />
           </div>
         </div>
       ))}
@@ -1004,7 +1018,10 @@ function KanbanCardItem({
   const [hovered, setHovered] = useState(false);
   const [suppressHoverPad, setSuppressHoverPad] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const completeBtnRef = useRef<HTMLButtonElement>(null);
   const suppressClickRef = useRef(false);
+  const { fire: firePaperConfetti, host: paperConfettiHost } = usePaperConfetti();
+  const { celebrating, trigger: triggerCelebrate } = useCelebratePulse();
   const isCompleted = Boolean(card.completedAt);
   const showCompleteCheck = true;
   const showArchiveAction =
@@ -1084,6 +1101,7 @@ function KanbanCardItem({
             ],
       )}
     >
+      {paperConfettiHost}
       {!readOnly && (
         <div
           className={clsx(
@@ -1157,6 +1175,7 @@ function KanbanCardItem({
       >
         {showCompleteCheck ? (
           <button
+            ref={completeBtnRef}
             type="button"
             disabled={readOnly || !onToggleCardComplete}
             title={isCompleted ? 'Marcar como pendente' : 'Marcar como concluído'}
@@ -1164,13 +1183,18 @@ function KanbanCardItem({
             onClick={(e) => {
               e.stopPropagation();
               if (isCompleted) setSuppressHoverPad(true);
-              else setSuppressHoverPad(false);
+              else {
+                setSuppressHoverPad(false);
+                triggerCelebrate();
+                firePaperConfetti(originFromElement(completeBtnRef.current), 48);
+              }
               onToggleCardComplete?.(card);
             }}
             className={clsx(
               'absolute left-0 top-0.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border-[1.5px]',
               'transition-[opacity,transform,border-color,background-color] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]',
               'motion-reduce:transition-none',
+              celebrating && 'kanban-complete-celebrate',
               isCompleted
                 ? 'scale-100 border-[#61BD4F] bg-[#61BD4F] text-white opacity-100'
                 : [
@@ -1184,7 +1208,15 @@ function KanbanCardItem({
               (readOnly || !onToggleCardComplete) && 'cursor-default',
             )}
           >
-            {isCompleted ? <Check className="h-2.5 w-2.5 stroke-[3]" aria-hidden /> : null}
+            {isCompleted ? (
+              <Check
+                className={clsx(
+                  'h-2.5 w-2.5 stroke-[3]',
+                  celebrating && 'kanban-complete-check-pop',
+                )}
+                aria-hidden
+              />
+            ) : null}
           </button>
         ) : null}
         <h4
@@ -1470,14 +1502,17 @@ function KanbanColumnComponent({
         onDragEnd={onColumnDragEnd}
         className={clsx(
           'group/collapsed relative flex flex-col items-center w-[52px] flex-shrink-0 self-start h-auto',
-          'rounded-2xl bg-[#F9FAFB] dark:bg-gray-800/70',
-          'hover:bg-white/90 dark:hover:bg-gray-800/90',
-          'transition-[opacity,background-color] duration-200 ease-out motion-reduce:transition-none',
+          'rounded-2xl',
+          '[background-color:color-mix(in_srgb,var(--kanban-column-accent)_22%,#FFFFFF)]',
+          'dark:[background-color:color-mix(in_srgb,var(--kanban-column-accent)_28%,rgb(31_41_55))]',
+          'hover:brightness-[1.03] dark:hover:brightness-110',
+          'transition-[opacity,filter,background-color] duration-200 ease-out motion-reduce:transition-none',
           onColumnDragStart && 'cursor-grab active:cursor-grabbing',
           isColumnDragging && 'kanban-column-dragging',
           isCollapsedDropTarget &&
             'ring-2 ring-red-500/90 dark:ring-red-400/80 ring-inset',
         )}
+        style={getKanbanColumnSurfaceStyle(column.color)}
         onDragOver={
           readOnly || isColumnDragActive
             ? undefined
@@ -1523,7 +1558,7 @@ function KanbanColumnComponent({
           className="flex w-full flex-col items-center justify-center pb-4 pt-2 select-none"
         >
           <span
-            className="w-2 h-2 rounded-full ring-2 ring-white/80 dark:ring-gray-900/40"
+            className="w-2.5 h-2.5 rounded-full ring-2 ring-white/70 dark:ring-black/20"
             style={{ backgroundColor: column.color }}
           />
         </button>
@@ -1550,11 +1585,13 @@ function KanbanColumnComponent({
       className={clsx(
         'relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl',
         isChecklistView && 'h-full max-h-full min-h-0 overflow-hidden',
-        'bg-[#F9FAFB] dark:bg-gray-800/60',
-        'transition-[opacity,box-shadow] duration-200 ease-out motion-reduce:transition-none',
+        '[background-color:color-mix(in_srgb,var(--kanban-column-accent)_22%,#FFFFFF)]',
+        'dark:[background-color:color-mix(in_srgb,var(--kanban-column-accent)_28%,rgb(31_41_55))]',
+        'transition-[opacity,box-shadow,background-color] duration-200 ease-out motion-reduce:transition-none',
         onColumnDragStart && 'cursor-grab active:cursor-grabbing [&_[data-kanban-card]]:cursor-pointer',
         isColumnDragging && 'kanban-column-dragging',
       )}
+      style={getKanbanColumnSurfaceStyle(column.color)}
       ref={columnRootRef}
       onDragOver={
         readOnly || isColumnDragActive
@@ -4085,10 +4122,10 @@ function KanbanPage() {
         <div
           ref={boardScrollRef}
           className={clsx(
-            'overflow-x-auto bg-[#F3F4F6] px-4 dark:bg-gray-900/40',
+            'overflow-x-auto bg-transparent px-4',
             isChecklistBoard
-              ? 'min-h-0 flex-1 overflow-y-hidden rounded-t-2xl pt-5 pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
-              : 'scrollbar-hide rounded-2xl py-5 pb-4',
+              ? 'min-h-0 flex-1 overflow-y-hidden pt-5 pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
+              : 'scrollbar-hide py-5 pb-4',
           )}
         >
           <div

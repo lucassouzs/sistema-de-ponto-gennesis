@@ -178,3 +178,13 @@ export function getKanbanLabelTextColor(background: string): string {
   );
 }
 
+/** Estilo de superfície da coluna (tint da cor da bolinha). */
+export function getKanbanColumnSurfaceStyle(
+  color: string | null | undefined,
+): { ['--kanban-column-accent']: string } {
+  const accent = (color || '#6B7280').trim() || '#6B7280';
+  return {
+    ['--kanban-column-accent']: accent,
+  };
+}
+
