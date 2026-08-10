@@ -45,7 +45,11 @@ import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import api from '@/lib/api';
 import { formatDateBr, parseDateSafe } from '@/lib/dateTimeBr';
-import { exportFinancialControlEntries } from '@/lib/exportFinancialControl';
+import {
+  exportFinancialControlEntries,
+  exportFinancialControlEntriesPdf,
+  type FinancialControlExportFormat,
+} from '@/lib/exportFinancialControl';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   formatFinancialControlObservationDisplay,
@@ -58,6 +62,7 @@ import {
   isFinancialControlPaidStatus,
 } from '@/lib/financialControlStatus';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { useBrandingLogo } from '@/hooks/useBrandingLogo';
 
 const MONTH_GROUP_PAGE_SIZE = 25;
 
@@ -197,6 +202,21 @@ function formatDate(value: string | null | undefined): string {
   return formatDateBr(value, '—');
 }
 
+/** Filtra emissionDate dentro do intervalo inclusivo [fromYmd, toYmd] (YYYY-MM-DD). */
+function matchesEmissionRange(
+  emissionDate: string | null | undefined,
+  fromYmd: string,
+  toYmd: string
+): boolean {
+  if (!emissionDate) return false;
+  const d = parseDateSafe(emissionDate);
+  if (!d || d.getFullYear() < 1990) return false;
+  const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (fromYmd && ymd < fromYmd) return false;
+  if (toYmd && ymd > toYmd) return false;
+  return Boolean(fromYmd || toYmd);
+}
+
 /**
  * Converte a string digitada pelo usuário (ex.: "5000", "5.000,00", "5000,5") em um número.
  * Retorna null para valores inválidos/vazios.
@@ -321,6 +341,7 @@ function entryToForm(entry: FinancialControlEntry): EntryFormState {
 
 export default function ControleFinanceiroPage() {
   const queryClient = useQueryClient();
+  const { useUnbBranding } = useBrandingLogo();
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -329,6 +350,8 @@ export default function ControleFinanceiroPage() {
   const [filters, setFilters] = useState({
     year: currentYear,
     month: currentMonth,
+    emissionFrom: '',
+    emissionTo: '',
     status: '' as '' | FinancialControlStatus,
     search: '',
     overdueOnly: false,
@@ -339,9 +362,13 @@ export default function ControleFinanceiroPage() {
   const [editingEntry, setEditingEntry] = useState<FinancialControlEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<FinancialControlExportFormat>('excel');
+  const [isExporting, setIsExporting] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchExpanded = searchOpen || filters.search.trim().length > 0;
+  const hasEmissionFilter = Boolean(filters.emissionFrom || filters.emissionTo);
 
   useEffect(() => {
     if (!searchExpanded) return;
@@ -370,14 +397,17 @@ export default function ControleFinanceiroPage() {
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.append('consorcio', consorcio);
-    if (filters.year > 0) params.append('year', String(filters.year));
-    if (filters.month > 0) params.append('month', String(filters.month));
+    // Com filtro de emissão, não restringe paymentYear/Month na API.
+    if (!hasEmissionFilter) {
+      if (filters.year > 0) params.append('year', String(filters.year));
+      if (filters.month > 0) params.append('month', String(filters.month));
+    }
     if (filters.status && filters.status !== 'AGUARDAR_NOTA') {
       params.append('status', filters.status);
     }
     if (filters.search.trim()) params.append('search', filters.search.trim());
     return params.toString();
-  }, [consorcio, filters]);
+  }, [consorcio, filters, hasEmissionFilter]);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['financial-control', consorcio, queryParams],
@@ -389,12 +419,24 @@ export default function ControleFinanceiroPage() {
 
   const rawEntries = data || [];
 
-  // Filtros de status (aguardar nota) e "apenas em atraso" no cliente.
+  // Filtros de status, data de emissão e "apenas em atraso" no cliente.
   const entries = useMemo(() => {
     let result = rawEntries;
     if (filters.status === 'AGUARDAR_NOTA') {
       result = result.filter(
         (entry) => entry.status === 'AGUARDAR_NOTA' || entry.status === 'PAGO',
+      );
+    }
+    if (hasEmissionFilter) {
+      let from = filters.emissionFrom;
+      let to = filters.emissionTo;
+      if (from && to && from > to) {
+        const swap = from;
+        from = to;
+        to = swap;
+      }
+      result = result.filter((entry) =>
+        matchesEmissionRange(entry.emissionDate, from, to)
       );
     }
     if (!filters.overdueOnly) return result;
@@ -408,7 +450,14 @@ export default function ControleFinanceiroPage() {
       if (!due || due.getFullYear() < 1990) return false;
       return due < todayStart;
     });
-  }, [rawEntries, filters.status, filters.overdueOnly]);
+  }, [
+    rawEntries,
+    filters.status,
+    filters.emissionFrom,
+    filters.emissionTo,
+    filters.overdueOnly,
+    hasEmissionFilter,
+  ]);
 
   const listEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
@@ -482,8 +531,40 @@ export default function ControleFinanceiroPage() {
   const hasActivePeriodFilter =
     filters.year !== currentYear ||
     filters.month !== currentMonth ||
+    hasEmissionFilter ||
     filters.status !== '' ||
     filters.overdueOnly;
+
+  const exportFilterSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (hasEmissionFilter) {
+      const from = filters.emissionFrom
+        ? formatDateBr(filters.emissionFrom, filters.emissionFrom)
+        : null;
+      const to = filters.emissionTo
+        ? formatDateBr(filters.emissionTo, filters.emissionTo)
+        : null;
+      if (from && to) parts.push(`Emissão: ${from} a ${to}`);
+      else if (from) parts.push(`Emissão: a partir de ${from}`);
+      else if (to) parts.push(`Emissão: até ${to}`);
+    } else {
+      if (filters.year > 0) parts.push(`Ano: ${filters.year}`);
+      else parts.push('Ano: todos');
+      if (filters.month > 0) {
+        parts.push(`Mês: ${MONTHS_PT[filters.month - 1] ?? filters.month}`);
+      } else {
+        parts.push('Mês: todos');
+      }
+    }
+    if (filters.status) {
+      const label =
+        STATUS_FILTER_OPTIONS.find((o) => o.value === filters.status)?.label || filters.status;
+      parts.push(`Status: ${label}`);
+    }
+    if (filters.overdueOnly) parts.push('Apenas em atraso');
+    if (filters.search.trim()) parts.push(`Busca: ${filters.search.trim()}`);
+    return parts.join(' · ');
+  }, [filters, hasEmissionFilter]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -578,21 +659,53 @@ export default function ControleFinanceiroPage() {
     deleteMutation.mutate(id);
   };
 
-  const handleExport = () => {
+  const buildExportSuffix = () => {
+    const yearPart = filters.year > 0 ? String(filters.year) : 'todos-anos';
+    const monthPart =
+      filters.month > 0 ? `-${String(filters.month).padStart(2, '0')}` : '';
+    const emissionPart =
+      filters.emissionFrom || filters.emissionTo
+        ? `-emissao-${filters.emissionFrom || 'inicio'}_a_${filters.emissionTo || 'fim'}`
+        : '';
+    const statusPart = filters.status ? `-${filters.status.toLowerCase()}` : '';
+    return `${consorcio}-${yearPart}${monthPart}${emissionPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
+  };
+
+  const openExportModal = () => {
     if (listEntries.length === 0) {
       toast.error('Nenhum lançamento para exportar com os filtros atuais.');
       return;
     }
+    setExportFormat('excel');
+    setIsExportModalOpen(true);
+  };
+
+  const handleExportConfirm = async () => {
+    if (listEntries.length === 0) {
+      toast.error('Nenhum lançamento para exportar com os filtros atuais.');
+      return;
+    }
+    setIsExporting(true);
     try {
-      const yearPart = filters.year > 0 ? String(filters.year) : 'todos-anos';
-      const monthPart =
-        filters.month > 0 ? `-${String(filters.month).padStart(2, '0')}` : '';
-      const statusPart = filters.status ? `-${filters.status.toLowerCase()}` : '';
-      const suffix = `${consorcio}-${yearPart}${monthPart}${statusPart}_${new Date().toISOString().slice(0, 10)}`;
-      exportFinancialControlEntries(listEntries, suffix);
-      toast.success(`${listEntries.length} lançamento(s) exportado(s).`);
+      const suffix = buildExportSuffix();
+      if (exportFormat === 'pdf') {
+        await exportFinancialControlEntriesPdf(listEntries, suffix, {
+          consorcioLabel: FINANCIAL_CONTROL_CONSORCIO_LABELS[consorcio],
+          filterSummary: exportFilterSummary,
+          useUnbBranding,
+        });
+        toast.success(`PDF gerado com ${listEntries.length} lançamento(s).`);
+      } else {
+        exportFinancialControlEntries(listEntries, suffix);
+        toast.success(`${listEntries.length} lançamento(s) exportado(s) em Excel.`);
+      }
+      setIsExportModalOpen(false);
     } catch {
-      toast.error('Erro ao exportar planilha.');
+      toast.error(
+        exportFormat === 'pdf' ? 'Erro ao gerar PDF.' : 'Erro ao exportar planilha.',
+      );
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -696,7 +809,7 @@ export default function ControleFinanceiroPage() {
             </button>
             <button
               type="button"
-              onClick={handleExport}
+              onClick={openExportModal}
               disabled={isLoading || listEntries.length === 0}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
               aria-label="Exportar"
@@ -830,9 +943,11 @@ export default function ControleFinanceiroPage() {
             </Card>
           ) : (
             <MonthGroup
-              key={`${consorcio}-${filters.year}-${filters.month}`}
+              key={`${consorcio}-${filters.year}-${filters.month}-${filters.emissionFrom}-${filters.emissionTo}`}
               year={filters.year}
               month={filters.month}
+              emissionFrom={filters.emissionFrom}
+              emissionTo={filters.emissionTo}
               items={listEntries}
               onEdit={openEditModal}
               onDelete={handleDelete}
@@ -864,9 +979,17 @@ export default function ControleFinanceiroPage() {
                 </label>
                 <StringSingleSelectDropdown
                   value={String(filters.year)}
-                  onChange={(v) => setFilters({ ...filters, year: parseInt(v, 10) })}
+                  onChange={(v) =>
+                    setFilters({
+                      ...filters,
+                      year: parseInt(v, 10),
+                      emissionFrom: '',
+                      emissionTo: '',
+                    })
+                  }
                   options={yearFilterOptions}
                   allowEmpty={false}
+                  disabled={hasEmissionFilter}
                 />
               </div>
 
@@ -876,10 +999,76 @@ export default function ControleFinanceiroPage() {
                 </label>
                 <StringSingleSelectDropdown
                   value={String(filters.month)}
-                  onChange={(v) => setFilters({ ...filters, month: parseInt(v, 10) })}
+                  onChange={(v) =>
+                    setFilters({
+                      ...filters,
+                      month: parseInt(v, 10),
+                      emissionFrom: '',
+                      emissionTo: '',
+                    })
+                  }
                   options={monthFilterOptions}
                   allowEmpty={false}
+                  disabled={hasEmissionFilter}
                 />
+              </div>
+
+              <div className="sm:col-span-2">
+                <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Data de emissão
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="cf-emission-from"
+                      className="mb-2 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                    >
+                      De
+                    </label>
+                    <input
+                      id="cf-emission-from"
+                      type="date"
+                      value={filters.emissionFrom}
+                      max={filters.emissionTo || undefined}
+                      onChange={(e) => {
+                        const emissionFrom = e.target.value;
+                        setFilters({
+                          ...filters,
+                          emissionFrom,
+                          year: emissionFrom || filters.emissionTo ? 0 : filters.year || currentYear,
+                          month:
+                            emissionFrom || filters.emissionTo ? 0 : filters.month || currentMonth,
+                        });
+                      }}
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-red-400"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="cf-emission-to"
+                      className="mb-2 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                    >
+                      Até
+                    </label>
+                    <input
+                      id="cf-emission-to"
+                      type="date"
+                      value={filters.emissionTo}
+                      min={filters.emissionFrom || undefined}
+                      onChange={(e) => {
+                        const emissionTo = e.target.value;
+                        setFilters({
+                          ...filters,
+                          emissionTo,
+                          year: filters.emissionFrom || emissionTo ? 0 : filters.year || currentYear,
+                          month:
+                            filters.emissionFrom || emissionTo ? 0 : filters.month || currentMonth,
+                        });
+                      }}
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:focus:ring-red-400"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="sm:col-span-2">
@@ -950,6 +1139,8 @@ export default function ControleFinanceiroPage() {
                   setFilters({
                     year: currentYear,
                     month: currentMonth,
+                    emissionFrom: '',
+                    emissionTo: '',
                     status: '',
                     search: filters.search,
                     overdueOnly: false,
@@ -965,6 +1156,100 @@ export default function ControleFinanceiroPage() {
                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Modal de Exportação */}
+        <Modal
+          isOpen={isExportModalOpen}
+          onClose={() => {
+            if (!isExporting) setIsExportModalOpen(false);
+          }}
+          title="Exportar lançamentos"
+          size="md"
+          closeOnOverlayClick={!isExporting}
+        >
+          <div className="space-y-5">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Serão exportados{' '}
+              <strong className="font-medium text-gray-800 dark:text-gray-200">
+                {listEntries.length} lançamento(s)
+              </strong>{' '}
+              com os filtros atuais
+              {exportFilterSummary ? (
+                <>
+                  :{' '}
+                  <span className="text-gray-700 dark:text-gray-300">{exportFilterSummary}</span>
+                </>
+              ) : (
+                '.'
+              )}
+            </p>
+
+            <div>
+              <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Formato</p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => setExportFormat('excel')}
+                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                    exportFormat === 'excel'
+                      ? 'border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/30'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/60'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Excel</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Planilha .xlsx com todas as colunas
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => setExportFormat('pdf')}
+                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                    exportFormat === 'pdf'
+                      ? 'border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/30'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/60'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">PDF</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Relatório em paisagem para impressão
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={() => setIsExportModalOpen(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isExporting || listEntries.length === 0}
+                onClick={() => void handleExportConfirm()}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Gerando…
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    Exportar
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -1180,6 +1465,8 @@ function ImportModeRadio({
 interface MonthGroupProps {
   year: number;
   month: number;
+  emissionFrom?: string;
+  emissionTo?: string;
   items: FinancialControlEntry[];
   onEdit: (entry: FinancialControlEntry) => void;
   onDelete: (id: string) => void;
@@ -1231,13 +1518,33 @@ function getEntryRemainingDays(entry: FinancialControlEntry): number | null {
   return entry.remainingDays ?? null;
 }
 
-function MonthGroup({ year, month, items, onEdit, onDelete, deletingId }: MonthGroupProps) {
+function MonthGroup({
+  year,
+  month,
+  emissionFrom,
+  emissionTo,
+  items,
+  onEdit,
+  onDelete,
+  deletingId,
+}: MonthGroupProps) {
   const monthLabel = month > 0 ? MONTHS_PT[month - 1] || '' : '';
   const titleMonth = monthLabel
     ? monthLabel.charAt(0) + monthLabel.slice(1).toLowerCase()
     : '';
-  const listTitle =
-    year > 0 && month > 0
+  const emissionTitle = (() => {
+    if (!emissionFrom && !emissionTo) return null;
+    const from = emissionFrom ? formatDateBr(emissionFrom, emissionFrom) : null;
+    const to = emissionTo ? formatDateBr(emissionTo, emissionTo) : null;
+    if (from && to) {
+      return from === to ? `Emissão em ${from}` : `Emissão de ${from} a ${to}`;
+    }
+    if (from) return `Emissão a partir de ${from}`;
+    return `Emissão até ${to}`;
+  })();
+  const listTitle = emissionTitle
+    ? emissionTitle
+    : year > 0 && month > 0
       ? `Pagamentos de ${titleMonth} de ${year}`
       : year > 0
         ? `Pagamentos de ${year}`
