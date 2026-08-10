@@ -17,6 +17,8 @@ export type LoadPdfBrandingLogoOptions = {
    * (localStorage / centro de custo UNB). Relatórios multi-contrato devem usar isso.
    */
   userBrandingOnly?: boolean;
+  /** Quando definido, força Gennesis (false) ou Predial/UNB (true), ignorando storage/rótulos. */
+  forceUnbBranding?: boolean;
   maxW?: number;
   maxH?: number;
   extraCandidates?: string[];
@@ -101,13 +103,17 @@ export async function loadPdfBrandingLogo(
   const {
     contextLabels = [],
     userBrandingOnly = false,
+    forceUnbBranding,
     maxW = 36,
     maxH = 22,
     extraCandidates = [],
   } = options;
-  const useUnb = userBrandingOnly
-    ? readStoredUnbBranding()
-    : shouldUseUnbBranding(...contextLabels);
+  const useUnb =
+    typeof forceUnbBranding === 'boolean'
+      ? forceUnbBranding
+      : userBrandingOnly
+        ? readStoredUnbBranding()
+        : shouldUseUnbBranding(...contextLabels);
   const candidates = [...extraCandidates, ...resolvePdfLogoCandidates(useUnb)];
   const cacheKey = `v2|${useUnb ? 'unb' : 'gen'}|${maxW}x${maxH}|${candidates.join(',')}`;
 

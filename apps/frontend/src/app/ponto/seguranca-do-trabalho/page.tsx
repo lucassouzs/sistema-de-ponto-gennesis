@@ -357,8 +357,8 @@ export default function SegurancaDoTrabalhoPage() {
   const [filterResultado, setFilterResultado] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterPosition, setFilterPosition] = useState('');
-  const [filterMes, setFilterMes] = useState(() => String(new Date().getMonth() + 1));
-  const [filterAno, setFilterAno] = useState(() => String(new Date().getFullYear()));
+  const [filterMes, setFilterMes] = useState('');
+  const [filterAno, setFilterAno] = useState('');
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
@@ -839,8 +839,8 @@ export default function SegurancaDoTrabalhoPage() {
     setFilterResultado('');
     setFilterDepartment('');
     setFilterPosition('');
-    setFilterAno(String(new Date().getFullYear()));
-    setFilterMes(String(new Date().getMonth() + 1));
+    setFilterAno('');
+    setFilterMes('');
   };
 
   const resetFormState = () => {

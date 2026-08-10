@@ -126,7 +126,12 @@ export function readStoredUnbBranding(): boolean {
   return localStorage.getItem(UNB_BRANDING_STORAGE_KEY) === '1';
 }
 
+export function persistUnbBrandingFlag(isUnb: boolean): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(UNB_BRANDING_STORAGE_KEY, isUnb ? '1' : '0');
+}
+
 export function persistUnbBranding(costCenter: string | null | undefined): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(UNB_BRANDING_STORAGE_KEY, isUnbCostCenter(costCenter) ? '1' : '0');
+  persistUnbBrandingFlag(isUnbCostCenter(costCenter));
 }
