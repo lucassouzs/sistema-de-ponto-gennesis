@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 export interface KanbanCardLabel {
   color: string;
   text: string;
@@ -181,10 +183,10 @@ export function getKanbanLabelTextColor(background: string): string {
 /** Estilo de superfície da coluna (tint da cor da bolinha). */
 export function getKanbanColumnSurfaceStyle(
   color: string | null | undefined,
-): { ['--kanban-column-accent']: string } {
+): CSSProperties {
   const accent = (color || '#6B7280').trim() || '#6B7280';
   return {
     ['--kanban-column-accent']: accent,
-  };
+  } as CSSProperties;
 }
 
