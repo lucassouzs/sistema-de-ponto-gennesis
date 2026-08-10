@@ -168,10 +168,12 @@ function timelineVisual(type: TimelineItemType): {
 
 const barColor = '#dc2626';
 
-const PIE_COLORS_LIGHT = ['#b91c1c', '#0f766e', '#1e40af'];
-const PIE_COLORS_DARK = ['#f87171', '#2dd4bf', '#93c5fd'];
-const PIE_OTHERS_LIGHT = '#94a3b8';
-const PIE_OTHERS_DARK = '#64748b';
+const PIE_COLORS_LIGHT = ['#e11d48', '#0d9488', '#2563eb'];
+const PIE_COLORS_DARK = ['#fb7185', '#2dd4bf', '#60a5fa'];
+const PIE_OTHERS_LIGHT = '#cbd5e1';
+const PIE_OTHERS_DARK = '#475569';
+const PIE_TRACK_LIGHT = '#f1f5f9';
+const PIE_TRACK_DARK = '#334155';
 
 type TopPageSlice = {
   path: string;
@@ -283,9 +285,9 @@ export function EmployeeActivityInsights({
     ];
   }, [topPagesFiltered, isDark, topPagesTotal]);
 
-  const pieStroke = isDark ? '#1f2937' : '#ffffff';
-  const pieCenterMain = isDark ? '#f9fafb' : '#111827';
-  const pieCenterMuted = isDark ? '#9ca3af' : '#6b7280';
+  const pieTrack = isDark ? PIE_TRACK_DARK : PIE_TRACK_LIGHT;
+  const pieCenterMain = isDark ? '#f8fafc' : '#0f172a';
+  const pieCenterMuted = isDark ? '#94a3b8' : '#64748b';
 
   const peakHour = useMemo(() => {
     const hours = data?.byHour || [];
@@ -373,29 +375,38 @@ export function EmployeeActivityInsights({
               ) : (
                 <div className="flex min-h-0 flex-1 flex-col">
                   <div className="flex min-h-0 flex-1 items-start justify-center pt-1 pb-3">
-                    <div className="h-[210px] w-[210px] shrink-0">
+                    <div className="relative h-[220px] w-[220px] shrink-0">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
+                          <Pie
+                            data={[{ value: 1 }]}
+                            dataKey="value"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={62}
+                            outerRadius={96}
+                            fill={pieTrack}
+                            stroke="none"
+                            isAnimationActive={false}
+                          />
                           <Pie
                             data={topPagesData}
                             dataKey="count"
                             nameKey="name"
                             cx="50%"
                             cy="50%"
-                            innerRadius={58}
-                            outerRadius={92}
-                            paddingAngle={2}
-                            stroke={pieStroke}
-                            strokeWidth={2}
-                            isAnimationActive={false}
+                            innerRadius={62}
+                            outerRadius={96}
+                            paddingAngle={topPagesData.length > 1 ? 3 : 0}
+                            cornerRadius={8}
+                            stroke="none"
+                            isAnimationActive
+                            animationBegin={0}
+                            animationDuration={650}
+                            animationEasing="ease-out"
                           >
                             {topPagesData.map((entry) => (
-                              <Cell
-                                key={entry.path}
-                                fill={entry.color}
-                                stroke={pieStroke}
-                                strokeWidth={2}
-                              />
+                              <Cell key={entry.path} fill={entry.color} stroke="none" />
                             ))}
                             <Label
                               position="center"
@@ -406,19 +417,21 @@ export function EmployeeActivityInsights({
                                   <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle">
                                     <tspan
                                       x={cx}
-                                      y={(cy || 0) - 4}
+                                      y={(cy || 0) - 6}
                                       fill={pieCenterMain}
-                                      fontSize={22}
+                                      fontSize={28}
                                       fontWeight={700}
+                                      letterSpacing="-0.02em"
                                     >
                                       {topPagesTotal}
                                     </tspan>
                                     <tspan
                                       x={cx}
-                                      y={(cy || 0) + 14}
+                                      y={(cy || 0) + 16}
                                       fill={pieCenterMuted}
                                       fontSize={11}
-                                      fontWeight={500}
+                                      fontWeight={600}
+                                      style={{ textTransform: 'uppercase', letterSpacing: '0.12em' }}
                                     >
                                       visitas
                                     </tspan>
@@ -435,7 +448,7 @@ export function EmployeeActivityInsights({
 
                               return (
                                 <div
-                                  className="rounded-[10px] px-3 py-2 text-xs shadow-lg"
+                                  className="rounded-xl px-3.5 py-2.5 text-xs shadow-xl backdrop-blur-sm"
                                   style={{
                                     backgroundColor: chartTooltipBg,
                                     border: `1px solid ${chartTooltipBorder}`,
@@ -478,33 +491,47 @@ export function EmployeeActivityInsights({
                       </ResponsiveContainer>
                     </div>
                   </div>
-                  <ul className="grid w-full min-w-0 shrink-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                  <ul className="grid w-full min-w-0 shrink-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {topPagesData.map((item) => (
                       <li
                         key={item.path}
-                        className="group relative flex min-w-0 items-center gap-2 rounded-md px-1 py-1"
+                        className="group relative min-w-0 rounded-lg px-1.5 py-1.5"
                         title={item.isOthers ? undefined : item.path}
                       >
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: item.color }}
-                          aria-hidden
-                        />
-                        <span
-                          className="min-w-0 flex-1 truncate text-xs font-medium"
-                          style={{ color: isDark ? '#f3f4f6' : '#111827' }}
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white dark:ring-gray-800"
+                            style={{ backgroundColor: item.color }}
+                            aria-hidden
+                          />
+                          <span
+                            className="min-w-0 flex-1 truncate text-xs font-medium"
+                            style={{ color: isDark ? '#f1f5f9' : '#0f172a' }}
+                          >
+                            {item.name}
+                          </span>
+                          <span
+                            className="shrink-0 text-xs font-semibold tabular-nums"
+                            style={{ color: isDark ? '#cbd5e1' : '#475569' }}
+                          >
+                            {item.pct}%
+                          </span>
+                        </div>
+                        <div
+                          className="h-1.5 w-full overflow-hidden rounded-full"
+                          style={{ backgroundColor: pieTrack }}
                         >
-                          {item.name}
-                        </span>
-                        <span
-                          className="shrink-0 text-xs tabular-nums"
-                          style={{ color: isDark ? '#9ca3af' : '#6b7280' }}
-                        >
-                          {item.pct}%
-                        </span>
+                          <div
+                            className="h-full rounded-full transition-[width] duration-500"
+                            style={{
+                              width: `${Math.max(item.pct, item.count > 0 ? 4 : 0)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
                         {item.isOthers && item.others?.length ? (
                           <div
-                            className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-max min-w-[10rem] max-w-[16rem] rounded-[10px] px-3 py-2 text-xs shadow-lg group-hover:block"
+                            className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-max min-w-[10rem] max-w-[16rem] rounded-xl px-3.5 py-2.5 text-xs shadow-xl group-hover:block"
                             style={{
                               backgroundColor: chartTooltipBg,
                               border: `1px solid ${chartTooltipBorder}`,
