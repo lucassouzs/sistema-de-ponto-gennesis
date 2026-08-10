@@ -570,6 +570,7 @@ export function useRoutePermission(route: string) {
     '/ponto/orcamento': canAccessOrcamentoRoutePage,
     '/ponto/contratos': isAdministrator || can(pk('/ponto/contratos')),
     '/ponto/contratos/controle-geral': isAdministrator || can(pk('/ponto/contratos/controle-geral')),
+    '/ponto/contratos/socios': isAdministrator || can(pk('/ponto/contratos/socios')),
     '/ponto/contratos/gastos-operacionais':
       isAdministrator || can(pk('/ponto/contratos/gastos-operacionais')),
     '/ponto/pleitos-gerados': isAdministrator || can(pk('/ponto/pleitos-gerados')),

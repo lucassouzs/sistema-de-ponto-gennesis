@@ -17,6 +17,14 @@ export const CONTROLE_GERAL_GASTOS_VISIBLE_LOCALITIES = [
   'PARAIBA'
 ] as const satisfies readonly GastosOperacionaisLocality[];
 
+/**
+ * Contratos extras sempre mesclados no Controle Geral (fora das localidades padrão),
+ * ex.: contratos de sócios em outras regiões.
+ */
+export const CONTROLE_GERAL_EXTRA_CONTRACTS = [
+  'MAPA - UMIPI DE JEQUIE'
+] as const;
+
 export function resolveVisibleLocalityItems(
   visibleLocalities?: readonly GastosOperacionaisLocality[]
 ) {
@@ -135,6 +143,7 @@ const CONTRACTS_BY_LOCALITY: Record<GastosOperacionaisLocality, readonly string[
     'CEHAB PE',
     'INCRA - MÃO DE OBRA',
     'INCRA - SERVIÇOS EVENTUAIS',
+    'MAPA - UMIPI DE JEQUIE',
     'PARQUE TRES RUAS - JOAO PESSOA',
     'RECEITA FEDERAL - MÃO DE OBRA',
     'RN - ADM LOCAL',

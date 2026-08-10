@@ -464,6 +464,12 @@ try {
       } catch (e) {
         console.error('Erro ao sincronizar permissões com o registro de módulos:', e);
       }
+
+      try {
+        startPncpSyncScheduler();
+      } catch (e) {
+        console.error('[pncp-sync] falha ao agendar:', e);
+      }
     })();
 
     console.log('');
@@ -477,12 +483,6 @@ try {
     console.log('📋 Licitações: checklist-template + PATCH /:id/analise-manual + /:id/finalizar-analise ativos');
     console.log('═══════════════════════════════════════');
     console.log('');
-
-    try {
-      startPncpSyncScheduler();
-    } catch (e) {
-      console.error('[pncp-sync] falha ao agendar:', e);
-    }
 
     // Pré-aquecer os datasets Fluig em background para carregamento instantâneo
     if (process.env.FLUIG_CONSUMER_KEY && process.env.FLUIG_ACCESS_TOKEN) {
@@ -502,4 +502,5 @@ try {
   process.exit(1);
 }
 
+/** Hot-reload: MAPA NFS. */
 export default app;

@@ -194,9 +194,24 @@ export class ControleNfsController {
           }
         : undefined;
 
-      // Totals (com cache) + recebido mensal compartilham o mesmo Map de abas processadas.
-      const summary = await fetchControleNfsTotalsSummary(forceRefresh, filters);
-      const processedByTabKey = await loadProcessedNfsSheetsByTabKey(false);
+      const processedByTabKey = await loadProcessedNfsSheetsByTabKey(forceRefresh);
+
+      // Recovery: carga paralela pode falhar na aba MAPA (rate-limit Google).
+      if (!(processedByTabKey.get('mapa')?.rows?.length)) {
+        try {
+          await fetchControleNfsSheet('mapa', 'MAPA', true);
+          const recovered = await loadProcessedNfsSheetsByTabKey(false);
+          const mapa = recovered.get('mapa');
+          if (mapa) processedByTabKey.set('mapa', mapa);
+        } catch (error) {
+          console.warn(
+            '[controle-nfs] recovery MAPA falhou:',
+            error instanceof Error ? error.message : error
+          );
+        }
+      }
+
+      const summary = await fetchControleNfsTotalsSummary(forceRefresh, filters, processedByTabKey);
       const nfsLotFaturamento =
         summary.faturamentoByLot ??
         (await fetchNfsLotFaturamento(toNfsTotalsComputeOptions(filters), processedByTabKey));
