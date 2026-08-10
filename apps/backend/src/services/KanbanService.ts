@@ -294,6 +294,23 @@ function formatCard(card: {
   };
 }
 
+const BOARD_LIST_DESCRIPTION_MAX = 240;
+const BOARD_LIST_MEMBERS_MAX = 4;
+
+/** Card no quadro: payload enxuto (sem checklist completo; descrição truncada). */
+function formatBoardListCard(card: Parameters<typeof formatCard>[0]) {
+  const formatted = formatCard(card);
+  const desc = String(formatted.description ?? '');
+  return {
+    ...formatted,
+    description:
+      desc.length > BOARD_LIST_DESCRIPTION_MAX
+        ? `${desc.slice(0, BOARD_LIST_DESCRIPTION_MAX)}…`
+        : desc,
+    members: formatted.members.slice(0, BOARD_LIST_MEMBERS_MAX),
+  };
+}
+
 export type KanbanChecklistItemDto = {
   id: string;
   cardId: string;
@@ -345,24 +362,13 @@ function formatChecklistItem(item: {
 
 const memberUserSelect = { id: true, name: true, profilePhotoUrl: true } as const;
 
-/** Include da listagem do quadro (membros leves + checklist para visão expandida nos cards). */
+/** Include da listagem do quadro — leve (sem checklistItems; progresso vem de totalTasks/completedTasks). */
 const boardListCardInclude = {
   assignee: { select: memberUserSelect },
   members: {
     orderBy: { createdAt: 'asc' as const },
+    take: BOARD_LIST_MEMBERS_MAX,
     include: { user: { select: memberUserSelect } },
-  },
-  checklistItems: {
-    orderBy: { position: 'asc' as const },
-    select: {
-      id: true,
-      cardId: true,
-      title: true,
-      isDone: true,
-      position: true,
-      dueDate: true,
-      assigneeUserId: true,
-    },
   },
   _count: { select: { comments: true, attachments: true } },
 } as const;
@@ -496,7 +502,7 @@ function formatBoardResponse(
       color: col.color,
       position: col.position,
       limit: col.cardLimit ?? undefined,
-      cards: col.cards.map(formatCard),
+      cards: col.cards.map(formatBoardListCard),
     })),
   };
 }

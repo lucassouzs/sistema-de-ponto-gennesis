@@ -1,9 +1,28 @@
 import type { KanbanBoard } from '@/lib/kanban';
 
-const STORAGE_PREFIX = 'kanban-board-cache:v3:';
+const STORAGE_PREFIX = 'kanban-board-cache:v4:';
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingWrite: { key: string; board: KanbanBoard } | null = null;
+
+/** Remove campos pesados antes de gravar no sessionStorage (importações grandes). */
+function slimBoardForCache(board: KanbanBoard): KanbanBoard {
+  return {
+    ...board,
+    columns: board.columns.map((col) => ({
+      ...col,
+      cards: col.cards.map((card) => {
+        const desc = String(card.description ?? '');
+        return {
+          ...card,
+          checklistItems: undefined,
+          description: desc.length > 240 ? `${desc.slice(0, 240)}…` : desc,
+          members: (card.members ?? []).slice(0, 4),
+        };
+      }),
+    })),
+  };
+}
 
 export function readKanbanBoardCache(departmentKey: string): KanbanBoard | undefined {
   if (typeof sessionStorage === 'undefined') return undefined;
@@ -19,7 +38,7 @@ export function readKanbanBoardCache(departmentKey: string): KanbanBoard | undef
 export function writeKanbanBoardCache(departmentKey: string, board: KanbanBoard): void {
   if (typeof sessionStorage === 'undefined') return;
   try {
-    sessionStorage.setItem(STORAGE_PREFIX + departmentKey, JSON.stringify(board));
+    sessionStorage.setItem(STORAGE_PREFIX + departmentKey, JSON.stringify(slimBoardForCache(board)));
   } catch {
     /* quota ou modo privado */
   }

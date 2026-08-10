@@ -1400,10 +1400,14 @@ function KanbanColumnComponent({
   const overIndex = isTarget ? dragState.overIndex : null;
   const cardDnDDisabled = readOnly || isColumnDragActive || disableCardDnD;
   const isChecklistView = cardViewMode === 'checklist';
-  const visibleCards = isChecklistView
-    ? column.cards
-    : column.cards.slice(0, visibleCount);
-  const hasMoreCards = !isChecklistView && column.cards.length > visibleCount;
+  const visibleCards = column.cards.slice(0, visibleCount);
+  const hasMoreCards = column.cards.length > visibleCount;
+
+  const loadMoreCards = useCallback(() => {
+    setVisibleCount((current) =>
+      Math.min(current + KANBAN_COLUMN_VISIBLE_BATCH, column.cards.length),
+    );
+  }, [column.cards.length]);
 
   const updateBottomFade = useCallback(() => {
     const el = cardsScrollRef.current;
@@ -1424,14 +1428,36 @@ function KanbanColumnComponent({
   useEffect(() => {
     const el = cardsScrollRef.current;
     if (!el || !isChecklistView) return;
-    el.addEventListener('scroll', updateBottomFade, { passive: true });
+    const onScroll = () => {
+      updateBottomFade();
+      if (column.cards.length <= visibleCount) return;
+      // Evita carregar tudo de uma vez quando ainda não há overflow.
+      if (el.scrollHeight <= el.clientHeight + 4) return;
+      if (el.scrollTop + el.clientHeight >= el.scrollHeight - 96) {
+        loadMoreCards();
+      }
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
     const ro = new ResizeObserver(() => updateBottomFade());
     ro.observe(el);
     return () => {
-      el.removeEventListener('scroll', updateBottomFade);
+      el.removeEventListener('scroll', onScroll);
       ro.disconnect();
     };
-  }, [updateBottomFade, isChecklistView]);
+  }, [updateBottomFade, isChecklistView, column.cards.length, visibleCount, loadMoreCards]);
+
+  // Preenche a altura da coluna na visão checklist sem montar todos os cards de uma vez.
+  useEffect(() => {
+    if (!isChecklistView || !hasMoreCards) return;
+    const el = cardsScrollRef.current;
+    if (!el) return;
+    const id = requestAnimationFrame(() => {
+      if (el.scrollHeight <= el.clientHeight + 4) {
+        loadMoreCards();
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isChecklistView, hasMoreCards, visibleCount, loadMoreCards]);
 
   function resolveColumnCardDropIndex(clientY: number): number {
     if (!columnRootRef.current) return visibleCards.length;
@@ -1440,7 +1466,7 @@ function KanbanColumnComponent({
 
   useEffect(() => {
     setVisibleCount(KANBAN_COLUMN_VISIBLE_BATCH);
-  }, [column.id]);
+  }, [column.id, cardViewMode]);
 
   useEffect(() => {
     if (!menuOpen) setMenuView('main');
@@ -1880,14 +1906,10 @@ function KanbanColumnComponent({
         {hasMoreCards && (
           <button
             type="button"
-            onClick={() =>
-              setVisibleCount((current) =>
-                Math.min(current + KANBAN_COLUMN_VISIBLE_BATCH, column.cards.length),
-              )
-            }
+            onClick={loadMoreCards}
             className="mt-1 w-full shrink-0 rounded-xl border border-gray-200/80 bg-white/70 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-white hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
           >
-            Ver mais
+            Ver mais ({column.cards.length - visibleCount})
           </button>
         )}
         {column.cards.length === 0 && !cardDnDDisabled && (
@@ -2915,6 +2937,9 @@ function KanbanPage() {
   });
   const dragRef = useRef(dragState);
   const columnDragRef = useRef(columnDrag);
+  const cardDragOverRafRef = useRef<number | null>(null);
+  const pendingCardDragOverRef = useRef<{ columnId: string; index: number | null } | null>(null);
+  const prefetchCardTimerRef = useRef<Map<string, number>>(new Map());
   const columnDropHandledRef = useRef(false);
   const columnDragIdRef = useRef<string | null>(null);
   const columnDragOverIndexRef = useRef<number | null>(null);
@@ -3187,11 +3212,17 @@ function KanbanPage() {
   const prefetchKanbanCard = useCallback(
     (cardId: string) => {
       if (isOptimisticKanbanCardId(cardId)) return;
-      void queryClient.prefetchQuery({
-        queryKey: kanbanCardQueryKey(cardId),
-        queryFn: () => fetchKanbanCard(cardId),
-        staleTime: 3 * 60 * 1000,
-      });
+      const existing = prefetchCardTimerRef.current.get(cardId);
+      if (existing) window.clearTimeout(existing);
+      const timer = window.setTimeout(() => {
+        prefetchCardTimerRef.current.delete(cardId);
+        void queryClient.prefetchQuery({
+          queryKey: kanbanCardQueryKey(cardId),
+          queryFn: () => fetchKanbanCard(cardId),
+          staleTime: 3 * 60 * 1000,
+        });
+      }, 280);
+      prefetchCardTimerRef.current.set(cardId, timer);
     },
     [queryClient],
   );
@@ -3398,11 +3429,18 @@ function KanbanPage() {
     if (columnDragRef.current.draggingColumnId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragStateSync((prev) =>
-      prev.overColumnId === columnId && prev.overIndex === (index ?? null)
-        ? prev
-        : { ...prev, overColumnId: columnId, overIndex: index ?? null },
-    );
+    pendingCardDragOverRef.current = { columnId, index: index ?? null };
+    if (cardDragOverRafRef.current != null) return;
+    cardDragOverRafRef.current = window.requestAnimationFrame(() => {
+      cardDragOverRafRef.current = null;
+      const next = pendingCardDragOverRef.current;
+      if (!next) return;
+      setDragStateSync((prev) =>
+        prev.overColumnId === next.columnId && prev.overIndex === next.index
+          ? prev
+          : { ...prev, overColumnId: next.columnId, overIndex: next.index },
+      );
+    });
   }, [setDragStateSync]);
 
   const handleDrop = useCallback(
