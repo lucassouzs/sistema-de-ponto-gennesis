@@ -1,10 +1,21 @@
 import express from 'express';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { SystemDashboardService } from '../services/SystemDashboardService';
 
 const router = express.Router();
 
 router.use(authenticate);
+
+// Endpoint para visão geral do sistema (OCs, RMs, combustível, logística, contratos, financeiro, auditoria)
+router.get('/overview', authorize('EMPLOYEE'), async (req: AuthRequest, res, next) => {
+  try {
+    const data = await SystemDashboardService.getOverview();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Endpoint para métricas administrativas - agora disponível para todos os funcionários
 router.get('/admin', authorize('EMPLOYEE'), async (req: AuthRequest, res, next) => {

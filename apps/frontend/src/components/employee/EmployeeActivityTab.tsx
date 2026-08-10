@@ -339,7 +339,7 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4">
         <Card>
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center">
@@ -448,7 +448,7 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
           />
         }
         belowCharts={
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 items-start gap-4 sm:gap-6 lg:grid-cols-2">
             <Card className={cadastroListClasses.card}>
               <CardHeader className={cadastroListClasses.cardHeader}>
                 <SectionHeader

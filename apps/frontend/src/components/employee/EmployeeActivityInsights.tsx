@@ -330,7 +330,7 @@ export function EmployeeActivityInsights({
   }, [data?.timeline]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
@@ -352,9 +352,9 @@ export function EmployeeActivityInsights({
           Não foi possível carregar os insights.
         </div>
       ) : (
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 sm:gap-6 xl:flex-row xl:items-start">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
           <Card className={`${cadastroListClasses.card} flex h-full min-h-0 flex-col`}>
             <CardHeader className={cadastroListClasses.cardHeader}>
               <SectionHeader
