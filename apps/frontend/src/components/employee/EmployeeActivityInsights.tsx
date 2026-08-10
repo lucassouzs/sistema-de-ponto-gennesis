@@ -352,7 +352,7 @@ export function EmployeeActivityInsights({
           Não foi possível carregar os insights.
         </div>
       ) : (
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
           <div className="flex min-w-0 flex-1 flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card className={`${cadastroListClasses.card} flex h-full min-h-0 flex-col`}>
@@ -618,7 +618,7 @@ export function EmployeeActivityInsights({
 
           </div>
 
-          <Card className={`${cadastroListClasses.card} flex min-h-[28rem] w-full flex-col overflow-hidden xl:w-[min(100%,24rem)] xl:shrink-0 xl:self-stretch`}>
+          <Card className={`${cadastroListClasses.card} flex w-full flex-col xl:w-[min(100%,24rem)] xl:shrink-0`}>
             <CardHeader className={`${cadastroListClasses.cardHeader} shrink-0`}>
               <SectionHeader
                 icon={Activity}
@@ -626,7 +626,7 @@ export function EmployeeActivityInsights({
                 subtitle="Logins, páginas e ações em ordem"
               />
             </CardHeader>
-            <CardContent className={`${cadastroListClasses.cardContent} flex min-h-0 flex-1 flex-col overflow-hidden`}>
+            <CardContent className={cadastroListClasses.cardContent}>
               {data.timeline.length === 0 ? (
                 <CadastroListEmpty
                   icon={Activity}
@@ -634,7 +634,7 @@ export function EmployeeActivityInsights({
                   hint="Ajuste o filtro de datas"
                 />
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                <div>
                   {timelineByDay.map((group) => (
                     <div key={group.dayKey} className="mb-3 last:mb-0">
                       <p className="sticky top-0 z-[2] mb-2 bg-white/95 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:bg-gray-800/95 dark:text-gray-400">
