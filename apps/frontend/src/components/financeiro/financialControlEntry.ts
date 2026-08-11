@@ -32,6 +32,8 @@ export const FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO: FinancialControlConsorcio =
 export const FINANCIAL_CONTROL_OC_CONSORCIO_LABEL = 'Consórcio Predial Brasília';
 export const FINANCIAL_CONTROL_OC_CONSORCIO_FIELD_LABEL = 'Contrato';
 
+export type FinancialControlAttachment = { url: string; name: string };
+
 export interface FinancialControlEntry {
   id: string;
   consorcio: FinancialControlConsorcio;
@@ -52,8 +54,22 @@ export interface FinancialControlEntry {
   remainingDays: number | null;
   receivedNote: string | null;
   notes: string | null;
+  attachments?: FinancialControlAttachment[] | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export function parseFinancialControlAttachments(raw: unknown): FinancialControlAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const url = String((item as { url?: unknown }).url || '').trim();
+      if (!url) return null;
+      const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+      return { url, name };
+    })
+    .filter((item): item is FinancialControlAttachment => Boolean(item));
 }
 
 export const MONTHS_PT = [
@@ -70,6 +86,22 @@ export const MONTHS_PT = [
   'Novembro',
   'Dezembro',
 ];
+
+export function financialControlSupplierSelectOption(supplier: {
+  code?: string | null;
+  name?: string | null;
+  tradeName?: string | null;
+}) {
+  const legalName = String(supplier.name || '').trim();
+  const tradeName = String(supplier.tradeName || '').trim();
+  const displayName = tradeName || legalName;
+  const label = supplier.code ? `${supplier.code} - ${displayName}` : displayName;
+  return {
+    value: label,
+    label,
+    searchText: [supplier.code, legalName, tradeName].filter(Boolean).join(' '),
+  };
+}
 
 export interface EntryFormState {
   id?: string;
@@ -91,6 +123,7 @@ export interface EntryFormState {
   remainingDays: string;
   receivedNote: string;
   notes: string;
+  attachments: FinancialControlAttachment[];
 }
 
 export function parseCurrencyInput(value: string): number | null {
@@ -170,6 +203,7 @@ export function buildInitialForm(
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    attachments: [],
   };
 }
 
@@ -195,6 +229,7 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
       entry.remainingDays !== null && entry.remainingDays !== undefined ? String(entry.remainingDays) : '',
     receivedNote: entry.receivedNote || '',
     notes: entry.notes || '',
+    attachments: parseFinancialControlAttachments(entry.attachments),
   };
 }
 
@@ -227,6 +262,7 @@ export function buildFinancialEntryPayload(form: EntryFormState) {
     remainingDays: computedRemainingDays,
     receivedNote: form.receivedNote || null,
     notes: form.notes || null,
+    attachments: form.attachments,
   };
 }
 
@@ -421,5 +457,6 @@ export function buildFormFromPurchaseOrder(
     remainingDays: '',
     receivedNote: formatOcFinancialControlOriginNote(order.orderNumber),
     notes: rmRef,
+    attachments: [],
   };
 }

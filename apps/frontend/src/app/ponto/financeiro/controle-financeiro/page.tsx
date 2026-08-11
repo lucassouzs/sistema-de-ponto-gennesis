@@ -37,6 +37,7 @@ import { FinancialControlEntryModal } from '@/components/financeiro/FinancialCon
 import {
   FINANCIAL_CONTROL_CONSORCIO_LABELS,
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  parseFinancialControlAttachments,
   resolveNfAndParcelForDisplay,
   type FinancialControlConsorcio,
   type FinancialControlEntry,
@@ -45,6 +46,7 @@ import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import api from '@/lib/api';
+import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import { formatDateBr, parseDateSafe } from '@/lib/dateTimeBr';
 import {
   exportFinancialControlEntries,
@@ -1800,6 +1802,28 @@ function MonthGroup({
                   <span className="whitespace-pre-wrap">{detailEntry.notes}</span>
                 </DetailField>
               ) : null}
+              {(() => {
+                const files = parseFinancialControlAttachments(detailEntry.attachments);
+                if (files.length === 0) return null;
+                return (
+                  <DetailField label="Anexos" className="sm:col-span-2">
+                    <ul className="space-y-1">
+                      {files.map((file, index) => (
+                        <li key={`${file.url}-${index}`}>
+                          <a
+                            href={absoluteUploadUrl(file.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            {file.name || 'Ver anexo'}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </DetailField>
+                );
+              })()}
             </DetailSection>
 
             <div className="flex flex-col-reverse gap-2 border-t border-gray-200 pt-4 dark:border-gray-700 sm:flex-row sm:justify-end">

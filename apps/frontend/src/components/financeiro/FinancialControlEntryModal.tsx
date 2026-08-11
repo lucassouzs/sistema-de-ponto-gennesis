@@ -23,9 +23,14 @@ import {
   buildInitialForm,
   buildQuickLaunchPayload,
   entryToForm,
+  financialControlSupplierSelectOption,
   parseCurrencyInput,
 } from '@/components/financeiro/financialControlEntry';
 import { FinancialControlOcQuickLaunch } from '@/components/financeiro/FinancialControlOcQuickLaunch';
+import {
+  FinancialControlAttachmentsField,
+  uploadFinancialControlAttachments,
+} from '@/components/financeiro/FinancialControlAttachmentsField';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 
 const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
@@ -48,6 +53,7 @@ const inputCls =
 type SupplierOption = {
   id: string;
   name: string;
+  tradeName?: string | null;
   code?: string | null;
   isActive?: boolean;
 };
@@ -177,6 +183,7 @@ export function FinancialControlEntryModal({
   );
   const [interestValue, setInterestValue] = useState('');
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   const showQuickLaunch = simplifiedFromOc && !editingEntry;
 
@@ -192,14 +199,7 @@ export function FinancialControlEntryModal({
 
   const supplierOptions = useMemo(() => {
     const active = suppliers.filter((s) => s.isActive !== false);
-    const opts = active.map((s) => {
-      const label = s.code ? `${s.code} - ${s.name}` : s.name;
-      return {
-        value: label,
-        label,
-        searchText: `${s.code ?? ''} ${s.name}`,
-      };
-    });
+    const opts = active.map((s) => financialControlSupplierSelectOption(s));
     const current = form.supplierName.trim();
     if (current && !opts.some((o) => o.value === current)) {
       opts.unshift({ value: current, label: current, searchText: current });
@@ -220,6 +220,7 @@ export function FinancialControlEntryModal({
     setForm({
       ...buildInitialForm(month, year),
       ...initialValues,
+      attachments: initialValues?.attachments ?? [],
       consorcio: showQuickLaunch
         ? FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO
         : (initialValues?.consorcio ?? ''),
@@ -605,6 +606,40 @@ export function FinancialControlEntryModal({
                 rows={3}
                 autoComplete="off"
                 className={`${inputCls} resize-y`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Anexar arquivos</label>
+              <FinancialControlAttachmentsField
+                files={form.attachments}
+                uploading={uploadingAttachments}
+                disabled={isSaving}
+                onFilesSelect={async (files) => {
+                  if (!files.length) return;
+                  setUploadingAttachments(true);
+                  try {
+                    const uploaded = await uploadFinancialControlAttachments(files);
+                    setForm((prev) => ({
+                      ...prev,
+                      attachments: [...prev.attachments, ...uploaded],
+                    }));
+                    toast.success(
+                      uploaded.length > 1 ? `${uploaded.length} arquivos enviados` : 'Arquivo enviado'
+                    );
+                  } catch (e: unknown) {
+                    const err = e as { response?: { data?: { message?: string } }; message?: string };
+                    toast.error(err.response?.data?.message || err.message || 'Não foi possível enviar o arquivo');
+                  } finally {
+                    setUploadingAttachments(false);
+                  }
+                }}
+                onRemove={(index) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    attachments: prev.attachments.filter((_, i) => i !== index),
+                  }))
+                }
               />
             </div>
 

@@ -313,6 +313,35 @@ function toYmdLocal(iso: string | undefined | null): string | null {
 
 const EMPTY_REQUEST_LIST: unknown[] = [];
 
+type FdAttachment = { url: string; name: string };
+
+function parseFdAttachments(r: {
+  demandSheetAttachments?: unknown;
+  demandSheetAttachmentUrl?: string | null;
+  demandSheetAttachmentName?: string | null;
+}): FdAttachment[] {
+  const raw = r.demandSheetAttachments;
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const url = String((item as { url?: unknown }).url || '').trim();
+        if (!url) return null;
+        const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+        return { url, name };
+      })
+      .filter((item): item is FdAttachment => Boolean(item));
+  }
+  const url = String(r.demandSheetAttachmentUrl || '').trim();
+  if (!url) return [];
+  return [
+    {
+      url,
+      name: String(r.demandSheetAttachmentName || '').trim() || 'Arquivo anexado',
+    },
+  ];
+}
+
 const emptyNewFormData = () => ({
   contractId: '',
   costCenterId: '',
@@ -322,8 +351,7 @@ const emptyNewFormData = () => ({
   description: '',
   priority: 'MEDIUM',
   demandSheet: '',
-  demandSheetAttachmentUrl: '',
-  demandSheetAttachmentName: '',
+  demandSheetAttachments: [] as FdAttachment[],
   items: [{ materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }]
 });
 
@@ -401,7 +429,7 @@ function validateNewMaterialRequestForm(
   if (!formData.serviceOrderId.trim()) return 'Selecione a ordem de serviço.';
   if (!options?.demandSheetOptional) {
     if (!formData.demandSheet.trim()) return 'Informe a ficha de demanda.';
-    if (!formData.demandSheetAttachmentUrl.trim()) return 'Anexe o arquivo da ficha de demanda.';
+    if (formData.demandSheetAttachments.length === 0) return 'Anexe ao menos um arquivo.';
   }
 
   const validItems = formData.items.filter((item) => item.materialId);
@@ -667,6 +695,122 @@ function RmAttachmentField({
   );
 }
 
+function RmDemandSheetAttachmentsField({
+  files,
+  uploading,
+  disabled = false,
+  onFilesSelect,
+  onRemove,
+  chooseLabel = 'Escolher arquivo',
+  addLabel = 'Adicionar arquivo',
+  size = 'md',
+}: {
+  files: FdAttachment[];
+  uploading?: boolean;
+  disabled?: boolean;
+  onFilesSelect: (files: File[]) => void;
+  onRemove: (index: number) => void;
+  chooseLabel?: string;
+  addLabel?: string;
+  size?: 'sm' | 'md';
+}) {
+  const isSm = size === 'sm';
+  const shellClass = isSm
+    ? 'rounded border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
+    : 'rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800';
+  const chooseBtnClass = isSm
+    ? 'inline-flex w-full items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50'
+    : 'inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50';
+
+  const pickFiles = (list: FileList | null) => {
+    if (!list?.length) return;
+    onFilesSelect(Array.from(list));
+  };
+
+  if (files.length === 0) {
+    return (
+      <label className={`${chooseBtnClass} ${disabled || uploading ? 'pointer-events-none' : ''}`}>
+        {uploading ? <Loader2 className={isSm ? 'h-3.5 w-3.5 animate-spin' : 'h-4 w-4 animate-spin'} /> : <Paperclip className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />}
+        <span>{uploading ? 'Enviando...' : chooseLabel}</span>
+        <input
+          type="file"
+          multiple
+          className="hidden"
+          disabled={disabled || uploading}
+          accept={RM_ATTACHMENT_ACCEPT}
+          onChange={(e) => {
+            pickFiles(e.target.files);
+            e.currentTarget.value = '';
+          }}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <div className={`${shellClass} overflow-hidden`}>
+      <ul className="divide-y divide-gray-200 dark:divide-gray-600">
+        {files.map((file, index) => {
+          const displayName = file.name?.trim() || 'Arquivo anexado';
+          return (
+            <li
+              key={`${file.url}-${index}`}
+              className={`flex items-center gap-2 ${isSm ? 'px-2 py-2' : 'px-3 py-2.5'}`}
+            >
+              <Paperclip className={`shrink-0 text-gray-500 dark:text-gray-400 ${isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
+              <span
+                className={`min-w-0 flex-1 truncate font-medium text-gray-900 dark:text-gray-100 ${isSm ? 'text-xs' : 'text-sm'}`}
+                title={displayName}
+              >
+                {displayName}
+              </span>
+              <a
+                href={absoluteUploadUrl(file.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex shrink-0 items-center gap-1 font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 ${isSm ? 'text-xs' : 'text-sm'}`}
+              >
+                <ExternalLink className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+                Abrir
+              </a>
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                disabled={disabled || uploading}
+                aria-label="Remover anexo"
+                className="shrink-0 rounded-md p-1 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+              >
+                <X className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <label
+        className={`flex cursor-pointer items-center justify-center gap-1.5 border-t border-gray-200 text-center font-medium text-blue-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-blue-400 dark:hover:bg-gray-800/80 ${isSm ? 'px-2 py-1.5 text-xs' : 'px-3 py-2 text-sm'} ${disabled || uploading ? 'pointer-events-none opacity-50' : ''}`}
+      >
+        {uploading ? (
+          <Loader2 className={isSm ? 'h-3.5 w-3.5 animate-spin' : 'h-4 w-4 animate-spin'} />
+        ) : (
+          <Plus className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+        )}
+        <span>{uploading ? 'Enviando...' : addLabel}</span>
+        <input
+          type="file"
+          multiple
+          className="hidden"
+          disabled={disabled || uploading}
+          accept={RM_ATTACHMENT_ACCEPT}
+          onChange={(e) => {
+            pickFiles(e.target.files);
+            e.currentTarget.value = '';
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 function SolicitarMateriaisPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -686,8 +830,7 @@ function SolicitarMateriaisPage() {
     description: '',
     priority: 'MEDIUM',
     demandSheet: '',
-    demandSheetAttachmentUrl: '',
-    demandSheetAttachmentName: '',
+    demandSheetAttachments: [] as FdAttachment[],
     items: [{ materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }]
   });
 
@@ -902,8 +1045,9 @@ function SolicitarMateriaisPage() {
         description: form.description,
         priority: form.priority,
         demandSheet: form.demandSheet || undefined,
-        demandSheetAttachmentUrl: form.demandSheetAttachmentUrl || undefined,
-        demandSheetAttachmentName: form.demandSheetAttachmentName || undefined,
+        demandSheetAttachments: form.demandSheetAttachments,
+        demandSheetAttachmentUrl: form.demandSheetAttachments[0]?.url || undefined,
+        demandSheetAttachmentName: form.demandSheetAttachments[0]?.name || undefined,
         items: form.items.map((item) => ({
           materialId: item.materialId,
           quantity: item.quantity,
@@ -1244,8 +1388,7 @@ function SolicitarMateriaisPage() {
       description: (r.description as string) || '',
       priority: (r.priority as string) || 'MEDIUM',
       demandSheet: String((r as { demandSheet?: string }).demandSheet || ''),
-      demandSheetAttachmentUrl: String((r as { demandSheetAttachmentUrl?: string }).demandSheetAttachmentUrl || ''),
-      demandSheetAttachmentName: String((r as { demandSheetAttachmentName?: string }).demandSheetAttachmentName || ''),
+      demandSheetAttachments: parseFdAttachments(r as Parameters<typeof parseFdAttachments>[0]),
       items:
         itemsFromApi.length > 0
           ? itemsFromApi.map(
@@ -1421,8 +1564,9 @@ function SolicitarMateriaisPage() {
       description: formData.description,
       priority: formData.priority,
       demandSheet: formData.demandSheet.trim(),
-      demandSheetAttachmentUrl: formData.demandSheetAttachmentUrl.trim(),
-      demandSheetAttachmentName: formData.demandSheetAttachmentName.trim() || undefined,
+      demandSheetAttachments: formData.demandSheetAttachments,
+      demandSheetAttachmentUrl: formData.demandSheetAttachments[0]?.url || undefined,
+      demandSheetAttachmentName: formData.demandSheetAttachments[0]?.name || undefined,
       items: formData.items
         .filter((item) => item.materialId)
         .map((item) => ({
@@ -1501,49 +1645,54 @@ function SolicitarMateriaisPage() {
     }
   };
 
-  const handleDemandSheetAttachmentFile = async (form: 'new' | 'edit', file: File | null) => {
-    if (!file) return;
+  const handleDemandSheetAttachmentFiles = async (form: 'new' | 'edit', files: File[]) => {
+    if (!files.length) return;
     setUploadingDemandSheetAttachment(form);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await api.post('/material-requests/upload-item-attachment', fd);
-      const d = res.data?.data as { url?: string; originalName?: string } | undefined;
-      if (!d?.url) throw new Error('Resposta inválida do servidor');
+      const uploaded: FdAttachment[] = [];
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await api.post('/material-requests/upload-item-attachment', fd);
+        const d = res.data?.data as { url?: string; originalName?: string } | undefined;
+        if (!d?.url) throw new Error('Resposta inválida do servidor');
+        uploaded.push({
+          url: d.url,
+          name: d.originalName || file.name || 'Arquivo anexado',
+        });
+      }
       if (form === 'new') {
         setFormData((prev) => ({
           ...prev,
-          demandSheetAttachmentUrl: d.url || '',
-          demandSheetAttachmentName: d.originalName || ''
+          demandSheetAttachments: [...prev.demandSheetAttachments, ...uploaded],
         }));
       } else {
         setEditFormData((prev) => ({
           ...prev,
-          demandSheetAttachmentUrl: d.url || '',
-          demandSheetAttachmentName: d.originalName || ''
+          demandSheetAttachments: [...prev.demandSheetAttachments, ...uploaded],
         }));
       }
-      toast.success('Anexo da FD enviado');
+      toast.success(
+        uploaded.length > 1 ? `${uploaded.length} arquivos enviados` : 'Arquivo enviado'
+      );
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || 'Não foi possível enviar o anexo da FD');
+      toast.error(err.response?.data?.message || 'Não foi possível enviar o arquivo');
     } finally {
       setUploadingDemandSheetAttachment(null);
     }
   };
 
-  const clearDemandSheetAttachment = (form: 'new' | 'edit') => {
+  const removeDemandSheetAttachment = (form: 'new' | 'edit', index: number) => {
     if (form === 'new') {
       setFormData((prev) => ({
         ...prev,
-        demandSheetAttachmentUrl: '',
-        demandSheetAttachmentName: ''
+        demandSheetAttachments: prev.demandSheetAttachments.filter((_, i) => i !== index),
       }));
     } else {
       setEditFormData((prev) => ({
         ...prev,
-        demandSheetAttachmentUrl: '',
-        demandSheetAttachmentName: ''
+        demandSheetAttachments: prev.demandSheetAttachments.filter((_, i) => i !== index),
       }));
     }
   };
@@ -2162,18 +2311,22 @@ function SolicitarMateriaisPage() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Anexar FD{isNewFormUnbCostCenter ? '' : ' *'}
+                          Anexar arquivos{isNewFormUnbCostCenter ? '' : ' *'}
                         </label>
-                        <RmAttachmentField
-                          fileUrl={formData.demandSheetAttachmentUrl}
-                          fileName={formData.demandSheetAttachmentName}
+                        <RmDemandSheetAttachmentsField
+                          files={formData.demandSheetAttachments}
                           uploading={uploadingDemandSheetAttachment === 'new'}
                           disabled={!!uploadingDemandSheetAttachment}
-                          onFileSelect={(file) => void handleDemandSheetAttachmentFile('new', file)}
-                          onRemove={() => clearDemandSheetAttachment('new')}
+                          onFilesSelect={(files) => void handleDemandSheetAttachmentFiles('new', files)}
+                          onRemove={(index) => removeDemandSheetAttachment('new', index)}
                         />
                         {!isNewFormUnbCostCenter ? (
-                          <input type="hidden" required value={formData.demandSheetAttachmentUrl} readOnly />
+                          <input
+                            type="hidden"
+                            required
+                            value={formData.demandSheetAttachments[0]?.url || ''}
+                            readOnly
+                          />
                         ) : null}
                       </div>
                     </div>
@@ -2391,6 +2544,7 @@ function SolicitarMateriaisPage() {
                     const pos = Array.isArray(d.purchaseOrders) ? d.purchaseOrders : [];
                     const requestedDate = d.requestedAt ? new Date(String(d.requestedAt)) : null;
                     const statusKey = d.status ? String(d.status) : '';
+                    const fdAttachments = parseFdAttachments(d as Parameters<typeof parseFdAttachments>[0]);
 
                     return (
                       <div className="space-y-5">
@@ -2444,6 +2598,30 @@ function SolicitarMateriaisPage() {
                             {d.description ? (
                               <DetailField label="Descrição" className="sm:col-span-2">
                                 <p className="whitespace-pre-wrap leading-relaxed">{String(d.description)}</p>
+                              </DetailField>
+                            ) : null}
+                            {(d as { demandSheet?: string }).demandSheet ? (
+                              <DetailField label="Ficha de Demanda">
+                                {String((d as { demandSheet?: string }).demandSheet)}
+                              </DetailField>
+                            ) : null}
+                            {fdAttachments.length > 0 ? (
+                              <DetailField label="Anexos" className="sm:col-span-2">
+                                <ul className="space-y-1">
+                                  {fdAttachments.map((file, index) => (
+                                    <li key={`${file.url}-${index}`}>
+                                      <a
+                                        href={absoluteUploadUrl(file.url)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                        {file.name || 'Ver anexo'}
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
                               </DetailField>
                             ) : null}
                           </div>
@@ -2674,17 +2852,17 @@ function SolicitarMateriaisPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Anexar FD
+                    Anexar arquivos
                   </label>
-                  <RmAttachmentField
+                  <RmDemandSheetAttachmentsField
                     size="sm"
-                    fileUrl={editFormData.demandSheetAttachmentUrl}
-                    fileName={editFormData.demandSheetAttachmentName}
+                    files={editFormData.demandSheetAttachments}
                     uploading={uploadingDemandSheetAttachment === 'edit'}
                     disabled={!!uploadingDemandSheetAttachment}
-                    onFileSelect={(file) => void handleDemandSheetAttachmentFile('edit', file)}
-                    onRemove={() => clearDemandSheetAttachment('edit')}
+                    onFilesSelect={(files) => void handleDemandSheetAttachmentFiles('edit', files)}
+                    onRemove={(index) => removeDemandSheetAttachment('edit', index)}
                     chooseLabel="Arquivo"
+                    addLabel="Adicionar arquivo"
                   />
                 </div>
 

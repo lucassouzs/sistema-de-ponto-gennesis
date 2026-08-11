@@ -569,6 +569,7 @@ export interface CreatePurchaseOrderData {
   /** @deprecated Ignorado: o total é sempre calculado como itens + frete. */
   amountToPay?: number;
   notes?: string;
+  attachments?: Array<{ url: string; name: string }>;
   items: {
     materialRequestItemId?: string;
     materialId: string;
@@ -666,6 +667,7 @@ type PreparedOcCreateData = {
   freightAmount: Decimal;
   amountToPay: Decimal;
   notes: string | null;
+  attachments?: Prisma.InputJsonValue;
   createdBy: string;
   items: { create: PreparedOcItemCreate[] };
 };
@@ -951,6 +953,17 @@ export class PurchaseOrderService {
       freightAmount: freight,
       amountToPay,
       notes: data.notes || null,
+      attachments: (() => {
+        const files = Array.isArray(data.attachments)
+          ? data.attachments
+              .map((item) => ({
+                url: String(item?.url || '').trim().slice(0, 2000),
+                name: String(item?.name || '').trim().slice(0, 500) || 'Arquivo anexado',
+              }))
+              .filter((item) => item.url)
+          : [];
+        return files.length > 0 ? (files as Prisma.InputJsonValue) : undefined;
+      })(),
       createdBy: userId,
       items: { create: items },
     };

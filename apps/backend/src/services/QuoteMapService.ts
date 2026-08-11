@@ -395,6 +395,7 @@ export class QuoteMapService {
         boletoAttachmentUrl?: string;
         boletoAttachmentName?: string;
         creationBoletoInstallments?: Array<{ boletoUrl: string; boletoName?: string | null }>;
+        attachments?: Array<{ url: string; name: string }>;
       }>;
     }
   ) {
@@ -551,7 +552,8 @@ export class QuoteMapService {
         boletoAttachmentName: pay.boletoAttachmentName,
         creationBoletoInstallments: pay.creationBoletoInstallments,
         freightAmount: Number(freight),
-        notes: pay.observations ?? null
+        notes: pay.observations ?? null,
+        attachments: pay.attachments,
       });
     }
 

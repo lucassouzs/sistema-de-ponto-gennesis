@@ -79,6 +79,7 @@ router.post('/:id/generate', async (req: AuthRequest, res: Response, next: NextF
           amountToPay?: number;
           boletoAttachmentUrl?: string;
           boletoAttachmentName?: string;
+          attachments?: Array<{ url: string; name: string }>;
         }>;
       };
 

@@ -40,6 +40,10 @@ export interface MaterialRequest {
   serviceOrder?: string | null;
   service_orders?: MaterialRequestServiceOrderRef | null;
   description: string;
+  demandSheet?: string | null;
+  demandSheetAttachmentUrl?: string | null;
+  demandSheetAttachmentName?: string | null;
+  demandSheetAttachments?: Array<{ url?: string; name?: string }> | null;
   status: 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   createdAt: string;

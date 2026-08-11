@@ -160,6 +160,52 @@ router.get('/export-finalized-csv', async (req: AuthRequest, res: Response, next
   }
 });
 
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const ok =
+      file.mimetype === 'application/pdf' ||
+      file.mimetype.startsWith('image/') ||
+      /\.(pdf|png|jpg|jpeg|webp|doc|docx|xls|xlsx)$/i.test(name);
+    if (ok) cb(null, true);
+    else cb(new Error('Envie PDF, imagem ou documento Office (PDF, PNG, JPG, DOC, XLS…)'));
+  },
+});
+
+router.post('/upload-attachment', (req: AuthRequest, res: Response, next: NextFunction) => {
+  attachmentUpload.single('file')(req, res, (err: unknown) => {
+    if (err) {
+      const msg = err instanceof Error ? err.message : 'Erro no upload';
+      res.status(400).json({ success: false, message: msg });
+      return;
+    }
+    next();
+  });
+}, async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file?.buffer) {
+      throw createError('Selecione um arquivo', 400);
+    }
+    const uploadsDir = path.join(backendUploadsRoot, 'purchase-orders');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    const ext = path.extname(req.file.originalname || '') || '.bin';
+    const safeExt = ext.length <= 8 ? ext : '.bin';
+    const fileName = `${uuidv4()}${safeExt}`;
+    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    res.json({
+      success: true,
+      data: {
+        url: `/uploads/purchase-orders/${fileName}`,
+        originalName: req.file.originalname || fileName,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/upload-boleto', (req: AuthRequest, res: Response, next: NextFunction) => {
   boletoUpload.single('boleto')(req, res, (err: unknown) => {
     if (err) {

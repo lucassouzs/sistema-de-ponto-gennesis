@@ -109,6 +109,14 @@ async function ensureMaterialRequestColumns(prisma: PrismaClient): Promise<void>
         ADD COLUMN IF NOT EXISTS "demandSheetAttachmentName" TEXT;
     `);
   }
+
+  if (!(await columnExists(prisma, 'material_requests', 'demandSheetAttachments'))) {
+    console.warn('[Schema] Coluna demandSheetAttachments em material_requests ausente — adicionando.');
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "material_requests"
+        ADD COLUMN IF NOT EXISTS "demandSheetAttachments" JSONB;
+    `);
+  }
 }
 
 async function ensureMaterialRequestItemColumns(prisma: PrismaClient): Promise<void> {
@@ -324,6 +332,16 @@ async function ensureFinancialControlLancadoStatus(prisma: PrismaClient): Promis
   `);
 }
 
+async function ensureFinancialControlAttachmentsColumn(prisma: PrismaClient): Promise<void> {
+  if (!(await columnExists(prisma, 'financial_control_entries', 'attachments'))) {
+    console.warn('[Schema] Coluna attachments em financial_control_entries ausente — adicionando.');
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "financial_control_entries"
+        ADD COLUMN IF NOT EXISTS "attachments" JSONB;
+    `);
+  }
+}
+
 async function ensureFinancialControlNfNumberColumn(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "financial_control_entries" ADD COLUMN IF NOT EXISTS "nfNumber" TEXT;
@@ -392,6 +410,17 @@ async function ensureDpRequestTypeAdmAsos(prisma: PrismaClient): Promise<void> {
       WHEN duplicate_object THEN NULL;
     END $$;
   `);
+}
+
+async function ensurePurchaseOrderAttachmentsColumn(prisma: PrismaClient): Promise<void> {
+  if (!(await tableExists(prisma, 'purchase_orders'))) return;
+  if (!(await columnExists(prisma, 'purchase_orders', 'attachments'))) {
+    console.warn('[Schema] Coluna attachments em purchase_orders ausente — adicionando.');
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "purchase_orders"
+        ADD COLUMN IF NOT EXISTS "attachments" JSONB;
+    `);
+  }
 }
 
 async function ensurePurchaseOrderPixFields(prisma: PrismaClient): Promise<void> {
@@ -1150,9 +1179,11 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureMaterialRequestItemColumns(prisma);
     await ensureDemandSheetApprovals(prisma);
     await ensurePurchaseOrderStageApprovals(prisma);
+    await ensurePurchaseOrderAttachmentsColumn(prisma);
     await ensureFinancialControlAguardarPagamentoStatus(prisma);
     await ensureFinancialControlLancadoStatus(prisma);
     await ensureFinancialControlNfNumberColumn(prisma);
+    await ensureFinancialControlAttachmentsColumn(prisma);
     await ensureDpRequestTypeAdmAsos(prisma);
     await ensureLicitacoesTables(prisma);
     await ensureLicitacaoColumns(prisma);
