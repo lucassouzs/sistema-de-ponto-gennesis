@@ -630,6 +630,8 @@ export default function EstoquePage() {
   const [historyDetail, setHistoryDetail] = useState<StockMovement | null>(null);
   const [balanceDetail, setBalanceDetail] = useState<GroupedStockBalance | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel');
   const BALANCE_ITEMS_PER_PAGE = 12;
   const HISTORY_ITEMS_PER_PAGE = 12;
   const [ocMovementItems, setOcMovementItems] = useState<OcMovementItemState[]>([]);
@@ -1692,6 +1694,15 @@ export default function EstoquePage() {
     }
   };
 
+  const handleExportConfirm = async () => {
+    if (exportFormat === 'pdf') {
+      await handleExportPdf();
+    } else {
+      await handleExportExcel();
+    }
+    setIsExportModalOpen(false);
+  };
+
   const handleInvoiceUpload = async (file: File | null) => {
     if (!file) return;
     setIsUploadingInvoice(true);
@@ -1837,27 +1848,25 @@ export default function EstoquePage() {
           </div>
 
           <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex space-x-8">
+            <nav className="-mb-px flex justify-center space-x-8">
               <button
                 onClick={() => setActiveTab('balance')}
-                className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
+                className={`py-3 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'balance'
                     ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
                 }`}
               >
-                <Box className="w-4 h-4" />
-                Lista de estoque
+                Lista de Estoque
               </button>
               <button
                 onClick={() => setActiveTab('movements')}
-                className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
+                className={`py-3 px-1 border-b-2 font-medium text-sm ${
                   activeTab === 'movements'
                     ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
                 }`}
               >
-                <History className="w-4 h-4" />
                 Histórico
               </button>
             </nav>
@@ -1872,7 +1881,7 @@ export default function EstoquePage() {
                       <Box className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Lista de estoque</h3>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Lista de Estoque</h3>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         Consulte materiais e quantidades em estoque por contrato
                       </p>
@@ -1910,21 +1919,13 @@ export default function EstoquePage() {
                     </button>
                     <button
                       type="button"
-                      onClick={handleExportExcel}
+                      onClick={() => setIsExportModalOpen(true)}
                       disabled={isExporting || balances.length === 0}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      aria-label="Exportar"
+                      title="Exportar"
                     >
-                      <Download className="h-4 w-4 shrink-0" />
-                      <span>Exportar Excel</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleExportPdf}
-                      disabled={isExporting || balances.length === 0}
-                      className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-                    >
-                      <Download className="h-4 w-4 shrink-0" />
-                      <span>Exportar PDF</span>
+                      <Download className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
@@ -1972,20 +1973,20 @@ export default function EstoquePage() {
                       <table className="w-full text-sm">
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
-                            <th className="w-36 px-3 sm:px-4 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Detalhes
-                            </th>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Material
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Categoria
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Quantidade total
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Unidade
+                            </th>
+                            <th className="px-3 sm:px-4 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Detalhes
                             </th>
                           </tr>
                         </thead>
@@ -1998,7 +1999,19 @@ export default function EstoquePage() {
                               key={group.material.id}
                               className={listTableRowClasses.tr}
                             >
-                              <td className="px-3 sm:px-4 py-3">
+                              <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                <span className="text-sm text-gray-900 dark:text-gray-100">{group.material.name}</span>
+                              </td>
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                {group.material.category || '—'}
+                              </td>
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {totalBalance.toLocaleString('pt-BR')}
+                              </td>
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                {group.material.unit}
+                              </td>
+                              <td className="px-3 sm:px-4 py-3 text-center">
                                 <button
                                   type="button"
                                   onClick={() => setBalanceDetail(group)}
@@ -2010,18 +2023,6 @@ export default function EstoquePage() {
                                     {costCenterCount === 1 ? '1 contrato' : `${costCenterCount} contratos`}
                                   </span>
                                 </button>
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                <span className="text-sm text-gray-900 dark:text-gray-100">{group.material.name}</span>
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
-                                {group.material.category || '—'}
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-right font-semibold text-gray-900 dark:text-gray-100">
-                                {totalBalance.toLocaleString('pt-BR')}
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-right text-gray-700 dark:text-gray-300">
-                                {group.material.unit}
                               </td>
                             </tr>
                             );
@@ -2199,24 +2200,24 @@ export default function EstoquePage() {
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Data
-                            </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               OC
                             </th>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Material
                             </th>
                             <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Data
+                            </th>
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Movimento
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Quantidade
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Contrato
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Registrado por
                             </th>
                             <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -2234,14 +2235,14 @@ export default function EstoquePage() {
                                 onClick={() => setHistoryDetail(mov)}
                                 className={getListTableRowClassName(true)}
                               >
-                                <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                  {new Date(mov.createdAt).toLocaleString('pt-BR')}
-                                </td>
                                 <td className="px-3 sm:px-6 py-3 text-sm">
                                   <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">{ocNumber}</span>
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
                                   <ListRowNavigableLabel className="font-medium">{mov.material.name}</ListRowNavigableLabel>
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                  {new Date(mov.createdAt).toLocaleString('pt-BR')}
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 text-center">
                                   <span
@@ -2259,13 +2260,13 @@ export default function EstoquePage() {
                                     {mov.type === 'IN' ? 'Entrada' : 'Saída'}
                                   </span>
                                 </td>
-                                <td className="px-3 sm:px-6 py-3 text-sm text-right font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
                                   {mov.quantity.toLocaleString('pt-BR')} {mov.material.unit}
                                 </td>
-                                <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
                                   {mov.costCenter?.name || '—'}
                                 </td>
-                                <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
                                   {mov.user.name}
                                 </td>
                                 <td className="px-3 sm:px-6 py-3 text-right" onClick={(e) => e.stopPropagation()}>
@@ -3190,6 +3191,72 @@ export default function EstoquePage() {
               </div>
             </div>
           )}
+
+          <Modal
+            isOpen={isExportModalOpen}
+            onClose={() => {
+              if (!isExporting) setIsExportModalOpen(false);
+            }}
+            title="Exportar lista de estoque"
+            size="md"
+            closeOnOverlayClick={!isExporting}
+          >
+            <div className="space-y-5">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Escolha o formato do arquivo.
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => setExportFormat('excel')}
+                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                    exportFormat === 'excel'
+                      ? 'border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/30'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/60'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Excel</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Planilha .xlsx com os materiais em estoque
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => setExportFormat('pdf')}
+                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                    exportFormat === 'pdf'
+                      ? 'border-red-300 bg-red-50 dark:border-red-800/60 dark:bg-red-950/30'
+                      : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/60'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">PDF</p>
+                  <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    Relatório em paisagem para impressão
+                  </p>
+                </button>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  disabled={isExporting}
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isExporting || balances.length === 0}
+                  onClick={() => void handleExportConfirm()}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                >
+                  {isExporting ? 'Gerando…' : 'Exportar'}
+                </button>
+              </div>
+            </div>
+          </Modal>
 
         </div>
       </MainLayout>
