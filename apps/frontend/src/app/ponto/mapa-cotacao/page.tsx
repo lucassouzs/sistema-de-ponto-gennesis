@@ -14,6 +14,10 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { PaymentConditionSelect, type PaymentConditionRow } from '@/components/oc/PaymentConditionSelect';
 import { OC_PIX_KEY_TYPE_OPTIONS } from '@/components/oc/OcPurchaseOrderFormFields';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
+import {
+  FinancialControlAttachmentsField,
+  uploadNamedAttachments,
+} from '@/components/financeiro/FinancialControlAttachmentsField';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
@@ -494,6 +498,7 @@ function emptyPaymentDraft() {
     pixKey: '',
     observations: '',
     amountToPayStr: '',
+    attachments: [] as Array<{ url: string; name: string }>,
   };
 }
 
@@ -538,9 +543,11 @@ export default function MapaCotacaoPage() {
         pixKey: string;
         observations: string;
         amountToPayStr: string;
+        attachments: Array<{ url: string; name: string }>;
       }
     >
   >({});
+  const [uploadingOcAttachments, setUploadingOcAttachments] = useState(false);
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -983,6 +990,7 @@ export default function MapaCotacaoPage() {
           pixKey: '',
           observations: '',
           amountToPayStr: totals ? String(totals.amountToPay) : '',
+          attachments: [],
         };
 
         const draft = paymentDraftBySupplier[supplierId] ?? fallbackDraft;
@@ -1024,6 +1032,7 @@ export default function MapaCotacaoPage() {
             pixKey: paymentType === OC_TYPE_AVISTA ? draft.pixKey?.trim() || undefined : undefined,
             observations: draft.observations?.trim() || undefined,
             amountToPay: totals?.amountToPay,
+            attachments: draft.attachments?.length ? draft.attachments : undefined,
           },
         ];
 
@@ -1834,6 +1843,59 @@ export default function MapaCotacaoPage() {
                     rows={2}
                     placeholder="Observações gerais da OC"
                     className={`${mapFieldCls} min-h-[4rem] resize-y`}
+                  />
+                </div>
+
+                <div>
+                  <span className={mapLabelCls}>Anexar arquivos</span>
+                  <FinancialControlAttachmentsField
+                    files={paymentDraftBySupplier[sid]?.attachments ?? []}
+                    uploading={uploadingOcAttachments}
+                    disabled={isGenerating}
+                    onFilesSelect={async (files) => {
+                      if (!files.length) return;
+                      setUploadingOcAttachments(true);
+                      try {
+                        const uploaded = await uploadNamedAttachments(
+                          '/purchase-orders/upload-attachment',
+                          files
+                        );
+                        setPaymentDraftBySupplier((prev) => {
+                          const current = prev[sid] ?? emptyPaymentDraft();
+                          return {
+                            ...prev,
+                            [sid]: {
+                              ...current,
+                              attachments: [...(current.attachments || []), ...uploaded],
+                            },
+                          };
+                        });
+                        toast.success(
+                          uploaded.length > 1
+                            ? `${uploaded.length} arquivos enviados`
+                            : 'Arquivo enviado'
+                        );
+                      } catch (e: unknown) {
+                        const err = e as { response?: { data?: { message?: string } }; message?: string };
+                        toast.error(
+                          err.response?.data?.message || err.message || 'Não foi possível enviar o arquivo'
+                        );
+                      } finally {
+                        setUploadingOcAttachments(false);
+                      }
+                    }}
+                    onRemove={(index) => {
+                      setPaymentDraftBySupplier((prev) => {
+                        const current = prev[sid] ?? emptyPaymentDraft();
+                        return {
+                          ...prev,
+                          [sid]: {
+                            ...current,
+                            attachments: (current.attachments || []).filter((_, i) => i !== index),
+                          },
+                        };
+                      });
+                    }}
                   />
                 </div>
                   </div>

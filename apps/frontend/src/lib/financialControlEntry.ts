@@ -25,6 +25,7 @@ export interface FinancialControlEntry {
   remainingDays: number | null;
   receivedNote: string | null;
   notes: string | null;
+  attachments?: Array<{ url: string; name: string }> | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +65,7 @@ export interface EntryFormState {
   remainingDays: string;
   receivedNote: string;
   notes: string;
+  attachments: Array<{ url: string; name: string }>;
 }
 
 export function parseCurrencyInput(value: string): number | null {
@@ -136,6 +138,7 @@ export function buildInitialForm(
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    attachments: [],
   };
 }
 
@@ -161,6 +164,14 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
       entry.remainingDays !== null && entry.remainingDays !== undefined ? String(entry.remainingDays) : '',
     receivedNote: entry.receivedNote || '',
     notes: entry.notes || '',
+    attachments: Array.isArray(entry.attachments)
+      ? entry.attachments
+          .map((item) => ({
+            url: String(item?.url || '').trim(),
+            name: String(item?.name || '').trim() || 'Arquivo anexado',
+          }))
+          .filter((item) => item.url)
+      : [],
   };
 }
 
@@ -195,6 +206,7 @@ export function buildInitialFormFromPurchaseOrder(order: {
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    attachments: [],
   };
 }
 
@@ -222,5 +234,6 @@ export function formToPayload(form: EntryFormState) {
     remainingDays: computedRemainingDays,
     receivedNote: form.receivedNote || null,
     notes: form.notes || null,
+    attachments: form.attachments,
   };
 }

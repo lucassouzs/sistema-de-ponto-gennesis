@@ -53,6 +53,21 @@ function parseInteger(value: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
+type FinancialControlAttachment = { url: string; name: string };
+
+function parseAttachments(raw: unknown): FinancialControlAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FinancialControlAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const url = String((item as { url?: unknown }).url || '').trim();
+    if (!url) continue;
+    const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+    out.push({ url: url.slice(0, 2000), name: name.slice(0, 500) });
+  }
+  return out;
+}
+
 /** Resolve OS real da RM vinculada à OC (evita mostrar código de contrato/CC). */
 async function resolveOsCodeByOcNumber(
   entries: Array<{ id: string; ocNumber: string | null; osCode: string | null }>
@@ -148,6 +163,10 @@ function buildEntryData(body: any, userId?: string | null, isUpdate = false) {
   if (body.remainingDays !== undefined) (data as any).remainingDays = parseInteger(body.remainingDays);
   if (body.receivedNote !== undefined) (data as any).receivedNote = body.receivedNote || null;
   if (body.notes !== undefined) (data as any).notes = body.notes || null;
+  if (body.attachments !== undefined) {
+    const files = parseAttachments(body.attachments);
+    (data as any).attachments = files.length > 0 ? files : Prisma.DbNull;
+  }
 
   if (isUpdate) {
     (data as any).updatedBy = userId || null;

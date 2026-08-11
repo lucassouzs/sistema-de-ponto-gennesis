@@ -1527,8 +1527,9 @@ model MaterialRequest {
   obra            String? // Obra (texto livre)
   description     String? // Descrição/observações da requisição
   demandSheet     String? // Número ou referência da ficha de demanda
-  demandSheetAttachmentUrl  String? // URL do anexo da FD
-  demandSheetAttachmentName String? // Nome original do anexo da FD
+  demandSheetAttachmentUrl  String? // URL do anexo da FD (primeiro arquivo; compat)
+  demandSheetAttachmentName String? // Nome original do anexo da FD (primeiro arquivo; compat)
+  demandSheetAttachments    Json? // [{ url, name }] — vários anexos da FD
   status          MaterialRequestStatus   @default(PENDING) // Status da requisição
   /// Último tipo de entrada de estoque vinculada a OC desta RM (Total ou Parcial).
   lastStockReceiptType MaterialDeliveryReceiptType?
@@ -1886,6 +1887,8 @@ model PurchaseOrder {
   freightAmount              Decimal             @default(0) @db.Decimal(15, 2)
   amountToPay                Decimal?            @db.Decimal(15, 2) // Itens + frete (recalculado ao salvar itens/frete)
   notes                      String?
+  /// [{ url, name }] — anexos gerais na criação da OC
+  attachments                Json?
   createdBy                  String // Usuário que criou
   approvedBy                 String? // Usuário que aprovou (diretoria — status APPROVED)
   approvedAt                 DateTime?
@@ -2608,6 +2611,8 @@ model FinancialControlEntry {
   /// "Recebido" — observação livre (ex.: PAGO TED, PAGO PIX, CANCELADO, PAGO pelo ÊNFASE).
   receivedNote    String?
   notes           String?
+  /// [{ url, name }] — anexos do lançamento
+  attachments     Json?
 
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt

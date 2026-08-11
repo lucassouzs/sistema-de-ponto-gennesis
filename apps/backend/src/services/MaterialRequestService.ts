@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import type { EngineeringMaterial, Prisma } from '@prisma/client';
+import { type EngineeringMaterial, Prisma } from '@prisma/client';
 import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
 import { resolveRmServiceOrderFields } from '../utils/materialRequestServiceOrder';
 
@@ -15,6 +15,46 @@ const MATERIAL_REQUEST_CREATE_TX_OPTIONS = {
   maxWait: Number(process.env.MATERIAL_REQUEST_CREATE_TX_MAX_WAIT_MS) || 30_000,
   timeout: Number(process.env.MATERIAL_REQUEST_CREATE_TX_TIMEOUT_MS) || 90_000,
 };
+
+export type DemandSheetAttachment = { url: string; name: string };
+
+function parseDemandSheetAttachments(raw: unknown): DemandSheetAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: DemandSheetAttachment[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const url = String((item as { url?: unknown }).url || '').trim();
+    if (!url) continue;
+    const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+    out.push({ url, name });
+  }
+  return out;
+}
+
+export function normalizeDemandSheetAttachments(data: {
+  demandSheetAttachments?: unknown;
+  demandSheetAttachmentUrl?: string | null;
+  demandSheetAttachmentName?: string | null;
+}): DemandSheetAttachment[] {
+  const fromList = parseDemandSheetAttachments(data.demandSheetAttachments);
+  if (fromList.length > 0) return fromList;
+  const url = (data.demandSheetAttachmentUrl || '').trim();
+  if (!url) return [];
+  return [
+    {
+      url,
+      name: (data.demandSheetAttachmentName || '').trim() || 'Arquivo anexado',
+    },
+  ];
+}
+
+function demandSheetAttachmentFields(files: DemandSheetAttachment[]) {
+  return {
+    demandSheetAttachmentUrl: files[0]?.url ?? null,
+    demandSheetAttachmentName: files[0]?.name ?? null,
+    demandSheetAttachments: files.length > 0 ? (files as Prisma.InputJsonValue) : Prisma.DbNull,
+  };
+}
 
 type NestedPurchaseOrderWithCondition = {
   paymentCondition: string | null;
@@ -90,6 +130,7 @@ export interface CreateMaterialRequestData {
   demandSheet?: string;
   demandSheetAttachmentUrl?: string;
   demandSheetAttachmentName?: string;
+  demandSheetAttachments?: DemandSheetAttachment[];
   items: {
     materialId: string;
     quantity: number;
@@ -121,6 +162,10 @@ export interface UpdateMaterialRequestCorrectionData {
     attachmentUrl?: string | null;
     attachmentName?: string | null;
   }[];
+  demandSheet?: string;
+  demandSheetAttachmentUrl?: string;
+  demandSheetAttachmentName?: string;
+  demandSheetAttachments?: DemandSheetAttachment[];
   /** Se true, volta para PENDING após salvar (reenvio para aprovação). */
   submitForApproval?: boolean;
 }
@@ -139,7 +184,7 @@ export class MaterialRequestService {
     if (!(data.demandSheet || '').trim()) {
       throw new Error('Ficha de demanda é obrigatória');
     }
-    if (!(data.demandSheetAttachmentUrl || '').trim()) {
+    if (normalizeDemandSheetAttachments(data).length === 0) {
       throw new Error('Anexo da ficha de demanda é obrigatório');
     }
   }
@@ -345,8 +390,7 @@ export class MaterialRequestService {
 
     const obra = (data.obra || '').trim() || null;
     const demandSheet = (data.demandSheet || '').trim() || null;
-    const demandSheetAttachmentUrl = (data.demandSheetAttachmentUrl || '').trim() || null;
-    const demandSheetAttachmentName = (data.demandSheetAttachmentName || '').trim() || null;
+    const demandSheetFiles = normalizeDemandSheetAttachments(data);
 
     // Serializa geração de requestNumber + create (evita race em UNIQUE)
     const request = await prisma.$transaction(
@@ -367,8 +411,7 @@ export class MaterialRequestService {
           obra,
           description: data.description?.trim() || null,
           demandSheet,
-          demandSheetAttachmentUrl,
-          demandSheetAttachmentName,
+          ...demandSheetAttachmentFields(demandSheetFiles),
           priority: data.priority || 'MEDIUM',
           status: 'PENDING',
           items: {
@@ -822,6 +865,7 @@ export class MaterialRequestService {
     }
 
     const obra = (data.obra || '').trim() || null;
+    const demandSheetFiles = normalizeDemandSheetAttachments(data);
 
     const itemCreates = data.items.map((item) => {
       const material = materialMap.get(item.materialId)!;
@@ -853,6 +897,12 @@ export class MaterialRequestService {
         serviceOrder,
         obra,
         description: data.description ?? null,
+        demandSheet: data.demandSheet !== undefined ? (data.demandSheet || '').trim() || null : existing.demandSheet,
+        ...demandSheetAttachmentFields(
+          data.demandSheetAttachments !== undefined || data.demandSheetAttachmentUrl !== undefined
+            ? demandSheetFiles
+            : normalizeDemandSheetAttachments(existing)
+        ),
         priority: data.priority || existing.priority,
         ...(data.submitForApproval ? { status: 'PENDING' } : {}),
         updatedAt: new Date(),

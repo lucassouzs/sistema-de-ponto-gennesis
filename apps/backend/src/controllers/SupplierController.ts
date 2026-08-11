@@ -134,7 +134,7 @@ export class SupplierController {
         ];
       }
       if (isActive !== undefined) where.isActive = isActive === 'true';
-      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
+      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 2000);
       const pageNum = Math.max(1, Number(page) || 1);
       const skip = (pageNum - 1) * limitNum;
       const [suppliers, total] = await Promise.all([

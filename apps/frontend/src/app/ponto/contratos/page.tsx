@@ -827,22 +827,22 @@ export default function ContratosPage() {
                 <table className="w-full table-fixed text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[26%] min-w-[180px]">
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[24%] min-w-[160px]">
                         Nome
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[11%]">
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%]">
                         Nº Contrato
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[18%]">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[16%]">
                         Vigência
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[15%]">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[14%]">
                         Centro de Custo
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[14%]">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">
                         Valor + Aditivos
                       </th>
-                      <th className={`px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${showActionsColumn ? 'w-[12%]' : 'w-[16%]'}`}>
+                      <th className={`px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${showActionsColumn ? 'w-[10%]' : 'w-[14%]'}`}>
                         Valor + Aditivos Anual
                       </th>
                       {showActionsColumn && (
@@ -883,21 +883,31 @@ export default function ContratosPage() {
                           className={getListTableRowClassName(true)}
                           aria-label={`Abrir detalhes do contrato ${c.name}`}
                         >
-                          <td className="px-3 sm:px-6 py-3 align-middle text-left min-w-0">
-                            <ListRowNavigableLabel className="font-medium whitespace-normal">
+                          <td className="min-w-0 overflow-hidden px-3 py-3 align-middle text-left sm:px-6">
+                            <ListRowNavigableLabel className="font-medium break-words whitespace-normal">
                               {c.name}
                             </ListRowNavigableLabel>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
-                            <span className="text-sm font-mono text-gray-900 dark:text-gray-100">
+                          <td
+                            className="min-w-0 overflow-hidden px-3 py-3 align-middle text-left text-sm text-gray-700 dark:text-gray-300 sm:px-6"
+                            title={c.number}
+                          >
+                            <span className="block break-all font-mono text-sm text-gray-900 dark:text-gray-100">
                               {c.number}
                             </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
-                            {formatDate(c.startDate)} até {formatDate(c.endDate)}
+                          <td className="overflow-hidden px-3 py-3 text-center text-sm text-gray-700 dark:text-gray-300 sm:px-6">
+                            <span className="block whitespace-normal">
+                              {formatDate(c.startDate)} até {formatDate(c.endDate)}
+                            </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
-                            {c.costCenter?.name || c.costCenter?.code || '-'}
+                          <td
+                            className="min-w-0 overflow-hidden px-3 py-3 text-center text-sm text-gray-700 dark:text-gray-300 sm:px-6"
+                            title={c.costCenter?.name || c.costCenter?.code || '-'}
+                          >
+                            <span className="block truncate">
+                              {c.costCenter?.name || c.costCenter?.code || '-'}
+                            </span>
                           </td>
                           <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
                             {formatCurrency(c.valuePlusAddenda)}

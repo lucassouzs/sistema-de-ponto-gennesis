@@ -651,6 +651,53 @@ export default function GerenciarMateriaisPage() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">Descrição</p>
                   <p className="text-gray-900 dark:text-gray-100">{selectedRequest.description || 'Sem descrição'}</p>
                 </div>
+                {selectedRequest.demandSheet ? (
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Ficha de Demanda</p>
+                    <p className="text-gray-900 dark:text-gray-100">{selectedRequest.demandSheet}</p>
+                  </div>
+                ) : null}
+                {(() => {
+                  const fromList = Array.isArray(selectedRequest.demandSheetAttachments)
+                    ? selectedRequest.demandSheetAttachments
+                        .map((file) => ({
+                          url: String(file?.url || '').trim(),
+                          name: String(file?.name || '').trim() || 'Arquivo anexado',
+                        }))
+                        .filter((file) => file.url)
+                    : [];
+                  const fdFiles =
+                    fromList.length > 0
+                      ? fromList
+                      : selectedRequest.demandSheetAttachmentUrl
+                        ? [
+                            {
+                              url: selectedRequest.demandSheetAttachmentUrl,
+                              name: selectedRequest.demandSheetAttachmentName || 'Arquivo anexado',
+                            },
+                          ]
+                        : [];
+                  if (fdFiles.length === 0) return null;
+                  return (
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Anexos</p>
+                      <ul className="space-y-1">
+                        {fdFiles.map((file, index) => (
+                          <li key={`${file.url}-${index}`}>
+                            <a
+                              href={absoluteUploadUrl(file.url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                            >
+                              {file.name || 'Ver anexo'}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
                 <div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Itens</p>
                   <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">

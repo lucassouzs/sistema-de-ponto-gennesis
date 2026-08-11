@@ -216,7 +216,7 @@ router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => 
       throw createError('Usuário não autenticado', 401);
     }
 
-    const { costCenterId, projectId, serviceOrderId, serviceOrder, obra, description, priority, demandSheet, demandSheetAttachmentUrl, demandSheetAttachmentName, items } =
+    const { costCenterId, projectId, serviceOrderId, serviceOrder, obra, description, priority, demandSheet, demandSheetAttachmentUrl, demandSheetAttachmentName, demandSheetAttachments, items } =
       req.body;
 
     if (!costCenterId || !items || !Array.isArray(items) || items.length === 0) {
@@ -237,6 +237,7 @@ router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => 
       demandSheet,
       demandSheetAttachmentUrl,
       demandSheetAttachmentName,
+      demandSheetAttachments,
       items: items.map((item: any) => ({
         materialId: item.materialId,
         quantity: item.quantity,
@@ -319,8 +320,21 @@ router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction)
   try {
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
     const { id } = req.params;
-    const { costCenterId, projectId, serviceOrderId, serviceOrder, obra, description, priority, items, submitForApproval } =
-      req.body;
+    const {
+      costCenterId,
+      projectId,
+      serviceOrderId,
+      serviceOrder,
+      obra,
+      description,
+      priority,
+      demandSheet,
+      demandSheetAttachmentUrl,
+      demandSheetAttachmentName,
+      demandSheetAttachments,
+      items,
+      submitForApproval,
+    } = req.body;
 
     if (!costCenterId || !items || !Array.isArray(items) || items.length === 0) {
       throw createError('Centro de custo e itens são obrigatórios', 400);
@@ -340,6 +354,10 @@ router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction)
           ? undefined
           : normalizeRmPriority(priority),
       items: items.map((item: any) => normalizeRmItemBody(item)),
+      demandSheet,
+      demandSheetAttachmentUrl,
+      demandSheetAttachmentName,
+      demandSheetAttachments,
       submitForApproval: Boolean(submitForApproval)
     });
 
