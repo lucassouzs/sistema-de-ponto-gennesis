@@ -14,10 +14,10 @@ import {
   Box,
   Filter,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   RotateCcw,
   Download,
-  Eye,
   MoreVertical,
   Search,
   X
@@ -89,6 +89,15 @@ interface GroupedStockBalance {
   material: Material;
   lines: Array<{
     costCenter?: { id: string; code: string; name: string } | null;
+    balance: number;
+  }>;
+}
+
+interface GroupedStockByContract {
+  key: string;
+  costCenter: StockBalance['costCenter'];
+  lines: Array<{
+    material: Material;
     balance: number;
   }>;
 }
@@ -628,7 +637,9 @@ export default function EstoquePage() {
   const [balanceCurrentPage, setBalanceCurrentPage] = useState(1);
   const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
   const [historyDetail, setHistoryDetail] = useState<StockMovement | null>(null);
-  const [balanceDetail, setBalanceDetail] = useState<GroupedStockBalance | null>(null);
+  const [balanceView, setBalanceView] = useState<'material' | 'contract'>('contract');
+  const [selectedContractKey, setSelectedContractKey] = useState<string | null>(null);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<'excel' | 'pdf'>('excel');
@@ -717,14 +728,20 @@ export default function EstoquePage() {
     setFiltersCostCenterId(lockedUnbCostCenterId);
   }, [lockedUnbCostCenterId]);
 
+  const balanceApiSearch =
+    (balanceView === 'contract' && selectedContractKey) ||
+    (balanceView === 'material' && selectedMaterialId)
+      ? ''
+      : filtersSearch;
+
   const { data: balanceData, isLoading: loadingBalance } = useQuery({
-    queryKey: ['stock-balance', filtersCostCenterId, filtersCategory, filtersSearch],
+    queryKey: ['stock-balance', filtersCostCenterId, filtersCategory, balanceApiSearch],
     queryFn: async () => {
       const res = await api.get('/stock/balance', {
         params: {
           costCenterId: filtersCostCenterId || undefined,
           category: filtersCategory || undefined,
-          search: filtersSearch || undefined
+          search: balanceApiSearch || undefined
         }
       });
       return res.data;
@@ -1148,11 +1165,77 @@ export default function EstoquePage() {
       }))
       .sort((a, b) => a.material.name.localeCompare(b.material.name, 'pt-BR'));
   }, [balances]);
-  const balanceTotal = groupedBalances.length;
+  const groupedByContract = useMemo(() => {
+    const byContract = new Map<string, GroupedStockByContract>();
+    for (const row of balances) {
+      const key = row.costCenter?.id || 'sem-contrato';
+      const existing = byContract.get(key);
+      if (existing) {
+        existing.lines.push({ material: row.material, balance: row.balance });
+      } else {
+        byContract.set(key, {
+          key,
+          costCenter: row.costCenter,
+          lines: [{ material: row.material, balance: row.balance }],
+        });
+      }
+    }
+    return Array.from(byContract.values())
+      .map((group) => ({
+        ...group,
+        lines: [...group.lines].sort((a, b) =>
+          a.material.name.localeCompare(b.material.name, 'pt-BR')
+        ),
+      }))
+      .sort((a, b) =>
+        (a.costCenter?.name || 'Não informado').localeCompare(
+          b.costCenter?.name || 'Não informado',
+          'pt-BR'
+        )
+      );
+  }, [balances]);
+  const selectedContractGroup = useMemo(
+    () => groupedByContract.find((group) => group.key === selectedContractKey) ?? null,
+    [groupedByContract, selectedContractKey]
+  );
+  const showingContractStock = balanceView === 'contract' && Boolean(selectedContractKey);
+  const selectedMaterialGroup = useMemo(
+    () => groupedBalances.find((group) => group.material.id === selectedMaterialId) ?? null,
+    [groupedBalances, selectedMaterialId]
+  );
+  const showingMaterialStock = balanceView === 'material' && Boolean(selectedMaterialId);
+  const contractStockLines = useMemo(() => {
+    const lines = selectedContractGroup?.lines ?? [];
+    const q = filtersSearch.trim().toLowerCase();
+    if (!showingContractStock || !q) return lines;
+    return lines.filter(
+      (line) =>
+        line.material.name.toLowerCase().includes(q) ||
+        (line.material.category || '').toLowerCase().includes(q)
+    );
+  }, [selectedContractGroup, showingContractStock, filtersSearch]);
+  const materialStockLines = useMemo(() => {
+    const lines = selectedMaterialGroup?.lines ?? [];
+    const q = filtersSearch.trim().toLowerCase();
+    if (!showingMaterialStock || !q) return lines;
+    return lines.filter((line) =>
+      (line.costCenter?.name || 'Não informado').toLowerCase().includes(q)
+    );
+  }, [selectedMaterialGroup, showingMaterialStock, filtersSearch]);
+  const balanceTotal = showingContractStock
+    ? contractStockLines.length
+    : showingMaterialStock
+      ? materialStockLines.length
+      : balanceView === 'material'
+        ? groupedBalances.length
+        : groupedByContract.length;
   const balanceTotalPages = Math.max(1, Math.ceil(balanceTotal / BALANCE_ITEMS_PER_PAGE));
   const balanceStartIndex = (balanceCurrentPage - 1) * BALANCE_ITEMS_PER_PAGE;
   const balanceEndIndex = balanceStartIndex + BALANCE_ITEMS_PER_PAGE;
   const paginatedGroupedBalances = groupedBalances.slice(balanceStartIndex, balanceEndIndex);
+  const paginatedGroupedByContract = groupedByContract.slice(balanceStartIndex, balanceEndIndex);
+  const paginatedContractStock = contractStockLines.slice(balanceStartIndex, balanceEndIndex);
+  const paginatedMaterialStock = materialStockLines.slice(balanceStartIndex, balanceEndIndex);
   const balanceStartItem = balanceTotal === 0 ? 0 : balanceStartIndex + 1;
   const balanceEndItem = Math.min(balanceEndIndex, balanceTotal);
   const balancesByMaterial = useMemo(() => {
@@ -1224,7 +1307,7 @@ export default function EstoquePage() {
 
   useEffect(() => {
     setBalanceCurrentPage(1);
-  }, [filtersCostCenterId, filtersCategory, filtersSearch]);
+  }, [filtersCostCenterId, filtersCategory, filtersSearch, balanceView, selectedContractKey, selectedMaterialId]);
 
   useEffect(() => {
     setHistoryCurrentPage(1);
@@ -1250,15 +1333,6 @@ export default function EstoquePage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [historyDetail]);
-
-  useEffect(() => {
-    if (!balanceDetail) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setBalanceDetail(null);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [balanceDetail]);
 
   useEffect(() => {
     if (!isMovementModalOpen) return;
@@ -1848,29 +1922,83 @@ export default function EstoquePage() {
           </div>
 
           <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex justify-center space-x-8">
+            <nav
+              className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
+              role="tablist"
+              aria-label="Seções de estoque"
+            >
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'balance'}
                 onClick={() => setActiveTab('balance')}
-                className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                   activeTab === 'balance'
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
+                    ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200'
                 }`}
               >
                 Lista de Estoque
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'movements'}
                 onClick={() => setActiveTab('movements')}
-                className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
                   activeTab === 'movements'
-                    ? 'border-red-600 text-red-600'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300'
+                    ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200'
                 }`}
               >
                 Histórico
               </button>
             </nav>
           </div>
+          {activeTab === 'balance' && (
+            <div className="border-b border-gray-200 dark:border-gray-700">
+              <nav
+                className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
+                role="tablist"
+                aria-label="Agrupar lista de estoque"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={balanceView === 'contract'}
+                  onClick={() => {
+                    setBalanceView('contract');
+                    setSelectedContractKey(null);
+                    setSelectedMaterialId(null);
+                  }}
+                  className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                    balanceView === 'contract'
+                      ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Por contrato
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={balanceView === 'material'}
+                  onClick={() => {
+                    setBalanceView('material');
+                    setSelectedContractKey(null);
+                    setSelectedMaterialId(null);
+                  }}
+                  className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                    balanceView === 'material'
+                      ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                  }`}
+                >
+                  Por material
+                </button>
+              </nav>
+            </div>
+          )}
 
           {activeTab === 'balance' && (
             <Card className="w-full">
@@ -1881,10 +2009,56 @@ export default function EstoquePage() {
                       <Box className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Lista de Estoque</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Consulte materiais e quantidades em estoque por contrato
-                      </p>
+                      <h3 className="text-lg font-semibold leading-7 text-gray-900 dark:text-gray-100">Lista de Estoque</h3>
+                      <div className="h-5 text-sm leading-5">
+                        {showingContractStock ? (
+                          <nav className="flex h-5 min-w-0 items-center gap-1" aria-label="Navegação do contrato">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedContractKey(null);
+                                setFiltersSearch('');
+                              }}
+                              className="truncate text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                            >
+                              Contratos
+                            </button>
+                            <ChevronRight
+                              className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500"
+                              aria-hidden
+                            />
+                            <span className="truncate font-medium text-gray-700 dark:text-gray-200">
+                              {selectedContractGroup?.costCenter?.name || 'Não informado'}
+                            </span>
+                          </nav>
+                        ) : showingMaterialStock ? (
+                          <nav className="flex h-5 min-w-0 items-center gap-1" aria-label="Navegação do material">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedMaterialId(null);
+                                setFiltersSearch('');
+                              }}
+                              className="truncate text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                            >
+                              Materiais
+                            </button>
+                            <ChevronRight
+                              className="h-3.5 w-3.5 shrink-0 text-gray-400 dark:text-gray-500"
+                              aria-hidden
+                            />
+                            <span className="truncate font-medium text-gray-700 dark:text-gray-200">
+                              {selectedMaterialGroup?.material.name || 'Material'}
+                            </span>
+                          </nav>
+                        ) : (
+                          <p className="truncate text-gray-600 dark:text-gray-400">
+                            {balanceView === 'contract'
+                              ? 'Selecione um contrato para ver itens e quantidades'
+                              : 'Selecione um material para ver os contratos e quantidades'}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
@@ -1894,7 +2068,15 @@ export default function EstoquePage() {
                         type="text"
                         value={filtersSearch}
                         onChange={(e) => setFiltersSearch(e.target.value)}
-                        placeholder="Pesquisar material..."
+                        placeholder={
+                          showingContractStock
+                            ? 'Pesquisar material...'
+                            : showingMaterialStock
+                              ? 'Pesquisar contrato...'
+                              : balanceView === 'contract'
+                                ? 'Pesquisar contrato, material...'
+                                : 'Pesquisar material...'
+                        }
                         className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                       {filtersSearch && (
@@ -1963,72 +2145,181 @@ export default function EstoquePage() {
                   <>
                     <div className="mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
                       <span>
-                        Mostrando {balanceStartItem} a {balanceEndItem} de {balanceTotal} materiais
+                        Mostrando {balanceStartItem} a {balanceEndItem} de {balanceTotal}{' '}
+                        {showingMaterialStock || (balanceView === 'contract' && !showingContractStock)
+                          ? 'contratos'
+                          : 'materiais'}
                       </span>
                       <span>
                         Página {balanceCurrentPage} de {balanceTotalPages}
                       </span>
                     </div>
                     <div className="table-scroll">
-                      <table className="w-full text-sm">
-                        <thead className="border-b border-gray-200 dark:border-gray-700">
-                          <tr>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Material
-                            </th>
-                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Categoria
-                            </th>
-                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Quantidade total
-                            </th>
-                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Unidade
-                            </th>
-                            <th className="px-3 sm:px-4 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Detalhes
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                          {paginatedGroupedBalances.map((group) => {
-                            const totalBalance = group.lines.reduce((sum, line) => sum + line.balance, 0);
-                            const costCenterCount = group.lines.length;
-                            return (
-                            <tr
-                              key={group.material.id}
-                              className={listTableRowClasses.tr}
-                            >
-                              <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                <span className="text-sm text-gray-900 dark:text-gray-100">{group.material.name}</span>
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
-                                {group.material.category || '—'}
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                {totalBalance.toLocaleString('pt-BR')}
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
-                                {group.material.unit}
-                              </td>
-                              <td className="px-3 sm:px-4 py-3 text-center">
-                                <button
-                                  type="button"
-                                  onClick={() => setBalanceDetail(group)}
-                                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-gray-200"
-                                  title="Ver saldo por contrato"
-                                >
-                                  <Eye className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                                  <span className="whitespace-nowrap">
-                                    {costCenterCount === 1 ? '1 contrato' : `${costCenterCount} contratos`}
-                                  </span>
-                                </button>
-                              </td>
+                      {showingMaterialStock ? (
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-200 dark:border-gray-700">
+                            <tr>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Contrato
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Quantidade
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Unidade
+                              </th>
                             </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {paginatedMaterialStock.map((line, index) => (
+                              <tr
+                                key={line.costCenter?.id || `sem-cc-${index}`}
+                                className={listTableRowClasses.tr}
+                              >
+                                <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {line.costCenter?.name || 'Não informado'}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                  {line.balance.toLocaleString('pt-BR')}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {selectedMaterialGroup?.material.unit}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : showingContractStock ? (
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-200 dark:border-gray-700">
+                            <tr>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Material
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Categoria
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Quantidade
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Unidade
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {paginatedContractStock.map((line) => (
+                              <tr key={line.material.id} className={listTableRowClasses.tr}>
+                                <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {line.material.name}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {line.material.category || '—'}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                  {line.balance.toLocaleString('pt-BR')}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {line.material.unit}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : balanceView === 'contract' ? (
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-200 dark:border-gray-700">
+                            <tr>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Contrato
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Materiais
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {paginatedGroupedByContract.map((group) => {
+                              const materialCount = group.lines.length;
+                              return (
+                                <tr
+                                  key={group.key}
+                                  onClick={() => {
+                                    setSelectedContractKey(group.key);
+                                    setFiltersSearch('');
+                                  }}
+                                  className={getListTableRowClassName(true)}
+                                >
+                                  <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    <ListRowNavigableLabel className="font-medium">
+                                      {group.costCenter?.name || 'Não informado'}
+                                    </ListRowNavigableLabel>
+                                  </td>
+                                  <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                    {materialCount}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-200 dark:border-gray-700">
+                            <tr>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Material
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Categoria
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Quantidade total
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Unidade
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                Contratos
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            {paginatedGroupedBalances.map((group) => {
+                              const totalBalance = group.lines.reduce((sum, line) => sum + line.balance, 0);
+                              const costCenterCount = group.lines.length;
+                              return (
+                              <tr
+                                key={group.material.id}
+                                onClick={() => {
+                                  setSelectedMaterialId(group.material.id);
+                                  setFiltersSearch('');
+                                }}
+                                className={getListTableRowClassName(true)}
+                              >
+                                <td className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  <ListRowNavigableLabel className="font-medium">
+                                    {group.material.name}
+                                  </ListRowNavigableLabel>
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {group.material.category || '—'}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                  {totalBalance.toLocaleString('pt-BR')}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {group.material.unit}
+                                </td>
+                                <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
+                                  {costCenterCount}
+                                </td>
+                              </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                     {balanceTotalPages > 1 && (
                       <div className="mt-4 flex items-center justify-center gap-2">
@@ -2397,103 +2688,6 @@ export default function EstoquePage() {
                 </div>
               )}
             </Card>
-          )}
-
-          {balanceDetail && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div
-                className="absolute inset-0 bg-black/40"
-                onClick={() => setBalanceDetail(null)}
-                aria-hidden
-              />
-              <div
-                className="relative z-10 w-full max-w-lg max-h-[min(90vh,32rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="balance-detail-modal-title"
-              >
-                <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3">
-                  <h2
-                    id="balance-detail-modal-title"
-                    className="text-base font-semibold text-gray-900 dark:text-gray-100 pr-2"
-                  >
-                    Saldo por contrato
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setBalanceDetail(null)}
-                    className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    aria-label="Fechar"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4 space-y-4">
-                  <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Material</span>
-                      <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {balanceDetail.material.name}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Categoria</span>
-                      <span className="text-gray-800 dark:text-gray-200">
-                        {balanceDetail.material.category || '—'}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Quantidade total</span>
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {balanceDetail.lines
-                          .reduce((sum, line) => sum + line.balance, 0)
-                          .toLocaleString('pt-BR')}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Unidade de medida</span>
-                      <span className="text-gray-800 dark:text-gray-200">{balanceDetail.material.unit}</span>
-                    </p>
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Contratos</span>
-                      <span className="text-gray-800 dark:text-gray-200">{balanceDetail.lines.length}</span>
-                    </p>
-                  </div>
-                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
-                    <table className="w-full text-sm">
-                      <thead className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/80">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Contrato
-                          </th>
-                          <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Quantidade
-                          </th>
-                          <th className="px-4 py-2.5 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                            Unidade de medida
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                        {balanceDetail.lines.map((line, index) => (
-                          <tr key={line.costCenter?.id || `sem-cc-${index}`}>
-                            <td className="px-4 py-2.5 text-gray-800 dark:text-gray-200">
-                              {line.costCenter?.name || 'Não informado'}
-                            </td>
-                            <td className="px-4 py-2.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                              {line.balance.toLocaleString('pt-BR')}
-                            </td>
-                            <td className="px-4 py-2.5 text-right text-gray-700 dark:text-gray-300">
-                              {balanceDetail.material.unit}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
           )}
 
           {historyDetail && (

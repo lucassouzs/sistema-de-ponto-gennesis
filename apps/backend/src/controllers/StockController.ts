@@ -152,9 +152,11 @@ export class StockController {
 
       if (search) {
         const searchStr = String(search);
-        movementsWhere.material.OR = [
-          { name: { contains: searchStr, mode: 'insensitive' } },
-          { description: { contains: searchStr, mode: 'insensitive' } }
+        movementsWhere.OR = [
+          { material: { name: { contains: searchStr, mode: 'insensitive' } } },
+          { material: { description: { contains: searchStr, mode: 'insensitive' } } },
+          { costCenter: { name: { contains: searchStr, mode: 'insensitive' } } },
+          { costCenter: { code: { contains: searchStr, mode: 'insensitive' } } },
         ];
       }
 
