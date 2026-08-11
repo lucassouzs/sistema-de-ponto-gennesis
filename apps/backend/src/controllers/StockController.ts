@@ -477,4 +477,143 @@ export class StockController {
       next(error);
     }
   }
+
+  /**
+   * Importação em lote de ajustes de estoque (marcados como [AJUSTE_ESTOQUE]).
+   */
+  async importAdjustments(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+
+      const rows = req.body?.adjustments;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        throw createError('Envie um array "adjustments" com ao menos um item', 400);
+      }
+
+      const ADJUSTMENT_MARKER = '[AJUSTE_ESTOQUE]';
+      const norm = (v: unknown) =>
+        String(v ?? '')
+          .trim()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ');
+
+      const [materials, costCenters] = await Promise.all([
+        prisma.constructionMaterial.findMany({
+          select: { id: true, name: true, unit: true, code: true },
+        }),
+        prisma.costCenter.findMany({
+          select: { id: true, name: true, code: true },
+        }),
+      ]);
+
+      const materialByName = new Map(materials.map((m) => [norm(m.name), m]));
+      const materialByCode = new Map(
+        materials.filter((m) => m.code).map((m) => [norm(m.code), m]),
+      );
+      const costCenterByName = new Map(costCenters.map((c) => [norm(c.name), c]));
+      const costCenterByCode = new Map(
+        costCenters.filter((c) => c.code).map((c) => [norm(c.code), c]),
+      );
+
+      const unbScope = await getUserUnbCostCenterScope(req.user.id, !!req.user.isAdmin);
+      let created = 0;
+      const errors: { index: number; message: string }[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = (rows[i] || {}) as Record<string, unknown>;
+        try {
+          const materialKey = norm(row.material);
+          const material =
+            materialByName.get(materialKey) ||
+            materialByCode.get(materialKey) ||
+            materialByName.get(materialKey.replace(/^\[inativo\]\s*/, ''));
+          if (!material) {
+            errors.push({ index: i, message: `Material não encontrado: ${String(row.material || '').trim()}` });
+            continue;
+          }
+
+          const typeRaw = String(row.type || '').toUpperCase();
+          const type = typeRaw === 'IN' || typeRaw === 'OUT' ? typeRaw : '';
+          if (!type) {
+            errors.push({ index: i, message: 'Movimento deve ser Entrada ou Saída' });
+            continue;
+          }
+
+          const quantity = parseFloat(String(row.quantity ?? '').replace(',', '.'));
+          if (!Number.isFinite(quantity) || quantity <= 0) {
+            errors.push({ index: i, message: 'Quantidade inválida' });
+            continue;
+          }
+
+          const contratoKey = norm(row.contrato ?? row.costCenter ?? row.costCenterName);
+          let costCenterId: string | null = null;
+          if (contratoKey) {
+            const cc = costCenterByName.get(contratoKey) || costCenterByCode.get(contratoKey);
+            if (!cc) {
+              errors.push({
+                index: i,
+                message: `Contrato não encontrado: ${String(row.contrato || row.costCenter || '').trim()}`,
+              });
+              continue;
+            }
+            costCenterId = cc.id;
+            await assertCostCenterAllowedForUnbUser(req.user.id, !!req.user.isAdmin, costCenterId);
+          } else if (unbScope !== null) {
+            errors.push({ index: i, message: 'Informe o contrato (centro de custo UNB)' });
+            continue;
+          }
+
+          if (type === 'OUT') {
+            const groupedByType = await prisma.stockMovement.groupBy({
+              by: ['type'],
+              where: {
+                materialId: material.id,
+                costCenterId,
+              },
+              _sum: { quantity: true },
+            });
+            const totalIn = groupedByType.find((item) => item.type === 'IN')?._sum.quantity || 0;
+            const totalOut = groupedByType.find((item) => item.type === 'OUT')?._sum.quantity || 0;
+            const availableBalance = totalIn - totalOut;
+            if (quantity > availableBalance) {
+              errors.push({
+                index: i,
+                message: `Saldo insuficiente para ${material.name}. Disponível: ${availableBalance} ${material.unit}`,
+              });
+              continue;
+            }
+          }
+
+          const extraNotes = String(row.notes ?? '').trim();
+          const notes = [ADJUSTMENT_MARKER, extraNotes].filter(Boolean).join('\n');
+
+          await prisma.stockMovement.create({
+            data: {
+              materialId: material.id,
+              costCenterId,
+              type,
+              quantity,
+              notes,
+              userId: req.user.id,
+            },
+          });
+          created += 1;
+        } catch (err) {
+          errors.push({
+            index: i,
+            message: err instanceof Error ? err.message : 'Erro ao importar linha',
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        data: { created, failed: errors.length, errors },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

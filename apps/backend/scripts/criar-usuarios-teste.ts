@@ -28,7 +28,7 @@ const DEFAULT_WORK_SCHEDULE = {
 /** Módulos mínimos para logar e usar o fluxo de ponto no frontend. */
 const BASIC_MODULE_PATHS = [
   '/ponto',
-  '/ponto/dashboard',
+  '/ponto/painel-do-sistema',
   '/ponto/banco-horas',
   '/ponto/solicitacoes',
 ] as const;

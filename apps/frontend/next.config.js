@@ -35,6 +35,11 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: '/ponto/dashboard',
+        destination: '/ponto/painel-do-sistema',
+        permanent: true,
+      },
+      {
         source: '/ponto/espelho-nf/codigos-tributarios',
         destination: '/ponto/codigos-tributarios',
         permanent: true

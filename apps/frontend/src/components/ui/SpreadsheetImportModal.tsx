@@ -35,6 +35,8 @@ type SpreadsheetImportModalProps = {
   batchSize?: number;
   /** Timeout por lote (ms). Padrão: 120s — importações com normalização externa precisam de mais tempo. */
   requestTimeoutMs?: number;
+  /** Conteúdo extra no bloco do modelo (ex.: escolher quais linhas pré-preencher). */
+  templateExtra?: React.ReactNode;
 };
 
 function resolveImportErrorMessage(err: unknown): string {
@@ -70,6 +72,7 @@ export function SpreadsheetImportModal({
   onImported,
   batchSize = 100,
   requestTimeoutMs = 120_000,
+  templateExtra,
 }: SpreadsheetImportModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileInputId = `import-file-${bodyKey}`;
@@ -223,21 +226,24 @@ export function SpreadsheetImportModal({
           </div>
         ) : (
           <>
-            <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-900/40 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                  Modelo de planilha
-                </p>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{templateHint}</p>
+            <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Modelo de planilha
+                  </p>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{templateHint}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Download className="h-4 w-4" />
+                  Baixar modelo
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={downloadTemplate}
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-              >
-                <Download className="h-4 w-4" />
-                Baixar modelo
-              </button>
+              {templateExtra}
             </div>
 
             <div>

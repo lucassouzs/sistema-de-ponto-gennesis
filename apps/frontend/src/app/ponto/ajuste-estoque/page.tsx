@@ -14,6 +14,7 @@ import {
   MoreVertical,
   RotateCcw,
   Search,
+  Upload,
   X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -26,7 +27,16 @@ import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDr
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { ConstructionMaterialSearchDropdown } from '@/components/suprimentos/ConstructionMaterialSearchDropdown';
-import type { ConstructionMaterialListItem } from '@/lib/fetchAllConstructionMaterials';
+import {
+  fetchAllConstructionMaterials,
+  type ConstructionMaterialListItem,
+} from '@/lib/fetchAllConstructionMaterials';
+import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
+import {
+  STOCK_ADJUSTMENT_IMPORT_COLUMNS,
+  downloadStockAdjustmentImportTemplate,
+  parseStockAdjustmentsFromFile,
+} from '@/lib/stockAdjustmentImport';
 import toast from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
@@ -207,6 +217,11 @@ export default function AjusteEstoquePage() {
   const queryClient = useQueryClient();
   const { isUnbUser, unbCostCenterIds } = usePermissions();
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [templateMaterialMode, setTemplateMaterialMode] = useState<'all' | 'selected'>('all');
+  const [templateMaterials, setTemplateMaterials] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
 
   const [formData, setFormData] = useState<MovementFormData>(emptyForm());
   const [selectedMaterial, setSelectedMaterial] = useState<ConstructionMaterialListItem | null>(null);
@@ -265,6 +280,13 @@ export default function AjusteEstoquePage() {
       const res = await api.get('/stock/movements', { params: { limit: 500 } });
       return res.data;
     }
+  });
+
+  const { data: importMaterials = [] } = useQuery({
+    queryKey: ['construction-materials', 'ajuste-import'],
+    queryFn: () => fetchAllConstructionMaterials(),
+    enabled: isImportModalOpen,
+    staleTime: 5 * 60 * 1000,
   });
 
   const closeAdjustmentModal = () => {
@@ -480,6 +502,15 @@ export default function AjusteEstoquePage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setIsImportModalOpen(true)}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      aria-label="Importar"
+                      title="Importar"
+                    >
+                      <Upload className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         setFormData(emptyForm(lockedUnbCostCenterId || ''));
                         setIsAdjustmentModalOpen(true);
@@ -520,24 +551,24 @@ export default function AjusteEstoquePage() {
                         <thead className="border-b border-gray-200 dark:border-gray-700">
                           <tr>
                             <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Data
-                            </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Material
+                            </th>
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Data
                             </th>
                             <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Movimento
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Quantidade
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                              Centro de Custo
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              Contrato
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Registrado por
                             </th>
-                            <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               Ação
                             </th>
                           </tr>
@@ -549,11 +580,11 @@ export default function AjusteEstoquePage() {
                               onClick={() => setHistoryDetail(mov)}
                               className={getListTableRowClassName(true)}
                             >
-                              <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                {new Date(mov.createdAt).toLocaleString('pt-BR')}
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm">
+                              <td className="px-3 sm:px-6 py-3 text-left text-sm">
                                 <ListRowNavigableLabel className="font-medium">{mov.material.name}</ListRowNavigableLabel>
+                              </td>
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                {new Date(mov.createdAt).toLocaleString('pt-BR')}
                               </td>
                               <td className="px-3 sm:px-6 py-3 text-center">
                                 <span
@@ -571,24 +602,26 @@ export default function AjusteEstoquePage() {
                                   {mov.type === 'IN' ? 'Entrada' : 'Saída'}
                                 </span>
                               </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-right font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm font-semibold text-gray-900 dark:text-gray-100 whitespace-nowrap">
                                 {mov.quantity.toLocaleString('pt-BR')} {mov.material.unit}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
                                 {mov.costCenter?.name || '—'}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                              <td className="px-3 sm:px-6 py-3 text-center text-sm text-gray-700 dark:text-gray-300">
                                 {mov.user.name}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  onClick={() => setHistoryDetail(mov)}
-                                  className={rowActionMenuButtonClass(false)}
-                                  aria-label="Ver detalhes"
-                                >
-                                  <MoreVertical className="w-4 h-4" />
-                                </button>
+                              <td className="px-3 sm:px-6 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => setHistoryDetail(mov)}
+                                    className={rowActionMenuButtonClass(false)}
+                                    aria-label="Ver detalhes"
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           ))}
@@ -876,7 +909,7 @@ export default function AjusteEstoquePage() {
                   </p>
                   {historyDetail.costCenter && (
                     <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Centro de custo</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Contrato</span>
                       <span>{historyDetail.costCenter.name}</span>
                     </p>
                   )}
@@ -893,6 +926,125 @@ export default function AjusteEstoquePage() {
               </div>
             </div>
           )}
+
+          <SpreadsheetImportModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            title="Importar ajustes de estoque"
+            templateHint="Baixe o modelo com os materiais já nas linhas. Preencha movimento, quantidade e contrato só nos itens que quiser importar — o resto é ignorado."
+            columns={STOCK_ADJUSTMENT_IMPORT_COLUMNS}
+            bodyKey="adjustments"
+            importPath="/stock/adjustments/import"
+            downloadTemplate={() => {
+              if (templateMaterialMode === 'selected' && templateMaterials.length === 0) {
+                toast.error('Selecione os itens do modelo ou escolha Todos.');
+                return;
+              }
+              const names =
+                templateMaterialMode === 'all'
+                  ? importMaterials.map((m) => m.name)
+                  : templateMaterials.map((m) => m.name);
+              downloadStockAdjustmentImportTemplate(names);
+            }}
+            parseFile={async (file) => {
+              const report = await parseStockAdjustmentsFromFile(file);
+              return {
+                items: report.items,
+                skipped: report.skipped,
+                totalRows: report.totalRows,
+              };
+            }}
+            onImported={() => {
+              void queryClient.invalidateQueries({ queryKey: ['stock-adjustment-movements'] });
+              void queryClient.invalidateQueries({ queryKey: ['stock-balance'] });
+              void queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+            }}
+            templateExtra={
+              <div className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                  Itens no modelo
+                </p>
+                <div className="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateMaterialMode('all')}
+                    className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                      templateMaterialMode === 'all'
+                        ? 'bg-white font-medium text-red-600 shadow-sm dark:bg-gray-600 dark:text-red-400'
+                        : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateMaterialMode('selected')}
+                    className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                      templateMaterialMode === 'selected'
+                        ? 'bg-white font-medium text-red-600 shadow-sm dark:bg-gray-600 dark:text-red-400'
+                        : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'
+                    }`}
+                  >
+                    Escolher itens
+                  </button>
+                </div>
+                {templateMaterialMode === 'selected' && (
+                  <div className="space-y-2">
+                    <ConstructionMaterialSearchDropdown
+                      value=""
+                      stayOpenOnSelect
+                      selectedIds={templateMaterials.map((m) => m.id)}
+                      onChange={(_id, material) => {
+                        setTemplateMaterials((prev) =>
+                          prev.some((m) => m.id === material.id)
+                            ? prev.filter((m) => m.id !== material.id)
+                            : [...prev, { id: material.id, name: material.name }],
+                        );
+                      }}
+                      placeholder="Digite para buscar material..."
+                      noFocusRing
+                    />
+                    {templateMaterials.length > 0 && (
+                      <>
+                        <ul className="flex flex-wrap gap-1.5">
+                          {templateMaterials.map((m) => (
+                            <li
+                              key={m.id}
+                              className="inline-flex max-w-full items-center gap-1 rounded-full border border-gray-200 bg-white py-1 pl-2.5 pr-1 text-xs text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                            >
+                              <span className="min-w-0 truncate">{m.name}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setTemplateMaterials((prev) => prev.filter((x) => x.id !== m.id))
+                                }
+                                className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                aria-label={`Remover ${m.name}`}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          onClick={() => setTemplateMaterials([])}
+                          className="text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          Tirar todos
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {templateMaterialMode === 'all'
+                    ? `${importMaterials.length} material(is) vão no modelo.`
+                    : `${templateMaterials.length} material(is) selecionado(s).`}
+                </p>
+              </div>
+            }
+          />
         </div>
       </MainLayout>
     </ProtectedRoute>

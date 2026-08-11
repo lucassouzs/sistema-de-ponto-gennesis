@@ -75,6 +75,10 @@ router.post('/movements', (req, res, next) =>
   stockController.createMovement(req, res, next)
 );
 
+router.post('/adjustments/import', (req, res, next) =>
+  stockController.importAdjustments(req, res, next)
+);
+
 // Upload de nota fiscal para movimentação
 router.post('/upload-invoice', (req, res, next) => {
   invoiceUpload.single('file')(req, res, (err: unknown) => {

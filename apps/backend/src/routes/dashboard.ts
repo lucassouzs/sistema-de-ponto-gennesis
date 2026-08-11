@@ -714,10 +714,10 @@ router.get('/modules', authorize('EMPLOYEE'), async (req: AuthRequest, res, next
     const modules = [
       {
         id: 'dashboard',
-        name: 'Dashboard',
+        name: 'Painel do Sistema',
         description: 'Visão geral do sistema com métricas e estatísticas',
         icon: 'LayoutDashboard',
-        href: '/ponto/dashboard',
+        href: '/ponto/painel-do-sistema',
         category: 'Principal',
         permissions: ['EMPLOYEE']
       },

@@ -9,7 +9,7 @@ import { Loading } from '@/components/ui/Loading';
 import { SystemOverviewDashboard } from '@/components/dashboard/SystemOverviewDashboard';
 import api from '@/lib/api';
 
-export default function DashboardPage() {
+export default function PainelDoSistemaPage() {
   const router = useRouter();
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
@@ -36,7 +36,7 @@ export default function DashboardPage() {
   }, [isFirstLogin, userData]);
 
   if (loadingUser || !userData) {
-    return <Loading message="Carregando dashboard..." fullScreen size="lg" />;
+    return <Loading message="Carregando painel do sistema..." fullScreen size="lg" />;
   }
 
   const user = userData?.data || {

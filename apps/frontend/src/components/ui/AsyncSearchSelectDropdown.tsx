@@ -42,6 +42,10 @@ export type AsyncSearchSelectDropdownProps<T> = {
   hideFocus?: boolean;
   minSearchLength?: number;
   queryKeyPrefix: string;
+  /** Mantém o painel aberto após escolher (para ir selecionando vários). */
+  stayOpenOnSelect?: boolean;
+  /** IDs já escolhidos — mostra check e permite marcar/desmarcar na lista. */
+  selectedIds?: string[];
 };
 
 function getPortalRoot(): HTMLElement | null {
@@ -96,6 +100,8 @@ export function AsyncSearchSelectDropdown<T>({
   hideFocus = false,
   minSearchLength = DEFAULT_MIN_SEARCH_LENGTH,
   queryKeyPrefix,
+  stayOpenOnSelect = false,
+  selectedIds,
 }: AsyncSearchSelectDropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -186,6 +192,10 @@ export function AsyncSearchSelectDropdown<T>({
 
   const pickOption = (option: T) => {
     onChange(option);
+    if (stayOpenOnSelect) {
+      window.requestAnimationFrame(() => searchInputRef.current?.focus());
+      return;
+    }
     closePanel();
   };
 
@@ -229,7 +239,7 @@ export function AsyncSearchSelectDropdown<T>({
       <div className="space-y-0.5">
         {results.map((option) => {
           const id = getOptionId(option);
-          const active = id === value;
+          const active = selectedIds ? selectedIds.includes(id) : id === value;
           return (
             <button
               key={id}

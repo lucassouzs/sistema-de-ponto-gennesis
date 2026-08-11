@@ -13,6 +13,8 @@ export type ConstructionMaterialSearchDropdownProps = {
   disabled?: boolean;
   placeholder?: string;
   noFocusRing?: boolean;
+  stayOpenOnSelect?: boolean;
+  selectedIds?: string[];
 };
 
 export function ConstructionMaterialSearchDropdown({
@@ -22,6 +24,8 @@ export function ConstructionMaterialSearchDropdown({
   disabled,
   placeholder = 'Digite para buscar material...',
   noFocusRing,
+  stayOpenOnSelect,
+  selectedIds,
 }: ConstructionMaterialSearchDropdownProps) {
   return (
     <AsyncSearchSelectDropdown<ConstructionMaterialListItem>
@@ -35,6 +39,8 @@ export function ConstructionMaterialSearchDropdown({
       placeholder={placeholder}
       noFocusRing={noFocusRing}
       queryKeyPrefix="construction-materials-search"
+      stayOpenOnSelect={stayOpenOnSelect}
+      selectedIds={selectedIds}
     />
   );
 }

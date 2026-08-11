@@ -492,8 +492,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         icon: Home,
         items: [
           {
-            name: 'Dashboard',
-            href: '/ponto/dashboard',
+            name: 'Painel do Sistema',
+            href: '/ponto/painel-do-sistema',
             icon: LayoutDashboard,
             description: 'Visão geral do sistema',
             permission: isAdministrator || isDepartmentPessoal || permissions.canViewDashboard

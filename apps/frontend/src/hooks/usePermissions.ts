@@ -522,7 +522,7 @@ export function useRoutePermission(route: string) {
 
   const routePermissions: Record<string, boolean> = {
     '/ponto': isAdministrator || isDepartmentPessoal || permissions.canRegisterTime,
-    '/ponto/dashboard': isAdministrator || isDepartmentPessoal || permissions.canViewDashboard,
+    '/ponto/painel-do-sistema': isAdministrator || isDepartmentPessoal || permissions.canViewDashboard,
     /**
      * Aprovações: a página agora aparece automaticamente para quem precisa decidir
      * sobre algum bloco. Não há mais entrada na matriz de acessos.

@@ -204,7 +204,7 @@ function inferCategoryFromHref(href: string): string {
   const h = href.replace(/\/$/, '') || '/';
   if (
     [
-      '/ponto/dashboard',
+      '/ponto/painel-do-sistema',
       '/ponto/aprovacoes',
       '/ponto/financeiro/gestao-solicitacoes',
       '/ponto/solicitacoes-dp',

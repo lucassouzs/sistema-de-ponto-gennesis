@@ -65,7 +65,8 @@ export const PERMISSION_MODULE_KEYS_OPEN_ACCESS: readonly string[] = [
  */
 export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   // Principal
-  { key: pathToModuleKey('/ponto/dashboard'), name: 'Dashboard', href: '/ponto/dashboard', category: 'Principal' },
+  // key estável (legado `ponto_dashboard`) — href atualizado sem invalidar permissões no banco
+  { key: pathToModuleKey('/ponto/dashboard'), name: 'Painel do Sistema', href: '/ponto/painel-do-sistema', category: 'Principal' },
   { key: pathToModuleKey('/ponto/financeiro/gestao-solicitacoes'), name: 'Fluig - Processos', href: '/ponto/financeiro/gestao-solicitacoes', category: 'Principal' },
   { key: pathToModuleKey('/ponto/fluig/aprovacoes-workflow'), name: 'Fluig - Aprovações', href: '/ponto/fluig/aprovacoes-workflow', category: 'Principal' },
   { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações DP/ADM/TST', href: '/ponto/solicitacoes-dp', category: 'Principal' },
