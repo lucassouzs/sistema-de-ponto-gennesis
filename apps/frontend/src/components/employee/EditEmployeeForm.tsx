@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit, X, Save, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { TOMADORES_LIST } from '@/constants/tomadores';
 import { CARGOS_AVAILABLE } from '@/constants/cargos';
 import { useCostCenters } from '@/hooks/useCostCenters';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -263,6 +264,12 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
   });
 
   const queryClient = useQueryClient();
+
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm);
 
   // Função para validar CPF
   const isValidCPF = (cpf: string): boolean => {
@@ -667,8 +674,9 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
   };
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
       <div className="relative w-full max-w-4xl mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
         <div className="px-8 py-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-between">
           <div>
@@ -676,7 +684,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
             <p className="text-sm text-gray-500 dark:text-gray-400">Atualize os dados do funcionário</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label="Fechar"
           >
@@ -1208,5 +1216,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
         </form>
       </div>
     </div>
+    {confirmUi}
+    </>
   );
 }

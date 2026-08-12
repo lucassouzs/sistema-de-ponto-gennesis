@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -39,6 +39,7 @@ import {
 } from '@/lib/stockAdjustmentImport';
 import toast from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
 
 interface Material {
@@ -289,11 +290,21 @@ export default function AjusteEstoquePage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const closeAdjustmentModal = () => {
+  const closeAdjustmentModal = useCallback(() => {
     setIsAdjustmentModalOpen(false);
     setFormData(emptyForm(lockedUnbCostCenterId || ''));
     setSelectedMaterial(null);
-  };
+  }, [lockedUnbCostCenterId]);
+
+  const { requestClose: requestCloseAdjustmentModal, confirmUi: adjustmentModalConfirmUi } =
+    useModalCloseConfirm(closeAdjustmentModal, { isParentOpen: isAdjustmentModalOpen });
+
+  const closeHistoryDetail = useCallback(() => {
+    setHistoryDetail(null);
+  }, []);
+
+  const { requestClose: requestCloseHistoryDetail, confirmUi: historyDetailConfirmUi } =
+    useModalCloseConfirm(closeHistoryDetail, { isParentOpen: !!historyDetail });
 
   const createMovementMutation = useMutation({
     mutationFn: async (data: MovementPayload) => {
@@ -422,20 +433,20 @@ export default function AjusteEstoquePage() {
   useEffect(() => {
     if (!historyDetail) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setHistoryDetail(null);
+      if (e.key === 'Escape') requestCloseHistoryDetail();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [historyDetail]);
+  }, [historyDetail, requestCloseHistoryDetail]);
 
   useEffect(() => {
     if (!isAdjustmentModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeAdjustmentModal();
+      if (e.key === 'Escape') requestCloseAdjustmentModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isAdjustmentModalOpen]);
+  }, [isAdjustmentModalOpen, requestCloseAdjustmentModal]);
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
@@ -745,7 +756,7 @@ export default function AjusteEstoquePage() {
 
           {isAdjustmentModalOpen && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40" onClick={closeAdjustmentModal} aria-hidden />
+              <div className="absolute inset-0 bg-black/40" onClick={requestCloseAdjustmentModal} aria-hidden />
               <div
                 className="relative flex max-h-[min(92vh,720px)] w-full max-w-lg flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
                 role="dialog"
@@ -761,7 +772,7 @@ export default function AjusteEstoquePage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={closeAdjustmentModal}
+                    onClick={requestCloseAdjustmentModal}
                     className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-0 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                     aria-label="Fechar"
                   >
@@ -860,7 +871,7 @@ export default function AjusteEstoquePage() {
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
-                      onClick={closeAdjustmentModal}
+                      onClick={requestCloseAdjustmentModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -881,7 +892,7 @@ export default function AjusteEstoquePage() {
 
           {historyDetail && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40" onClick={() => setHistoryDetail(null)} aria-hidden />
+              <div className="absolute inset-0 bg-black/40" onClick={requestCloseHistoryDetail} aria-hidden />
               <div className="relative z-10 w-full max-w-lg max-h-[min(90vh,32rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
                 <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3">
                   <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pr-2">
@@ -889,7 +900,7 @@ export default function AjusteEstoquePage() {
                   </h2>
                   <button
                     type="button"
-                    onClick={() => setHistoryDetail(null)}
+                    onClick={requestCloseHistoryDetail}
                     className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
                   >
                     <X className="w-5 h-5" />
@@ -926,6 +937,9 @@ export default function AjusteEstoquePage() {
               </div>
             </div>
           )}
+
+          {adjustmentModalConfirmUi}
+          {historyDetailConfirmUi}
 
           <SpreadsheetImportModal
             isOpen={isImportModalOpen}

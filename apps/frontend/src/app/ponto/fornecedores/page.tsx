@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -43,6 +43,7 @@ import {
   parseSuppliersFromFile
 } from '@/lib/supplierImport';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 const SUPPLIER_ACTIVE_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos (ativos e inativos)' },
@@ -273,6 +274,14 @@ export default function FornecedoresPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [formData, setFormData] = useState<SupplierFormState>(EMPTY_FORM);
+
+  const closeSupplierForm = useCallback(() => {
+    setShowForm(false);
+    setEditingSupplier(null);
+  }, []);
+
+  const { requestClose: requestCloseSupplierForm, confirmUi: supplierFormConfirmUi } =
+    useModalCloseConfirm(closeSupplierForm, { isParentOpen: showForm });
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [supplierActiveFilter, setSupplierActiveFilter] = useState<string>('all');
@@ -895,10 +904,7 @@ export default function FornecedoresPage() {
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                setShowForm(false);
-                setEditingSupplier(null);
-              }}
+              onClick={requestCloseSupplierForm}
             />
             <div className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-800">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -906,10 +912,7 @@ export default function FornecedoresPage() {
                   {editingSupplier ? 'Editar Fornecedor' : 'Novo Fornecedor'}
                 </h2>
                 <button
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingSupplier(null);
-                  }}
+                  onClick={requestCloseSupplierForm}
                   className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                 >
                   <X className="h-5 w-5" />
@@ -1223,10 +1226,7 @@ export default function FornecedoresPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditingSupplier(null);
-                    }}
+                    onClick={requestCloseSupplierForm}
                     className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                   >
                     Cancelar
@@ -1236,6 +1236,7 @@ export default function FornecedoresPage() {
             </div>
           </div>
         )}
+        {supplierFormConfirmUi}
 
         {showDeleteModal && (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">

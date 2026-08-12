@@ -1,10 +1,11 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { uploadImport, handleUploadError } from '../middleware/upload';
 import { FinancialControlController } from '../controllers/FinancialControlController';
 import { createError } from '../middleware/errorHandler';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 
 const router = Router();
 const controller = new FinancialControlController();
@@ -42,14 +43,14 @@ router.post('/upload-attachment', (req: AuthRequest, res: Response, next: NextFu
     const saved = await savePersistentUpload({
       folder: 'financial-control',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
     });
     res.json({
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName,
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName,
       },
     });
   } catch (error) {

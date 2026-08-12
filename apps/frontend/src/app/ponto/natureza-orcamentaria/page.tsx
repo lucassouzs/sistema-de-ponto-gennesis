@@ -1,6 +1,6 @@
  'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Plus, Upload, Search, X, Download, BookPlus, FileSpreadsheet, CheckCircle, Loader2 } from 'lucide-react';
@@ -14,6 +14,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 interface BudgetNature {
   id: string;
@@ -166,6 +167,28 @@ export default function NaturezaOrcamentariaPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<any>(null);
+
+  const closeFormModal = useCallback(() => {
+    setShowForm(false);
+    setEditingItem(null);
+  }, []);
+
+  const { requestClose: requestCloseForm, confirmUi: formConfirmUi } = useModalCloseConfirm(
+    closeFormModal,
+    { isParentOpen: showForm }
+  );
+
+  const closeImportModal = useCallback(() => {
+    setIsImportOpen(false);
+    setFile(null);
+    setParsedRows([]);
+    setResult(null);
+  }, []);
+
+  const { requestClose: requestCloseImport, confirmUi: importConfirmUi } = useModalCloseConfirm(
+    closeImportModal,
+    { isParentOpen: isImportOpen }
+  );
 
   const parseSpreadsheet = async () => {
     if (!file) {
@@ -365,11 +388,11 @@ export default function NaturezaOrcamentariaPage() {
         {/* Form Modal */}
         {showForm && (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50" onClick={() => { setShowForm(false); setEditingItem(null); }} />
+            <div className="absolute inset-0 bg-black/50" onClick={requestCloseForm} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingItem ? 'Editar Natureza' : 'Nova Natureza'}</h2>
-                <button onClick={() => { setShowForm(false); setEditingItem(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400">
+                <button onClick={requestCloseForm} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -383,7 +406,7 @@ export default function NaturezaOrcamentariaPage() {
                   <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button type="button" onClick={() => { setShowForm(false); setEditingItem(null); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                  <button type="button" onClick={requestCloseForm} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                   <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{editingItem ? 'Atualizar' : 'Criar'}</button>
                 </div>
               </form>
@@ -394,11 +417,11 @@ export default function NaturezaOrcamentariaPage() {
         {/* Import Modal (novo: mesma estrutura do modal de Centros de Custo) */}
         {isImportOpen && (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
-            <div className="absolute inset-0" onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} />
+            <div className="absolute inset-0" onClick={requestCloseImport} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Importar Naturezas</h3>
-                <button onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400" aria-label="Fechar">
+                <button onClick={requestCloseImport} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400" aria-label="Fechar">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -543,7 +566,7 @@ export default function NaturezaOrcamentariaPage() {
 
                     {/* Botões Cancelar / Importar */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <button onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                      <button onClick={requestCloseImport} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                       <button onClick={handleImport} disabled={isUploading || parsedRows.filter(r => r.isValid).length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors">
                         {isUploading ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Importando...</span></>) : (<><Upload className="w-4 h-4" /><span>Importar {parsedRows.filter(r => r.isValid).length} natureza(s)</span></>)}
                       </button>
@@ -569,6 +592,9 @@ export default function NaturezaOrcamentariaPage() {
             </div>
           </div>
         )}
+
+        {formConfirmUi}
+        {importConfirmUi}
 
       </MainLayout>
     </ProtectedRoute>

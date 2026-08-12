@@ -1,9 +1,10 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import multer from 'multer';
 import { StockController } from '../controllers/StockController';
 import { StockShortfallController } from '../controllers/StockShortfallController';
 import { authenticate } from '../middleware/auth';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 
 const router = Router();
 const stockController = new StockController();
@@ -96,7 +97,7 @@ router.post('/upload-invoice', (req, res, next) => {
     const saved = await savePersistentUpload({
       folder: 'stock-invoices',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
       fileNamePrefix: 'nf-',
     });
@@ -105,7 +106,7 @@ router.post('/upload-invoice', (req, res, next) => {
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {
@@ -133,7 +134,7 @@ router.post('/upload-withdrawal-sheet', (req, res, next) => {
     const saved = await savePersistentUpload({
       folder: 'stock-withdrawal-sheets',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
       fileNamePrefix: 'ficha-retirada-',
     });
@@ -142,7 +143,7 @@ router.post('/upload-withdrawal-sheet', (req, res, next) => {
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {
@@ -170,7 +171,7 @@ router.post('/upload-payment-slip', (req, res, next) => {
     const saved = await savePersistentUpload({
       folder: 'stock-payment-slips',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
       fileNamePrefix: 'boleto-',
     });
@@ -179,7 +180,7 @@ router.post('/upload-payment-slip', (req, res, next) => {
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {

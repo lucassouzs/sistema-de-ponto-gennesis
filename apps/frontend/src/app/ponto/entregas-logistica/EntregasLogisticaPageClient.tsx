@@ -820,7 +820,8 @@ export default function EntregasLogisticaPageClient() {
         <Modal
           isOpen={!!deleteId}
           onClose={() => setDeleteId(null)}
-          title="Excluir solicitação"
+          confirmBeforeClose={false}
+      title="Excluir solicitação"
         >
           <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
             Tem certeza que deseja excluir esta solicitação logística? Esta ação não pode ser desfeita.

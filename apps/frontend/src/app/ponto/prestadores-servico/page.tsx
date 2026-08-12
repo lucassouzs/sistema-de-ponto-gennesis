@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Truck, Plus, Search, X, AlertCircle } from 'lucide-react';
@@ -14,6 +14,7 @@ import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useEspelhoNfBootstrap } from '@/hooks/useEspelhoNfBootstrap';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 interface ServiceProviderRow {
   id: string;
@@ -50,6 +51,14 @@ export default function PrestadoresEspelhoNfPage() {
   const [editing, setEditing] = useState<ServiceProviderRow | null>(null);
   const [formData, setFormData] = useState(() => emptyForm());
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+
+  const closeProviderForm = useCallback(() => {
+    setShowForm(false);
+    setEditing(null);
+  }, []);
+
+  const { requestClose: requestCloseProviderForm, confirmUi: providerFormConfirmUi } =
+    useModalCloseConfirm(closeProviderForm, { isParentOpen: showForm });
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -340,10 +349,7 @@ export default function PrestadoresEspelhoNfPage() {
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                setShowForm(false);
-                setEditing(null);
-              }}
+              onClick={requestCloseProviderForm}
             />
             <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-800">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -352,10 +358,7 @@ export default function PrestadoresEspelhoNfPage() {
                 </h2>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditing(null);
-                  }}
+                  onClick={requestCloseProviderForm}
                   className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <X className="h-5 w-5" />
@@ -461,10 +464,7 @@ export default function PrestadoresEspelhoNfPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditing(null);
-                    }}
+                    onClick={requestCloseProviderForm}
                     className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
                   >
                     Cancelar
@@ -474,6 +474,8 @@ export default function PrestadoresEspelhoNfPage() {
             </div>
           </div>
         ) : null}
+
+        {providerFormConfirmUi}
 
         {showDeleteModal ? (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">

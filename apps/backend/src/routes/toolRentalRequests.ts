@@ -1,9 +1,10 @@
-import { Router, Response, NextFunction } from 'express';
+﻿import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { requireToolRentalSuppliesAccess } from '../middleware/permissionAuth';
 import { createError } from '../middleware/errorHandler';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 import { ToolRentalRequestController } from '../controllers/ToolRentalRequestController';
 
 const router = Router();
@@ -41,14 +42,14 @@ router.post(
       const saved = await savePersistentUpload({
         folder: 'tool-rental-requests',
         buffer: req.file.buffer,
-        originalName: req.file.originalname,
+        originalName: fixMulterOriginalName(req.file.originalname),
         mimeType: req.file.mimetype,
       });
       res.json({
         success: true,
         data: {
           url: saved.url,
-          originalName: req.file.originalname || saved.fileName,
+          originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName,
         },
       });
     } catch (error) {

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Calendar, User, FileText, AlertCircle, CheckCircle, Loader2, Search, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 interface RegisterAbsenceModalProps {
   isOpen: boolean;
@@ -126,7 +127,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
     }
   });
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setFormData({
       employeeId: '',
       date: '',
@@ -139,7 +140,9 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
     setEmployeeSearch('');
     setShowEmployeeDropdown(false);
     onClose();
-  };
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(handleClose, { isParentOpen: isOpen });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,8 +215,10 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
   };
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="absolute inset-0" onClick={requestClose} aria-hidden />
+      <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
@@ -225,7 +230,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
               </p>
             </div>
             <button
-              onClick={handleClose}
+              onClick={requestClose}
               className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
@@ -403,7 +408,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
             <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={requestClose}
                 disabled={isLoading}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
@@ -431,6 +436,8 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
         </CardContent>
       </Card>
     </div>
+    {confirmUi}
+    </>
   );
 }
 

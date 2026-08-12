@@ -1,4 +1,4 @@
-import { Router, Response, NextFunction } from 'express';
+﻿import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
@@ -8,6 +8,7 @@ import {
 } from '../middleware/permissionAuth';
 import { createError } from '../middleware/errorHandler';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 import { logisticsDeliveryRequestController } from '../controllers/LogisticsDeliveryRequestController';
 
 const router = Router();
@@ -41,14 +42,14 @@ router.post('/upload-attachment', requireLogisticsDeliveryReadAccess, (req: Auth
     const saved = await savePersistentUpload({
       folder: 'logistics-delivery-requests',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
     });
     res.json({
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName,
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName,
       },
     });
   } catch (error) {

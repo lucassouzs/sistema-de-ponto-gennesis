@@ -1302,7 +1302,8 @@ export default function ControleEntregasPageClient() {
         <Modal
           isOpen={Boolean(deleteId)}
           onClose={() => setDeleteId(null)}
-          title="Excluir entrega"
+          confirmBeforeClose={false}
+      title="Excluir entrega"
         >
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.

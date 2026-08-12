@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { X, Plus, List, FileText } from 'lucide-react';
 import { PointCorrectionCard } from './PointCorrectionCard';
 import { PointCorrectionList } from './PointCorrectionList';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 interface PointCorrectionsModalProps {
   isOpen: boolean;
@@ -16,6 +17,12 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'list' | 'new'>('list');
 
+  const closeModal = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeModal, { isParentOpen: isOpen });
+
   if (!isOpen) return null;
 
   const handleSuccess = () => {
@@ -23,8 +30,9 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
   };
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
       <div className="relative w-full max-w-4xl bg-white rounded-lg shadow-2xl overflow-hidden max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b flex items-center justify-between">
@@ -38,7 +46,7 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 text-gray-600"
           >
             <X className="w-5 h-5" />
@@ -85,5 +93,7 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
         </div>
       </div>
     </div>
+    {confirmUi}
+    </>
   );
 };

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate, requireAdministrator } from '../middleware/auth';
@@ -106,7 +106,7 @@ router.post("/upload-item-attachment", (req: AuthRequest, res: Response, next: N
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: saved.originalName || saved.fileName
       }
     });
   } catch (error) {

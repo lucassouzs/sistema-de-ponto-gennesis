@@ -669,7 +669,8 @@ export function FinancialControlEntryModal({
         onClose={() => {
           if (!createMutation.isPending) setConfirmCreateOpen(false);
         }}
-        title="Confirmar lançamento"
+        confirmBeforeClose={false}
+      title="Confirmar lançamento"
         size="sm"
         elevated
       >

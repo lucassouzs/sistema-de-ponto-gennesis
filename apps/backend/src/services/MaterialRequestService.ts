@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { type EngineeringMaterial, Prisma } from '@prisma/client';
 import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
 import { resolveRmServiceOrderFields } from '../utils/materialRequestServiceOrder';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 
 /** Lock de sessão Postgres para serializar geração de requestNumber (mesmo padrão de DpRequest). */
 const MATERIAL_REQUEST_NUMBER_ADVISORY_LOCK = 91827365;
@@ -25,7 +26,9 @@ function parseDemandSheetAttachments(raw: unknown): DemandSheetAttachment[] {
     if (!item || typeof item !== 'object') continue;
     const url = String((item as { url?: unknown }).url || '').trim();
     if (!url) continue;
-    const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+    const name =
+      fixMulterOriginalName(String((item as { name?: unknown }).name || '').trim()) ||
+      'Arquivo anexado';
     out.push({ url, name });
   }
   return out;
@@ -43,7 +46,9 @@ export function normalizeDemandSheetAttachments(data: {
   return [
     {
       url,
-      name: (data.demandSheetAttachmentName || '').trim() || 'Arquivo anexado',
+      name:
+        fixMulterOriginalName((data.demandSheetAttachmentName || '').trim()) ||
+        'Arquivo anexado',
     },
   ];
 }

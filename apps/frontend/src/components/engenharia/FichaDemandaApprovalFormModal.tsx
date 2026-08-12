@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Calendar, Loader2, Minus, Paperclip, Plus, Trash2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
@@ -145,6 +146,12 @@ export function FichaDemandaApprovalFormModal({
   const [form, setForm] = useState<FichaDemandaApprovalFormState>(() => emptyFichaDemandaForm());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
+
   useEffect(() => {
     if (!isOpen) return;
     if (editingRecord) {
@@ -273,7 +280,7 @@ export function FichaDemandaApprovalFormModal({
 
   const modalContent = (
     <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={isSaving ? undefined : onClose} />
+      <div className="absolute inset-0 bg-black/50" aria-hidden onClick={isSaving ? undefined : requestClose} />
       <div className="relative z-[1101] flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
           <div>
@@ -286,7 +293,7 @@ export function FichaDemandaApprovalFormModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={isSaving}
             className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             aria-label="Fechar"
@@ -519,5 +526,11 @@ export function FichaDemandaApprovalFormModal({
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return createPortal(
+    <>
+      {modalContent}
+      {confirmUi}
+    </>,
+    document.body
+  );
 }

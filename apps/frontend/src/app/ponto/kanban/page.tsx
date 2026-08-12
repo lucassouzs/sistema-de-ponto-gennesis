@@ -4708,7 +4708,8 @@ function KanbanPage() {
           isOpen
           onClose={() => setDeleteConfirm(null)}
           size="sm"
-          title="Confirmar exclusão"
+          confirmBeforeClose={false}
+      title="Confirmar exclusão"
         >
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
             {deleteConfirm.type === 'card'
@@ -4753,7 +4754,8 @@ function KanbanPage() {
           isOpen
           onClose={() => !deletingBoard && setBoardDeleteTarget(null)}
           size="sm"
-          title="Excluir quadro"
+          confirmBeforeClose={false}
+      title="Excluir quadro"
         >
           <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
             Excluir o quadro <strong>{boardDeleteTarget.department}</strong> permanentemente?

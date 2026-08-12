@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Users, Search, Filter, ChevronDown, ChevronUp, X, Building2, FileText, Calendar, ListPlus, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -9,6 +9,7 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { PayrollEmployee, PayrollFilters } from '@/types';
 import { 
   DEPARTMENTS_LIST, 
@@ -193,10 +194,13 @@ export default function AlocacaoPage() {
     }
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedEmployee(null);
-  };
+  }, []);
+
+  const { requestClose: requestCloseAllocationModal, confirmUi: allocationModalConfirmUi } =
+    useModalCloseConfirm(handleCloseModal, { isParentOpen: isModalOpen });
 
   const handlePreviousMonth = () => {
     if (modalCurrentMonth === 0) {
@@ -1188,10 +1192,10 @@ export default function AlocacaoPage() {
         {/* Modal de Centro de Custo */}
         {isModalOpen && selectedEmployee && (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40" onClick={handleCloseModal} />
+            <div className="absolute inset-0 bg-black/40" onClick={requestCloseAllocationModal} />
             <div className="relative w-full max-w-4xl rounded-lg bg-white dark:bg-gray-800 p-6 shadow-lg max-h-[90vh] overflow-y-auto">
               <button
-                onClick={handleCloseModal}
+                onClick={requestCloseAllocationModal}
                 className="absolute top-3 right-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 <X className="h-6 w-6" />
@@ -1288,6 +1292,7 @@ export default function AlocacaoPage() {
             </div>
           </div>
         )}
+        {allocationModalConfirmUi}
       </div>
       </MainLayout>
     </ProtectedRoute>

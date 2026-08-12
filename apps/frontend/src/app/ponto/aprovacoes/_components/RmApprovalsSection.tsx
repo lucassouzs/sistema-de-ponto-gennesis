@@ -551,7 +551,13 @@ export function RmApprovalsSection() {
       )}
 
       {approveTarget && (
-        <Modal isOpen onClose={() => setApproveTarget(null)} title="Aprovar Requisição de Material" size="md">
+        <Modal
+          isOpen
+          onClose={() => setApproveTarget(null)}
+          confirmBeforeClose={false}
+          title="Aprovar Requisição de Material"
+          size="md"
+        >
           <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
             Confirmar aprovação da RM{' '}
             <strong>{formatRmListDisplayId(approveTarget.requestNumber)}</strong>?
@@ -580,6 +586,7 @@ export function RmApprovalsSection() {
         <Modal
           isOpen
           onClose={() => setCorrectionTarget(null)}
+          confirmBeforeClose={false}
           title="Enviar para Correção RM"
           size="md"
         >
@@ -607,7 +614,13 @@ export function RmApprovalsSection() {
       )}
 
       {cancelTarget && (
-        <Modal isOpen onClose={() => setCancelTarget(null)} title="Cancelar Requisição" size="md">
+        <Modal
+          isOpen
+          onClose={() => setCancelTarget(null)}
+          confirmBeforeClose={false}
+          title="Cancelar Requisição"
+          size="md"
+        >
           <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
             A RM ficará como <strong>Cancelada</strong> e sairá do fluxo de análise. Confirma?
           </p>
