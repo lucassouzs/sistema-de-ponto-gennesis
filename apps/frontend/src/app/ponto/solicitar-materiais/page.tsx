@@ -817,6 +817,8 @@ function SolicitarMateriaisPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'list' | 'new'>('list');
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
+  const [showCloseNewRequestConfirm, setShowCloseNewRequestConfirm] = useState(false);
+  const [showCloseDetailConfirm, setShowCloseDetailConfirm] = useState(false);
   const [formData, setFormData] = useState(emptyNewFormData);
 
   const [correctionEditId, setCorrectionEditId] = useState<string | null>(null);
@@ -1080,11 +1082,25 @@ function SolicitarMateriaisPage() {
   });
 
   const closeNewRequestModal = () => {
+    setShowCloseNewRequestConfirm(false);
     setIsNewRequestModalOpen(false);
     setFormData(emptyNewFormData());
     setNewItemMaterialLabels(['']);
     setUploadingAttachment(null);
     setUploadingDemandSheetAttachment(null);
+  };
+
+  const requestCloseNewRequestModal = () => {
+    setShowCloseNewRequestConfirm(true);
+  };
+
+  const closeDetailModal = () => {
+    setShowCloseDetailConfirm(false);
+    setDetailViewId(null);
+  };
+
+  const requestCloseDetailModal = () => {
+    setShowCloseDetailConfirm(true);
   };
 
   // Criar requisição
@@ -1476,20 +1492,32 @@ function SolicitarMateriaisPage() {
   useEffect(() => {
     if (!isNewRequestModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeNewRequestModal();
+      if (e.key === 'Escape') {
+        if (showCloseNewRequestConfirm) {
+          setShowCloseNewRequestConfirm(false);
+          return;
+        }
+        requestCloseNewRequestModal();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isNewRequestModalOpen]);
+  }, [isNewRequestModalOpen, showCloseNewRequestConfirm]);
 
   useEffect(() => {
     if (!detailViewId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDetailViewId(null);
+      if (e.key === 'Escape') {
+        if (showCloseDetailConfirm) {
+          setShowCloseDetailConfirm(false);
+          return;
+        }
+        requestCloseDetailModal();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [detailViewId]);
+  }, [detailViewId, showCloseDetailConfirm]);
 
 
   const user = userData?.data || {
@@ -2186,7 +2214,7 @@ function SolicitarMateriaisPage() {
 
           {isNewRequestModalOpen && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40" onClick={closeNewRequestModal} aria-hidden />
+              <div className="absolute inset-0 bg-black/40" onClick={requestCloseNewRequestModal} aria-hidden />
               <div
                 className="relative flex max-h-[min(92vh,720px)] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
                 role="dialog"
@@ -2202,7 +2230,7 @@ function SolicitarMateriaisPage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={closeNewRequestModal}
+                    onClick={requestCloseNewRequestModal}
                     className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-0 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                     aria-label="Fechar"
                   >
@@ -2450,7 +2478,7 @@ function SolicitarMateriaisPage() {
                   <div className="flex justify-end gap-3">
                     <button
                       type="button"
-                      onClick={closeNewRequestModal}
+                      onClick={requestCloseNewRequestModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -2474,7 +2502,7 @@ function SolicitarMateriaisPage() {
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/40"
-              onClick={() => setDetailViewId(null)}
+              onClick={requestCloseDetailModal}
               aria-hidden
             />
             <div
@@ -2501,7 +2529,7 @@ function SolicitarMateriaisPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setDetailViewId(null)}
+                  onClick={requestCloseDetailModal}
                   className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                   aria-label="Fechar"
                 >
@@ -2727,8 +2755,74 @@ function SolicitarMateriaisPage() {
               <div className="flex shrink-0 justify-end border-t border-gray-200 px-5 py-4 dark:border-gray-700">
                 <button
                   type="button"
-                  onClick={() => setDetailViewId(null)}
+                  onClick={closeDetailModal}
                   className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCloseNewRequestConfirm && (
+          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowCloseNewRequestConfirm(false)}
+            />
+            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Deseja fechar?
+              </h3>
+              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                Tem certeza que deseja fechar a solicitação? Os dados preenchidos serão perdidos.
+              </p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCloseNewRequestConfirm(false)}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={closeNewRequestModal}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCloseDetailConfirm && (
+          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowCloseDetailConfirm(false)}
+            />
+            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Deseja fechar?
+              </h3>
+              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                Tem certeza que deseja fechar os detalhes da solicitação?
+              </p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCloseDetailConfirm(false)}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDetailModal}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
                 >
                   Fechar
                 </button>

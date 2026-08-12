@@ -978,7 +978,7 @@ export default function GerenciarMateriaisPage() {
               className="absolute inset-0 bg-black/50"
               onClick={() => setShowCloseDetailsConfirm(false)}
             />
-            <div className="app-modal-panel relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
               <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Deseja fechar?
               </h3>

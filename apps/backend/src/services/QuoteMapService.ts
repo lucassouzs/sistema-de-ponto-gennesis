@@ -7,7 +7,7 @@ import { PassThrough } from 'stream';
 import PDFDocument from 'pdfkit';
 import { backendUploadsRoot } from '../lib/uploads';
 import { savePersistentBuffer } from '../lib/persistentUpload';
-import { shouldUseUnbBranding, resolvePdfLogoPathFromPublic } from '../lib/unbBranding';
+import { shouldUseUnbBranding, resolvePdfLogoPathFromPublic, resolvePdfCompanyHeader } from '../lib/unbBranding';
 
 export class QuoteMapService {
   private purchaseOrderService = new PurchaseOrderService();
@@ -15,6 +15,70 @@ export class QuoteMapService {
 
   private formatCurrency(value: number) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  }
+
+  private formatDateBr(value?: string | Date | null): string {
+    if (!value) return '';
+    const d = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  private formatDateTimeBr(value?: string | Date | null): string {
+    if (!value) return '';
+    const d = typeof value === 'string' ? new Date(value) : value;
+    if (Number.isNaN(d.getTime())) return '';
+    const date = d.toLocaleDateString('pt-BR');
+    const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `${date}, ${time}`;
+  }
+
+  private formatOcDisplayNumber(orderNumber: string): string {
+    const trimmed = (orderNumber || '').trim();
+    if (!trimmed) return '';
+    const match = trimmed.match(/^OC-\d{4}-(\d+)$/i);
+    if (match) return String(parseInt(match[1], 10));
+    return trimmed;
+  }
+
+  private paymentTypeLabel(code?: string | null): string {
+    if (!code) return '';
+    if (code === 'AVISTA') return 'À vista';
+    if (code === 'BOLETO') return 'Boleto';
+    return code;
+  }
+
+  private paymentConditionLabel(code?: string | null): string {
+    if (!code) return '';
+    if (code === 'AVISTA') return 'À vista';
+    if (code === 'BOLETO_30') return 'Boleto 30 dias';
+    if (code === 'BOLETO_28') return 'Boleto 28 dias';
+    return code;
+  }
+
+  private supplierAddressLine(s: {
+    street?: string | null;
+    streetNumber?: string | null;
+    complement?: string | null;
+    neighborhood?: string | null;
+    address?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zipCode?: string | null;
+  }): string {
+    const structured = [
+      s.street ? `Rua: ${s.street}` : '',
+      s.streetNumber ? `Nº: ${s.streetNumber}` : '',
+      s.complement ? `Comp: ${s.complement}` : '',
+      s.neighborhood ? `Bairro: ${s.neighborhood}` : '',
+      s.city ? `Cidade: ${s.city}` : '',
+      s.state ? `UF: ${s.state}` : '',
+      s.zipCode ? `CEP: ${s.zipCode}` : '',
+    ]
+      .filter(Boolean)
+      .join(', ');
+    if (structured) return structured;
+    return [s.address, s.city, s.state, s.zipCode].filter(Boolean).join(' — ');
   }
 
   private toNumber(value: any): number {
@@ -34,41 +98,162 @@ export class QuoteMapService {
     const map = await this.db.quoteMap.findUnique({
       where: { id: quoteMapId },
       include: {
+        creator: { select: { id: true, name: true, email: true } },
         materialRequest: {
           select: {
             id: true,
             requestNumber: true,
             serviceOrder: true,
+            description: true,
+            demandSheet: true,
             costCenter: { select: { name: true, code: true } },
             items: {
-              include: { material: true }
+              include: { material: true },
             },
           },
         },
         suppliers: {
-          include: { supplier: true }
+          include: { supplier: true },
         },
         supplierItems: {
           include: {
             supplier: true,
             materialRequestItem: {
-              include: { material: true }
-            }
-          }
+              include: { material: true },
+            },
+          },
         },
         winners: {
           include: {
             winnerSupplier: true,
             materialRequestItem: {
-              include: { material: true }
-            }
-          }
-        }
-      }
+              include: { material: true },
+            },
+          },
+        },
+        purchaseOrders: {
+          include: {
+            supplier: true,
+            creator: { select: { id: true, name: true, email: true } },
+            items: {
+              include: { material: true },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
     const publicUrl = `/uploads/quote-maps/${map.id}/snapshot.pdf`;
+    const mr = map.materialRequest;
+    const contextLabels = [mr?.costCenter?.name, mr?.costCenter?.code, mr?.serviceOrder];
+    const useUnb = shouldUseUnbBranding(...contextLabels);
+    const company = resolvePdfCompanyHeader(useUnb);
+    const logoPath = this.findCompanyLogoPath(...contextLabels);
+
+    type SnapshotSection = {
+      orderNumber?: string;
+      orderDate?: string | Date | null;
+      expectedDelivery?: string | Date | null;
+      deliveryAddress?: string | null;
+      paymentType?: string | null;
+      paymentCondition?: string | null;
+      paymentDetails?: string | null;
+      freightAmount?: number;
+      amountToPay?: number | null;
+      notes?: string | null;
+      buyerName?: string | null;
+      supplier: any;
+      items: Array<{
+        label: string;
+        quantity: number;
+        unit: string;
+        unitPrice: number;
+        totalPrice: number;
+      }>;
+    };
+
+    const sections: SnapshotSection[] = [];
+
+    if (Array.isArray(map.purchaseOrders) && map.purchaseOrders.length > 0) {
+      for (const po of map.purchaseOrders) {
+        sections.push({
+          orderNumber: po.orderNumber,
+          orderDate: po.orderDate,
+          expectedDelivery: po.expectedDelivery,
+          deliveryAddress: po.deliveryAddress,
+          paymentType: po.paymentType,
+          paymentCondition: po.paymentCondition,
+          paymentDetails: po.paymentDetails,
+          freightAmount: this.toNumber(po.freightAmount),
+          amountToPay: po.amountToPay != null ? this.toNumber(po.amountToPay) : null,
+          notes: po.notes,
+          buyerName: po.creator?.name || map.creator?.name || null,
+          supplier: po.supplier,
+          items: (po.items || []).map((it: any) => {
+            const qty = this.toNumber(it.quantity);
+            const unitPrice = this.toNumber(it.unitPrice);
+            const total =
+              it.totalPrice != null ? this.toNumber(it.totalPrice) : qty * unitPrice;
+            return {
+              label:
+                it.material?.description?.trim() ||
+                it.material?.name?.trim() ||
+                it.materialId ||
+                '—',
+              quantity: qty,
+              unit: it.unit || '—',
+              unitPrice,
+              totalPrice: total,
+            };
+          }),
+        });
+      }
+    } else {
+      // Sem OC ainda: monta seções pelos fornecedores vencedores (só dados do mapa/cadastro).
+      const winnerSupplierIds = Array.from(
+        new Set((map.winners || []).map((w: any) => w.winnerSupplierId).filter(Boolean))
+      ) as string[];
+      for (const supplierId of winnerSupplierIds) {
+        const qs = (map.suppliers || []).find((s: any) => s.supplierId === supplierId);
+        const supplier = qs?.supplier || (map.winners || []).find((w: any) => w.winnerSupplierId === supplierId)?.winnerSupplier;
+        if (!supplier) continue;
+        const winnerItems = (map.winners || []).filter((w: any) => w.winnerSupplierId === supplierId);
+        const items = winnerItems.map((w: any) => {
+          const mri = w.materialRequestItem;
+          const qty = this.toNumber(mri?.quantity);
+          const quote = (map.supplierItems || []).find(
+            (si: any) =>
+              si.supplierId === supplierId && si.materialRequestItemId === w.materialRequestItemId
+          );
+          const unitPrice = this.toNumber(quote?.unitPrice);
+          return {
+            label:
+              mri?.material?.description?.trim() ||
+              mri?.material?.name?.trim() ||
+              w.materialRequestItemId ||
+              '—',
+            quantity: qty,
+            unit: mri?.unit || '—',
+            unitPrice,
+            totalPrice: qty * unitPrice,
+          };
+        });
+        sections.push({
+          paymentType: qs?.paymentType,
+          paymentCondition: qs?.paymentCondition,
+          paymentDetails: qs?.paymentDetails,
+          freightAmount: this.toNumber(qs?.freight),
+          amountToPay: qs?.amountToPay != null ? this.toNumber(qs.amountToPay) : null,
+          notes: qs?.observations,
+          buyerName: map.creator?.name || null,
+          supplier,
+          items,
+        });
+      }
+    }
 
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
@@ -81,122 +266,475 @@ export class QuoteMapService {
       doc.pipe(stream);
 
       const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
       const left = 40;
       const right = pageWidth - 40;
       const contentWidth = right - left;
+      let y = 36;
 
-      // Header card
-      doc.roundedRect(left, 30, contentWidth, 96, 8).fill('#F5F7FB');
-      const logoContext = [
-        map.materialRequest?.costCenter?.name,
-        map.materialRequest?.costCenter?.code,
-        map.materialRequest?.serviceOrder,
-      ];
-      const logoPath = this.findCompanyLogoPath(...logoContext);
-      if (logoPath) {
-        doc.image(logoPath, left + 12, 44, { fit: [120, 56], valign: 'center' });
-      }
-      doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(16).text('Snapshot do Mapa de Cotação', left + 150, 46);
-      doc.font('Helvetica').fontSize(10);
-      doc.text(`Mapa: ${map.id}`, left + 150, 69);
-      doc.text(`SC: ${map.materialRequest?.requestNumber || map.materialRequestId}`, left + 150, 84);
-      doc.text(`Data: ${new Date().toLocaleString('pt-BR')}`, left + 150, 99);
-
-      let y = 140;
-
-      // Suppliers section
-      doc.fillColor('#1E293B').font('Helvetica-Bold').fontSize(12).text('Fornecedores', left, y);
-      y += 16;
-      doc.roundedRect(left, y, contentWidth, Math.max(36, (map.suppliers?.length || 1) * 16 + 12), 6).fill('#F8FAFC');
-      y += 8;
-      for (const s of map.suppliers || []) {
-        const freight = this.toNumber(s.freight);
-        doc
-          .fillColor('#334155')
-          .font('Helvetica')
-          .fontSize(10)
-          .text(`${s.supplier?.name || s.supplierId}`, left + 10, y, { width: contentWidth - 160, ellipsis: true })
-          .text(`Frete: ${this.formatCurrency(freight)}`, right - 140, y, { width: 130, align: 'right' });
-        y += 16;
-      }
-      y += 8;
-
-      // Items title
-      doc.fillColor('#1E293B').font('Helvetica-Bold').fontSize(12).text('Itens e cotações completas', left, y);
-      y += 18;
-
-      const tableCols = {
-        material: left + 8,
-        qty: left + 268,
-        unit: left + 318,
-        quotes: left + 360
-      };
-
-      const drawTableHeader = () => {
-        doc.roundedRect(left, y, contentWidth, 20, 4).fill('#E2E8F0');
-        doc
-          .fillColor('#0F172A')
-          .font('Helvetica-Bold')
-          .fontSize(9)
-          .text('Material', tableCols.material, y + 6, { width: 250 })
-          .text('Qtd', tableCols.qty, y + 6, { width: 40, align: 'right' })
-          .text('Un.', tableCols.unit, y + 6, { width: 35, align: 'center' })
-          .text('Fornecedores / Valores', tableCols.quotes, y + 6, { width: 148 });
-        y += 22;
-      };
-
-      drawTableHeader();
-
-      const ensureSpace = (minHeight: number) => {
-        if (y + minHeight <= doc.page.height - 45) return;
+      const ensureSpace = (needed: number) => {
+        if (y + needed <= pageHeight - 48) return;
         doc.addPage();
         y = 40;
-        drawTableHeader();
       };
 
-      const items = map.materialRequest?.items || [];
-      for (const item of items) {
-        const winner = (map.winners || []).find((w: any) => w.materialRequestItemId === item.id);
-        const winnerSupplierId = winner?.winnerSupplierId;
-        const qty = this.toNumber(item.quantity);
-        const itemLabel = item.material?.name || item.material?.description || item.id;
-        const itemQuotes = (map.supplierItems || [])
-          .filter((si: any) => si.materialRequestItemId === item.id)
-          .map((si: any) => {
-            const supplierName = si?.supplier?.name || si?.supplierId || 'Fornecedor';
-            const unitValue = this.formatCurrency(this.toNumber(si?.unitPrice));
-            const isWinner = winnerSupplierId && si?.supplierId === winnerSupplierId;
-            return `${isWinner ? 'VENCEDOR - ' : ''}${supplierName}\nUnit.: ${unitValue}`;
-          });
-
-        const quotesBlock = itemQuotes.length > 0 ? itemQuotes.join('\n') : 'Sem cotações registradas';
-
-        const materialHeight = doc.heightOfString(itemLabel, { width: 250, align: 'left' });
-        const quotesHeight = doc.heightOfString(quotesBlock, { width: 148, align: 'left' });
-        const rowHeight = Math.max(22, Math.ceil(Math.max(materialHeight, quotesHeight) + 10));
-        ensureSpace(rowHeight + 4);
-
+      const drawHr = () => {
         doc
-          .fillColor('#0F172A')
-          .font('Helvetica')
-          .fontSize(9)
-          .text(itemLabel, tableCols.material, y + 5, { width: 250 })
-          .text(String(qty), tableCols.qty, y + 5, { width: 40, align: 'right' })
-          .text(item.unit || '-', tableCols.unit, y + 5, { width: 35, align: 'center' })
-          .text(quotesBlock, tableCols.quotes, y + 5, { width: 148 });
+          .moveTo(left, y)
+          .lineTo(right, y)
+          .strokeColor('#94A3B8')
+          .lineWidth(0.7)
+          .stroke();
+        y += 12;
+      };
 
-        doc.moveTo(left, y + rowHeight).lineTo(right, y + rowHeight).strokeColor('#E2E8F0').lineWidth(1).stroke();
-        y += rowHeight + 2;
+      /** Label + valor com coluna fixa (espaço entre label e valor, como no modelo). */
+      const FIELD_SIZE = 8;
+      const LABEL_GAP = 8;
+      const LEFT_LABEL_W = 92;
+      const RIGHT_LABEL_W = 58;
+      const ROW_GAP = 5;
+
+      const measureField = (label: string, value: string, width: number, labelColW: number) => {
+        const v = (value || '').trim();
+        if (!v) return 0;
+        const valueW = Math.max(20, width - labelColW - LABEL_GAP);
+        doc.font('Helvetica').fontSize(FIELD_SIZE);
+        return Math.max(10, doc.heightOfString(v, { width: valueW }));
+      };
+
+      const drawField = (
+        label: string,
+        value: string,
+        x: number,
+        width: number,
+        atY: number,
+        labelColW: number
+      ) => {
+        const v = (value || '').trim();
+        if (!v) return 0;
+        const valueW = Math.max(20, width - labelColW - LABEL_GAP);
+        doc.font('Helvetica').fontSize(FIELD_SIZE);
+        const h = Math.max(10, doc.heightOfString(v, { width: valueW }));
+        doc.fillColor('#0F172A');
+        doc.font('Helvetica-Bold').text(label, x, atY, { width: labelColW, lineBreak: false });
+        doc.font('Helvetica').text(v, x + labelColW + LABEL_GAP, atY, { width: valueW });
+        return h;
+      };
+
+      const drawLabeledLine = (label: string, value: string, x = left, width = contentWidth) => {
+        const text = (value || '').trim();
+        if (!text) return;
+        const h = measureField(label, text, width, LEFT_LABEL_W) || 10;
+        ensureSpace(h + 4);
+        drawField(label, text, x, width, y, LEFT_LABEL_W);
+        y += h + ROW_GAP;
+      };
+
+      /** Duas colunas; valores afastados do label (não colados). */
+      const drawTwoColRow = (
+        leftCell: { label: string; value?: string | null },
+        rightCell?: { label: string; value?: string | null }
+      ) => {
+        const gap = 16;
+        const colW = (contentWidth - gap) / 2;
+        const lv = (leftCell.value || '').trim();
+        const rv = (rightCell?.value || '').trim();
+        if (!lv && !rv) return;
+        const hL = lv ? measureField(leftCell.label, lv, colW, LEFT_LABEL_W) : 0;
+        const hR = rv && rightCell ? measureField(rightCell.label, rv, colW, RIGHT_LABEL_W) : 0;
+        const rowH = Math.max(hL, hR, 10);
+        ensureSpace(rowH + 4);
+        if (lv) drawField(leftCell.label, lv, left, colW, y, LEFT_LABEL_W);
+        if (rv && rightCell) {
+          drawField(rightCell.label, rv, left + colW + gap, colW, y, RIGHT_LABEL_W);
+        }
+        y += rowH + ROW_GAP;
+      };
+
+      // —— Cabeçalho empresa: 2 colunas (igual fornecedor) + logo encostada ——
+      const HEADER_SIZE = 8;
+      const HEADER_ROW = 4;
+      const headerTop = y;
+      const logoMaxW = 100;
+      const logoGap = 6;
+      const textX = logoPath ? left + logoMaxW + logoGap : left;
+      const textW = logoPath ? contentWidth - logoMaxW - logoGap : contentWidth;
+      const HL = 52;
+      const HR = 42;
+      const headerColGap = 12;
+      const headerColW = (textW - headerColGap) / 2;
+      const headerRightX = textX + headerColW + headerColGap;
+      y = headerTop;
+
+      const drawHeaderField = (
+        label: string,
+        value: string,
+        x: number,
+        width: number,
+        atY: number,
+        labelColW: number
+      ) => {
+        const v = (value || '').trim();
+        if (!v) return 0;
+        const valueW = Math.max(18, width - labelColW - LABEL_GAP);
+        doc.fillColor('#0F172A').fontSize(HEADER_SIZE);
+        doc.font('Helvetica-Bold').text(label, x, atY, { width: labelColW, lineBreak: false });
+        doc.font('Helvetica').text(v, x + labelColW + LABEL_GAP, atY, {
+          width: valueW,
+          lineBreak: false,
+          ellipsis: true,
+        });
+        return 10;
+      };
+
+      const headerFull = (label: string, value?: string | null) => {
+        const v = (value || '').trim();
+        if (!v) return;
+        drawHeaderField(label, v, textX, textW, y, HL);
+        y += 10 + HEADER_ROW;
+      };
+
+      const headerTwo = (
+        a: { label: string; value?: string | null; lw?: number },
+        b?: { label: string; value?: string | null; lw?: number }
+      ) => {
+        const av = (a.value || '').trim();
+        const bv = (b?.value || '').trim();
+        if (!av && !bv) return;
+        const aLw = a.lw ?? HL;
+        const bLw = b?.lw ?? HR;
+        if (av) drawHeaderField(a.label, av, textX, headerColW, y, aLw);
+        if (bv && b) drawHeaderField(b.label, bv, headerRightX, headerColW, y, bLw);
+        y += 10 + HEADER_ROW;
+      };
+
+      headerFull('Empresa: ', company.name);
+      headerFull('CNPJ: ', company.cnpj);
+
+      if (useUnb) {
+        headerTwo(
+          { label: 'Rua: ', value: company.street },
+          { label: 'Nº: ', value: company.streetNumber, lw: 28 }
+        );
+        headerTwo(
+          { label: 'Bairro: ', value: company.neighborhood },
+          { label: 'Comp: ', value: company.complement, lw: 36 }
+        );
+        headerTwo(
+          { label: 'Cidade: ', value: company.city },
+          { label: 'UF: ', value: company.state, lw: 28 }
+        );
+        headerTwo(
+          { label: 'Telefone: ', value: company.phone },
+          { label: 'E-mail: ', value: company.email, lw: 42 }
+        );
+      } else {
+        if ((company.subtitle || '').trim()) {
+          doc.font('Helvetica').fontSize(7).fillColor('#334155').text(company.subtitle!, textX, y, {
+            width: textW,
+          });
+          y += 10;
+        }
+        if ((company.addressLine || '').trim()) {
+          headerFull('Endereço: ', company.addressLine);
+        }
+        headerTwo(
+          { label: 'Telefone: ', value: company.phone },
+          { label: 'E-mail: ', value: company.email, lw: 42 }
+        );
       }
 
-      // Footer
+      const textBottom = y;
+      const textBlockH = textBottom - headerTop;
+      if (logoPath) {
+        try {
+          const logoH = Math.min(Math.max(textBlockH, 58), 88);
+          const logoY = headerTop + Math.max(0, (textBlockH - logoH) / 2);
+          doc.image(logoPath, left, logoY, { fit: [logoMaxW, logoH] });
+        } catch {
+          // ignora logo inválida
+        }
+      }
+      y = Math.max(textBottom, headerTop + (logoPath ? Math.min(Math.max(textBlockH, 58), 88) : 0)) + 8;
+
+      if (sections.length === 0) {
+        ensureSpace(40);
+        doc
+          .fillColor('#64748B')
+          .font('Helvetica')
+          .fontSize(10)
+          .text('Nenhuma cotação vencedora ou OC vinculada a este mapa.', left, y, {
+            width: contentWidth,
+          });
+        y += 20;
+      }
+
+      sections.forEach((section, sectionIndex) => {
+        if (sectionIndex > 0) {
+          ensureSpace(60);
+          y += 4;
+          drawHr();
+        }
+
+        const ocDisplay = section.orderNumber
+          ? this.formatOcDisplayNumber(section.orderNumber)
+          : '';
+        if (ocDisplay) {
+          ensureSpace(64);
+          y += 16;
+          doc
+            .fillColor('#0F172A')
+            .font('Helvetica-Bold')
+            .fontSize(18)
+            .text(`Ordem de Compra No. ${ocDisplay}`, left, y, {
+              width: contentWidth,
+              align: 'center',
+            });
+          y += 26;
+          const orderDateTime = this.formatDateTimeBr(section.orderDate);
+          if (orderDateTime) {
+            doc
+              .font('Helvetica')
+              .fontSize(9)
+              .fillColor('#475569')
+              .text(orderDateTime, left, y, { width: contentWidth, align: 'center' });
+            y += 18;
+          }
+          y += 10;
+        }
+
+        // Fornecedor — 2 colunas com label/valor afastados
+        const s = section.supplier || {};
+        ensureSpace(90);
+        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text('Dados do fornecedor', left, y);
+        y += 20;
+        if (s.name) drawLabeledLine('Razão social: ', s.name);
+        drawTwoColRow(
+          { label: 'Nome fantasia: ', value: s.tradeName },
+          { label: 'Código: ', value: s.code }
+        );
+        drawTwoColRow(
+          { label: 'CNPJ: ', value: s.cnpj },
+          { label: 'IE: ', value: s.stateRegistration }
+        );
+        drawTwoColRow(
+          { label: 'Telefone: ', value: s.phone || s.mobile },
+          { label: 'E-mail: ', value: s.email }
+        );
+        if (s.contactName) drawLabeledLine('Contato: ', s.contactName);
+        drawTwoColRow(
+          { label: 'Rua: ', value: s.street },
+          { label: 'Nº: ', value: s.streetNumber }
+        );
+        drawTwoColRow(
+          { label: 'Bairro: ', value: s.neighborhood },
+          { label: 'Cidade: ', value: s.city }
+        );
+        drawTwoColRow(
+          { label: 'CEP: ', value: s.zipCode },
+          { label: 'UF: ', value: s.state }
+        );
+        if (s.complement) drawLabeledLine('Comp: ', s.complement);
+        if (
+          !s.street &&
+          !s.neighborhood &&
+          !s.city &&
+          !s.zipCode &&
+          (s.address || '').trim()
+        ) {
+          drawLabeledLine('Endereço: ', String(s.address).trim());
+        }
+        y += 6;
+
+        // Pagamento e entrega — só campos preenchidos
+        const payCond = [
+          this.paymentConditionLabel(section.paymentCondition),
+          this.paymentTypeLabel(section.paymentType),
+        ]
+          .filter(Boolean)
+          .join(' — ');
+        const deliveryDate = this.formatDateBr(section.expectedDelivery);
+        const hasPaymentBlock =
+          Boolean(payCond) ||
+          Boolean(deliveryDate) ||
+          Boolean((section.deliveryAddress || '').trim()) ||
+          Boolean((section.paymentDetails || '').trim()) ||
+          Boolean((section.buyerName || '').trim()) ||
+          (section.freightAmount != null && section.freightAmount > 0);
+
+        if (hasPaymentBlock) {
+          ensureSpace(50);
+          doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text('Pagamento e entrega', left, y);
+          y += 20;
+          drawTwoColRow(
+            { label: 'Cond. pagto.: ', value: payCond },
+            { label: 'Data entrega: ', value: deliveryDate }
+          );
+          if ((section.deliveryAddress || '').trim()) {
+            drawLabeledLine('Local de entrega: ', String(section.deliveryAddress).trim());
+          }
+          if ((section.paymentDetails || '').trim()) {
+            drawLabeledLine('Dados do pagamento: ', String(section.paymentDetails).trim());
+          }
+          drawTwoColRow(
+            {
+              label: 'Frete: ',
+              value:
+                section.freightAmount != null && section.freightAmount > 0
+                  ? this.formatCurrency(section.freightAmount)
+                  : '',
+            },
+            { label: 'Comprador: ', value: section.buyerName }
+          );
+          y += 6;
+        }
+
+        // Itens — colunas dentro da margem; texts separados (PDFKit chain quebra alinhamento)
+        ensureSpace(50);
+        doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(10).text('Itens', left, y);
+        y += 12;
+
+        const wItem = 28;
+        const wQty = 42;
+        const wUnit = 36;
+        const wUnitPrice = 70;
+        const wTotal = 72;
+        const wDesc = contentWidth - (wItem + wQty + wUnit + wUnitPrice + wTotal);
+        const col = {
+          item: left,
+          desc: left + wItem,
+          qty: left + wItem + wDesc,
+          unit: left + wItem + wDesc + wQty,
+          unitPrice: left + wItem + wDesc + wQty + wUnit,
+          total: left + wItem + wDesc + wQty + wUnit + wUnitPrice,
+        };
+
+        const drawItemsHeader = () => {
+          doc.rect(left, y, contentWidth, 18).fill('#111827');
+          doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(8);
+          doc.text('ITEM', col.item + 3, y + 5, { width: wItem - 4, lineBreak: false });
+          doc.text('DESCRIÇÃO', col.desc, y + 5, { width: wDesc - 4, lineBreak: false });
+          doc.text('QTD.', col.qty, y + 5, { width: wQty - 2, align: 'center', lineBreak: false });
+          doc.text('UND', col.unit, y + 5, { width: wUnit, align: 'center', lineBreak: false });
+          doc.text('V. UNIT.', col.unitPrice, y + 5, {
+            width: wUnitPrice - 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          doc.text('TOTAL', col.total, y + 5, {
+            width: wTotal - 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          y += 20;
+        };
+        drawItemsHeader();
+
+        let productsTotal = 0;
+        section.items.forEach((item, idx) => {
+          productsTotal += item.totalPrice;
+          doc.font('Helvetica').fontSize(8);
+          const descHeight = doc.heightOfString(item.label || '—', { width: wDesc - 4 });
+          const rowH = Math.max(18, descHeight + 8);
+          if (y + rowH > pageHeight - 70) {
+            doc.addPage();
+            y = 40;
+            drawItemsHeader();
+            doc.font('Helvetica').fontSize(8);
+          }
+          const rowY = y + 4;
+          doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
+          doc.text(String(idx + 1), col.item + 3, rowY, { width: wItem - 4, lineBreak: false });
+          doc.text(item.label || '—', col.desc, rowY, { width: wDesc - 4 });
+          doc.text(String(item.quantity), col.qty, rowY, {
+            width: wQty - 2,
+            align: 'center',
+            lineBreak: false,
+          });
+          doc.text(item.unit || '—', col.unit, rowY, {
+            width: wUnit,
+            align: 'center',
+            lineBreak: false,
+          });
+          doc.text(this.formatCurrency(item.unitPrice), col.unitPrice, rowY, {
+            width: wUnitPrice - 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          doc.text(this.formatCurrency(item.totalPrice), col.total, rowY, {
+            width: wTotal - 2,
+            align: 'right',
+            lineBreak: false,
+          });
+          doc
+            .moveTo(left, y + rowH)
+            .lineTo(right, y + rowH)
+            .strokeColor('#E5E7EB')
+            .lineWidth(0.6)
+            .stroke();
+          y += rowH;
+        });
+
+        if (section.items.length === 0) {
+          ensureSpace(20);
+          doc
+            .fillColor('#64748B')
+            .font('Helvetica')
+            .fontSize(9)
+            .text('Nenhum item neste bloco.', left, y);
+          y += 16;
+        }
+
+        // Totais
+        const freight = section.freightAmount || 0;
+        const totalCompra =
+          section.amountToPay != null && Number.isFinite(section.amountToPay)
+            ? section.amountToPay
+            : productsTotal + freight;
+        ensureSpace(48);
+        y += 8;
+        const labelW = 118;
+        const valueW = 78;
+        const totalsX = right - labelW - valueW;
+        doc.font('Helvetica').fontSize(9).fillColor('#0F172A');
+        doc.text('TOTAL PRODUTOS:', totalsX, y, { width: labelW, align: 'right', lineBreak: false });
+        doc.text(this.formatCurrency(productsTotal), totalsX + labelW, y, {
+          width: valueW,
+          align: 'right',
+          lineBreak: false,
+        });
+        y += 13;
+        if (freight > 0) {
+          doc.text('FRETE:', totalsX, y, { width: labelW, align: 'right', lineBreak: false });
+          doc.text(this.formatCurrency(freight), totalsX + labelW, y, {
+            width: valueW,
+            align: 'right',
+            lineBreak: false,
+          });
+          y += 13;
+        }
+        doc.font('Helvetica-Bold');
+        doc.text('TOTAL COMPRA:', totalsX, y, { width: labelW, align: 'right', lineBreak: false });
+        doc.text(this.formatCurrency(totalCompra), totalsX + labelW, y, {
+          width: valueW,
+          align: 'right',
+          lineBreak: false,
+        });
+        y += 16;
+
+        if ((section.notes || '').trim()) {
+          drawLabeledLine('Observações: ', String(section.notes).trim());
+        }
+      });
+
       doc
         .font('Helvetica')
         .fontSize(8)
         .fillColor('#64748B')
-        .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, doc.page.height - 28, {
+        .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, pageHeight - 28, {
           width: contentWidth,
-          align: 'center'
+          align: 'center',
         });
 
       doc.end();

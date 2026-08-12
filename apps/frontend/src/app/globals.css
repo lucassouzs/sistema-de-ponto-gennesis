@@ -1598,8 +1598,11 @@ button[data-form-field-trigger='true']:is(:focus, :focus-visible) {
     animation: none !important;
   }
 
+  /* Sem animação, painéis não controlados ficavam em opacity:0 (invisíveis). */
   .app-modal-backdrop--open,
-  .app-modal-panel--open {
+  .app-modal-panel--open,
+  .app-modal-overlay:not([data-modal-anim='controlled']) > .app-modal-panel,
+  .app-modal-overlay:not([data-modal-anim='controlled']) > div:not(.absolute):not(.fixed) {
     opacity: 1;
     transform: none;
   }
