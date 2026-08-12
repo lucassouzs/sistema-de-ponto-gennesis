@@ -5,6 +5,8 @@ import { AuthRequest } from '../middleware/auth';
 
 /** Igual a pathToModuleKey('/ponto/contratos') no pacote permission-modules. */
 export const CONTRACTS_MODULE_KEY = 'ponto_contratos';
+/** Igual a pathToModuleKey('/ponto/contratos/socios'). */
+export const CONTRACTS_SOCIOS_MODULE_KEY = 'ponto_contratos_socios';
 
 export type ContractAccessFilter =
   | { filter: 'all' }
@@ -34,6 +36,29 @@ export async function getContractAccessForUser(
   });
 
   return { filter: 'ids', ids: rows.map((r) => r.contractId) };
+}
+
+/**
+ * Gastos operacionais (TOTVS) na tela Sócios: libera quem tem Contratos
+ * ou só o módulo Contratos Sócios (sem precisar do Contratos geral).
+ */
+export async function userCanAccessGastosOperacionais(
+  userId: string,
+  isAdmin: boolean
+): Promise<boolean> {
+  const access = await getContractAccessForUser(userId, isAdmin);
+  if (access.filter !== 'none') return true;
+
+  const hasSociosModule = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: CONTRACTS_SOCIOS_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
+      allowed: true,
+    },
+    select: { id: true },
+  });
+  return Boolean(hasSociosModule);
 }
 
 export async function assertContractAccess(req: AuthRequest, contractId: string): Promise<void> {

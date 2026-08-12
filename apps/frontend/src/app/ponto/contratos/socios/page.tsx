@@ -107,9 +107,15 @@ export default function ContratosSociosPage() {
     }
     if (totvsGastosError) {
       const err = totvsGastosErrorObj as {
-        response?: { data?: { message?: string } };
+        response?: { status?: number; data?: { message?: string } };
         message?: string;
       } | null;
+      if (err?.response?.status === 403) {
+        return (
+          err.response.data?.message ??
+          'Sem permissão para carregar os gastos (módulo Contratos Sócios / Contratos).'
+        );
+      }
       return (
         err?.response?.data?.message ??
         err?.message ??

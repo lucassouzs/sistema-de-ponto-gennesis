@@ -26,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { CadastroListEmpty } from '@/components/ui/CadastroListSummary';
+import { CadastroListEmpty, CadastroListSummary } from '@/components/ui/CadastroListSummary';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
@@ -369,17 +369,42 @@ export default function ControleFinanceiroPage() {
   const currentMonth = now.getMonth() + 1;
   const defaultEmissionPeriod = useMemo(() => getDefaultEmissionPeriod(), []);
 
-  const [filters, setFilters] = useState(() => {
+  type ListFiltersState = {
+    emissionFrom: string;
+    emissionTo: string;
+    status: '' | FinancialControlStatus;
+    search: string;
+    overdueOnly: boolean;
+  };
+
+  const buildDefaultListFilters = (): ListFiltersState => {
     const period = getDefaultEmissionPeriod();
     return {
       emissionFrom: period.emissionFrom,
       emissionTo: period.emissionTo,
-      status: '' as '' | FinancialControlStatus,
+      status: '',
       search: '',
       overdueOnly: false,
     };
-  });
+  };
+
   const [consorcio, setConsorcio] = useState<FinancialControlConsorcio>('brasilia');
+  const [filtersByConsorcio, setFiltersByConsorcio] = useState<
+    Record<FinancialControlConsorcio, ListFiltersState>
+  >(() => ({
+    brasilia: buildDefaultListFilters(),
+    hub: buildDefaultListFilters(),
+  }));
+  const filters = filtersByConsorcio[consorcio];
+  const setFilters = (
+    next: ListFiltersState | ((prev: ListFiltersState) => ListFiltersState)
+  ) => {
+    setFiltersByConsorcio((prev) => {
+      const current = prev[consorcio];
+      const resolved = typeof next === 'function' ? next(current) : next;
+      return { ...prev, [consorcio]: resolved };
+    });
+  };
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<FinancialControlEntry | null>(null);
@@ -388,7 +413,16 @@ export default function ControleFinanceiroPage() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<FinancialControlExportFormat>('excel');
   const [isExporting, setIsExporting] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpenByConsorcio, setSearchOpenByConsorcio] = useState<
+    Record<FinancialControlConsorcio, boolean>
+  >({
+    brasilia: false,
+    hub: false,
+  });
+  const searchOpen = searchOpenByConsorcio[consorcio];
+  const setSearchOpen = (open: boolean) => {
+    setSearchOpenByConsorcio((prev) => ({ ...prev, [consorcio]: open }));
+  };
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchExpanded = searchOpen || filters.search.trim().length > 0;
   const hasEmissionFilter = Boolean(filters.emissionFrom || filters.emissionTo);
@@ -399,7 +433,7 @@ export default function ControleFinanceiroPage() {
       searchInputRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(id);
-  }, [searchExpanded]);
+  }, [searchExpanded, consorcio]);
 
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -686,6 +720,159 @@ export default function ControleFinanceiroPage() {
     }
   };
 
+  const listTitle = (() => {
+    if (!filters.emissionFrom && !filters.emissionTo) return 'Lançamentos';
+    const from = filters.emissionFrom
+      ? formatDateBr(filters.emissionFrom, filters.emissionFrom)
+      : null;
+    const to = filters.emissionTo
+      ? formatDateBr(filters.emissionTo, filters.emissionTo)
+      : null;
+    if (from && to) {
+      return from === to ? `Emissão em ${from}` : `Emissão de ${from} a ${to}`;
+    }
+    if (from) return `Emissão a partir de ${from}`;
+    return `Emissão até ${to}`;
+  })();
+
+  const listToolbar = (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <div
+        className={`relative h-10 shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-600 dark:bg-gray-800 ${
+          searchExpanded ? 'w-[min(100%,280px)] sm:w-[280px]' : 'w-10'
+        }`}
+      >
+        <button
+          type="button"
+          tabIndex={searchExpanded ? -1 : 0}
+          aria-hidden={searchExpanded}
+          onClick={() => setSearchOpen(true)}
+          className={`absolute inset-0 z-10 inline-flex items-center justify-center text-gray-700 outline-none transition-opacity duration-200 hover:bg-gray-50 focus:ring-0 dark:text-gray-200 dark:hover:bg-gray-700 ${
+            searchExpanded ? 'pointer-events-none opacity-0' : 'opacity-100'
+          }`}
+          title="Pesquisar lançamento"
+          aria-label="Pesquisar lançamento"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+
+        <div
+          className={`absolute inset-0 transition-opacity duration-200 ${
+            searchExpanded ? 'opacity-100 delay-75' : 'pointer-events-none opacity-0'
+          }`}
+        >
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            onBlur={() => {
+              if (!filters.search.trim()) setSearchOpen(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                if (filters.search) {
+                  setFilters({ ...filters, search: '' });
+                } else {
+                  setSearchOpen(false);
+                }
+              }
+            }}
+            placeholder="Pesquisar lançamento..."
+            tabIndex={searchExpanded ? 0 : -1}
+            className="h-full w-full bg-transparent py-2 pl-9 pr-9 text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-100"
+            aria-label="Pesquisar lançamento"
+          />
+          {filters.search ? (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setFilters({ ...filters, search: '' });
+                searchInputRef.current?.focus();
+              }}
+              aria-label="Limpar busca"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-gray-600 focus:ring-0 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setIsFiltersModalOpen(true)}
+        className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+          hasActivePeriodFilter
+            ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
+            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+        }`}
+        aria-label="Abrir filtro"
+        title={hasActivePeriodFilter ? 'Filtro ativo' : 'Filtro'}
+      >
+        <Filter className="h-4 w-4" />
+        {hasActivePeriodFilter ? (
+          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={openExportModal}
+        disabled={isLoading || listEntries.length === 0}
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        aria-label="Exportar"
+        title="Exportar"
+      >
+        <Download className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={openImportModal}
+        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        aria-label="Importar"
+        title="Importar"
+      >
+        <Upload className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={openCreateModal}
+        className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+        aria-label="Novo Lançamento"
+        title="Novo Lançamento"
+      >
+        <Plus className="h-4 w-4 shrink-0" />
+        <span>Novo Lançamento</span>
+      </button>
+    </div>
+  );
+
+  const listCardHeader = (
+    <CardHeader className={cadastroListClasses.cardHeader}>
+      <div className={cadastroListClasses.cardHeaderRow}>
+        <div className={cadastroListClasses.cardHeaderIconRow}>
+          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+            <CalendarDays className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {listTitle}
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {isLoading
+                ? 'Carregando lançamentos...'
+                : error
+                  ? 'Erro ao carregar a lista'
+                  : `${listEntries.length} ${listEntries.length === 1 ? 'lançamento' : 'lançamentos'}`}
+            </p>
+          </div>
+        </div>
+      </div>
+    </CardHeader>
+  );
+
   return (
     <ProtectedRoute route="/ponto/financeiro/controle-financeiro">
       <MainLayout userRole="EMPLOYEE" userName="">
@@ -700,120 +887,8 @@ export default function ControleFinanceiroPage() {
             </p>
           </div>
 
-          {/* Barra de ações */}
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <div
-              className={`relative h-10 shrink-0 overflow-hidden rounded-lg border border-gray-300 bg-white transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gray-600 dark:bg-gray-800 ${
-                searchExpanded ? 'w-[min(100%,280px)] sm:w-[280px]' : 'w-10'
-              }`}
-            >
-              <button
-                type="button"
-                tabIndex={searchExpanded ? -1 : 0}
-                aria-hidden={searchExpanded}
-                onClick={() => setSearchOpen(true)}
-                className={`absolute inset-0 z-10 inline-flex items-center justify-center text-gray-700 outline-none transition-opacity duration-200 hover:bg-gray-50 focus:ring-0 dark:text-gray-200 dark:hover:bg-gray-700 ${
-                  searchExpanded ? 'pointer-events-none opacity-0' : 'opacity-100'
-                }`}
-                title="Pesquisar lançamento"
-                aria-label="Pesquisar lançamento"
-              >
-                <Search className="h-4 w-4" />
-              </button>
-
-              <div
-                className={`absolute inset-0 transition-opacity duration-200 ${
-                  searchExpanded
-                    ? 'opacity-100 delay-75'
-                    : 'pointer-events-none opacity-0'
-                }`}
-              >
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  onBlur={() => {
-                    if (!filters.search.trim()) setSearchOpen(false);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      if (filters.search) {
-                        setFilters({ ...filters, search: '' });
-                      } else {
-                        setSearchOpen(false);
-                      }
-                    }
-                  }}
-                  placeholder="Pesquisar lançamento..."
-                  tabIndex={searchExpanded ? 0 : -1}
-                  className="h-full w-full bg-transparent py-2 pl-9 pr-9 text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-100"
-                  aria-label="Pesquisar lançamento"
-                />
-                {filters.search ? (
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setFilters({ ...filters, search: '' });
-                      searchInputRef.current?.focus();
-                    }}
-                    aria-label="Limpar busca"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 outline-none transition-colors hover:bg-gray-100 hover:text-gray-600 focus:ring-0 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsFiltersModalOpen(true)}
-              className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                hasActivePeriodFilter
-                  ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-              }`}
-              aria-label="Abrir filtro"
-              title={hasActivePeriodFilter ? 'Filtro ativo' : 'Filtro'}
-            >
-              <Filter className="h-4 w-4" />
-              {hasActivePeriodFilter && (
-                <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={openExportModal}
-              disabled={isLoading || listEntries.length === 0}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              aria-label="Exportar"
-              title="Exportar"
-            >
-              <Download className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={openImportModal}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              aria-label="Importar"
-              title="Importar"
-            >
-              <Upload className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={openCreateModal}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-              aria-label="Novo Lançamento"
-              title="Novo Lançamento"
-            >
-              <Plus className="h-4 w-4 shrink-0" />
-              <span>Novo Lançamento</span>
-            </button>
-          </div>
+          {/* Barra de ações — posição original (acima das abas) */}
+          {listToolbar}
 
           <ConsorcioTabNav active={consorcio} onChange={setConsorcio} />
 
@@ -866,33 +941,36 @@ export default function ControleFinanceiroPage() {
             })}
           </div>
 
-          {/* Conteúdo */}
+          {/* Lista — mesmo padrão das outras telas de cadastro */}
           {isLoading ? (
-            <Card>
-              <CardContent className="py-12">
-                <div className="flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400">
-                  <Loader2 className="w-5 h-5 animate-spin" />
+            <Card className={cadastroListClasses.card}>
+              {listCardHeader}
+              <CardContent className={cadastroListClasses.cardContent}>
+                <div className="flex items-center justify-center gap-2 py-12 text-gray-500 dark:text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   Carregando lançamentos...
                 </div>
               </CardContent>
             </Card>
           ) : error ? (
-            <Card className="border-red-300 dark:border-red-700">
-              <CardContent className="py-6">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+            <Card className={`${cadastroListClasses.card} border-red-300 dark:border-red-700`}>
+              {listCardHeader}
+              <CardContent className={cadastroListClasses.cardContent}>
+                <div className="flex items-start gap-3 py-6">
+                  <AlertCircle className="mt-0.5 h-5 w-5 text-red-600 dark:text-red-400" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-red-700 dark:text-red-300">
                       Erro ao carregar dados
                     </p>
-                    <p className="text-sm text-red-600 dark:text-red-400 mt-1">
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">
                       {(error as any)?.response?.data?.message ||
                         (error as any)?.message ||
                         'Tente novamente.'}
                     </p>
                     <button
+                      type="button"
                       onClick={() => refetch()}
-                      className="mt-2 text-sm font-medium text-red-700 dark:text-red-300 underline"
+                      className="mt-2 text-sm font-medium text-red-700 underline dark:text-red-300"
                     >
                       Tentar novamente
                     </button>
@@ -901,7 +979,8 @@ export default function ControleFinanceiroPage() {
               </CardContent>
             </Card>
           ) : listEntries.length === 0 ? (
-            <Card>
+            <Card className={cadastroListClasses.card}>
+              {listCardHeader}
               <CardContent className={cadastroListClasses.cardContent}>
                 <CadastroListEmpty
                   icon={ClipboardList}
@@ -926,6 +1005,7 @@ export default function ControleFinanceiroPage() {
               emissionFrom={filters.emissionFrom}
               emissionTo={filters.emissionTo}
               items={listEntries}
+              header={listCardHeader}
               onEdit={openEditModal}
               onDelete={handleDelete}
               deletingId={deletingId}
@@ -937,6 +1017,7 @@ export default function ControleFinanceiroPage() {
           isOpen={isModalOpen}
           onClose={closeModal}
           editingEntry={editingEntry}
+          initialValues={editingEntry ? undefined : { consorcio }}
           defaultPaymentMonth={currentMonth}
           defaultPaymentYear={currentYear}
         />
@@ -1383,6 +1464,7 @@ interface MonthGroupProps {
   emissionFrom?: string;
   emissionTo?: string;
   items: FinancialControlEntry[];
+  header?: React.ReactNode;
   onEdit: (entry: FinancialControlEntry) => void;
   onDelete: (id: string) => void;
   deletingId: string | null;
@@ -1482,6 +1564,7 @@ function MonthGroup({
   emissionFrom,
   emissionTo,
   items,
+  header,
   onEdit,
   onDelete,
   deletingId,
@@ -1560,60 +1643,51 @@ function MonthGroup({
     detailRemainingDays !== null && detailRemainingDays !== undefined && detailRemainingDays < 0;
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="border-b-0 !pb-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 sm:p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-              <CalendarDays className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {listTitle}
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {items.length} {items.length === 1 ? 'lançamento' : 'lançamentos'}
-              </p>
+    <Card className={cadastroListClasses.card}>
+      {header ?? (
+        <CardHeader className={cadastroListClasses.cardHeader}>
+          <div className={cadastroListClasses.cardHeaderRow}>
+            <div className={cadastroListClasses.cardHeaderIconRow}>
+              <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                <CalendarDays className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {listTitle}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {items.length} {items.length === 1 ? 'lançamento' : 'lançamentos'}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      )}
       <div id={`month-list-${year}-${month}`}>
-        <CardContent className="px-0 !pt-0 pb-0">
-          <div className="table-scroll">
-            <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <CardContent className={cadastroListClasses.cardContent}>
+          <CadastroListSummary
+            startItem={rangeStart}
+            endItem={rangeEnd}
+            total={items.length}
+            itemLabel="lançamento"
+            itemLabelPlural="lançamentos"
+            currentPage={page}
+            totalPages={totalPages}
+          />
+          <div className={cadastroListClasses.tableScroll}>
+            <table className={`${cadastroListClasses.table} !table-auto`}>
+            <thead className="border-b border-gray-200 dark:border-gray-700">
               <tr>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  NF
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Parcela
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Fornecedor
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  OS
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  OC
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Vencimento
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Valor Final
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Dias
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Ação
-                </th>
+                <th className={cadastroListClasses.thCenter}>NF</th>
+                <th className={cadastroListClasses.thCenter}>Parcela</th>
+                <th className={cadastroListClasses.th}>Fornecedor</th>
+                <th className={cadastroListClasses.thCenter}>OS</th>
+                <th className={cadastroListClasses.thCenter}>OC</th>
+                <th className={cadastroListClasses.thCenter}>Vencimento</th>
+                <th className={cadastroListClasses.thCenter}>Valor Final</th>
+                <th className={cadastroListClasses.thCenter}>Dias</th>
+                <th className={cadastroListClasses.thCenter}>Status</th>
+                <th className={cadastroListClasses.thRight}>Ação</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1695,18 +1769,11 @@ function MonthGroup({
             </tbody>
           </table>
         </div>
-        {items.length > MONTH_GROUP_PAGE_SIZE && (
-          <div className="border-t border-gray-200 px-4 py-4 dark:border-gray-700 sm:px-6">
-            <p className="mb-3 text-center text-sm text-gray-600 dark:text-gray-400">
-              Exibindo {rangeStart}–{rangeEnd} de {items.length} lançamentos
-            </p>
-            <ListPagination
-              currentPage={page}
-              totalPages={totalPages}
-              onPageChange={setPage}
-            />
-          </div>
-        )}
+        <ListPagination
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
         </CardContent>
       </div>
 

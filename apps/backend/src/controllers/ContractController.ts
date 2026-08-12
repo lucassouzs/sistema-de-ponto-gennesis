@@ -8,7 +8,8 @@ import {
   assertUserCanCreateContract,
   assertUserCanDeleteContract,
   assertUserCanEditContract,
-  getContractAccessForUser
+  getContractAccessForUser,
+  userCanAccessGastosOperacionais
 } from '../lib/contractAccess';
 import { getTotvsRmRelatorioFinService } from '../services/TotvsRmRelatorioFinService';
 import { totvsRmContractLookupCodes } from '../lib/totvsRmContractCostCenterCode';
@@ -571,9 +572,9 @@ export class ContractController {
   async getGastosOperacionais(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Não autenticado', 401);
-      const access = await getContractAccessForUser(req.user.id, req.user.isAdmin);
-      if (access.filter === 'none') {
-        throw createError('Sem permissão para acessar contratos', 403);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
       }
 
       const svc = getTotvsRmRelatorioFinService();
@@ -637,9 +638,9 @@ export class ContractController {
   ) {
     try {
       if (!req.user) throw createError('Não autenticado', 401);
-      const access = await getContractAccessForUser(req.user.id, req.user.isAdmin);
-      if (access.filter === 'none') {
-        throw createError('Sem permissão para acessar contratos', 403);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
       }
 
       const contract = String(req.query.contract ?? '').trim();
