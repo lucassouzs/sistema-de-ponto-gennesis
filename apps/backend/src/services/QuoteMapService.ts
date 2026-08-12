@@ -513,7 +513,11 @@ export class QuoteMapService {
 
         // Fornecedor — 2 colunas com label/valor afastados
         const s = section.supplier || {};
-        ensureSpace(90);
+        const dash = (v?: string | null) => {
+          const t = (v || '').trim();
+          return t || '—';
+        };
+        ensureSpace(130);
         doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text('Dados do fornecedor', left, y);
         y += 20;
         if (s.name) drawLabeledLine('Razão social: ', s.name);
@@ -552,6 +556,15 @@ export class QuoteMapService {
         ) {
           drawLabeledLine('Endereço: ', String(s.address).trim());
         }
+        // Dados bancários — sempre exibir (mesmo vazios)
+        drawTwoColRow(
+          { label: 'Banco: ', value: dash(s.bank) },
+          { label: 'Agência: ', value: dash(s.agency) }
+        );
+        drawTwoColRow(
+          { label: 'Conta: ', value: dash(s.account) },
+          { label: 'Dígito: ', value: dash(s.accountDigit) }
+        );
         y += 6;
 
         // Pagamento e entrega — só campos preenchidos

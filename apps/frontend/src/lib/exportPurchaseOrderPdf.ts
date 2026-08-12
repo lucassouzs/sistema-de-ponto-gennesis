@@ -141,6 +141,10 @@ type PoDetail = {
     state?: string | null;
     zipCode?: string | null;
     contactName?: string | null;
+    bank?: string | null;
+    agency?: string | null;
+    account?: string | null;
+    accountDigit?: string | null;
   };
   materialRequest?: {
     requestNumber?: string;
@@ -254,7 +258,9 @@ export async function exportPurchaseOrderPdf(
     `CNPJ: ${s.cnpj || '—'}`,
     `Endereço: ${[s.address, s.city, s.state, s.zipCode].filter(Boolean).join(' — ') || '—'}`,
     `Contato: ${s.contactName || '—'}`,
-    `Telefone: ${s.phone || '—'}  |  E-mail: ${s.email || '—'}`
+    `Telefone: ${s.phone || '—'}  |  E-mail: ${s.email || '—'}`,
+    `Banco: ${s.bank || '—'}  |  Agência: ${s.agency || '—'}`,
+    `Conta: ${s.account || '—'}  |  Dígito: ${s.accountDigit || '—'}`
   ];
   supplierLines.forEach((line) => {
     const lines = pdf.splitTextToSize(line, cw);

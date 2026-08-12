@@ -787,7 +787,11 @@ const purchaseOrderIncludePdf = {
       city: true,
       state: true,
       zipCode: true,
-      contactName: true
+      contactName: true,
+      bank: true,
+      agency: true,
+      account: true,
+      accountDigit: true
     }
   },
   materialRequest: {
