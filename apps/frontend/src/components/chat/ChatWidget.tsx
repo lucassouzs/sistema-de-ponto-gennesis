@@ -42,6 +42,7 @@ const DEPARTMENTS = [
   { value: 'Financeiro', label: 'Financeiro' },
   { value: 'Operacional', label: 'Operacional' },
   { value: 'Segurança do Trabalho', label: 'Segurança do Trabalho' },
+  { value: 'Sócios', label: 'Sócios' },
 ];
 
 const departmentSelectOptions = labeledToSelectOptions(DEPARTMENTS);

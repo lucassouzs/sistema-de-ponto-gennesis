@@ -83,6 +83,8 @@ function buildSupplierData(body: SupplierInput) {
     agency: normalizeOptionalString(body.agency),
     account: normalizeOptionalString(body.account),
     accountDigit: normalizeOptionalString(body.accountDigit),
+    pixKeyType: normalizeOptionalString(body.pixKeyType),
+    pixKey: normalizeOptionalString(body.pixKey),
     isActive: parseActive(body.isActive)
   };
 }

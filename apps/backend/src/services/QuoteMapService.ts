@@ -517,7 +517,7 @@ export class QuoteMapService {
           const t = (v || '').trim();
           return t || '—';
         };
-        ensureSpace(130);
+        ensureSpace(150);
         doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(11).text('Dados do fornecedor', left, y);
         y += 20;
         if (s.name) drawLabeledLine('Razão social: ', s.name);
@@ -564,6 +564,10 @@ export class QuoteMapService {
         drawTwoColRow(
           { label: 'Conta: ', value: dash(s.account) },
           { label: 'Dígito: ', value: dash(s.accountDigit) }
+        );
+        drawTwoColRow(
+          { label: 'Tipo chave PIX: ', value: dash(s.pixKeyType) },
+          { label: 'Chave PIX: ', value: dash(s.pixKey) }
         );
         y += 6;
 

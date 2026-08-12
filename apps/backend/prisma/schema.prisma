@@ -1743,6 +1743,8 @@ model Supplier {
   agency                String? // Agência do favorecido
   account               String? // Conta (sem dígito)
   accountDigit          String? // Dígito da conta
+  pixKeyType            String? // Tipo de chave PIX (ALEATÓRIA, CELULAR, CNPJ, CPF, E-MAIL)
+  pixKey                String? // Chave PIX
   notes                 String?
   isActive              Boolean  @default(true)
   createdAt    DateTime @default(now())

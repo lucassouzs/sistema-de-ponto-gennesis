@@ -41,7 +41,9 @@ export const SUPPLIER_IMPORT_COLUMNS = [
   { name: 'Banco', required: false },
   { name: 'Agência', required: false },
   { name: 'Conta', required: false },
-  { name: 'Dígito da conta', required: false }
+  { name: 'Dígito da conta', required: false },
+  { name: 'Tipo de chave PIX', required: false, hint: 'ALEATÓRIA, CELULAR, CNPJ, CPF, E-MAIL' },
+  { name: 'Chave PIX', required: false }
 ] as const;
 
 export const SUPPLIER_IMPORT_TEMPLATE_HEADERS = [
@@ -69,7 +71,9 @@ export const SUPPLIER_IMPORT_TEMPLATE_HEADERS = [
   'Banco',
   'Agência',
   'Conta',
-  'Dígito da conta'
+  'Dígito da conta',
+  'Tipo de chave PIX',
+  'Chave PIX'
 ];
 
 export const SUPPLIER_IMPORT_TEMPLATE_EXAMPLE = [
@@ -97,7 +101,9 @@ export const SUPPLIER_IMPORT_TEMPLATE_EXAMPLE = [
   '341',
   '1234',
   '56789',
-  '0'
+  '0',
+  'E-MAIL',
+  'contato@abc.com.br'
 ];
 
 function normalizeHeaderKey(header: string): string {
@@ -192,6 +198,13 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
     'Dígito',
     'accountDigit'
   );
+  const pixKeyType = pickRowValue(
+    row,
+    'Tipo de chave PIX',
+    'Tipo chave PIX',
+    'pixKeyType'
+  );
+  const pixKey = pickRowValue(row, 'Chave PIX', 'Chave pix', 'pixKey');
 
   const skipReasons: string[] = [];
   if (!name) skipReasons.push('Nome em branco');
@@ -229,7 +242,9 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
     bank: bank || undefined,
     agency: agency || undefined,
     account: account || undefined,
-    accountDigit: accountDigit || undefined
+    accountDigit: accountDigit || undefined,
+    pixKeyType: pixKeyType || undefined,
+    pixKey: pixKey || undefined
   };
 
   const isActive = parseActive(ativoRaw);

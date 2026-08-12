@@ -138,6 +138,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
     'Financeiro',
     'Operacional',
     'Segurança do Trabalho',
+    'Sócios',
   ];
 
   // Lista de cargos disponíveis (sem Administrador e sem Diretor)

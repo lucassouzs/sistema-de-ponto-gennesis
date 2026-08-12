@@ -145,6 +145,8 @@ type PoDetail = {
     agency?: string | null;
     account?: string | null;
     accountDigit?: string | null;
+    pixKeyType?: string | null;
+    pixKey?: string | null;
   };
   materialRequest?: {
     requestNumber?: string;
@@ -260,7 +262,8 @@ export async function exportPurchaseOrderPdf(
     `Contato: ${s.contactName || '—'}`,
     `Telefone: ${s.phone || '—'}  |  E-mail: ${s.email || '—'}`,
     `Banco: ${s.bank || '—'}  |  Agência: ${s.agency || '—'}`,
-    `Conta: ${s.account || '—'}  |  Dígito: ${s.accountDigit || '—'}`
+    `Conta: ${s.account || '—'}  |  Dígito: ${s.accountDigit || '—'}`,
+    `Tipo chave PIX: ${s.pixKeyType || '—'}  |  Chave PIX: ${s.pixKey || '—'}`
   ];
   supplierLines.forEach((line) => {
     const lines = pdf.splitTextToSize(line, cw);

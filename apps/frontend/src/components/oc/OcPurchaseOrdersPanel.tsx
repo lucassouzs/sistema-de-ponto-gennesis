@@ -206,6 +206,8 @@ export interface PurchaseOrder {
     agency?: string | null;
     account?: string | null;
     accountDigit?: string | null;
+    pixKeyType?: string | null;
+    pixKey?: string | null;
   };
   materialRequest?: {
     id?: string;

@@ -11,6 +11,7 @@ export const DEPARTMENTS_LIST = [
   'Financeiro',
   'Operacional',
   'Segurança do Trabalho',
+  'Sócios',
 ];
 
 export const COMPANIES_LIST = [

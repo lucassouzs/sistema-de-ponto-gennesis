@@ -10,6 +10,7 @@ export const ASO_SETORES = [
   'Financeiro',
   'Operacional',
   'Segurança do Trabalho',
+  'Sócios',
 ] as const;
 
 /** Cargos genéricos que montam o rótulo "{Cargo} de {Setor}". */

@@ -692,7 +692,9 @@ const purchaseOrderIncludeList = {
       bank: true,
       agency: true,
       account: true,
-      accountDigit: true
+      accountDigit: true,
+      pixKeyType: true,
+      pixKey: true
     }
   },
   quoteMap: { select: { id: true, createdAt: true } },
@@ -791,7 +793,9 @@ const purchaseOrderIncludePdf = {
       bank: true,
       agency: true,
       account: true,
-      accountDigit: true
+      accountDigit: true,
+      pixKeyType: true,
+      pixKey: true
     }
   },
   materialRequest: {

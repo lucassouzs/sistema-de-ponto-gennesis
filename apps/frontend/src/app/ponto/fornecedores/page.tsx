@@ -42,7 +42,8 @@ import {
   normalizeSupplierCategory,
   parseSuppliersFromFile
 } from '@/lib/supplierImport';
-import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { labeledToSelectOptions, stringsToSelectOptions } from '@/lib/selectOptionBuilders';
+import { POLOS_LIST } from '@/constants/payrollFilters';
 
 const SUPPLIER_ACTIVE_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos (ativos e inativos)' },
@@ -57,9 +58,18 @@ const PARTY_TYPE_SELECT_OPTIONS = labeledToSelectOptions([
 ]);
 
 const CATEGORY_SELECT_OPTIONS = labeledToSelectOptions([
-  { value: '', label: 'Selecione...' },
   { value: 'Pessoa Física', label: 'Pessoa Física' },
   { value: 'Pessoa Jurídica', label: 'Pessoa Jurídica' },
+]);
+
+const STATE_SELECT_OPTIONS = stringsToSelectOptions(POLOS_LIST);
+
+const PIX_KEY_TYPE_SELECT_OPTIONS = labeledToSelectOptions([
+  { value: 'ALEATÓRIA', label: 'ALEATÓRIA' },
+  { value: 'CELULAR', label: 'CELULAR' },
+  { value: 'CNPJ', label: 'CNPJ' },
+  { value: 'CPF', label: 'CPF' },
+  { value: 'E-MAIL', label: 'E-MAIL' },
 ]);
 
 interface Supplier {
@@ -91,6 +101,8 @@ interface Supplier {
   agency?: string | null;
   account?: string | null;
   accountDigit?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
   isActive: boolean;
 }
 
@@ -120,6 +132,8 @@ type SupplierFormState = {
   agency: string;
   account: string;
   accountDigit: string;
+  pixKeyType: string;
+  pixKey: string;
   isActive: boolean;
 };
 
@@ -149,6 +163,8 @@ const EMPTY_FORM: SupplierFormState = {
   agency: '',
   account: '',
   accountDigit: '',
+  pixKeyType: '',
+  pixKey: '',
   isActive: true
 };
 
@@ -216,7 +232,9 @@ function getSupplierDetailSections(s: Supplier): DetailSection[] {
         { label: 'Banco', value: cell(s.bank) },
         { label: 'Agência', value: cell(s.agency) },
         { label: 'Conta', value: cell(s.account) },
-        { label: 'Dígito da conta', value: cell(s.accountDigit) }
+        { label: 'Dígito da conta', value: cell(s.accountDigit) },
+        { label: 'Tipo de chave PIX', value: cell(s.pixKeyType) },
+        { label: 'Chave PIX', value: cell(s.pixKey) }
       ]
     }
   ];
@@ -258,6 +276,8 @@ function supplierToForm(s: Supplier): SupplierFormState {
     agency: s.agency || '',
     account: s.account || '',
     accountDigit: s.accountDigit || '',
+    pixKeyType: s.pixKeyType || '',
+    pixKey: s.pixKey || '',
     isActive: s.isActive
   };
 }
@@ -928,6 +948,7 @@ export default function FornecedoresPage() {
                         onChange={(v) => setFormData({ ...formData, partyType: v })}
                         options={PARTY_TYPE_SELECT_OPTIONS}
                         allowEmpty={false}
+                        placeholder="Selecione o tipo"
                       />
                     </div>
                     <div>
@@ -937,6 +958,7 @@ export default function FornecedoresPage() {
                         onChange={(v) => setFormData({ ...formData, category: v })}
                         options={CATEGORY_SELECT_OPTIONS}
                         allowEmpty={false}
+                        placeholder="Selecione a categoria"
                       />
                     </div>
                     <div>
@@ -945,6 +967,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.tradeName}
                         onChange={(e) => setFormData({ ...formData, tradeName: e.target.value })}
+                        placeholder="Ex.: ABC Materiais"
                         className={inputClass}
                       />
                     </div>
@@ -954,6 +977,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="Razão social ou nome completo"
                         className={inputClass}
                         required
                       />
@@ -976,6 +1000,7 @@ export default function FornecedoresPage() {
                         onChange={(e) =>
                           setFormData({ ...formData, stateRegistration: e.target.value })
                         }
+                        placeholder="Ex.: 123456789"
                         className={inputClass}
                       />
                     </div>
@@ -987,6 +1012,7 @@ export default function FornecedoresPage() {
                         onChange={(e) =>
                           setFormData({ ...formData, municipalRegistration: e.target.value })
                         }
+                        placeholder="Ex.: 987654321"
                         className={inputClass}
                       />
                     </div>
@@ -1042,6 +1068,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.street}
                         onChange={(e) => setFormData({ ...formData, street: e.target.value })}
+                        placeholder="Ex.: Rua das Flores"
                         className={inputClass}
                       />
                     </div>
@@ -1051,6 +1078,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.streetNumber}
                         onChange={(e) => setFormData({ ...formData, streetNumber: e.target.value })}
+                        placeholder="Ex.: 100"
                         className={inputClass}
                       />
                     </div>
@@ -1060,6 +1088,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.neighborhood}
                         onChange={(e) => setFormData({ ...formData, neighborhood: e.target.value })}
+                        placeholder="Ex.: Centro"
                         className={inputClass}
                       />
                     </div>
@@ -1069,6 +1098,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.city}
                         onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="Ex.: Brasília"
                         className={inputClass}
                       />
                     </div>
@@ -1078,6 +1108,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.complement}
                         onChange={(e) => setFormData({ ...formData, complement: e.target.value })}
+                        placeholder="Ex.: Sala 2, Bloco A"
                         className={inputClass}
                       />
                     </div>
@@ -1087,18 +1118,19 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.poBox}
                         onChange={(e) => setFormData({ ...formData, poBox: e.target.value })}
+                        placeholder="Ex.: 70000-000"
                         className={inputClass}
                       />
                     </div>
                     <div>
                       <label className={labelClass}>Estado</label>
-                      <input
-                        type="text"
+                      <StringSingleSelectDropdown
                         value={formData.state}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                        maxLength={2}
-                        placeholder="DF"
-                        className={inputClass}
+                        onChange={(state) => setFormData({ ...formData, state })}
+                        options={STATE_SELECT_OPTIONS}
+                        placeholder="Selecione a UF"
+                        searchPlaceholder="Pesquisar UF..."
+                        emptyOptionLabel="Nenhum"
                       />
                     </div>
                     <div>
@@ -1107,6 +1139,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.zipCode}
                         onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
+                        placeholder="00000-000"
                         className={inputClass}
                       />
                     </div>
@@ -1124,6 +1157,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.phone}
                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="(61) 3333-4444"
                         className={inputClass}
                       />
                     </div>
@@ -1133,6 +1167,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.fax}
                         onChange={(e) => setFormData({ ...formData, fax: e.target.value })}
+                        placeholder="(61) 3333-5555"
                         className={inputClass}
                       />
                     </div>
@@ -1142,6 +1177,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.mobile}
                         onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                        placeholder="(61) 99999-8888"
                         className={inputClass}
                       />
                     </div>
@@ -1151,6 +1187,7 @@ export default function FornecedoresPage() {
                         type="email"
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="contato@empresa.com.br"
                         className={inputClass}
                       />
                     </div>
@@ -1172,7 +1209,7 @@ export default function FornecedoresPage() {
                     Dados bancários
                   </h3>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
+                    <div>
                       <label className={labelClass}>Banco</label>
                       <input
                         type="text"
@@ -1188,6 +1225,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.agency}
                         onChange={(e) => setFormData({ ...formData, agency: e.target.value })}
+                        placeholder="Ex.: 1234"
                         className={inputClass}
                       />
                     </div>
@@ -1197,6 +1235,7 @@ export default function FornecedoresPage() {
                         type="text"
                         value={formData.account}
                         onChange={(e) => setFormData({ ...formData, account: e.target.value })}
+                        placeholder="Ex.: 56789"
                         className={inputClass}
                       />
                     </div>
@@ -1207,6 +1246,26 @@ export default function FornecedoresPage() {
                         value={formData.accountDigit}
                         onChange={(e) => setFormData({ ...formData, accountDigit: e.target.value })}
                         maxLength={2}
+                        placeholder="Ex.: 0"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Tipo de chave PIX</label>
+                      <StringSingleSelectDropdown
+                        value={formData.pixKeyType}
+                        onChange={(pixKeyType) => setFormData({ ...formData, pixKeyType })}
+                        options={PIX_KEY_TYPE_SELECT_OPTIONS}
+                        placeholder="Selecione o tipo de chave"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Chave PIX</label>
+                      <input
+                        type="text"
+                        value={formData.pixKey}
+                        onChange={(e) => setFormData({ ...formData, pixKey: e.target.value })}
+                        placeholder="Ex.: e-mail, CPF, CNPJ ou chave aleatória"
                         className={inputClass}
                       />
                     </div>
