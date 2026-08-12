@@ -2346,19 +2346,9 @@ function SolicitarMateriaisPage() {
                   </div>
 
                   <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Itens *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleAddItem}
-                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Adicionar Item
-                      </button>
-                    </div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                      Itens *
+                    </label>
                     <div className="space-y-3">
                       {formData.items.map((item, index) => (
                         <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -2438,6 +2428,14 @@ function SolicitarMateriaisPage() {
                         </div>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar Item
+                    </button>
                   </div>
 
                   {createMutation.isError && (
@@ -2867,17 +2865,7 @@ function SolicitarMateriaisPage() {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Itens *</span>
-                    <button
-                      type="button"
-                      onClick={handleEditAddItem}
-                      className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Adicionar item
-                    </button>
-                  </div>
+                  <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Itens *</span>
                   <div className="space-y-3">
                     {editFormData.items.map((item, index) => (
                       <div
@@ -2952,6 +2940,14 @@ function SolicitarMateriaisPage() {
                       </div>
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleEditAddItem}
+                    className="mt-3 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Adicionar item
+                  </button>
                 </div>
               </div>
 

@@ -1,11 +1,8 @@
 import express, { Response, NextFunction } from 'express';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { uploadAsoAttachment } from '../middleware/upload';
-import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentUpload } from '../lib/persistentUpload';
 import { AsoController } from '../controllers/AsoController';
 import { AsoService } from '../services/AsoService';
 
@@ -75,16 +72,15 @@ router.post(
       if (!req.file?.buffer) {
         throw createError('Selecione um arquivo', 400);
       }
-      const uploadsDir = path.join(backendUploadsRoot, 'aso');
-      fs.mkdirSync(uploadsDir, { recursive: true });
-      const safeName = (req.file.originalname || 'arquivo')
-        .replace(/[^a-zA-Z0-9.\-_]/g, '_')
-        .slice(0, 80);
-      const fileName = `${uuidv4()}-${safeName}`;
-      fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
-      const anexoUrl = `/uploads/aso/${fileName}`;
+      const saved = await savePersistentUpload({
+        folder: 'aso',
+        buffer: req.file.buffer,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        includeSafeOriginalName: true,
+      });
 
-      const data = await asoService.setAnexo(req.params.id, anexoUrl);
+      const data = await asoService.setAnexo(req.params.id, saved.url);
       res.json({ success: true, data, message: 'Anexo enviado com sucesso' });
     } catch (error) {
       next(error);

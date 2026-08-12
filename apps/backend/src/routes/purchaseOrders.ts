@@ -1,13 +1,10 @@
 import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
 import { PurchaseOrderService } from '../services/PurchaseOrderService';
 import { createError } from '../middleware/errorHandler';
-import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentUpload } from '../lib/persistentUpload';
 import {
   assertOcFlowStatusChange,
   assertUserHasOcModule,
@@ -188,17 +185,17 @@ router.post('/upload-attachment', (req: AuthRequest, res: Response, next: NextFu
     if (!req.file?.buffer) {
       throw createError('Selecione um arquivo', 400);
     }
-    const uploadsDir = path.join(backendUploadsRoot, 'purchase-orders');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const safeExt = ext.length <= 8 ? ext : '.bin';
-    const fileName = `${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'purchase-orders',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
     res.json({
       success: true,
       data: {
-        url: `/uploads/purchase-orders/${fileName}`,
-        originalName: req.file.originalname || fileName,
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName,
       },
     });
   } catch (error) {
@@ -220,17 +217,17 @@ router.post('/upload-boleto', (req: AuthRequest, res: Response, next: NextFuncti
     if (!req.file?.buffer) {
       throw createError('Selecione um arquivo (PDF ou imagem)', 400);
     }
-    const uploadsDir = path.join(backendUploadsRoot, 'purchase-orders');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const ext = path.extname(req.file.originalname || '') || '.pdf';
-    const safeExt = ext.length <= 8 ? ext : '.pdf';
-    const fileName = `${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'purchase-orders',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
     res.json({
       success: true,
       data: {
-        url: `/uploads/purchase-orders/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {
@@ -252,17 +249,18 @@ router.post('/upload-nf', (req: AuthRequest, res: Response, next: NextFunction) 
     if (!req.file?.buffer) {
       throw createError('Selecione um arquivo (PDF ou imagem)', 400);
     }
-    const uploadsDir = path.join(backendUploadsRoot, 'purchase-orders');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const ext = path.extname(req.file.originalname || '') || '.pdf';
-    const safeExt = ext.length <= 8 ? ext : '.pdf';
-    const fileName = `nf-${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'purchase-orders',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileNamePrefix: 'nf-',
+    });
     res.json({
       success: true,
       data: {
-        url: `/uploads/purchase-orders/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {
@@ -284,17 +282,18 @@ router.post('/upload-payment-proof', (req: AuthRequest, res: Response, next: Nex
     if (!req.file?.buffer) {
       throw createError('Selecione um arquivo (PDF ou imagem)', 400);
     }
-    const uploadsDir = path.join(backendUploadsRoot, 'purchase-orders');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const ext = path.extname(req.file.originalname || '') || '.pdf';
-    const safeExt = ext.length <= 8 ? ext : '.pdf';
-    const fileName = `proof-${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'purchase-orders',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileNamePrefix: 'proof-',
+    });
     res.json({
       success: true,
       data: {
-        url: `/uploads/purchase-orders/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {

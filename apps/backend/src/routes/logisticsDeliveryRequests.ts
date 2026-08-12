@@ -1,8 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import {
   requireLogisticsDeliveryAccess,
@@ -10,7 +7,7 @@ import {
   requireLogisticsDeliveryReadAccess,
 } from '../middleware/permissionAuth';
 import { createError } from '../middleware/errorHandler';
-import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentUpload } from '../lib/persistentUpload';
 import { logisticsDeliveryRequestController } from '../controllers/LogisticsDeliveryRequestController';
 
 const router = Router();
@@ -41,17 +38,17 @@ router.post('/upload-attachment', requireLogisticsDeliveryReadAccess, (req: Auth
 }, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.file?.buffer) throw createError('Selecione um arquivo', 400);
-    const uploadsDir = path.join(backendUploadsRoot, 'logistics-delivery-requests');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const safeExt = ext.length <= 8 ? ext : '.bin';
-    const fileName = `${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'logistics-delivery-requests',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
     res.json({
       success: true,
       data: {
-        url: `/uploads/logistics-delivery-requests/${fileName}`,
-        originalName: req.file.originalname || fileName,
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName,
       },
     });
   } catch (error) {

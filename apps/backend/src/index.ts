@@ -33,6 +33,7 @@ import rateLimit from 'express-rate-limit';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import { backendUploadsRoot } from './lib/uploads';
+import { persistentUploadsS3Fallback } from './lib/persistentUpload';
 import authRoutes from './routes/auth';
 import userRoutes from './routes/users';
 import timeRecordRoutes from './routes/timeRecords';
@@ -300,7 +301,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Sempre servir ficheiros gravados em disco (RM, OC/boleto, mensagens, etc.).
 // O uso de S3 para fotos de ponto não impede estes anexos locais.
+// Depois do static: se o arquivo sumiu do disco do Railway, busca no S3 (mesmo path).
 app.use('/uploads', express.static(backendUploadsRoot));
+app.use('/uploads', persistentUploadsS3Fallback());
 
 // Health check
 app.get('/health', (req, res) => {
