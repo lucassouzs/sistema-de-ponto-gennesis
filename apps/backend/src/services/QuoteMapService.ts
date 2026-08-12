@@ -728,13 +728,16 @@ export class QuoteMapService {
         }
       });
 
+      // Rodapé na margem inferior — lineBreak:false evita o PDFKit criar página em branco
+      // (texto em y > pageHeight - margin dispara addPage automático).
       doc
         .font('Helvetica')
         .fontSize(8)
         .fillColor('#64748B')
-        .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, pageHeight - 28, {
+        .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, pageHeight - 36, {
           width: contentWidth,
           align: 'center',
+          lineBreak: false,
         });
 
       doc.end();
