@@ -4942,11 +4942,12 @@ export function OcPurchaseOrdersPanel({
         </div>
       )}
 
-      {selectedOrder && !showEditOcModal && !correctionTarget && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+      {selectedOrder && !showEditOcModal && !correctionTarget && typeof document !== 'undefined'
+        ? createPortal(
+        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedOrder(null)} />
           <div
-            className={`relative flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full mx-4 max-h-[min(92vh,880px)] ${
+            className={`relative my-auto flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 max-h-[min(92dvh,calc(100dvh-2rem))] ${
               selectedOrder.status === 'IN_REVIEW' ? 'max-w-2xl' : 'max-w-4xl'
             }`}
             role="dialog"
@@ -6124,8 +6125,10 @@ export function OcPurchaseOrdersPanel({
             </div>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+      : null}
 
       {boletoParcelModalOrder && (
         <BoletoParcelasModal

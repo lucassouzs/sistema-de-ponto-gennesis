@@ -404,9 +404,11 @@
     overscroll-behavior: none;
   }
 
-  /* Impede clique/scroll na sidebar enquanto houver modal aberto */
+  /* Impede clique/scroll na sidebar e topnav enquanto houver modal aberto */
   html.modal-open [data-app-sidebar],
-  body.modal-open [data-app-sidebar] {
+  body.modal-open [data-app-sidebar],
+  html.modal-open [data-app-topnav],
+  body.modal-open [data-app-topnav] {
     pointer-events: none !important;
   }
 
@@ -940,7 +942,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -951,7 +953,7 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
