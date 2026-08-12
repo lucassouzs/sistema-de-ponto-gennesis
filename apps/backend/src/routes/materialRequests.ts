@@ -298,7 +298,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
     const request = await materialRequestService.updateMaterialRequestStatus(id, {
       status,
       approvedBy: status === 'APPROVED' ? req.user.id : undefined,
-      rejectedBy: undefined,
+      rejectedBy: status === 'CANCELLED' || status === 'REJECTED' ? req.user.id : undefined,
       rejectionReason: undefined
     }, req.user.id);
     res.json({ success: true, data: request, message: 'Status atualizado' });

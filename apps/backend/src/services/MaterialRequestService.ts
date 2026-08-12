@@ -805,6 +805,14 @@ export class MaterialRequestService {
       updateData.approvedAt = new Date();
     }
 
+    if (nextStatus === 'CANCELLED' && data.rejectedBy) {
+      updateData.rejectedBy = data.rejectedBy;
+      updateData.rejectedAt = new Date();
+      if (data.rejectionReason !== undefined) {
+        updateData.rejectionReason = data.rejectionReason;
+      }
+    }
+
     // Se todos os itens foram atendidos, marcar como FULFILLED
     if (nextStatus === 'FULFILLED') {
       updateData.completedAt = new Date();
@@ -1140,11 +1148,188 @@ export class MaterialRequestService {
   }
 
   async listComments(materialRequestId: string) {
+    const db = prisma as typeof prisma & {
+      auditLog?: {
+        findMany: (args: unknown) => Promise<any[]>;
+      };
+    };
+
     const existing = await prisma.materialRequest.findUnique({
       where: { id: materialRequestId },
-      select: { id: true },
+      select: {
+        id: true,
+        requestNumber: true,
+        createdAt: true,
+        requestedAt: true,
+        status: true,
+        approvedAt: true,
+        rejectedAt: true,
+        rejectionReason: true,
+        requester: { select: { id: true, name: true, profilePhotoUrl: true } },
+        approver: { select: { id: true, name: true, profilePhotoUrl: true } },
+        rejecter: { select: { id: true, name: true, profilePhotoUrl: true } },
+        purchaseOrders: {
+          select: {
+            id: true,
+            orderNumber: true,
+            createdAt: true,
+            creator: { select: { id: true, name: true, profilePhotoUrl: true } },
+            comprasApprovedAt: true,
+            comprasApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+            gestorApprovedAt: true,
+            gestorApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+            approvedAt: true,
+            approver: { select: { id: true, name: true, profilePhotoUrl: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
     if (!existing) throw new Error('Requisição não encontrada');
+
+    type Author = { id: string; name: string; profilePhotoUrl?: string | null };
+    type FeedItem = {
+      id: string;
+      kind: 'comment' | 'system';
+      content: string;
+      createdAt: string;
+      author: Author | null;
+    };
+
+    const feed: FeedItem[] = [];
+
+    const pushSystem = (
+      id: string,
+      at: Date | string | null | undefined,
+      text: string,
+      author?: Author | null
+    ) => {
+      if (!at || !text.trim()) return;
+      const createdAt = typeof at === 'string' ? at : at.toISOString();
+      feed.push({
+        id,
+        kind: 'system',
+        content: text.trim(),
+        createdAt,
+        author: author ?? null,
+      });
+    };
+
+    const shortOcNumber = (orderNumber?: string | null) => {
+      const trimmed = String(orderNumber ?? '').trim();
+      if (!trimmed) return '';
+      const match = trimmed.match(/(\d+)$/);
+      if (match) return String(parseInt(match[1], 10));
+      return trimmed;
+    };
+
+    if (existing.requester) {
+      pushSystem(
+        `sys-created-${existing.id}`,
+        existing.requestedAt || existing.createdAt,
+        `${existing.requester.name} criou a requisição de material`,
+        existing.requester
+      );
+    }
+
+    if (existing.approvedAt && existing.approver) {
+      pushSystem(
+        `sys-approved-${existing.id}`,
+        existing.approvedAt,
+        `${existing.approver.name} aprovou a requisição de material`,
+        existing.approver
+      );
+    }
+
+    if (existing.rejectedAt && existing.rejecter) {
+      const reason = existing.rejectionReason?.trim();
+      pushSystem(
+        `sys-rejected-${existing.id}`,
+        existing.rejectedAt,
+        reason
+          ? `${existing.rejecter.name} cancelou a requisição de material: ${reason}`
+          : `${existing.rejecter.name} cancelou a requisição de material`,
+        existing.rejecter
+      );
+    }
+
+    for (const oc of existing.purchaseOrders || []) {
+      const ocLabel = shortOcNumber(oc.orderNumber) || oc.id.slice(0, 8);
+      if (oc.creator) {
+        pushSystem(
+          `sys-oc-created-${oc.id}`,
+          oc.createdAt,
+          `${oc.creator.name} criou a OC ${ocLabel}`,
+          oc.creator
+        );
+      }
+      if (oc.comprasApprovedAt && oc.comprasApprover) {
+        pushSystem(
+          `sys-oc-compras-${oc.id}`,
+          oc.comprasApprovedAt,
+          `${oc.comprasApprover.name} aprovou no compras a OC ${ocLabel}`,
+          oc.comprasApprover
+        );
+      }
+      if (oc.gestorApprovedAt && oc.gestorApprover) {
+        pushSystem(
+          `sys-oc-gestor-${oc.id}`,
+          oc.gestorApprovedAt,
+          `${oc.gestorApprover.name} aprovou como gestor a OC ${ocLabel}`,
+          oc.gestorApprover
+        );
+      }
+      if (oc.approvedAt && oc.approver) {
+        pushSystem(
+          `sys-oc-diretoria-${oc.id}`,
+          oc.approvedAt,
+          `${oc.approver.name} aprovou como diretoria a OC ${ocLabel}`,
+          oc.approver
+        );
+      }
+    }
+
+    if (db.auditLog?.findMany) {
+      try {
+        const audits = await db.auditLog.findMany({
+          where: {
+            entity: 'MaterialRequest',
+            entityId: materialRequestId,
+            action: { in: ['REJECT', 'DELETE'] },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 50,
+        });
+        const userIds = Array.from(
+          new Set(audits.map((a: any) => a.userId).filter(Boolean))
+        ) as string[];
+        const users =
+          userIds.length > 0
+            ? await prisma.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, name: true, profilePhotoUrl: true },
+              })
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+        for (const a of audits) {
+          // Já cobrimos cancelamento via rejectedAt/rejecter
+          if (a.action === 'REJECT' && existing.rejectedAt && existing.rejecter) continue;
+          const summary = String(a.summary || '').trim();
+          if (!summary) continue;
+          const author = a.userId ? userById.get(a.userId) || null : null;
+          const who = author?.name ? `${author.name} ` : '';
+          const rest = summary.charAt(0).toLowerCase() + summary.slice(1);
+          pushSystem(
+            `sys-audit-${a.id}`,
+            a.createdAt,
+            `${who}${rest}`.replace(/\s+/g, ' ').trim(),
+            author
+          );
+        }
+      } catch (err) {
+        console.warn('[MaterialRequest] falha ao carregar auditoria no feed:', err);
+      }
+    }
 
     const rows = await prisma.materialRequestComment.findMany({
       where: { materialRequestId },
@@ -1153,17 +1338,22 @@ export class MaterialRequestService {
         author: { select: { id: true, name: true, profilePhotoUrl: true } },
       },
     });
+    for (const c of rows) {
+      feed.push({
+        id: c.id,
+        kind: 'comment',
+        content: c.content,
+        createdAt: c.createdAt.toISOString(),
+        author: {
+          id: c.author.id,
+          name: c.author.name,
+          profilePhotoUrl: c.author.profilePhotoUrl,
+        },
+      });
+    }
 
-    return rows.map((c) => ({
-      id: c.id,
-      content: c.content,
-      createdAt: c.createdAt.toISOString(),
-      author: {
-        id: c.author.id,
-        name: c.author.name,
-        profilePhotoUrl: c.author.profilePhotoUrl,
-      },
-    }));
+    feed.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return feed;
   }
 
   async createComment(materialRequestId: string, userId: string, content: string) {
@@ -1190,6 +1380,7 @@ export class MaterialRequestService {
 
     return {
       id: comment.id,
+      kind: 'comment' as const,
       content: comment.content,
       createdAt: comment.createdAt.toISOString(),
       author: {
