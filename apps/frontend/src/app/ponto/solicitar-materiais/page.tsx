@@ -39,8 +39,6 @@ import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import {
   materialRequestOcListRows,
-  purchaseOrderPhaseShortLabel,
-  sortMaterialRequestPurchaseOrders,
   type MaterialRequestOcListPurchaseOrder,
 } from '@/components/oc/materialRequestOcListRows';
 import { useCostCenters } from '@/hooks/useCostCenters';
@@ -56,52 +54,90 @@ import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi
 import { isExactUnbCostCenterLabel, isUnbRelatedLabel, resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
 import {
   purchaseOrderPhaseLabel,
-  ocStatusTextClass,
   OC_STATUS_LABELS_PT,
 } from '@/components/oc/ocStatusLabels';
-import { showInAttachBoletoTab } from '@/components/oc/ocPaymentBoleto';
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
+import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { isMaterialRequestEffectivelyCancelled } from '@/app/ponto/gerenciar-materiais/_lib/search';
+import {
+  getPriorityInfo,
+  getStatusInfo
+} from '@/app/ponto/gerenciar-materiais/_lib/display';
 import {
   DEFAULT_RM_CARD_FILTER,
   isMaterialRequestAwaitingOc,
   matchesRmCardFilter,
   type RmCardFilter
 } from '@/app/ponto/gerenciar-materiais/_lib/rmCardFilter';
+import { RmDetailOcTab } from '@/app/ponto/gerenciar-materiais/_components/RmDetailOcTab';
 
-function rmPriorityLabelPt(p: string | undefined): string {
-  const m: Record<string, string> = {
-    LOW: 'Baixa',
-    MEDIUM: 'Média',
-    HIGH: 'Alta',
-    URGENT: 'Urgente'
-  };
-  return p ? m[p] || p : '—';
-}
+type SolicitacaoDetailTab = 'resumo' | 'materiais' | 'ocs' | 'documentos';
 
-function rmPriorityBadgeClass(p: string | undefined): string {
-  const base = 'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium';
-  if (p === 'URGENT') return `${base} bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200`;
-  if (p === 'HIGH') return `${base} bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200`;
-  if (p === 'LOW') return `${base} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300`;
-  return `${base} bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200`;
-}
+const SOLICITACAO_DETAIL_TABS: { id: SolicitacaoDetailTab; label: string }[] = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'materiais', label: 'Materiais' },
+  { id: 'ocs', label: 'Ordens de compra' },
+  { id: 'documentos', label: 'Documentos' }
+];
 
-function DetailField({
-  label,
-  children,
-  className = ''
+function SolicitacaoDetailDocSection({
+  title,
+  children
 }: {
-  label: string;
+  title: string;
   children: React.ReactNode;
-  className?: string;
 }) {
   return (
-    <div className={className}>
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</p>
-      <div className="mt-1 text-sm text-gray-900 dark:text-gray-100">{children}</div>
+    <section className="space-y-0 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="border-b border-gray-200 pb-3 dark:border-gray-700">
+        <h3 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+          {title}
+        </h3>
+      </div>
+      <div className="divide-y divide-gray-200 dark:divide-gray-700">{children}</div>
+    </section>
+  );
+}
+
+function SolicitacaoDetailDocumentItem({
+  label,
+  subtitle,
+  url,
+  fileName,
+  pending = false
+}: {
+  label: string;
+  subtitle?: string;
+  url?: string | null;
+  fileName?: string | null;
+  pending?: boolean;
+}) {
+  const trimmedUrl = (url || '').trim();
+  const isPending = pending || !trimmedUrl;
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 first:pt-3 last:pb-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</p>
+        {subtitle ? (
+          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {isPending ? (
+          <span className="inline-flex whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+            Pendente
+          </span>
+        ) : (
+          <OcAttachmentActions
+            url={trimmedUrl}
+            fileName={fileName || label}
+            variant="buttons"
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -823,6 +859,7 @@ function SolicitarMateriaisPage() {
 
   const [correctionEditId, setCorrectionEditId] = useState<string | null>(null);
   const [detailViewId, setDetailViewId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<SolicitacaoDetailTab>('resumo');
   const [editFormData, setEditFormData] = useState({
     contractId: '',
     costCenterId: '',
@@ -1000,6 +1037,16 @@ function SolicitarMateriaisPage() {
     enabled: !!detailViewId && !!userData?.data?.id
   });
 
+  const detailRmDisplayNo = useMemo(() => {
+    const fromDetail = formatRmListDisplayId(
+      (detailRmData as { requestNumber?: string } | undefined)?.requestNumber
+    );
+    if (fromDetail && fromDetail !== '—') return fromDetail;
+    const list = (requestsData?.data || []) as Array<{ id?: string; requestNumber?: string }>;
+    const fromList = list.find((r) => r.id === detailViewId);
+    return formatRmListDisplayId(fromList?.requestNumber) || '—';
+  }, [detailRmData, detailViewId, requestsData]);
+
   const { data: correctionRmDetail } = useQuery({
     queryKey: ['material-request', correctionEditId],
     queryFn: async () => {
@@ -1097,6 +1144,7 @@ function SolicitarMateriaisPage() {
   const closeDetailModal = () => {
     setShowCloseDetailConfirm(false);
     setDetailViewId(null);
+    setDetailTab('resumo');
   };
 
   const requestCloseDetailModal = () => {
@@ -1965,7 +2013,10 @@ function SolicitarMateriaisPage() {
                             return (
                             <tr
                               key={request.id}
-                              onClick={() => setDetailViewId(request.id)}
+                              onClick={() => {
+                                setDetailTab('resumo');
+                                setDetailViewId(request.id);
+                              }}
                               className={getListTableRowClassName(true)}
                             >
                               <td
@@ -2066,7 +2117,10 @@ function SolicitarMateriaisPage() {
                       extraItems={[
                         {
                           label: 'Ver detalhes',
-                          onClick: () => setDetailViewId(rowForActionMenu.id),
+                          onClick: () => {
+                            setDetailTab('resumo');
+                            setDetailViewId(rowForActionMenu.id);
+                          },
                           icon: <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
                         },
                         ...(rowForActionMenu.status === 'IN_REVIEW'
@@ -2499,45 +2553,68 @@ function SolicitarMateriaisPage() {
         </div>
 
         {detailViewId && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={requestCloseDetailModal}
               aria-hidden
             />
             <div
-              className="relative flex max-h-[min(92vh,720px)] w-full max-w-2xl flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
+              className="relative my-auto flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800"
               role="dialog"
               aria-modal="true"
               aria-labelledby="rm-detail-modal-title"
             >
-              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+              <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
                 <div className="min-w-0">
                   <h3
                     id="rm-detail-modal-title"
-                    className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                    className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100"
                   >
-                    Detalhes da solicitação
+                    Requisição de Material No. {detailRmDisplayNo}
                   </h3>
-                  {!loadingDetailRm && detailRmData ? (
-                    <p className="mt-0.5 truncate text-sm text-gray-500 dark:text-gray-400">
-                      {formatRmListDisplayId(
-                        (detailRmData as { requestNumber?: string }).requestNumber
-                      ) || 'Solicitação'}
-                    </p>
-                  ) : null}
                 </div>
                 <button
                   type="button"
                   onClick={requestCloseDetailModal}
-                  className="shrink-0 rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                  className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                   aria-label="Fechar"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-4">
+              {!loadingDetailRm && detailRmData ? (
+                <div
+                  className="shrink-0 border-b border-gray-200 px-5 dark:border-gray-700"
+                  role="tablist"
+                  aria-label="Seções da solicitação"
+                >
+                  <div className="table-scroll -mb-px flex gap-1">
+                    {SOLICITACAO_DETAIL_TABS.map((tab) => {
+                      const active = detailTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setDetailTab(tab.id)}
+                          className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                            active
+                              ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                 {loadingDetailRm ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
@@ -2547,16 +2624,20 @@ function SolicitarMateriaisPage() {
                     const d = detailRmData as Record<string, unknown> & {
                       requestNumber?: string;
                       requestedAt?: string;
+                      createdAt?: string;
                       status?: string;
                       description?: string;
                       obra?: string;
                       serviceOrder?: string;
                       priority?: string;
+                      demandSheet?: string;
                       costCenter?: { code?: string; name?: string };
                       items?: Array<{
+                        id?: string;
                         quantity?: unknown;
                         unit?: string;
                         notes?: string | null;
+                        observation?: string | null;
                         attachmentUrl?: string | null;
                         attachmentName?: string | null;
                         material?: {
@@ -2565,182 +2646,232 @@ function SolicitarMateriaisPage() {
                           sinapiCode?: string | null;
                         };
                       }>;
-                      purchaseOrders?: Array<{ id: string; orderNumber?: string | null; status: string }>;
+                      purchaseOrders?: PurchaseOrder[];
                     };
                     const pos = Array.isArray(d.purchaseOrders) ? d.purchaseOrders : [];
-                    const requestedDate = d.requestedAt ? new Date(String(d.requestedAt)) : null;
+                    const dateRaw = d.requestedAt || d.createdAt;
+                    const requestedDate = dateRaw ? new Date(String(dateRaw)) : null;
                     const statusKey = d.status ? String(d.status) : '';
+                    const statusInfo = getStatusInfo(statusKey || 'PENDING');
+                    const priorityInfo = getPriorityInfo(String(d.priority || 'MEDIUM'));
                     const fdAttachments = parseFdAttachments(d as Parameters<typeof parseFdAttachments>[0]);
 
+                    const infoRows: { label: string; value: React.ReactNode; stacked?: boolean }[] = [
+                      {
+                        label: 'Status',
+                        value: (
+                          <span
+                            className={`inline-block rounded px-2 py-1 text-xs font-medium ${statusInfo.color}`}
+                          >
+                            {statusInfo.label}
+                          </span>
+                        )
+                      },
+                      {
+                        label: 'Prioridade',
+                        value: <span className={priorityInfo.color}>{priorityInfo.label}</span>
+                      },
+                      {
+                        label: 'Contrato',
+                        value: rmContractName(d as Parameters<typeof rmContractName>[0])
+                      },
+                      {
+                        label: 'Ordem de serviço',
+                        value: rmOsLine(d as Parameters<typeof rmOsLine>[0])
+                      },
+                      {
+                        label: 'Centro de custo',
+                        value: d.costCenter?.name?.trim() || '—'
+                      }
+                    ];
+                    if (d.obra) {
+                      infoRows.push({ label: 'Obra', value: String(d.obra) });
+                    }
+                    if (requestedDate && !Number.isNaN(requestedDate.getTime())) {
+                      infoRows.push({
+                        label: 'Data',
+                        value: requestedDate.toLocaleString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      });
+                    }
+                    if (d.demandSheet) {
+                      infoRows.push({ label: 'Ficha de Demanda', value: String(d.demandSheet) });
+                    }
+                    if (d.description?.trim()) {
+                      infoRows.push({
+                        label: 'Descrição',
+                        stacked: true,
+                        value: (
+                          <span className="whitespace-pre-wrap leading-relaxed">
+                            {String(d.description)}
+                          </span>
+                        )
+                      });
+                    }
+
                     return (
-                      <div className="space-y-5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          {statusKey ? (
-                            <span className={rmStatusBadgeClass(statusKey)}>
-                              RM · {rmStatusLabelPt(statusKey)}
-                            </span>
-                          ) : null}
-                          {d.priority ? (
-                            <span className={rmPriorityBadgeClass(String(d.priority))}>
-                              {rmPriorityLabelPt(String(d.priority))}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <section className="rounded-lg border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-600 dark:bg-gray-900/40">
-                          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                            Informações gerais
-                          </h4>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <DetailField label="Nº RM">
-                              <span className="font-semibold">
-                                {formatRmListDisplayId(
-                                  d.requestNumber ? String(d.requestNumber) : null
-                                )}
-                              </span>
-                            </DetailField>
-                            <DetailField label="Data da solicitação">
-                              {requestedDate && !Number.isNaN(requestedDate.getTime()) ? (
-                                <>
-                                  <span className="block">
-                                    {requestedDate.toLocaleDateString('pt-BR')}
-                                  </span>
-                                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                                    {requestedDate.toLocaleTimeString('pt-BR', {
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </span>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </DetailField>
-                            <DetailField label="Contrato" className="sm:col-span-2">
-                              {rmContractName(d as Parameters<typeof rmContractName>[0])}
-                            </DetailField>
-                            <DetailField label="OS">{rmOsLine(d as Parameters<typeof rmOsLine>[0])}</DetailField>
-                            <DetailField label="Obra">{d.obra ? String(d.obra) : '—'}</DetailField>
-                            {d.description ? (
-                              <DetailField label="Descrição" className="sm:col-span-2">
-                                <p className="whitespace-pre-wrap leading-relaxed">{String(d.description)}</p>
-                              </DetailField>
-                            ) : null}
-                            {(d as { demandSheet?: string }).demandSheet ? (
-                              <DetailField label="Ficha de Demanda">
-                                {String((d as { demandSheet?: string }).demandSheet)}
-                              </DetailField>
-                            ) : null}
-                            {fdAttachments.length > 0 ? (
-                              <DetailField label="Anexos" className="sm:col-span-2">
-                                <ul className="space-y-1">
-                                  {fdAttachments.map((file, index) => (
-                                    <li key={`${file.url}-${index}`}>
-                                      <a
-                                        href={absoluteUploadUrl(file.url)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                        {file.name || 'Ver anexo'}
-                                      </a>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </DetailField>
-                            ) : null}
-                          </div>
-                        </section>
-
-                        {d.items && d.items.length > 0 ? (
-                          <section>
-                            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                              Itens ({d.items.length})
-                            </h4>
-                            <ul className="space-y-2">
-                              {d.items.map((it, idx) => {
-                                const mat = it.material;
-                                const line =
-                                  mat?.description?.trim() ||
-                                  mat?.name?.trim() ||
-                                  mat?.sinapiCode ||
-                                  'Material';
-                                const qty =
-                                  it.quantity !== undefined && it.quantity !== null
-                                    ? Number(it.quantity).toLocaleString('pt-BR', {
-                                        maximumFractionDigits: 2,
-                                        useGrouping: false,
-                                      })
-                                    : '—';
-                                const unit = it.unit ? String(it.unit) : '';
-                                return (
-                                  <li
-                                    key={idx}
-                                    className="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-600 dark:bg-gray-800/60"
+                      <div className="space-y-5 text-sm">
+                        {detailTab === 'resumo' ? (
+                          <div className="space-y-4">
+                            <dl className="divide-y divide-gray-200 dark:divide-gray-700">
+                              {infoRows.map((row) => (
+                                <div
+                                  key={row.label}
+                                  className={
+                                    row.stacked
+                                      ? 'flex flex-col gap-1.5 py-3'
+                                      : 'flex flex-col gap-0.5 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6'
+                                  }
+                                >
+                                  <dt className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                    {row.label}
+                                  </dt>
+                                  <dd
+                                    className={
+                                      row.stacked
+                                        ? 'min-w-0 text-left text-sm text-gray-900 dark:text-gray-100'
+                                        : 'min-w-0 text-sm text-gray-900 dark:text-gray-100 sm:text-right'
+                                    }
                                   >
-                                    <p className="font-medium text-gray-900 dark:text-gray-100">{line}</p>
-                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                                      <span className="font-medium text-gray-700 dark:text-gray-300">
-                                        {qty}
-                                      </span>
-                                      {unit ? ` ${unit}` : ''}
-                                      {typeof it.notes === 'string' && it.notes.trim() ? (
-                                        <span className="text-gray-500 dark:text-gray-500">
-                                          {' '}
-                                          · {it.notes.trim()}
-                                        </span>
-                                      ) : null}
-                                    </p>
-                                    {it.attachmentUrl ? (
-                                      <a
-                                        href={absoluteUploadUrl(String(it.attachmentUrl))}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                        {it.attachmentName || 'Ver anexo'}
-                                      </a>
-                                    ) : null}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
+                                    {row.value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
                         ) : null}
 
-                        {pos.length > 0 ? (
-                          <section>
-                            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                              Ordens de compra ({pos.length})
-                            </h4>
-                            <ul className="space-y-2">
-                              {sortMaterialRequestPurchaseOrders(pos as MaterialRequestOcListPurchaseOrder[]).map((po) => {
-                                const num =
-                                  (po.orderNumber && String(po.orderNumber).trim()) || po.id.slice(0, 8);
-                                return (
-                                  <li
-                                    key={po.id}
-                                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-600 dark:bg-gray-800/60"
-                                  >
-                                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                      OC {num}
-                                    </span>
-                                    <span
-                                      className={`text-xs font-medium ${
-                                        showInAttachBoletoTab(po)
-                                          ? 'text-violet-600 dark:text-violet-400'
-                                          : ocStatusTextClass(po.status)
-                                      }`}
-                                    >
-                                      {purchaseOrderPhaseShortLabel(po)}
-                                    </span>
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          </section>
+                        {detailTab === 'materiais' ? (
+                          d.items && d.items.length > 0 ? (
+                            <div className="table-scroll">
+                              <table className="w-full text-xs sm:text-sm">
+                                <thead>
+                                  <tr className="border-b border-gray-200 text-left dark:border-gray-700">
+                                    <th className="w-12 whitespace-nowrap pb-3 pr-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Item
+                                    </th>
+                                    <th className="px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Material
+                                    </th>
+                                    <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Qtd
+                                    </th>
+                                    <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Un.
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                  {d.items.map((item, idx) => {
+                                    const mat = item.material;
+                                    const line =
+                                      mat?.description?.trim() ||
+                                      mat?.name?.trim() ||
+                                      mat?.sinapiCode ||
+                                      'Material';
+                                    const note = (item.notes || item.observation)?.trim();
+                                    return (
+                                      <tr
+                                        key={item.id || idx}
+                                        className="text-gray-900 dark:text-gray-100"
+                                      >
+                                        <td className="py-3 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
+                                          {idx + 1}
+                                        </td>
+                                        <td className="max-w-[220px] px-2 py-3 align-top sm:max-w-none">
+                                          {line}
+                                          {note ? (
+                                            <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                              {note}
+                                            </p>
+                                          ) : null}
+                                        </td>
+                                        <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
+                                          {Number(item.quantity)}
+                                        </td>
+                                        <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                          {item.unit || '—'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="py-10 text-center text-sm text-gray-400">
+                              Nenhum material nesta solicitação.
+                            </p>
+                          )
+                        ) : null}
+
+                        {detailTab === 'ocs' ? (
+                          <RmDetailOcTab
+                            materialRequestStatus={statusKey}
+                            orders={pos}
+                            enabled={detailTab === 'ocs'}
+                          />
+                        ) : null}
+
+                        {detailTab === 'documentos' ? (
+                          <div className="space-y-4">
+                            <SolicitacaoDetailDocSection title="Ficha de Demanda">
+                              {fdAttachments.length === 0 ? (
+                                <SolicitacaoDetailDocumentItem
+                                  label="Arquivo"
+                                  subtitle="Não anexado"
+                                  pending
+                                />
+                              ) : (
+                                fdAttachments.map((file, index) => (
+                                  <SolicitacaoDetailDocumentItem
+                                    key={`${file.url}-${index}`}
+                                    label={
+                                      fdAttachments.length > 1
+                                        ? `Arquivo ${index + 1}`
+                                        : 'Arquivo'
+                                    }
+                                    subtitle={file.name || 'Anexo'}
+                                    url={file.url}
+                                    fileName={file.name}
+                                  />
+                                ))
+                              )}
+                            </SolicitacaoDetailDocSection>
+
+                            {(() => {
+                              const itemsWithAttachments = (d.items ?? [])
+                                .map((item, idx) => ({ item, idx }))
+                                .filter(({ item }) => Boolean(item.attachmentUrl?.trim()));
+                              if (itemsWithAttachments.length === 0) return null;
+                              return (
+                                <SolicitacaoDetailDocSection title="Anexos dos materiais">
+                                  {itemsWithAttachments.map(({ item, idx }) => {
+                                    const mat = item.material;
+                                    const line =
+                                      mat?.description?.trim() ||
+                                      mat?.name?.trim() ||
+                                      mat?.sinapiCode ||
+                                      'Material';
+                                    return (
+                                      <SolicitacaoDetailDocumentItem
+                                        key={item.id || idx}
+                                        label={`Item ${idx + 1} · ${line}`}
+                                        subtitle={item.attachmentName || 'Anexo'}
+                                        url={item.attachmentUrl}
+                                        fileName={item.attachmentName}
+                                      />
+                                    );
+                                  })}
+                                </SolicitacaoDetailDocSection>
+                              );
+                            })()}
+                          </div>
                         ) : null}
                       </div>
                     );
@@ -2750,16 +2881,6 @@ function SolicitarMateriaisPage() {
                     Não foi possível carregar os detalhes.
                   </p>
                 )}
-              </div>
-
-              <div className="flex shrink-0 justify-end border-t border-gray-200 px-5 py-4 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={closeDetailModal}
-                  className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-                >
-                  Fechar
-                </button>
               </div>
             </div>
           </div>

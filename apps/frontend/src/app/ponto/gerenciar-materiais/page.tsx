@@ -62,12 +62,14 @@ import {
 } from './_lib/rmCardFilter';
 import { formatRmListDisplayId } from './_lib/rmListDisplay';
 import { RmCommentsSection } from './_components/RmCommentsSection';
+import { RmDetailOcTab } from './_components/RmDetailOcTab';
 
-type RmDetailModalTab = 'resumo' | 'materiais' | 'documentos' | 'comentarios';
+type RmDetailModalTab = 'resumo' | 'materiais' | 'ocs' | 'documentos' | 'comentarios';
 
 const RM_DETAIL_MODAL_TABS: { id: RmDetailModalTab; label: string }[] = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'materiais', label: 'Materiais' },
+  { id: 'ocs', label: 'Ordens de compra' },
   { id: 'documentos', label: 'Documentos' },
   { id: 'comentarios', label: 'Comentários' }
 ];
@@ -974,6 +976,14 @@ export default function GerenciarMateriaisPage() {
                         ))}
                       </dl>
                     </div>
+                  ) : null}
+
+                  {rmDetailTab === 'ocs' ? (
+                    <RmDetailOcTab
+                      materialRequestStatus={selectedRequest.status}
+                      orders={detailOrders}
+                      enabled={rmDetailTab === 'ocs'}
+                    />
                   ) : null}
 
                   {rmDetailTab === 'materiais' ? (
