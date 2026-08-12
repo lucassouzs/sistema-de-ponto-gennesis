@@ -1007,7 +1007,7 @@ export default function GerenciarMateriaisPage() {
                                 Un.
                               </th>
                               <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
-                                Valor médio pago
+                                Valor unitário
                               </th>
                             </tr>
                           </thead>
@@ -1036,11 +1036,7 @@ export default function GerenciarMateriaisPage() {
                                 </td>
                                 <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
                                   {(() => {
-                                    const avg =
-                                      item.avgPaidUnitPrice ??
-                                      item.material?.avgPaidUnitPrice ??
-                                      null;
-                                    const n = Number(avg);
+                                    const n = Number(item.unitPrice);
                                     if (!Number.isFinite(n) || n < 0) return '—';
                                     return n.toLocaleString('pt-BR', {
                                       style: 'currency',

@@ -20,7 +20,8 @@ import {
   ClipboardList,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  Info
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -466,6 +467,30 @@ function rmItemLineTotal(item: Pick<RmFormItem, 'quantity' | 'unitPrice'>): numb
 
 function rmRequestItemsTotal(items: Pick<RmFormItem, 'quantity' | 'unitPrice'>[]): number {
   return Math.round(items.reduce((sum, item) => sum + rmItemLineTotal(item), 0) * 100) / 100;
+}
+
+const RM_UNIT_PRICE_HELP =
+  'Padrão: média das últimas 10 compras deste material. Você pode alterar para o valor que quiser.';
+
+function RmUnitPriceInfoIcon() {
+  return (
+    <span className="group/rm-unit-help absolute inset-y-0 right-0 z-10 flex items-center pr-2.5">
+      <button
+        type="button"
+        className="inline-flex text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+        aria-label={RM_UNIT_PRICE_HELP}
+        title={RM_UNIT_PRICE_HELP}
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute bottom-full right-0 z-30 mb-1.5 w-max max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-left text-[11px] font-normal leading-relaxed text-gray-700 opacity-0 shadow-lg transition-opacity duration-150 invisible group-hover/rm-unit-help:visible group-hover/rm-unit-help:opacity-100 group-focus-within/rm-unit-help:visible group-focus-within/rm-unit-help:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+      >
+        {RM_UNIT_PRICE_HELP}
+      </span>
+    </span>
+  );
 }
 
 /** Valor unitário padrão ao selecionar material: média paga → mediana → 0. */
@@ -2543,25 +2568,25 @@ function SolicitarMateriaisPage() {
                               </div>
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div>
-                                  <label className={RM_FORM_FIELD_LABEL_CLS}>
-                                    Valor unitário
-                                  </label>
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={formatCurrencyInputBrFromNumber(item.unitPrice)}
-                                    onChange={(e) => {
-                                      const masked = maskCurrencyInputBrOrEmpty(e.target.value);
-                                      handleItemChange(
-                                        index,
-                                        'unitPrice',
-                                        parseCurrencyInputBr(masked) ?? 0
-                                      );
-                                    }}
-                                    className={FORM_FIELD_INPUT_CLS}
-                                    placeholder="R$ 0,00"
-                                    title="Referência do quanto pagar (padrão = média das últimas compras)"
-                                  />
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Valor unitário</label>
+                                  <div className="relative">
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={formatCurrencyInputBrFromNumber(item.unitPrice)}
+                                      onChange={(e) => {
+                                        const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                                        handleItemChange(
+                                          index,
+                                          'unitPrice',
+                                          parseCurrencyInputBr(masked) ?? 0
+                                        );
+                                      }}
+                                      className={`${FORM_FIELD_INPUT_CLS} pr-9`}
+                                      placeholder="R$ 0,00"
+                                    />
+                                    <RmUnitPriceInfoIcon />
+                                  </div>
                                 </div>
                                 <div>
                                   <label className={RM_FORM_FIELD_LABEL_CLS}>Valor total</label>
@@ -2860,7 +2885,7 @@ function SolicitarMateriaisPage() {
                                       Un.
                                     </th>
                                     <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
-                                      Valor médio pago
+                                      Valor unitário
                                     </th>
                                   </tr>
                                 </thead>
@@ -2873,10 +2898,8 @@ function SolicitarMateriaisPage() {
                                       mat?.sinapiCode ||
                                       'Material';
                                     const note = (item.notes || item.observation)?.trim();
-                                    const avgPaid =
-                                      (item as { avgPaidUnitPrice?: number | null }).avgPaidUnitPrice ??
-                                      (mat as { avgPaidUnitPrice?: number | null } | undefined)
-                                        ?.avgPaidUnitPrice;
+                                    const unitPrice =
+                                      (item as { unitPrice?: number | null }).unitPrice ?? null;
                                     return (
                                       <tr
                                         key={item.id || idx}
@@ -2900,7 +2923,7 @@ function SolicitarMateriaisPage() {
                                           {item.unit || '—'}
                                         </td>
                                         <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
-                                          {formatRmAvgPaid(avgPaid)}
+                                          {formatRmAvgPaid(unitPrice)}
                                         </td>
                                       </tr>
                                     );
@@ -3216,22 +3239,24 @@ function SolicitarMateriaisPage() {
                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                               <label className={RM_FORM_FIELD_LABEL_CLS}>Valor unitário</label>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={formatCurrencyInputBrFromNumber(item.unitPrice)}
-                                onChange={(e) => {
-                                  const masked = maskCurrencyInputBrOrEmpty(e.target.value);
-                                  handleEditItemChange(
-                                    index,
-                                    'unitPrice',
-                                    parseCurrencyInputBr(masked) ?? 0
-                                  );
-                                }}
-                                className={FORM_FIELD_INPUT_CLS}
-                                placeholder="R$ 0,00"
-                                title="Referência do quanto pagar (padrão = média das últimas compras)"
-                              />
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={formatCurrencyInputBrFromNumber(item.unitPrice)}
+                                  onChange={(e) => {
+                                    const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                                    handleEditItemChange(
+                                      index,
+                                      'unitPrice',
+                                      parseCurrencyInputBr(masked) ?? 0
+                                    );
+                                  }}
+                                  className={`${FORM_FIELD_INPUT_CLS} pr-9`}
+                                  placeholder="R$ 0,00"
+                                />
+                                <RmUnitPriceInfoIcon />
+                              </div>
                             </div>
                             <div>
                               <label className={RM_FORM_FIELD_LABEL_CLS}>Valor total</label>
