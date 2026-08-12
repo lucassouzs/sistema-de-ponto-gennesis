@@ -379,6 +379,67 @@ router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction)
   }
 });
 
+// Comentários da RM (antes de GET /:id)
+router.get('/:id/comments', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+    const { id } = req.params;
+    const request = await materialRequestService.getMaterialRequestById(id);
+    if (!request) throw createError('Requisição não encontrada', 404);
+    await assertCostCenterAllowedForUnbUser(req.user.id, !!req.user.isAdmin, request.costCenterId);
+    const comments = await materialRequestService.listComments(id);
+    res.json({ success: true, data: comments });
+  } catch (error) {
+    if (error instanceof Error && /não encontrada/i.test(error.message)) {
+      res.status(404).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post('/:id/comments', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+    const { id } = req.params;
+    const content = typeof req.body?.content === 'string' ? req.body.content : '';
+    const request = await materialRequestService.getMaterialRequestById(id);
+    if (!request) throw createError('Requisição não encontrada', 404);
+    await assertCostCenterAllowedForUnbUser(req.user.id, !!req.user.isAdmin, request.costCenterId);
+    const comment = await materialRequestService.createComment(id, req.user.id, content);
+    res.status(201).json({ success: true, data: comment });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /não encontrada|Escreva um comentário|muito longo/i.test(error.message)
+    ) {
+      const status = /não encontrada/i.test(error.message) ? 404 : 400;
+      res.status(status).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.delete('/comments/:commentId', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+    await materialRequestService.deleteComment(
+      req.params.commentId,
+      req.user.id,
+      !!req.user.isAdmin
+    );
+    res.json({ success: true, message: 'Comentário excluído' });
+  } catch (error) {
+    if (error instanceof Error && /não encontrado|Sem permissão/i.test(error.message)) {
+      const status = /Sem permissão/i.test(error.message) ? 403 : 404;
+      res.status(status).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 // Obter requisição por ID
 router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
