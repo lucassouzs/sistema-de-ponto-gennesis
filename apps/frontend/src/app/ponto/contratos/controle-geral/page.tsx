@@ -317,8 +317,8 @@ export default function ControleGeralContratosPage() {
             panelTitle="Controle de Contratos"
             panelDescription={
               gastosTotvsWarning
-                ? `Gastos: planilha até 2024 · TOTVS a partir de 2025 (${gastosTotvsWarning})`
-                : 'Gastos: QUERY BASE DE GASTOS até 31/12/2024 · mesma fonte do módulo Gastos Operacionais (TOTVS RM) a partir de 01/01/2025'
+                ? `Dados parcialmente disponíveis (${gastosTotvsWarning})`
+                : 'Faturamento, recebimentos e gastos por contrato'
             }
             totalColumnLabel="Gastos"
             showFaturamentoColumn

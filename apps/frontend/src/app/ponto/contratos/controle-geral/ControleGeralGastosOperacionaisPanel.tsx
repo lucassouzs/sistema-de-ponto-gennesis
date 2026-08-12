@@ -28,6 +28,7 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { Modal } from '@/components/ui/Modal';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   aggregateGastosDetailRows,
@@ -35,7 +36,6 @@ import {
   getGastosNaturezaAggRowKey,
   groupGastosNaturezaModalRows,
   gastosNaturezaTotalContribution,
-  deriveEmissaoMonthYearFromPeriod,
   EMPTY_GASTOS_OPERACIONAIS_FILTERS,
   filterGastosDetailRows,
   filterGastosDetailRowsByPolo,
@@ -174,6 +174,10 @@ type ControleGeralGastosOperacionaisPanelProps = {
   enableRowExclusion?: boolean;
   /** Oculta a coluna de localidade na tabela. */
   hideLocalityColumn?: boolean;
+  /** Oculta o filtro de contrato (mantém allowlist / dados). */
+  hideContractFilter?: boolean;
+  /** Oculta o filtro de localidade/polo. */
+  hideLocalityFilter?: boolean;
   /** Exibe polo vindo da API (somente leitura) em vez de localidade editável. */
   readOnlyPoloColumn?: boolean;
   panelTitle?: string;
@@ -668,6 +672,8 @@ export function ControleGeralGastosOperacionaisPanel({
   showPdfExport = false,
   enableRowExclusion = false,
   hideLocalityColumn = false,
+  hideContractFilter = false,
+  hideLocalityFilter = false,
   readOnlyPoloColumn = false,
   panelTitle = 'Gastos operacionais por contrato',
   panelDescription = 'QUERY BASE DE GASTOS — mês, ano, contrato e total (somatório por contrato)',
@@ -866,11 +872,19 @@ export function ControleGeralGastosOperacionaisPanel({
   );
 
   const emissaoFilter = useMemo(
-    () => deriveEmissaoMonthYearFromPeriod(filters.periodFrom, filters.periodTo),
-    [filters.periodFrom, filters.periodTo]
+    () => ({
+      emissaoPeriodFrom: filters.emissaoPeriodFrom,
+      emissaoPeriodTo: filters.emissaoPeriodTo,
+      recebimentoPeriodFrom: filters.recebimentoPeriodFrom,
+      recebimentoPeriodTo: filters.recebimentoPeriodTo
+    }),
+    [
+      filters.emissaoPeriodFrom,
+      filters.emissaoPeriodTo,
+      filters.recebimentoPeriodFrom,
+      filters.recebimentoPeriodTo
+    ]
   );
-  const emissaoFilterMonths = emissaoFilter.months;
-  const emissaoFilterYears = emissaoFilter.years;
 
   const {
     data: faturamentoQueryData,
@@ -879,18 +893,26 @@ export function ControleGeralGastosOperacionaisPanel({
   } = useQuery({
     enabled: showFaturamentoColumn,
     queryKey: [
-      'controle-geral-faturamento-by-contract-v26-mapa-umipi',
-      emissaoFilterMonths,
-      emissaoFilterYears,
+      'controle-geral-faturamento-by-contract-v30-recebido-por-emissao',
+      emissaoFilter.emissaoPeriodFrom,
+      emissaoFilter.emissaoPeriodTo,
+      emissaoFilter.recebimentoPeriodFrom,
+      emissaoFilter.recebimentoPeriodTo,
       dataRefreshNonce
     ],
     queryFn: async () => {
       const params: Record<string, string | number> = { refresh: 1 };
-      if (emissaoFilterMonths.length > 0) {
-        params.months = emissaoFilterMonths.join(',');
+      if (emissaoFilter.emissaoPeriodFrom) {
+        params.emissaoDateFrom = emissaoFilter.emissaoPeriodFrom;
       }
-      if (emissaoFilterYears.length > 0) {
-        params.years = emissaoFilterYears.join(',');
+      if (emissaoFilter.emissaoPeriodTo) {
+        params.emissaoDateTo = emissaoFilter.emissaoPeriodTo;
+      }
+      if (emissaoFilter.recebimentoPeriodFrom) {
+        params.recebimentoDateFrom = emissaoFilter.recebimentoPeriodFrom;
+      }
+      if (emissaoFilter.recebimentoPeriodTo) {
+        params.recebimentoDateTo = emissaoFilter.recebimentoPeriodTo;
       }
 
       const res = await api.get<{
@@ -911,6 +933,7 @@ export function ControleGeralGastosOperacionaisPanel({
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,
+    // Mantém os totais anteriores enquanto busca o novo período (evita flash em R$ 0,00).
     placeholderData: (previousData) => previousData
   });
 
@@ -1021,7 +1044,14 @@ export function ControleGeralGastosOperacionaisPanel({
 
   const hasActiveFilters =
     (readOnlyPoloColumn ? filters.polos.length > 0 : filters.localities.length > 0) ||
-    Boolean(filters.periodFrom || filters.periodTo) ||
+    Boolean(
+      filters.periodFrom ||
+        filters.periodTo ||
+        filters.emissaoPeriodFrom ||
+        filters.emissaoPeriodTo ||
+        filters.recebimentoPeriodFrom ||
+        filters.recebimentoPeriodTo
+    ) ||
     filters.contracts.length > 0;
 
   const contractLabelByKey = useMemo(() => {
@@ -1470,104 +1500,213 @@ export function ControleGeralGastosOperacionaisPanel({
     });
   };
 
+  const clampPeriodPair = (from: string, to: string): { from: string; to: string } => {
+    if (from && to && from > to) return { from, to: from };
+    return { from, to };
+  };
+
   const handlePeriodFromChange = (value: string) => {
     setFilters((prev) => {
-      const periodFrom = value;
-      let periodTo = prev.periodTo;
-      if (periodFrom && periodTo && periodFrom > periodTo) {
-        periodTo = periodFrom;
-      }
+      const { from: periodFrom, to: periodTo } = clampPeriodPair(value, prev.periodTo);
       return { ...prev, periodFrom, periodTo };
     });
   };
 
   const handlePeriodToChange = (value: string) => {
     setFilters((prev) => {
-      let periodFrom = prev.periodFrom;
-      const periodTo = value;
-      if (periodFrom && periodTo && periodFrom > periodTo) {
-        periodFrom = periodTo;
-      }
+      const { from: periodFrom, to: periodTo } = clampPeriodPair(prev.periodFrom, value);
       return { ...prev, periodFrom, periodTo };
     });
   };
 
-  const gastosFiltersFields = (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div>
-        <span className={filterLabelClassName}>Contrato</span>
-        <MultiSelectSearchDropdown
-          options={contractFilterOptions}
-          selected={filters.contracts}
-          onChange={(contracts) => setFilters((prev) => ({ ...prev, contracts }))}
-          placeholder="Todos os contratos"
-          searchPlaceholder="Pesquisar contrato..."
-          emptyOptionsMessage="Nenhum contrato disponível."
-          emptySearchMessage="Nenhum contrato encontrado."
-          listMaxHeight={FILTER_DROPDOWN_LIST_MAX_HEIGHT}
-          menuOverlapContent
-          noFocusRing
-        />
-      </div>
+  const handleEmissaoPeriodFromChange = (value: string) => {
+    setFilters((prev) => {
+      const { from, to } = clampPeriodPair(value, prev.emissaoPeriodTo);
+      return {
+        ...prev,
+        emissaoPeriodFrom: from,
+        emissaoPeriodTo: to,
+        // Gastos acompanham a apuração por emissão.
+        periodFrom: from,
+        periodTo: to
+      };
+    });
+  };
 
-      <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className={`${filterLabelClassName} !mb-0`}>
-            {readOnlyPoloColumn ? 'Polo' : 'Localidade'}
-          </span>
-          {!readOnlyPoloColumn ? (
-            <button
-              type="button"
-              onClick={() => setLocalitiesModalOpen(true)}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40"
-              title="Gerenciar localidades"
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              Gerenciar
-            </button>
+  const handleEmissaoPeriodToChange = (value: string) => {
+    setFilters((prev) => {
+      const { from, to } = clampPeriodPair(prev.emissaoPeriodFrom, value);
+      return {
+        ...prev,
+        emissaoPeriodFrom: from,
+        emissaoPeriodTo: to,
+        periodFrom: from,
+        periodTo: to
+      };
+    });
+  };
+
+  const handleRecebimentoPeriodFromChange = (value: string) => {
+    setFilters((prev) => {
+      const { from, to } = clampPeriodPair(value, prev.recebimentoPeriodTo);
+      return { ...prev, recebimentoPeriodFrom: from, recebimentoPeriodTo: to };
+    });
+  };
+
+  const handleRecebimentoPeriodToChange = (value: string) => {
+    setFilters((prev) => {
+      const { from, to } = clampPeriodPair(prev.recebimentoPeriodFrom, value);
+      return { ...prev, recebimentoPeriodFrom: from, recebimentoPeriodTo: to };
+    });
+  };
+
+  const dualNfsPeriodFilters = showFaturamentoColumn;
+
+  const gastosFiltersFields = (
+    <div className="space-y-4">
+      {!hideContractFilter || !hideLocalityFilter ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {!hideContractFilter ? (
+            <div>
+              <span className={filterLabelClassName}>Contrato</span>
+              <MultiSelectSearchDropdown
+                options={contractFilterOptions}
+                selected={filters.contracts}
+                onChange={(contracts) => setFilters((prev) => ({ ...prev, contracts }))}
+                placeholder="Todos os contratos"
+                searchPlaceholder="Pesquisar contrato..."
+                emptyOptionsMessage="Nenhum contrato disponível."
+                emptySearchMessage="Nenhum contrato encontrado."
+                listMaxHeight={FILTER_DROPDOWN_LIST_MAX_HEIGHT}
+                menuOverlapContent
+                noFocusRing
+              />
+            </div>
+          ) : null}
+
+          {!hideLocalityFilter ? (
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className={`${filterLabelClassName} !mb-0`}>
+                  {readOnlyPoloColumn ? 'Polo' : 'Localidade'}
+                </span>
+                {!readOnlyPoloColumn ? (
+                  <button
+                    type="button"
+                    onClick={() => setLocalitiesModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                    title="Gerenciar localidades"
+                  >
+                    <Settings2 className="h-3.5 w-3.5" />
+                    Gerenciar
+                  </button>
+                ) : null}
+              </div>
+              <MultiSelectSearchDropdown
+                options={readOnlyPoloColumn ? poloFilterOptions : localityFilterOptions}
+                selected={readOnlyPoloColumn ? filters.polos : filters.localities}
+                onChange={readOnlyPoloColumn ? handlePolosChange : handleLocalitiesChange}
+                placeholder={readOnlyPoloColumn ? 'Todos os polos' : 'Todas as localidades'}
+                searchPlaceholder={
+                  readOnlyPoloColumn ? 'Pesquisar polo...' : 'Pesquisar localidade...'
+                }
+                emptyOptionsMessage={
+                  readOnlyPoloColumn ? 'Nenhum polo disponível.' : 'Nenhuma localidade disponível.'
+                }
+                emptySearchMessage={
+                  readOnlyPoloColumn ? 'Nenhum polo encontrado.' : 'Nenhuma localidade encontrada.'
+                }
+                listMaxHeight={FILTER_DROPDOWN_LIST_MAX_HEIGHT}
+                menuOverlapContent
+                noFocusRing
+              />
+            </div>
           ) : null}
         </div>
-        <MultiSelectSearchDropdown
-          options={readOnlyPoloColumn ? poloFilterOptions : localityFilterOptions}
-          selected={readOnlyPoloColumn ? filters.polos : filters.localities}
-          onChange={readOnlyPoloColumn ? handlePolosChange : handleLocalitiesChange}
-          placeholder={readOnlyPoloColumn ? 'Todos os polos' : 'Todas as localidades'}
-          searchPlaceholder={
-            readOnlyPoloColumn ? 'Pesquisar polo...' : 'Pesquisar localidade...'
-          }
-          emptyOptionsMessage={
-            readOnlyPoloColumn ? 'Nenhum polo disponível.' : 'Nenhuma localidade disponível.'
-          }
-          emptySearchMessage={
-            readOnlyPoloColumn ? 'Nenhum polo encontrado.' : 'Nenhuma localidade encontrada.'
-          }
-          listMaxHeight={FILTER_DROPDOWN_LIST_MAX_HEIGHT}
-          menuOverlapContent
-          noFocusRing
-        />
-      </div>
+      ) : null}
 
-      <div>
-        <label className={filterFieldLabelClassName}>Data inicial</label>
-        <DatePickerField
-          value={filters.periodFrom}
-          onChange={handlePeriodFromChange}
-          placeholder="dd/mm/aaaa"
-          noFocusRing
-          aria-label="Data inicial"
-        />
-      </div>
+      {dualNfsPeriodFilters ? (
+        <>
+          <div>
+            <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Período emissão
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={filterFieldLabelClassName}>Data inicial</label>
+                <DatePickerField
+                  value={filters.emissaoPeriodFrom}
+                  onChange={handleEmissaoPeriodFromChange}
+                  placeholder="dd/mm/aaaa"
+                  noFocusRing
+                  aria-label="Data inicial de emissão"
+                />
+              </div>
+              <div>
+                <label className={filterFieldLabelClassName}>Data final</label>
+                <DatePickerField
+                  value={filters.emissaoPeriodTo}
+                  onChange={handleEmissaoPeriodToChange}
+                  placeholder="dd/mm/aaaa"
+                  noFocusRing
+                  aria-label="Data final de emissão"
+                />
+              </div>
+            </div>
+          </div>
 
-      <div>
-        <label className={filterFieldLabelClassName}>Data final</label>
-        <DatePickerField
-          value={filters.periodTo}
-          onChange={handlePeriodToChange}
-          placeholder="dd/mm/aaaa"
-          noFocusRing
-          aria-label="Data final"
-        />
-      </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Período recebimento
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={filterFieldLabelClassName}>Data inicial</label>
+                <DatePickerField
+                  value={filters.recebimentoPeriodFrom}
+                  onChange={handleRecebimentoPeriodFromChange}
+                  placeholder="dd/mm/aaaa"
+                  noFocusRing
+                  aria-label="Data inicial de recebimento"
+                />
+              </div>
+              <div>
+                <label className={filterFieldLabelClassName}>Data final</label>
+                <DatePickerField
+                  value={filters.recebimentoPeriodTo}
+                  onChange={handleRecebimentoPeriodToChange}
+                  placeholder="dd/mm/aaaa"
+                  noFocusRing
+                  aria-label="Data final de recebimento"
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={filterFieldLabelClassName}>Data inicial</label>
+            <DatePickerField
+              value={filters.periodFrom}
+              onChange={handlePeriodFromChange}
+              placeholder="dd/mm/aaaa"
+              noFocusRing
+              aria-label="Data inicial"
+            />
+          </div>
+          <div>
+            <label className={filterFieldLabelClassName}>Data final</label>
+            <DatePickerField
+              value={filters.periodTo}
+              onChange={handlePeriodToChange}
+              placeholder="dd/mm/aaaa"
+              noFocusRing
+              aria-label="Data final"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1611,8 +1750,22 @@ export function ControleGeralGastosOperacionaisPanel({
       );
     }
     const periodLabel = formatGastosPeriodFilterLabel(filters.periodFrom, filters.periodTo);
-    if (periodLabel) {
+    if (periodLabel && !showFaturamentoColumn) {
       lines.push(`Período: ${periodLabel}`);
+    }
+    const emissaoLabel = formatGastosPeriodFilterLabel(
+      filters.emissaoPeriodFrom,
+      filters.emissaoPeriodTo
+    );
+    if (emissaoLabel && showFaturamentoColumn) {
+      lines.push(`Período emissão: ${emissaoLabel}`);
+    }
+    const recebimentoLabel = formatGastosPeriodFilterLabel(
+      filters.recebimentoPeriodFrom,
+      filters.recebimentoPeriodTo
+    );
+    if (recebimentoLabel) {
+      lines.push(`Período recebimento: ${recebimentoLabel}`);
     }
     if (filters.contracts.length) {
       lines.push(`Contratos: ${filters.contracts.join(', ')}`);
@@ -1622,7 +1775,14 @@ export function ControleGeralGastosOperacionaisPanel({
     }
 
     return lines;
-  }, [filters, hasActiveFilters, totalGastos, readOnlyPoloColumn]);
+  }, [
+    filters,
+    hasActiveFilters,
+    totalGastos,
+    readOnlyPoloColumn,
+    showFaturamentoColumn,
+    localitiesCatalog
+  ]);
 
   const canExportPdf =
     visibleRows.length > 0 || (overviewForExport?.contracts.length ?? 0) > 0;
@@ -1789,23 +1949,37 @@ export function ControleGeralGastosOperacionaisPanel({
   return (
     <>
     <Card>
-      <CardHeader className="border-b-0 pb-1">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-amber-100 p-2 sm:p-3 dark:bg-amber-900/30">
-              <Wallet className="h-5 w-5 text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6" />
+      <CardHeader className={cadastroListClasses.cardHeader}>
+        <div className={cadastroListClasses.cardHeaderRow}>
+          <div className={cadastroListClasses.cardHeaderIconRow}>
+            <div className="rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-900/30">
+              <Wallet className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
                 {panelTitle}
               </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 {panelDescription}
+                {fetchedAt && !hideDataRefreshControls ? (
+                  <>
+                    {' · '}
+                    Atualizado em{' '}
+                    {new Date(fetchedAt).toLocaleString('pt-BR', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
-          {(inlineFilters && (showPdfExport || showFaturamentoColumn)) ? (
-            <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+
+          {(showPdfExport || showFaturamentoColumn || Boolean(onRetry) || showTetoOrcamentarioColumn) ? (
+            <div className={cadastroListClasses.cardToolbar}>
               <button
                 type="button"
                 onClick={() => setIsFiltersModalOpen(true)}
@@ -1822,103 +1996,67 @@ export function ControleGeralGastosOperacionaisPanel({
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
               </button>
-              <button
-                type="button"
-                onClick={() => void handleExportPdf()}
-                disabled={isPanelLoading || exportingPdf || !canExportPdf}
-                className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-              >
-                {exportingPdf ? (
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                ) : (
-                  <Download className="h-4 w-4 shrink-0" aria-hidden />
-                )}
-                <span>{exportingPdf ? 'Gerando PDF…' : 'Exportar PDF completo'}</span>
-              </button>
-            </div>
-          ) : (showPdfExport || showFaturamentoColumn) && !hideDataRefreshControls ? (
-            <div className="flex flex-col items-end gap-2">
-              {fetchedAt ? (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Atualizado em{' '}
-                  {new Date(fetchedAt).toLocaleString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </p>
+
+              {showTetoOrcamentarioColumn ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const singleMonth = getSingleCalendarMonthFromPeriod(
+                      filters.periodFrom,
+                      filters.periodTo
+                    );
+                    setTetoModalPrefill({
+                      year: singleMonth?.year,
+                      month: singleMonth?.month
+                    });
+                    setTetoModalOpen(true);
+                  }}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  aria-label="Cadastrar teto"
+                  title="Cadastrar teto"
+                >
+                  <PiggyBank className="h-4 w-4" aria-hidden />
+                </button>
               ) : null}
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {showTetoOrcamentarioColumn ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const singleMonth = getSingleCalendarMonthFromPeriod(
-                        filters.periodFrom,
-                        filters.periodTo
-                      );
-                      setTetoModalPrefill({
-                        year: singleMonth?.year,
-                        month: singleMonth?.month
-                      });
-                      setTetoModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-800 hover:bg-violet-100 dark:border-violet-800/60 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-950/60"
-                  >
-                    <PiggyBank className="h-3.5 w-3.5" aria-hidden />
-                    Cadastrar teto
-                  </button>
-                ) : null}
+
+              {showPdfExport || showFaturamentoColumn ? (
                 <button
                   type="button"
                   onClick={() => void handleExportPdf()}
                   disabled={isPanelLoading || exportingPdf || !canExportPdf}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  aria-label={exportingPdf ? 'Gerando PDF' : 'Exportar PDF'}
+                  title={exportingPdf ? 'Gerando PDF…' : 'Exportar PDF'}
                 >
                   {exportingPdf ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   ) : (
-                    <Download className="h-3.5 w-3.5" aria-hidden />
+                    <Download className="h-4 w-4" aria-hidden />
                   )}
-                  {exportingPdf ? 'Gerando PDF…' : 'Exportar PDF completo'}
                 </button>
-                {onRetry ? (
-                  <button
-                    type="button"
-                    onClick={onRetry}
-                    disabled={isPanelLoading || fetchingFaturamento}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <RefreshCw
-                      className={`h-3.5 w-3.5 ${isPanelLoading || fetchingFaturamento ? 'animate-spin' : ''}`}
-                      aria-hidden
-                    />
-                    Atualizar planilha
-                  </button>
-                ) : null}
-              </div>
+              ) : null}
+
+              {onRetry && !hideDataRefreshControls ? (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  disabled={isPanelLoading || fetchingFaturamento}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  aria-label="Atualizar planilha"
+                  title="Atualizar planilha"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isPanelLoading || fetchingFaturamento ? 'animate-spin' : ''}`}
+                    aria-hidden
+                  />
+                </button>
+              ) : null}
             </div>
-          ) : (showPdfExport || showFaturamentoColumn) && primaryExportButton ? (
-            <button
-              type="button"
-              onClick={() => void handleExportPdf()}
-              disabled={isPanelLoading || exportingPdf || !canExportPdf}
-              className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {exportingPdf ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Download className="h-4 w-4" aria-hidden />
-              )}
-              {exportingPdf ? 'Gerando PDF…' : 'Exportar PDF completo'}
-            </button>
           ) : null}
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className={cadastroListClasses.cardContent}>
         {isPanelLoading ? (
           <div className="flex items-center justify-center gap-2 py-12 text-gray-500 dark:text-gray-400">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
@@ -1947,29 +2085,6 @@ export function ControleGeralGastosOperacionaisPanel({
           </div>
         ) : (
           <>
-            {!inlineFilters ? (
-            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-700 dark:bg-gray-800/40">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                  <Filter className="h-4 w-4" aria-hidden />
-                  Filtros
-                </div>
-                {hasActiveFilters ? (
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700"
-                  >
-                    <X className="h-3.5 w-3.5" aria-hidden />
-                    Limpar filtros
-                  </button>
-                ) : null}
-              </div>
-
-              {gastosFiltersFields}
-            </div>
-            ) : null}
-
             {enableRowExclusion ? (
               <HiddenContractsPanel
                 contracts={excludedContractLabels}
@@ -2391,46 +2506,33 @@ export function ControleGeralGastosOperacionaisPanel({
         )}
       </CardContent>
 
-      {inlineFilters && isFiltersModalOpen ? (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setIsFiltersModalOpen(false)}
-          />
-          <div className="relative mx-4 w-full max-w-3xl rounded-xl bg-white shadow-2xl dark:bg-gray-800">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Filtro</h3>
-              <button
-                type="button"
-                onClick={() => setIsFiltersModalOpen(false)}
-                className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                aria-label="Fechar filtros"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{gastosFiltersFields}</div>
-            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Limpar filtros
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsFiltersModalOpen(false)}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
-              >
-                Fechar
-              </button>
-            </div>
+      <Modal
+        isOpen={isFiltersModalOpen}
+        onClose={() => setIsFiltersModalOpen(false)}
+        title="Filtro"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {gastosFiltersFields}
+          <div className="flex items-center justify-between gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Limpar filtros
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsFiltersModalOpen(false)}
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+            >
+              Fechar
+            </button>
           </div>
         </div>
-      ) : null}
-
+      </Modal>
 
       <Modal
         isOpen={naturezaModalContract != null}

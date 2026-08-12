@@ -19,10 +19,12 @@ export function listYearMonthsInGastosPeriod(
 ): YearMonthRef[] | null {
   if (!periodFrom && !periodTo) return null;
 
-  const from = periodFrom
-    ? parseGastosPeriodYmd(periodFrom)
-    : parseGastosPeriodYmd('1900-01-01');
-  const to = periodTo ? parseGastosPeriodYmd(periodTo) : parseGastosPeriodYmd('2100-12-31');
+  const now = new Date();
+  const fallbackFrom = new Date(2020, 0, 1, 12, 0, 0, 0);
+  const fallbackTo = new Date(now.getFullYear() + 1, 11, 31, 12, 0, 0, 0);
+
+  const from = periodFrom ? parseGastosPeriodYmd(periodFrom) : fallbackFrom;
+  const to = periodTo ? parseGastosPeriodYmd(periodTo) : fallbackTo;
   if (!from || !to || from > to) return null;
 
   const out: YearMonthRef[] = [];
@@ -35,10 +37,6 @@ export function listYearMonthsInGastosPeriod(
   }
 
   return out;
-}
-
-function yearMonthKey(year: number, month: number): string {
-  return `${year}-${String(month).padStart(2, '0')}`;
 }
 
 export function buildTetoOrcamentarioLookup(
@@ -122,7 +120,7 @@ export function resolveYearlyTetoOrcamentarioForLabels(
 
 /**
  * Soma o teto do contrato no período filtrado.
- * Sem filtro de período: soma todos os meses cadastrados.
+ * Sem filtro de período: retorna 0 (UI exibe hífen — teto só faz sentido com apuração).
  */
 export function resolveContractTetoOrcamentario(
   contract: string,
@@ -134,14 +132,18 @@ export function resolveContractTetoOrcamentario(
   const entries = lookup.get(key) ?? [];
   if (entries.length === 0) return 0;
 
-  const yearMonths = listYearMonthsInGastosPeriod(periodFrom, periodTo);
-  if (!yearMonths) {
-    return entries.reduce((sum, entry) => sum + (Number.isFinite(entry.amount) ? entry.amount : 0), 0);
-  }
+  // Sem período: não soma o histórico inteiro — a coluna fica com hífen.
+  if (!periodFrom && !periodTo) return 0;
 
-  const allowed = new Set(yearMonths.map((ym) => yearMonthKey(ym.year, ym.month)));
+  const from = periodFrom ? parseGastosPeriodYmd(periodFrom) : null;
+  const to = periodTo ? parseGastosPeriodYmd(periodTo) : null;
+  if ((periodFrom && !from) || (periodTo && !to)) return 0;
+
   return entries.reduce((sum, entry) => {
-    if (!allowed.has(yearMonthKey(entry.year, entry.month))) return sum;
+    const monthStart = new Date(entry.year, entry.month - 1, 1, 12, 0, 0, 0);
+    const monthEnd = new Date(entry.year, entry.month, 0, 12, 0, 0, 0);
+    if (from && monthEnd < from) return sum;
+    if (to && monthStart > to) return sum;
     return sum + (Number.isFinite(entry.amount) ? entry.amount : 0);
   }, 0);
 }

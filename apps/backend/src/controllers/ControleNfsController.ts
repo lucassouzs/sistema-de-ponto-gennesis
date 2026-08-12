@@ -11,6 +11,7 @@ import {
   listControleNfsTabs,
   parseControleNfsTotalsFilters,
   parseEmissaoApuracaoFilters,
+  parseIndependentPeriodFilter,
   toNfsTotalsComputeOptions,
   type ControleNfsTotalsFilters
 } from '../services/ControleNfsSheetsService';
@@ -186,13 +187,18 @@ export class ControleNfsController {
   ): Promise<void> {
     try {
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-      const apuracaoFilter = parseEmissaoApuracaoFilters(req.query);
-      const filters: ControleNfsTotalsFilters | undefined = apuracaoFilter
-        ? {
-            emissaoApuracaoFilter: apuracaoFilter,
-            recebimentoApuracaoFilter: apuracaoFilter
-          }
-        : undefined;
+      const independentPeriodFilter = parseIndependentPeriodFilter(req.query);
+      const apuracaoFilter = independentPeriodFilter
+        ? undefined
+        : parseEmissaoApuracaoFilters(req.query);
+      const filters: ControleNfsTotalsFilters | undefined = independentPeriodFilter
+        ? { independentPeriodFilter }
+        : apuracaoFilter
+          ? {
+              emissaoApuracaoFilter: apuracaoFilter,
+              recebimentoApuracaoFilter: apuracaoFilter
+            }
+          : undefined;
 
       const processedByTabKey = await loadProcessedNfsSheetsByTabKey(forceRefresh);
 
@@ -220,7 +226,8 @@ export class ControleNfsController {
       const recebidoMensal = await fetchRecebidoMensalByGastosContract(
         false,
         apuracaoFilter,
-        processedByTabKey
+        processedByTabKey,
+        independentPeriodFilter
       );
 
       res.json({
@@ -244,10 +251,15 @@ export class ControleNfsController {
   ): Promise<void> {
     try {
       const forceRefresh = req.query.refresh === '1' || req.query.refresh === 'true';
-      const recebimentoApuracaoFilter = parseEmissaoApuracaoFilters(req.query);
+      const independentPeriodFilter = parseIndependentPeriodFilter(req.query);
+      const recebimentoApuracaoFilter = independentPeriodFilter
+        ? undefined
+        : parseEmissaoApuracaoFilters(req.query);
       const summary = await fetchRecebidoMensalByGastosContract(
         forceRefresh,
-        recebimentoApuracaoFilter
+        recebimentoApuracaoFilter,
+        undefined,
+        independentPeriodFilter
       );
 
       res.json({

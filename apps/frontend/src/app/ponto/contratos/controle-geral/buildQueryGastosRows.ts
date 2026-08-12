@@ -85,10 +85,19 @@ export type GastosNaturezaModalDfcTree = {
 export type GastosOperacionaisFilters = {
   localities: string[];
   polos: string[];
-  /** YYYY-MM-DD (fuso local). Vazio = sem limite inferior. */
+  /**
+   * Período de apuração dos gastos (pagamento / mês).
+   * Em telas com NF's, espelha o período de emissão.
+   * YYYY-MM-DD (fuso local). Vazio = sem limite.
+   */
   periodFrom: string;
-  /** YYYY-MM-DD (fuso local). Vazio = sem limite superior. */
   periodTo: string;
+  /** Período pela coluna de emissão das NF's (faturamento / líquido). */
+  emissaoPeriodFrom: string;
+  emissaoPeriodTo: string;
+  /** Período pela coluna de recebimento das NF's (recebido). */
+  recebimentoPeriodFrom: string;
+  recebimentoPeriodTo: string;
   contracts: string[];
 };
 
@@ -97,6 +106,10 @@ export const EMPTY_GASTOS_OPERACIONAIS_FILTERS: GastosOperacionaisFilters = {
   polos: [],
   periodFrom: '',
   periodTo: '',
+  emissaoPeriodFrom: '',
+  emissaoPeriodTo: '',
+  recebimentoPeriodFrom: '',
+  recebimentoPeriodTo: '',
   contracts: []
 };
 
@@ -168,34 +181,52 @@ export function rowPaymentDateIntersectsGastosPeriod(
   return rowIntersectsGastosPeriod(row, periodFrom, periodTo);
 }
 
-/** Deriva meses/anos para a API de faturamento (mesma lógica do filtro multi mês/ano). */
+/** Deriva meses/anos para APIs legadas (months + years). Prefira periodFrom/periodTo. */
 export function deriveEmissaoMonthYearFromPeriod(
   periodFrom: string,
   periodTo: string
 ): { months: number[]; years: number[] } {
-  if (!periodFrom && !periodTo) return { months: [], years: [] };
-
-  const from = periodFrom
-    ? parseGastosPeriodYmd(periodFrom)
-    : parseGastosPeriodYmd('1900-01-01');
-  const to = periodTo ? parseGastosPeriodYmd(periodTo) : parseGastosPeriodYmd('2100-12-31');
-  if (!from || !to || from > to) return { months: [], years: [] };
+  const yearMonths = listYearMonthsCoveredByPeriod(periodFrom, periodTo);
+  if (!yearMonths.length) return { months: [], years: [] };
 
   const months = new Set<number>();
   const years = new Set<number>();
-  let cursor = new Date(from.getFullYear(), from.getMonth(), 1, 12, 0, 0, 0);
-  const endMarker = new Date(to.getFullYear(), to.getMonth(), 1, 12, 0, 0, 0);
-
-  while (cursor <= endMarker) {
-    months.add(cursor.getMonth() + 1);
-    years.add(cursor.getFullYear());
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0, 0);
+  for (const ym of yearMonths) {
+    months.add(ym.month);
+    years.add(ym.year);
   }
 
   return {
     months: Array.from(months).sort((a, b) => a - b),
     years: Array.from(years).sort((a, b) => a - b)
   };
+}
+
+/** Pares ano/mês cobertos pelo intervalo (sem produto cartesiano). Intervalo aberto usa bounds razoáveis. */
+export function listYearMonthsCoveredByPeriod(
+  periodFrom: string,
+  periodTo: string
+): Array<{ year: number; month: number }> {
+  if (!periodFrom && !periodTo) return [];
+
+  const now = new Date();
+  const fallbackFrom = new Date(2020, 0, 1, 12, 0, 0, 0);
+  const fallbackTo = new Date(now.getFullYear() + 1, 11, 31, 12, 0, 0, 0);
+
+  const from = periodFrom ? parseGastosPeriodYmd(periodFrom) : fallbackFrom;
+  const to = periodTo ? parseGastosPeriodYmd(periodTo) : fallbackTo;
+  if (!from || !to || from > to) return [];
+
+  const out: Array<{ year: number; month: number }> = [];
+  let cursor = new Date(from.getFullYear(), from.getMonth(), 1, 12, 0, 0, 0);
+  const endMarker = new Date(to.getFullYear(), to.getMonth(), 1, 12, 0, 0, 0);
+
+  while (cursor <= endMarker) {
+    out.push({ year: cursor.getFullYear(), month: cursor.getMonth() + 1 });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1, 12, 0, 0, 0);
+  }
+
+  return out;
 }
 
 export function formatGastosPeriodFilterLabel(periodFrom: string, periodTo: string): string | null {

@@ -81,8 +81,22 @@ export type ApuracaoMonthYearFilter = {
 export type EmissaoApuracaoFilter = ApuracaoMonthYearFilter;
 export type RecebimentoApuracaoFilter = ApuracaoMonthYearFilter;
 
+/** Períodos independentes: emissão → bruto/líquido; recebimento → recebido. */
+export type ControleNfsIndependentPeriodFilter = {
+  emissaoDateFrom?: string;
+  emissaoDateTo?: string;
+  recebimentoDateFrom?: string;
+  recebimentoDateTo?: string;
+};
+
 export type NfsTotalsComputeOptions = {
   dateFilter?: ControleNfsCardsDateFilter;
+  /**
+   * Quando definido, aplica intervalos de forma independente:
+   * emissão → bruto/líquido; recebimento → recebido.
+   * Não usa o AND de `dateFilter` (emissão ∩ recebimento).
+   */
+  independentPeriodFilter?: ControleNfsIndependentPeriodFilter;
   emissaoApuracaoFilter?: EmissaoApuracaoFilter;
   recebimentoApuracaoFilter?: RecebimentoApuracaoFilter;
 };
@@ -90,6 +104,7 @@ export type NfsTotalsComputeOptions = {
 export type ControleNfsTotalsFilters = {
   tabKeys?: string[];
   dateFilter?: ControleNfsCardsDateFilter;
+  independentPeriodFilter?: ControleNfsIndependentPeriodFilter;
   emissaoApuracaoFilter?: EmissaoApuracaoFilter;
   recebimentoApuracaoFilter?: RecebimentoApuracaoFilter;
 };
@@ -169,7 +184,7 @@ type SheetCacheEntry = {
 const sheetCache = new Map<string, SheetCacheEntry>();
 let totalsSummaryCache: { expiresAt: number; data: ControleNfsTotalsSummary } | null = null;
 /** Invalida caches em memória após mudanças no cálculo (ex.: Conta Vinculada / aba MAPA). */
-const NFS_TOTALS_CACHE_VERSION = 6;
+const NFS_TOTALS_CACHE_VERSION = 7;
 let loadedNfsTotalsCacheVersion = 0;
 
 function invalidateStaleNfsTotalsCache(): void {
@@ -230,10 +245,10 @@ function findValorBrutoColumnIndex(headers: string[]): number {
 }
 
 function findValorRecebidoColumnIndex(headers: string[]): number {
-  return headers.findIndex((header) => {
-    const key = normalizeHeaderKey(header);
-    return key === 'recebido' || key === 'valor recebido';
-  });
+  // Preferir cabeçalho exato "RECEBIDO" (coluna V da planilha), não confundir com datas.
+  const exact = headers.findIndex((header) => normalizeHeaderKey(header) === 'recebido');
+  if (exact >= 0) return exact;
+  return headers.findIndex((header) => normalizeHeaderKey(header) === 'valor recebido');
 }
 
 function findValorLiquidoColumnIndex(headers: string[]): number {
@@ -710,6 +725,22 @@ function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function monthYearIntersectsPeriodRange(
+  month: number,
+  year: number,
+  dateFrom?: string,
+  dateTo?: string
+): boolean {
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+  const from = parseIsoDateOnly(dateFrom);
+  const to = parseIsoDateOnly(dateTo);
+  const rangeStart = from ? startOfDay(from) : monthStart;
+  const rangeEnd = to ? startOfDay(to) : monthEnd;
+  if (rangeStart.getTime() > rangeEnd.getTime()) return false;
+  return monthStart.getTime() <= rangeEnd.getTime() && monthEnd.getTime() >= rangeStart.getTime();
+}
+
 function rowMatchesPeriodRange(
   row: string[],
   headers: string[],
@@ -722,15 +753,40 @@ function rowMatchesPeriodRange(
 
   const dateIndex = findFullDateColumnIndex(headers, dateBasis);
   const parsedDate = dateIndex >= 0 ? parseBrazilianDateCell(row[dateIndex] ?? '') : null;
-  if (!parsedDate) return false;
+  if (parsedDate) {
+    const from = parseIsoDateOnly(dateFrom);
+    const to = parseIsoDateOnly(dateTo);
+    const value = startOfDay(parsedDate).getTime();
 
-  const from = parseIsoDateOnly(dateFrom);
-  const to = parseIsoDateOnly(dateTo);
-  const value = startOfDay(parsedDate).getTime();
+    if (from && value < startOfDay(from).getTime()) return false;
+    if (to && value > startOfDay(to).getTime()) return false;
+    return true;
+  }
 
-  if (from && value < startOfDay(from).getTime()) return false;
-  if (to && value > startOfDay(to).getTime()) return false;
-  return true;
+  // Sem data completa: usa mês/ano de apuração (mesma lógica do filtro de gastos).
+  const { month, year } = extractRowMonthYear(row, headers, dateBasis);
+  if (month == null || year == null) return false;
+  return monthYearIntersectsPeriodRange(month, year, dateFrom, dateTo);
+}
+
+function filterRowsByPeriodRange(
+  headers: string[],
+  rows: string[][],
+  dateBasis: ControleNfsCardsDateBasis,
+  dateFrom?: string,
+  dateTo?: string
+): string[][] {
+  if (!dateFrom?.trim() && !dateTo?.trim()) return rows;
+  return rows.filter((row) => rowMatchesPeriodRange(row, headers, dateBasis, dateFrom, dateTo));
+}
+
+function hasIndependentPeriodFilter(filter?: ControleNfsIndependentPeriodFilter): boolean {
+  return Boolean(
+    filter?.emissaoDateFrom?.trim() ||
+      filter?.emissaoDateTo?.trim() ||
+      filter?.recebimentoDateFrom?.trim() ||
+      filter?.recebimentoDateTo?.trim()
+  );
 }
 
 function rowMatchesDateFilter(
@@ -816,6 +872,7 @@ export function toNfsTotalsComputeOptions(
 ): NfsTotalsComputeOptions | undefined {
   if (
     !filters?.dateFilter &&
+    !hasIndependentPeriodFilter(filters?.independentPeriodFilter) &&
     !hasApuracaoMonthYearFilter(filters?.emissaoApuracaoFilter) &&
     !hasApuracaoMonthYearFilter(filters?.recebimentoApuracaoFilter)
   ) {
@@ -823,8 +880,75 @@ export function toNfsTotalsComputeOptions(
   }
   return {
     dateFilter: filters?.dateFilter,
+    independentPeriodFilter: filters?.independentPeriodFilter,
     emissaoApuracaoFilter: filters?.emissaoApuracaoFilter,
     recebimentoApuracaoFilter: filters?.recebimentoApuracaoFilter
+  };
+}
+
+function resolveRowsForBrutoAndRecebido(
+  headers: string[],
+  rows: string[][],
+  computeOptions?: NfsTotalsComputeOptions
+): { rowsForBrutoLiquido: string[][]; rowsForRecebido: string[][] } {
+  const independent = computeOptions?.independentPeriodFilter;
+  if (hasIndependentPeriodFilter(independent)) {
+    const emissaoFrom = independent?.emissaoDateFrom?.trim() || undefined;
+    const emissaoTo = independent?.emissaoDateTo?.trim() || undefined;
+    const recebimentoFrom = independent?.recebimentoDateFrom?.trim() || undefined;
+    const recebimentoTo = independent?.recebimentoDateTo?.trim() || undefined;
+    const hasEmissao = Boolean(emissaoFrom || emissaoTo);
+    const hasRecebimento = Boolean(recebimentoFrom || recebimentoTo);
+
+    // Bruto/líquido: coluna por data de emissão.
+    // Se só houver período de recebimento, usa esse intervalo na data de emissão.
+    const rowsForBrutoLiquido = filterRowsByEmissaoApuracao(
+      headers,
+      filterRowsByPeriodRange(
+        headers,
+        rows,
+        'emissao',
+        hasEmissao ? emissaoFrom : recebimentoFrom,
+        hasEmissao ? emissaoTo : recebimentoTo
+      ),
+      computeOptions?.emissaoApuracaoFilter
+    );
+
+    // Recebido: soma a coluna RECEBIDO.
+    // - Com período de recebimento → filtra pela data de recebimento.
+    // - Só com período de emissão → filtra pela data de emissão (mesmo conjunto de NFs),
+    //   e soma o valor da coluna RECEBIDO dessas linhas (não usa a data de recebimento).
+    const recebidoDateBasis: ControleNfsCardsDateBasis = hasRecebimento
+      ? 'recebimento'
+      : 'emissao';
+    const recebidoFrom = hasRecebimento ? recebimentoFrom : emissaoFrom;
+    const recebidoTo = hasRecebimento ? recebimentoTo : emissaoTo;
+    const rowsForRecebido = filterRowsByRecebimentoApuracao(
+      headers,
+      filterRowsByPeriodRange(
+        headers,
+        rows,
+        recebidoDateBasis,
+        recebidoFrom,
+        recebidoTo
+      ),
+      computeOptions?.recebimentoApuracaoFilter
+    );
+    return { rowsForBrutoLiquido, rowsForRecebido };
+  }
+
+  const rowsAfterDateFilter = filterRowsByDate(headers, rows, computeOptions?.dateFilter);
+  return {
+    rowsForBrutoLiquido: filterRowsByEmissaoApuracao(
+      headers,
+      rowsAfterDateFilter,
+      computeOptions?.emissaoApuracaoFilter
+    ),
+    rowsForRecebido: filterRowsByRecebimentoApuracao(
+      headers,
+      rowsAfterDateFilter,
+      computeOptions?.recebimentoApuracaoFilter
+    )
   };
 }
 
@@ -834,16 +958,10 @@ function computeTabTotalsFromProcessed(
   computeOptions?: NfsTotalsComputeOptions,
   tabKey?: string
 ): Omit<ControleNfsTabTotals, 'tabKey' | 'label'> {
-  const rowsAfterDateFilter = filterRowsByDate(headers, rows, computeOptions?.dateFilter);
-  const rowsForBrutoLiquido = filterRowsByEmissaoApuracao(
+  const { rowsForBrutoLiquido, rowsForRecebido } = resolveRowsForBrutoAndRecebido(
     headers,
-    rowsAfterDateFilter,
-    computeOptions?.emissaoApuracaoFilter
-  );
-  const rowsForRecebido = filterRowsByRecebimentoApuracao(
-    headers,
-    rowsAfterDateFilter,
-    computeOptions?.recebimentoApuracaoFilter
+    rows,
+    computeOptions
   );
 
   return {
@@ -927,6 +1045,7 @@ function hasActiveTotalsFilters(filters?: ControleNfsTotalsFilters): boolean {
   return (
     !allTabsSelected ||
     hasDateFilter ||
+    hasIndependentPeriodFilter(filters.independentPeriodFilter) ||
     hasApuracaoMonthYearFilter(filters.emissaoApuracaoFilter) ||
     hasApuracaoMonthYearFilter(filters.recebimentoApuracaoFilter)
   );
@@ -1280,16 +1399,10 @@ function computeLotFaturamentoForTab(
   computeOptions?: NfsTotalsComputeOptions
 ): ControleNfsLotFaturamento[] {
   const lotColIndex = findLotBreakdownColumnIndex(headers, config.lotColumn);
-  const rowsAfterDateFilter = filterRowsByDate(headers, rows, computeOptions?.dateFilter);
-  const rowsForBrutoLiquido = filterRowsByEmissaoApuracao(
+  const { rowsForBrutoLiquido, rowsForRecebido } = resolveRowsForBrutoAndRecebido(
     headers,
-    rowsAfterDateFilter,
-    computeOptions?.emissaoApuracaoFilter
-  );
-  const rowsForRecebido = filterRowsByRecebimentoApuracao(
-    headers,
-    rowsAfterDateFilter,
-    computeOptions?.recebimentoApuracaoFilter
+    rows,
+    computeOptions
   );
 
   const brutoIdx = findValorBrutoColumnIndex(headers);
@@ -1397,6 +1510,34 @@ export function parseEmissaoApuracaoFilters(query: {
   };
 }
 
+/** Períodos de emissão/recebimento (YYYY-MM-DD) para Controle Geral / Contratos Sócios. */
+export function parseIndependentPeriodFilter(query: {
+  periodFrom?: unknown;
+  periodTo?: unknown;
+  emissaoDateFrom?: unknown;
+  emissaoDateTo?: unknown;
+  recebimentoDateFrom?: unknown;
+  recebimentoDateTo?: unknown;
+}): ControleNfsIndependentPeriodFilter | undefined {
+  const legacyFrom = parseOptionalDateParam(query.periodFrom);
+  const legacyTo = parseOptionalDateParam(query.periodTo);
+  const emissaoDateFrom =
+    parseOptionalDateParam(query.emissaoDateFrom) ?? legacyFrom;
+  const emissaoDateTo = parseOptionalDateParam(query.emissaoDateTo) ?? legacyTo;
+  const recebimentoDateFrom =
+    parseOptionalDateParam(query.recebimentoDateFrom) ?? legacyFrom;
+  const recebimentoDateTo =
+    parseOptionalDateParam(query.recebimentoDateTo) ?? legacyTo;
+
+  const filter: ControleNfsIndependentPeriodFilter = {
+    emissaoDateFrom,
+    emissaoDateTo,
+    recebimentoDateFrom,
+    recebimentoDateTo
+  };
+  return hasIndependentPeriodFilter(filter) ? filter : undefined;
+}
+
 export async function fetchNfsLotFaturamento(
   computeOptions?: NfsTotalsComputeOptions,
   preloadedByTabKey?: Map<string, { headers: string[]; rows: string[][] }>
@@ -1442,7 +1583,8 @@ function sumRecebidoByMonthForRows(
   rows: string[][],
   rowFilter: (row: string[]) => boolean,
   tabKey?: string,
-  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter
+  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter,
+  independentPeriodFilter?: ControleNfsIndependentPeriodFilter
 ): Map<string, number> {
   const recebidoIdx = findValorRecebidoColumnIndex(headers);
   const map = new Map<string, number>();
@@ -1450,6 +1592,22 @@ function sumRecebidoByMonthForRows(
   for (const row of rows) {
     if (!shouldIncludeRowInNfsMetricSum(row, headers, tabKey)) continue;
     if (!rowFilter(row)) continue;
+
+    const emissaoFrom = independentPeriodFilter?.emissaoDateFrom?.trim() || undefined;
+    const emissaoTo = independentPeriodFilter?.emissaoDateTo?.trim() || undefined;
+    const recebimentoFrom = independentPeriodFilter?.recebimentoDateFrom?.trim() || undefined;
+    const recebimentoTo = independentPeriodFilter?.recebimentoDateTo?.trim() || undefined;
+    const hasRecebimento = Boolean(recebimentoFrom || recebimentoTo);
+    const dateBasis: ControleNfsCardsDateBasis = hasRecebimento ? 'recebimento' : 'emissao';
+    const dateFrom = hasRecebimento ? recebimentoFrom : emissaoFrom;
+    const dateTo = hasRecebimento ? recebimentoTo : emissaoTo;
+
+    if (
+      (dateFrom || dateTo) &&
+      !rowMatchesPeriodRange(row, headers, dateBasis, dateFrom, dateTo)
+    ) {
+      continue;
+    }
 
     const { month, year } = extractRecebimentoMonthYearForMetric(row, headers);
     if (month == null || year == null) continue;
@@ -1479,7 +1637,8 @@ function sumRecebidoByMonthForRows(
 
 export function buildRecebidoMensalByGastosContract(
   processedByTabKey: Map<string, { headers: string[]; rows: string[][] }>,
-  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter
+  recebimentoApuracaoFilter?: RecebimentoApuracaoFilter,
+  independentPeriodFilter?: ControleNfsIndependentPeriodFilter
 ): RecebidoMensalByGastosContractEntry[] {
   const aggregate = new Map<string, RecebidoMensalByGastosContractEntry>();
 
@@ -1514,7 +1673,8 @@ export function buildRecebidoMensalByGastosContract(
         processed.rows,
         rowFilter,
         config.tabKey,
-        recebimentoApuracaoFilter
+        recebimentoApuracaoFilter,
+        independentPeriodFilter
       );
       for (const contract of lot.gastosCostCenters) {
         addMonthMap(contract, monthMap);
@@ -1536,7 +1696,8 @@ export function buildRecebidoMensalByGastosContract(
       processed.rows,
       () => true,
       tab.key,
-      recebimentoApuracaoFilter
+      recebimentoApuracaoFilter,
+      independentPeriodFilter
     );
     for (const contract of centers) {
       addMonthMap(contract, monthMap);
@@ -1553,7 +1714,8 @@ export function buildRecebidoMensalByGastosContract(
 export async function fetchRecebidoMensalByGastosContract(
   forceRefresh = false,
   recebimentoApuracaoFilter?: RecebimentoApuracaoFilter,
-  preloadedByTabKey?: Map<string, { headers: string[]; rows: string[][] }>
+  preloadedByTabKey?: Map<string, { headers: string[]; rows: string[][] }>,
+  independentPeriodFilter?: ControleNfsIndependentPeriodFilter
 ): Promise<{
   entries: RecebidoMensalByGastosContractEntry[];
   fetchedAt: string;
@@ -1564,7 +1726,8 @@ export async function fetchRecebidoMensalByGastosContract(
   return {
     entries: buildRecebidoMensalByGastosContract(
       processedByTabKey,
-      recebimentoApuracaoFilter
+      recebimentoApuracaoFilter,
+      independentPeriodFilter
     ),
     fetchedAt: new Date().toISOString()
   };

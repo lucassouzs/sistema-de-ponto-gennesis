@@ -144,8 +144,7 @@ export default function ContratosSociosPage() {
               Contratos Sócios
             </h1>
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-              Controle dos contratos compartilhados com sócios — apenas MAPA UMIPI Jequié e CONFEA
-              508/516 Norte
+              Visão financeira dos contratos compartilhados com sócios
             </p>
           </div>
 
@@ -163,11 +162,13 @@ export default function ContratosSociosPage() {
             dataRefreshNonce={dataRefreshNonce}
             allowedContracts={CONTRATOS_SOCIOS_ALLOWED}
             hideLocalityColumn
+            hideContractFilter
+            hideLocalityFilter
             panelTitle="Controle de Contratos"
             panelDescription={
               gastosTotvsWarning
-                ? `Gastos: planilha até 2024 · TOTVS a partir de 2025 (${gastosTotvsWarning})`
-                : 'Gastos: QUERY BASE DE GASTOS até 31/12/2024 · mesma fonte do módulo Gastos Operacionais (TOTVS RM) a partir de 01/01/2025'
+                ? `Dados parcialmente disponíveis (${gastosTotvsWarning})`
+                : 'Faturamento, recebimentos e gastos por contrato'
             }
             totalColumnLabel="Gastos"
             showFaturamentoColumn
