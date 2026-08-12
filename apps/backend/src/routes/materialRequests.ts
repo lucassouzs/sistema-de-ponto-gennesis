@@ -31,12 +31,20 @@ function normalizeRmPriority(p: unknown): 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' {
 }
 
 /** Garante tipos aceitos pelo Prisma (evita PrismaClientValidationError por string/objeto indevido no anexo) */
+function normalizeRmItemUnitPrice(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const n = typeof raw === 'number' ? raw : Number(String(raw).replace(',', '.'));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
 function normalizeRmItemBody(item: any) {
   const url = item?.attachmentUrl;
   const name = item?.attachmentName;
   return {
     materialId: item?.materialId,
     quantity: item?.quantity,
+    unitPrice: normalizeRmItemUnitPrice(item?.unitPrice),
     notes: item?.observation ?? item?.notes,
     attachmentUrl:
       typeof url === 'string' && url.trim().length > 0 ? url.trim().slice(0, 2000) : null,
@@ -235,13 +243,7 @@ router.post('/', async (req: AuthRequest, res: Response, next: NextFunction) => 
       demandSheetAttachmentUrl,
       demandSheetAttachmentName,
       demandSheetAttachments,
-      items: items.map((item: any) => ({
-        materialId: item.materialId,
-        quantity: item.quantity,
-        notes: item.observation || item.notes,
-        attachmentUrl: item.attachmentUrl || null,
-        attachmentName: item.attachmentName || null
-      }))
+      items: items.map((item: any) => normalizeRmItemBody(item))
     });
 
     res.status(201).json({

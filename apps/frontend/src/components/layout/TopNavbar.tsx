@@ -133,7 +133,7 @@ export function TopNavbar({
 }: TopNavbarProps) {
   const queryClient = useQueryClient();
   const pathname = usePathname();
-  const { user, userDepartment, userPosition } = usePermissions();
+  const { user, userDepartment, userPosition, canAccessCollaborationTools } = usePermissions();
   const { isDark, toggleTheme } = useTheme();
   const { breadcrumbEntities } = usePageTitleOverride();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -168,7 +168,7 @@ export function TopNavbar({
       const n = Number(res.data?.data?.count ?? res.data?.count);
       return Number.isFinite(n) && n > 0 ? n : 0;
     },
-    enabled: !!user?.id,
+    enabled: canAccessCollaborationTools && !!user?.id,
     staleTime: 15_000,
     refetchInterval: () => {
       if (typeof document === 'undefined') return 30_000;

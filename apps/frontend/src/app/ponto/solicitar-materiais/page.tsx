@@ -47,6 +47,11 @@ import { ServiceOrderSearchSelect } from '@/components/suprimentos/ServiceOrderS
 import { AsyncSearchSelectDropdown } from '@/components/ui/AsyncSearchSelectDropdown';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import { getRmMaterialLabel, searchRmMaterials, type RmMaterialListItem } from '@/lib/searchRmMaterials';
+import {
+  formatCurrencyInputBrFromNumber,
+  maskCurrencyInputBrOrEmpty,
+  parseCurrencyInputBr,
+} from '@/lib/maskCurrencyBr';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import { isExactUnbCostCenterLabel, isUnbRelatedLabel, resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
 import {
@@ -415,6 +420,17 @@ function parseFdAttachments(r: {
   ];
 }
 
+const emptyRmFormItem = () => ({
+  materialId: '',
+  quantity: 1,
+  unit: '',
+  /** Referência do que o comprador deveria pagar (padrão = média das últimas compras). */
+  unitPrice: 0,
+  observation: '',
+  attachmentUrl: '',
+  attachmentName: ''
+});
+
 const emptyNewFormData = () => ({
   contractId: '',
   costCenterId: '',
@@ -425,10 +441,41 @@ const emptyNewFormData = () => ({
   priority: 'MEDIUM',
   demandSheet: '',
   demandSheetAttachments: [] as FdAttachment[],
-  items: [{ materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }]
+  items: [emptyRmFormItem()]
 });
 
 type NewMaterialRequestFormData = ReturnType<typeof emptyNewFormData>;
+type RmFormItem = NewMaterialRequestFormData['items'][number];
+
+function formatRmAvgPaid(value: unknown): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  return formatCurrencyInputBrFromNumber(n);
+}
+
+function rmItemLineTotal(item: Pick<RmFormItem, 'quantity' | 'unitPrice'>): number {
+  const q = Number(item.quantity);
+  const u = Number(item.unitPrice);
+  if (!Number.isFinite(q) || !Number.isFinite(u)) return 0;
+  return Math.round(q * u * 100) / 100;
+}
+
+function rmRequestItemsTotal(items: Pick<RmFormItem, 'quantity' | 'unitPrice'>[]): number {
+  return Math.round(items.reduce((sum, item) => sum + rmItemLineTotal(item), 0) * 100) / 100;
+}
+
+/** Valor unitário padrão ao selecionar material: média paga → mediana → 0. */
+function defaultUnitPriceFromMaterial(material: RmMaterialListItem): number {
+  const avg = material.avgPaidUnitPrice;
+  if (avg != null && Number.isFinite(Number(avg)) && Number(avg) >= 0) {
+    return Math.round(Number(avg) * 100) / 100;
+  }
+  const median = material.medianPrice;
+  if (median != null && Number.isFinite(Number(median)) && Number(median) >= 0) {
+    return Math.round(Number(median) * 100) / 100;
+  }
+  return 0;
+}
 
 type RmContractOption = {
   id: string;
@@ -856,7 +903,7 @@ function SolicitarMateriaisPage() {
     priority: 'MEDIUM',
     demandSheet: '',
     demandSheetAttachments: [] as FdAttachment[],
-    items: [{ materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }]
+    items: [emptyRmFormItem()]
   });
 
   const [uploadingAttachment, setUploadingAttachment] = useState<{ form: 'new' | 'edit'; index: number } | null>(
@@ -1086,6 +1133,7 @@ function SolicitarMateriaisPage() {
         items: form.items.map((item) => ({
           materialId: item.materialId,
           quantity: item.quantity,
+          unitPrice: Number(item.unitPrice) || 0,
           observation: item.observation,
           attachmentUrl: item.attachmentUrl || undefined,
           attachmentName: item.attachmentName || undefined
@@ -1447,6 +1495,7 @@ function SolicitarMateriaisPage() {
                 material?: { id?: string; unit?: string; name?: string; description?: string };
                 quantity?: unknown;
                 unit?: string;
+                unitPrice?: unknown;
                 notes?: string | null;
                 attachmentUrl?: string | null;
                 attachmentName?: string | null;
@@ -1457,12 +1506,16 @@ function SolicitarMateriaisPage() {
                   return Number.isFinite(q) && q > 0 ? q : 1;
                 })(),
                 unit: it.unit || it.material?.unit || '',
+                unitPrice: (() => {
+                  const p = Number(it.unitPrice);
+                  return Number.isFinite(p) && p >= 0 ? Math.round(p * 100) / 100 : 0;
+                })(),
                 observation: it.notes || '',
                 attachmentUrl: it.attachmentUrl || '',
                 attachmentName: it.attachmentName || ''
               })
             )
-          : [{ materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }]
+          : [emptyRmFormItem()]
     });
     setEditItemMaterialLabels(
       itemsFromApi.length > 0
@@ -1572,10 +1625,7 @@ function SolicitarMateriaisPage() {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [
-        ...formData.items,
-        { materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }
-      ]
+      items: [...formData.items, emptyRmFormItem()]
     });
     setNewItemMaterialLabels((prev) => [...prev, '']);
   };
@@ -1600,6 +1650,7 @@ function SolicitarMateriaisPage() {
       ...newItems[index],
       materialId: material.id,
       unit: material.unit || '',
+      unitPrice: defaultUnitPriceFromMaterial(material),
     };
     setFormData({ ...formData, items: newItems });
     setNewItemMaterialLabels((prev) => {
@@ -1634,6 +1685,7 @@ function SolicitarMateriaisPage() {
         .map((item) => ({
         materialId: item.materialId,
         quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice) || 0,
         observation: item.observation.trim() || undefined,
         attachmentUrl: item.attachmentUrl?.trim() || undefined,
         attachmentName: item.attachmentName?.trim() || undefined
@@ -1644,10 +1696,7 @@ function SolicitarMateriaisPage() {
   const handleEditAddItem = () => {
     setEditFormData((prev) => ({
       ...prev,
-      items: [
-        ...prev.items,
-        { materialId: '', quantity: 1, unit: '', observation: '', attachmentUrl: '', attachmentName: '' }
-      ]
+      items: [...prev.items, emptyRmFormItem()]
     }));
     setEditItemMaterialLabels((prev) => [...prev, '']);
   };
@@ -1782,6 +1831,7 @@ function SolicitarMateriaisPage() {
         ...newItems[index],
         materialId: material.id,
         unit: material.unit || '',
+        unitPrice: defaultUnitPriceFromMaterial(material),
       };
       return { ...prev, items: newItems };
     });
@@ -2487,6 +2537,39 @@ function SolicitarMateriaisPage() {
                                   />
                                 </div>
                               </div>
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div>
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>
+                                    Valor unitário
+                                  </label>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={formatCurrencyInputBrFromNumber(item.unitPrice)}
+                                    onChange={(e) => {
+                                      const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                                      handleItemChange(
+                                        index,
+                                        'unitPrice',
+                                        parseCurrencyInputBr(masked) ?? 0
+                                      );
+                                    }}
+                                    className={FORM_FIELD_INPUT_CLS}
+                                    placeholder="R$ 0,00"
+                                    title="Referência do quanto pagar (padrão = média das últimas compras)"
+                                  />
+                                </div>
+                                <div>
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Valor total</label>
+                                  <input
+                                    type="text"
+                                    readOnly
+                                    tabIndex={-1}
+                                    value={formatCurrencyInputBrFromNumber(rmItemLineTotal(item))}
+                                    className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-800/80`}
+                                  />
+                                </div>
+                              </div>
                               <div>
                                 <label className={RM_FORM_FIELD_LABEL_CLS}>Anexo</label>
                                 <RmAttachmentField
@@ -2515,6 +2598,14 @@ function SolicitarMateriaisPage() {
                           <Plus className="h-4 w-4" />
                           Adicionar item
                         </button>
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Total da solicitação
+                          </span>
+                          <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                            {formatCurrencyInputBrFromNumber(rmRequestItemsTotal(formData.items))}
+                          </span>
+                        </div>
                       </div>
                     </RmFormSection>
 
@@ -2760,8 +2851,11 @@ function SolicitarMateriaisPage() {
                                     <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Qtd
                                     </th>
-                                    <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                    <th className="whitespace-nowrap px-2 pb-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Un.
+                                    </th>
+                                    <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Valor médio pago
                                     </th>
                                   </tr>
                                 </thead>
@@ -2774,6 +2868,10 @@ function SolicitarMateriaisPage() {
                                       mat?.sinapiCode ||
                                       'Material';
                                     const note = (item.notes || item.observation)?.trim();
+                                    const avgPaid =
+                                      (item as { avgPaidUnitPrice?: number | null }).avgPaidUnitPrice ??
+                                      (mat as { avgPaidUnitPrice?: number | null } | undefined)
+                                        ?.avgPaidUnitPrice;
                                     return (
                                       <tr
                                         key={item.id || idx}
@@ -2793,8 +2891,11 @@ function SolicitarMateriaisPage() {
                                         <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
                                           {Number(item.quantity)}
                                         </td>
-                                        <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                        <td className="whitespace-nowrap px-2 py-3 text-center align-top">
                                           {item.unit || '—'}
+                                        </td>
+                                        <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
+                                          {formatRmAvgPaid(avgPaid)}
                                         </td>
                                       </tr>
                                     );
@@ -3159,6 +3260,37 @@ function SolicitarMateriaisPage() {
                               />
                             </div>
                           </div>
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Valor unitário</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={formatCurrencyInputBrFromNumber(item.unitPrice)}
+                                onChange={(e) => {
+                                  const masked = maskCurrencyInputBrOrEmpty(e.target.value);
+                                  handleEditItemChange(
+                                    index,
+                                    'unitPrice',
+                                    parseCurrencyInputBr(masked) ?? 0
+                                  );
+                                }}
+                                className={FORM_FIELD_INPUT_CLS}
+                                placeholder="R$ 0,00"
+                                title="Referência do quanto pagar (padrão = média das últimas compras)"
+                              />
+                            </div>
+                            <div>
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Valor total</label>
+                              <input
+                                type="text"
+                                readOnly
+                                tabIndex={-1}
+                                value={formatCurrencyInputBrFromNumber(rmItemLineTotal(item))}
+                                className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-800/80`}
+                              />
+                            </div>
+                          </div>
                           <div>
                             <label className={RM_FORM_FIELD_LABEL_CLS}>Anexo</label>
                             <RmAttachmentField
@@ -3187,6 +3319,14 @@ function SolicitarMateriaisPage() {
                       <Plus className="h-4 w-4" />
                       Adicionar item
                     </button>
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3 dark:border-gray-700 dark:bg-gray-800/50">
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Total da solicitação
+                      </span>
+                      <span className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        {formatCurrencyInputBrFromNumber(rmRequestItemsTotal(editFormData.items))}
+                      </span>
+                    </div>
                   </div>
                 </RmFormSection>
               </div>

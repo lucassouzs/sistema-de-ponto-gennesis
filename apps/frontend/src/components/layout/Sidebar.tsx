@@ -197,6 +197,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     fluigApproverNameKeys,
     fluigApproverFullAccess,
     canAccessFluigApproversRoute,
+    canAccessCollaborationTools,
   } = usePermissions();
   const { logoSrc, logoAlt } = useBrandingLogo();
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -295,7 +296,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       const n = Number(res.data?.data?.count ?? res.data?.count);
       return Number.isFinite(n) && n > 0 ? n : 0;
     },
-    enabled: !!user?.id,
+    enabled: canAccessCollaborationTools && !!user?.id,
     staleTime: 15_000,
     refetchInterval: () => visibleTabRefetchInterval(30_000),
     refetchOnWindowFocus: true,
@@ -1649,7 +1650,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             )}
           </nav>
 
-          {/* Rodapé: atalhos */}
+          {/* Rodapé: atalhos (ocultos para setor Sócios) */}
+          {canAccessCollaborationTools ? (
           <div className="relative z-20 flex flex-shrink-0 flex-col items-center overflow-visible px-2 pb-4 [@media(max-height:820px)]:pb-2">
             <div className="flex flex-col items-center gap-2 [@media(max-height:820px)]:gap-1">
               <SidebarRailTooltip label="Conversas">
@@ -1730,6 +1732,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               </SidebarRailTooltip>
             </div>
           </div>
+          ) : null}
         </div>
 
         {/* Tier 2 — Painel de páginas do módulo */}

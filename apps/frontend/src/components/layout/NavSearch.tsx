@@ -43,6 +43,7 @@ export function NavSearch({ inputRef }: NavSearchProps) {
     canApproveFuel,
     canApproveOc,
     canApproveMaterialRequests,
+    canAccessCollaborationTools,
   } = usePermissions();
   const localInputRef = useRef<HTMLInputElement | null>(null);
   const mobileInputRef = useRef<HTMLInputElement | null>(null);
@@ -84,16 +85,25 @@ export function NavSearch({ inputRef }: NavSearchProps) {
 
   const accessible = useMemo(() => {
     return catalog.filter((item) => {
-      if (item.href === '/ponto/home' || item.href === '/ponto/agenda' || item.href === '/ponto/conversas') {
+      if (
+        item.href === '/ponto/agenda' ||
+        item.href === '/ponto/conversas' ||
+        item.href === '/ponto/drive' ||
+        item.href === '/ponto/kanban' ||
+        item.href === '/ponto/flow'
+      ) {
+        return canAccessCollaborationTools;
+      }
+      if (item.href === '/ponto/home') {
         return true;
       }
       if (item.href === '/ponto/aprovacoes') return canSeeApprovals;
       if (isAdministrator) return true;
       const key = pathToModuleKey(item.href);
-      if (OPEN_ACCESS.has(key)) return true;
+      if (OPEN_ACCESS.has(key)) return canAccessCollaborationTools;
       return can(key);
     });
-  }, [catalog, can, isAdministrator, canSeeApprovals]);
+  }, [catalog, can, isAdministrator, canSeeApprovals, canAccessCollaborationTools]);
 
   const results = useMemo(() => {
     const q = term.trim().toLowerCase();

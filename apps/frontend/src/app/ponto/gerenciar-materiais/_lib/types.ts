@@ -83,7 +83,11 @@ export interface MaterialRequest {
       sinapiCode?: string;
       description?: string;
       medianPrice?: number;
+      /** Média ponderada das últimas 10 compras efetivas (referência). */
+      avgPaidUnitPrice?: number | null;
     };
+    /** Espelho da média no item (API de detalhe da RM). */
+    avgPaidUnitPrice?: number | null;
   }>;
   approvedBy?: {
     id: string;

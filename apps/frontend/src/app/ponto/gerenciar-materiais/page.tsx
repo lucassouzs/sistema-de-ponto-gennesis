@@ -1001,8 +1001,11 @@ export default function GerenciarMateriaisPage() {
                               <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Qtd
                               </th>
-                              <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                              <th className="whitespace-nowrap px-2 pb-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Un.
+                              </th>
+                              <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Valor médio pago
                               </th>
                             </tr>
                           </thead>
@@ -1026,8 +1029,22 @@ export default function GerenciarMateriaisPage() {
                                 <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
                                   {Number(item.quantity)}
                                 </td>
-                                <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                <td className="whitespace-nowrap px-2 py-3 text-center align-top">
                                   {item.unit || '—'}
+                                </td>
+                                <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
+                                  {(() => {
+                                    const avg =
+                                      item.avgPaidUnitPrice ??
+                                      item.material?.avgPaidUnitPrice ??
+                                      null;
+                                    const n = Number(avg);
+                                    if (!Number.isFinite(n) || n < 0) return '—';
+                                    return n.toLocaleString('pt-BR', {
+                                      style: 'currency',
+                                      currency: 'BRL',
+                                    });
+                                  })()}
                                 </td>
                               </tr>
                             ))}

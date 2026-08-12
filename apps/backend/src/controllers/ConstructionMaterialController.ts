@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -10,6 +10,18 @@ const materialInclude = {
     select: { id: true, code: true, name: true }
   }
 } as const;
+
+/** OCs já aprovadas pela diretoria (ou etapas posteriores) — entram na média paga. */
+const EFFECTIVE_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = [
+  PurchaseOrderStatus.APPROVED,
+  PurchaseOrderStatus.PENDING_PROOF_VALIDATION,
+  PurchaseOrderStatus.PENDING_PROOF_CORRECTION,
+  PurchaseOrderStatus.PENDING_NF_ATTACHMENT,
+  PurchaseOrderStatus.SENT,
+  PurchaseOrderStatus.FINALIZED,
+  PurchaseOrderStatus.PARTIALLY_RECEIVED,
+  PurchaseOrderStatus.RECEIVED
+];
 
 export class ConstructionMaterialController {
   private mapMaterial(material: any) {
@@ -260,6 +272,146 @@ export class ConstructionMaterialController {
     });
   }
 
+  /** Quantas compras recentes entram na média paga (histórico continua completo). */
+  private static readonly AVG_PAID_LAST_PURCHASES = 10;
+
+  private weightedAvgFromPurchaseLines(
+    lines: Array<{ quantity: unknown; unitPrice: unknown }>
+  ): number | null {
+    let sumQty = 0;
+    let sumAmount = 0;
+    for (const it of lines) {
+      const qty = Number(it.quantity);
+      const unitPrice = Number(it.unitPrice);
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(unitPrice)) continue;
+      sumQty += qty;
+      sumAmount += qty * unitPrice;
+    }
+    if (sumQty <= 0) return null;
+    return Math.round((sumAmount / sumQty) * 100) / 100;
+  }
+
+  /** Média ponderada das últimas N compras efetivas por material (`CM-{id}`). */
+  private async avgPaidByConstructionMaterialIds(
+    constructionIds: string[]
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    if (constructionIds.length === 0) return result;
+
+    const sinapiCodes = constructionIds.map((id) => `CM-${id}`);
+    const engRows = await prisma.engineeringMaterial.findMany({
+      where: { sinapiCode: { in: sinapiCodes } },
+      select: { id: true, sinapiCode: true }
+    });
+    if (engRows.length === 0) return result;
+
+    const engIdToConstructionId = new Map<string, string>();
+    for (const eng of engRows) {
+      if (eng.sinapiCode.startsWith('CM-')) {
+        engIdToConstructionId.set(eng.id, eng.sinapiCode.slice(3));
+      }
+    }
+
+    const items = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialId: { in: engRows.map((e) => e.id) },
+        purchaseOrder: { status: { in: EFFECTIVE_PURCHASE_ORDER_STATUSES } }
+      },
+      select: {
+        materialId: true,
+        quantity: true,
+        unitPrice: true,
+        createdAt: true,
+        purchaseOrder: { select: { orderDate: true } }
+      },
+      orderBy: [{ purchaseOrder: { orderDate: 'desc' } }, { createdAt: 'desc' }]
+    });
+
+    const byConstruction = new Map<
+      string,
+      Array<{ quantity: unknown; unitPrice: unknown }>
+    >();
+    for (const it of items) {
+      const constructionId = engIdToConstructionId.get(it.materialId);
+      if (!constructionId) continue;
+      const list = byConstruction.get(constructionId) || [];
+      if (list.length >= ConstructionMaterialController.AVG_PAID_LAST_PURCHASES) continue;
+      list.push({ quantity: it.quantity, unitPrice: it.unitPrice });
+      byConstruction.set(constructionId, list);
+    }
+
+    for (const [constructionId, lines] of byConstruction) {
+      const avg = this.weightedAvgFromPurchaseLines(lines);
+      if (avg != null) result.set(constructionId, avg);
+    }
+    return result;
+  }
+
+  private async purchaseHistoryForConstructionMaterial(constructionId: string) {
+    const eng = await prisma.engineeringMaterial.findUnique({
+      where: { sinapiCode: `CM-${constructionId}` },
+      select: { id: true }
+    });
+    if (!eng) {
+      return { avgPaidUnitPrice: null as number | null, history: [] as Array<Record<string, unknown>> };
+    }
+
+    const items = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialId: eng.id,
+        purchaseOrder: { status: { in: EFFECTIVE_PURCHASE_ORDER_STATUSES } }
+      },
+      select: {
+        id: true,
+        quantity: true,
+        unit: true,
+        unitPrice: true,
+        totalPrice: true,
+        purchaseOrder: {
+          select: {
+            id: true,
+            orderNumber: true,
+            orderDate: true,
+            status: true,
+            supplier: {
+              select: { id: true, code: true, name: true, tradeName: true }
+            }
+          }
+        }
+      },
+      orderBy: [{ purchaseOrder: { orderDate: 'desc' } }, { createdAt: 'desc' }]
+    });
+
+    const history = items.map((it) => {
+      const qty = Number(it.quantity);
+      const unitPrice = Number(it.unitPrice);
+      const total =
+        it.totalPrice != null ? Number(it.totalPrice) : qty * unitPrice;
+      return {
+        id: it.id,
+        purchaseOrderId: it.purchaseOrder.id,
+        orderNumber: it.purchaseOrder.orderNumber,
+        orderDate: it.purchaseOrder.orderDate,
+        status: it.purchaseOrder.status,
+        supplierName:
+          it.purchaseOrder.supplier.tradeName?.trim() ||
+          it.purchaseOrder.supplier.name ||
+          '—',
+        supplierCode: it.purchaseOrder.supplier.code || null,
+        quantity: qty,
+        unit: it.unit,
+        unitPrice,
+        totalPrice: total
+      };
+    });
+
+    const avgPaidUnitPrice = this.weightedAvgFromPurchaseLines(
+      items.slice(0, ConstructionMaterialController.AVG_PAID_LAST_PURCHASES)
+    );
+
+    return { avgPaidUnitPrice, history };
+  }
+
   async getAllMaterials(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { search, isActive, page = 1, limit = 20 } = req.query;
@@ -306,9 +458,14 @@ export class ConstructionMaterialController {
           .filter((material): material is NonNullable<typeof material> => !!material);
       }
 
+      const avgById = await this.avgPaidByConstructionMaterialIds(ids);
+
       res.json({
         success: true,
-        data: materials.map((m) => this.mapMaterial(m)),
+        data: materials.map((m) => ({
+          ...this.mapMaterial(m),
+          avgPaidUnitPrice: avgById.get(m.id) ?? null
+        })),
         pagination: {
           page: Number(page),
           limit: limitNum,
@@ -368,9 +525,36 @@ export class ConstructionMaterialController {
         throw createError('Material não encontrado', 404);
       }
 
+      const { avgPaidUnitPrice, history } = await this.purchaseHistoryForConstructionMaterial(id);
+
       res.json({
         success: true,
-        data: this.mapMaterial(material)
+        data: {
+          ...this.mapMaterial(material),
+          avgPaidUnitPrice,
+          purchaseHistory: history
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getMaterialPurchaseHistory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const material = await prisma.constructionMaterial.findUnique({
+        where: { id },
+        select: { id: true }
+      });
+      if (!material) {
+        throw createError('Material não encontrado', 404);
+      }
+
+      const { avgPaidUnitPrice, history } = await this.purchaseHistoryForConstructionMaterial(id);
+      res.json({
+        success: true,
+        data: { avgPaidUnitPrice, history }
       });
     } catch (error) {
       next(error);

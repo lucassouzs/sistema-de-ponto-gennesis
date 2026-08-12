@@ -260,6 +260,7 @@ function buildTarefaPreviews(tasks: PlannerTask[], now: Date): TarefaPreview[] {
 export default function HomePage() {
   const handleLogout = useLogout();
   const queryClient = useQueryClient();
+  const { isAdministrator, can, canAccessCollaborationTools } = usePermissions();
   const [now, setNow] = useState<Date>(() => new Date());
   const [profileHydrated, setProfileHydrated] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
@@ -299,12 +300,14 @@ export default function HomePage() {
       return events;
     },
     staleTime: 60_000,
+    enabled: canAccessCollaborationTools,
   });
 
   const { data: taskLists = [], isLoading: loadingTasks } = useQuery({
     queryKey: ['planner-task-lists'],
     queryFn: fetchPlannerTaskLists,
     staleTime: 60_000,
+    enabled: canAccessCollaborationTools,
   });
 
   const todayAgendaItems = useMemo(() => {
@@ -341,8 +344,6 @@ export default function HomePage() {
       void queryClient.invalidateQueries({ queryKey: ['planner-task-lists'] });
     },
   });
-
-  const { isAdministrator, can } = usePermissions();
 
   const canSeePncp =
     isAdministrator ||
@@ -657,6 +658,7 @@ export default function HomePage() {
               </Card>
             )}
 
+            {canAccessCollaborationTools ? (
             <div
               className={`flex min-w-0 flex-col gap-4 sm:gap-6 ${
                 canSeePncp ? '' : 'lg:col-span-3 lg:grid lg:grid-cols-2'
@@ -849,6 +851,7 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             </div>
+            ) : null}
           </div>
         </div>
       </div>

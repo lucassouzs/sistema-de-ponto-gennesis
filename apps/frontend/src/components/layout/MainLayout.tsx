@@ -8,7 +8,7 @@ import React, {
   useState,
 } from 'react';
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   readSidebarCollapsed,
@@ -29,6 +29,7 @@ import { useModalOverlayObserver } from '@/hooks/useModalOverlayObserver';
 import { usePageActivityTracker } from '@/hooks/usePageActivityTracker';
 import { syncModalOpenClass } from '@/lib/modalBodyLock';
 import { MainLayoutShellContext } from './MainLayoutShellContext';
+import { isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAccess';
 import { PageEnter } from './PageEnter';
 
 export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
@@ -102,21 +103,29 @@ export function MainLayout({ children, userRole, userName, onLogout }: MainLayou
 
 function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const defaultLogout = useLogout();
   const handleLogout = onLogout ?? defaultLogout;
   const [isCollapsed, setIsCollapsed] = useState(() => resolveInitialSidebarCollapsed(pathname));
   const [layoutSynced, setLayoutSynced] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const { user } = usePermissions();
+  const { user, canAccessCollaborationTools, isLoading: permissionsLoading } = usePermissions();
   const displayName = userName || user?.name || '';
   const displayRole = (userRole || user?.role || 'EMPLOYEE') as MainLayoutProps['userRole'];
   const realtimeReady = useDeferredRealtimeReady();
-  const realtimeUserId = realtimeReady ? user?.id : undefined;
+  const realtimeUserId =
+    realtimeReady && canAccessCollaborationTools ? user?.id : undefined;
   const nativeCall = useNativeWebRTCCall({ userId: realtimeUserId });
   useChatSounds({ userId: realtimeUserId, callPhase: nativeCall.phase });
   useModalOverlayObserver();
   usePageActivityTracker();
+
+  useEffect(() => {
+    if (permissionsLoading || canAccessCollaborationTools) return;
+    if (!isSociosBlockedCollaborationPath(pathname)) return;
+    router.replace('/ponto/home');
+  }, [permissionsLoading, canAccessCollaborationTools, pathname, router]);
 
   useLayoutEffect(() => {
     setIsCollapsed(resolveInitialSidebarCollapsed(pathname));
@@ -184,7 +193,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
             </main>
           </div>
 
-          {SHOW_CHAT_FLOAT_BUTTON ? <ChatWidgetLazy /> : null}
+          {SHOW_CHAT_FLOAT_BUTTON && canAccessCollaborationTools ? <ChatWidgetLazy /> : null}
 
           <NativeCallOverlay
             call={nativeCall}

@@ -12,11 +12,25 @@ import {
   hasStoredAuthToken,
 } from '@/lib/authSession';
 import { resolveWorkflowApproverNameKey } from '@/lib/fluigWorkflowApproval';
+import { isSociosDepartment, isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAccess';
+import { authService } from '@/lib/auth';
 
 type PermissionItem = { module: string; action: string };
 
 const pk = pathToModuleKey;
 const FLUIG_APROVADORES_CONTROLE_KEY = pk('/ponto/controle/gerenciar-aprovadores-fluig');
+
+function resolveEmployeeDepartment(user: { employee?: { department?: string | null } | null } | null | undefined): string | undefined {
+  const fromApi = user?.employee?.department;
+  if (typeof fromApi === 'string' && fromApi.trim()) return fromApi.trim();
+  try {
+    const stored = authService.getUser()?.employee?.department;
+    if (typeof stored === 'string' && stored.trim()) return stored.trim();
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
 
 export function usePermissions() {
   const queryClient = useQueryClient();
@@ -35,9 +49,20 @@ export function usePermissions() {
           Pragma: 'no-cache',
         },
       });
-      return res.data;
+      const body = res.data;
+      // Mantém localStorage alinhado ao /auth/me (setor atualizado sem precisar relogar)
+      if (body?.data && typeof window !== 'undefined') {
+        try {
+          const remember = Boolean(localStorage.getItem('token'));
+          authService.setUser(body.data, remember);
+        } catch {
+          // ignore quota / private mode
+        }
+      }
+      return body;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: () => hasStoredAuthToken(),
     retry: (failureCount, error) => {
       const status = (error as { response?: { status?: number } })?.response?.status;
@@ -75,7 +100,7 @@ export function usePermissions() {
 
   const user = userData?.data;
   const userPosition = user?.employee?.position;
-  const userDepartment = user?.employee?.department;
+  const userDepartment = resolveEmployeeDepartment(user);
   const isAdministrator = userPosition === 'Administrador';
 
   const { data: permissionData, isPending: permissionsPending } = useQuery({
@@ -180,6 +205,15 @@ export function usePermissions() {
   const isDepartmentJuridico =
     userDepartment?.toLowerCase().includes('jurídico') ||
     userDepartment?.toLowerCase().includes('juridico');
+
+  const isDepartmentSocios = isSociosDepartment(userDepartment);
+  /**
+   * Chat, agenda, flow, drive e tasks (kanban) — ocultos/bloqueados só para quem tem
+   * setor «Sócios» no cadastro do funcionário. Enquanto o usuário carrega, não libera
+   * (evita flash dos atalhos para Sócios).
+   */
+  const canAccessCollaborationTools =
+    !isLoadingUser && !!user && !isDepartmentSocios;
 
   const employeesKey = pk('/ponto/funcionarios');
   const contractsKey = pk('/ponto/contratos');
@@ -425,6 +459,8 @@ export function usePermissions() {
     isDepartmentFinanceiro,
     isDepartmentCompras,
     isDepartmentJuridico,
+    isDepartmentSocios,
+    canAccessCollaborationTools,
     permissions: finalPermissions,
     can,
     canAction,
@@ -496,6 +532,7 @@ export function useRoutePermission(route: string) {
     isDepartmentFinanceiro,
     isDepartmentCompras,
     isDepartmentJuridico,
+    canAccessCollaborationTools,
     can,
     canAccessContract,
     dpApprovalContractIds,
@@ -513,7 +550,12 @@ export function useRoutePermission(route: string) {
     return { hasAccess: false, isLoading: true, canAccessContract };
   }
 
-  // Drive / Kanban / Flow: liberados para qualquer usuário autenticado
+  // Setor Sócios: sem chat, agenda, flow, drive nem tasks
+  if (!canAccessCollaborationTools && isSociosBlockedCollaborationPath(route)) {
+    return { hasAccess: false, isLoading: false, canAccessContract };
+  }
+
+  // Drive / Kanban / Flow: liberados para qualquer usuário autenticado (exceto Sócios acima)
   if (OPEN_ACCESS.has(pk(route))) {
     return { hasAccess: true, isLoading: false, canAccessContract };
   }
@@ -523,6 +565,8 @@ export function useRoutePermission(route: string) {
   const routePermissions: Record<string, boolean> = {
     '/ponto': isAdministrator || isDepartmentPessoal || permissions.canRegisterTime,
     '/ponto/painel-do-sistema': isAdministrator || isDepartmentPessoal || permissions.canViewDashboard,
+    '/ponto/agenda': canAccessCollaborationTools,
+    '/ponto/conversas': canAccessCollaborationTools,
     /**
      * Aprovações: a página agora aparece automaticamente para quem precisa decidir
      * sobre algum bloco. Não há mais entrada na matriz de acessos.

@@ -37,14 +37,35 @@ type MaterialRequestItem = {
   unit: string;
   observation?: string;
   notes?: string;
+  /** Referência da RM (quanto deveria pagar) — só exibição no mapa, não vai pra OC. */
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+  avgPaidUnitPrice?: number | null;
   material: {
     id: string;
     name?: string | null;
     code?: string;
     sinapiCode?: string | null;
     description?: string;
+    avgPaidUnitPrice?: number | null;
   };
 };
+
+function itemAvgPaidUnitPrice(item: MaterialRequestItem): number | null {
+  const raw = item.avgPaidUnitPrice ?? item.material?.avgPaidUnitPrice ?? null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+/** Valor unitário de referência da RM (média como padrão; pode ter sido alterado na solicitação). */
+function itemReferenceUnitPrice(item: MaterialRequestItem): number | null {
+  if (item.unitPrice != null && item.unitPrice !== undefined) {
+    const fromRm = Number(item.unitPrice);
+    if (Number.isFinite(fromRm) && fromRm >= 0) return Math.round(fromRm * 100) / 100;
+  }
+  return itemAvgPaidUnitPrice(item);
+}
 
 type MaterialRequest = MaterialRequestBase & {
   status: 'APPROVED' | string;
@@ -1238,6 +1259,12 @@ export default function MapaCotacaoPage() {
                                 <th className={cadastroListClasses.thCenter}>Unidade</th>
                                 <th className={cadastroListClasses.thCenter}>Qtd. RM</th>
                                 <th className={cadastroListClasses.thCenter}>Qtd. OC</th>
+                                <th
+                                  className={cadastroListClasses.thCenter}
+                                  title="Referência da RM — não entra na OC"
+                                >
+                                  Valor unitário
+                                </th>
                                 {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
                                   const sup = suppliers.find((x) => x.id === supplierId);
                                   return (
@@ -1266,6 +1293,7 @@ export default function MapaCotacaoPage() {
                                 const unitLabel = item.unit || '-';
                                 const maxQty = Number(item.quantity);
                                 const qty = ocItemQtyByItemId[item.id] ?? maxQty;
+                                const refUnit = itemReferenceUnitPrice(item);
                                 const winnerUnit =
                                   winner?.winnerSupplierId != null
                                     ? parseMapUnitPrice(
@@ -1302,6 +1330,11 @@ export default function MapaCotacaoPage() {
                                           setOcItemQtyByItemId((prev) => ({ ...prev, [item.id]: q }))
                                         }
                                       />
+                                    </td>
+                                    <td
+                                      className={`${cadastroListClasses.tdCenter} tabular-nums text-gray-600 dark:text-gray-300`}
+                                    >
+                                      {refUnit == null ? '—' : formatCurrencyBR(refUnit)}
                                     </td>
 
                                     {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
@@ -1363,7 +1396,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                                   <td
-                                    colSpan={5}
+                                    colSpan={6}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Frete
@@ -1396,7 +1429,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                                   <td
-                                    colSpan={5}
+                                    colSpan={6}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Valor total
@@ -1430,7 +1463,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 dark:border-gray-700">
                                   <td
-                                    colSpan={5}
+                                    colSpan={6}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Ordem de compra

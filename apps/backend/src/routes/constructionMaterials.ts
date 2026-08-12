@@ -81,6 +81,11 @@ router.get('/:id', (req, res, next) =>
   constructionMaterialController.getMaterialById(req, res, next)
 );
 
+// Histórico de compras (média paga + linhas de OC efetivas)
+router.get('/:id/purchase-history', (req, res, next) =>
+  constructionMaterialController.getMaterialPurchaseHistory(req, res, next)
+);
+
 // Criar novo material
 router.post('/', (req, res, next) => 
   constructionMaterialController.createMaterial(req, res, next)

@@ -14,7 +14,8 @@ import {
   Download,
   Filter,
   FileSpreadsheet,
-  CheckCircle
+  CheckCircle,
+  Eye
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import {
@@ -27,9 +28,11 @@ import {
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { Modal } from '@/components/ui/Modal';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -323,8 +326,46 @@ interface ConstructionMaterial {
   budgetNature?: BudgetNatureOption | null;
   category?: string;
   isActive: boolean;
+  /** Média ponderada das últimas 10 compras efetivas; null se nunca comprou. */
+  avgPaidUnitPrice?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+type MaterialPurchaseHistoryRow = {
+  id: string;
+  purchaseOrderId: string;
+  orderNumber: string;
+  orderDate: string;
+  status: string;
+  supplierName: string;
+  supplierCode?: string | null;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  totalPrice: number;
+};
+
+function formatMoneyBr(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return '—';
+  return Number(value).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+}
+
+function formatDateBr(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR');
+}
+
+function formatOcNumber(orderNumber?: string | null): string {
+  const raw = (orderNumber || '').trim();
+  if (!raw) return '—';
+  const m = raw.match(/(\d+)\s*$/);
+  return m ? m[1] : raw;
 }
 
 function formatBudgetNatureLabel(bn?: BudgetNatureOption | null): string {
@@ -395,6 +436,8 @@ export default function MateriaisConstrucaoPage() {
     isActive: true
   });
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+  const [detailMaterial, setDetailMaterial] = useState<ConstructionMaterial | null>(null);
+  const [detailTab, setDetailTab] = useState<'detalhes' | 'historico'>('detalhes');
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState('');
   const [importFileName, setImportFileName] = useState('');
@@ -468,6 +511,18 @@ export default function MateriaisConstrucaoPage() {
       });
       return res.data;
     }
+  });
+
+  const { data: purchaseHistoryData, isLoading: loadingPurchaseHistory } = useQuery({
+    queryKey: ['construction-material-purchase-history', detailMaterial?.id],
+    queryFn: async () => {
+      const res = await api.get(`/construction-materials/${detailMaterial!.id}/purchase-history`);
+      return res.data?.data as {
+        avgPaidUnitPrice: number | null;
+        history: MaterialPurchaseHistoryRow[];
+      };
+    },
+    enabled: !!detailMaterial?.id
   });
 
   useEffect(() => {
@@ -669,6 +724,11 @@ export default function MateriaisConstrucaoPage() {
       isActive: true
     });
     setEditingMaterial(null);
+  };
+
+  const openMaterialDetail = (material: ConstructionMaterial) => {
+    setDetailTab('detalhes');
+    setDetailMaterial(material);
   };
 
   const handleEdit = (material: ConstructionMaterial) => {
@@ -1229,9 +1289,10 @@ export default function MateriaisConstrucaoPage() {
                   <colgroup>
                     <col className="w-[4.5rem]" />
                     <col />
-                    <col className="w-[6.5rem]" />
-                    <col className="w-[4rem]" />
-                    <col className="w-[6rem]" />
+                    <col className="w-[7rem]" />
+                    <col className="w-[5rem]" />
+                    <col className="w-[8rem]" />
+                    <col className="w-[7.5rem]" />
                     <col className="w-[4.5rem]" />
                   </colgroup>
                   <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -1242,13 +1303,28 @@ export default function MateriaisConstrucaoPage() {
                       <th scope="col" className={`${cadastroListClasses.th} min-w-[12rem]`}>
                         Nome
                       </th>
-                      <th scope="col" className={cadastroListClasses.th}>
+                      <th
+                        scope="col"
+                        className="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-2 sm:py-4"
+                      >
                         Tipo
                       </th>
-                      <th scope="col" className={cadastroListClasses.th}>
+                      <th
+                        scope="col"
+                        className="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-2 sm:py-4"
+                      >
                         UN
                       </th>
-                      <th scope="col" className={cadastroListClasses.thCenter}>
+                      <th
+                        scope="col"
+                        className="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-2 sm:py-4"
+                      >
+                        Média paga
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-1 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-2 sm:py-4"
+                      >
                         Status
                       </th>
                       <th scope="col" className={cadastroListClasses.thRight}>
@@ -1260,35 +1336,55 @@ export default function MateriaisConstrucaoPage() {
                       {filteredMaterials.map((material: ConstructionMaterial, index: number) => (
                         <tr
                           key={material.id}
-                          className={listTableRowClasses.tr}
+                          role="button"
+                          tabIndex={0}
+                          className={listTableRowClasses.trNavigable}
+                          onClick={() => openMaterialDetail(material)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              openMaterialDetail(material);
+                            }
+                          }}
                         >
                           <td className={cadastroListClasses.tdMono}>
                             {formatCadastroListId(material.code, listRange.startItem + index)}
                           </td>
                           <td className={`${cadastroListClasses.tdTruncate} min-w-[12rem]`}>
-                            <span className="block text-sm font-medium text-gray-900 whitespace-normal break-words dark:text-gray-100">
+                            <ListRowNavigableLabel>
                               {material.name || '-'}
-                            </span>
+                            </ListRowNavigableLabel>
                           </td>
-                          <td className={cadastroListClasses.td}>
-                            {normalizeProductType(material.productType || material.category) ||
-                              material.productType ||
-                              material.category ||
-                              '-'}
+                          <td className="px-1 py-3 align-middle sm:px-2 sm:py-4">
+                            <div className="flex justify-center text-sm text-gray-900 dark:text-gray-100">
+                              {normalizeProductType(material.productType || material.category) ||
+                                material.productType ||
+                                material.category ||
+                                '-'}
+                            </div>
                           </td>
-                          <td className={cadastroListClasses.td}>
-                            {material.unit}
+                          <td className="px-1 py-3 align-middle sm:px-2 sm:py-4">
+                            <div className="flex justify-center text-sm text-gray-900 dark:text-gray-100">
+                              {material.unit}
+                            </div>
                           </td>
-                          <td className={cadastroListClasses.tdCenter}>
-                            <span
-                              className={`inline-flex items-center justify-center rounded-full px-2 py-1 text-xs font-medium ${
-                                material.isActive
-                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
-                              }`}
-                            >
-                              {material.isActive ? 'Ativo' : 'Inativo'}
-                            </span>
+                          <td className="px-1 py-3 align-middle sm:px-2 sm:py-4">
+                            <div className="flex justify-center text-sm tabular-nums text-gray-900 dark:text-gray-100">
+                              {formatMoneyBr(material.avgPaidUnitPrice)}
+                            </div>
+                          </td>
+                          <td className="px-1 py-3 align-middle sm:px-2 sm:py-4">
+                            <div className="flex justify-center">
+                              <span
+                                className={`inline-flex items-center justify-center rounded-full px-2 py-1 text-xs font-medium ${
+                                  material.isActive
+                                    ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                    : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
+                                }`}
+                              >
+                                {material.isActive ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </div>
                           </td>
                           <RowActionMenuCell
                             isOpen={isRowMenuOpen(material.id)}
@@ -1308,6 +1404,13 @@ export default function MateriaisConstrucaoPage() {
                   onClose={closeRowActionMenu}
                   onEdit={() => handleEdit(rowForActionMenu)}
                   onDelete={() => setShowDeleteModal(rowForActionMenu.id)}
+                  extraItems={[
+                    {
+                      label: 'Ver detalhes',
+                      icon: <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />,
+                      onClick: () => openMaterialDetail(rowForActionMenu)
+                    }
+                  ]}
                 />
               )}
               
@@ -1366,6 +1469,172 @@ export default function MateriaisConstrucaoPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Modal
+          isOpen={!!detailMaterial}
+          onClose={() => setDetailMaterial(null)}
+          title={
+            detailMaterial
+              ? `${detailMaterial.code ? `${detailMaterial.code} — ` : ''}${detailMaterial.name}`
+              : 'Detalhes do material'
+          }
+          size="xl"
+        >
+          {detailMaterial ? (
+            <div className="space-y-5">
+              <SegmentedControl
+                aria-label="Seções do material"
+                value={detailTab}
+                onChange={setDetailTab}
+                options={[
+                  { value: 'detalhes', label: 'Detalhes' },
+                  { value: 'historico', label: 'Histórico de compras' },
+                ]}
+              />
+
+              {detailTab === 'detalhes' ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Tipo
+                    </p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                      {normalizeProductType(detailMaterial.productType || detailMaterial.category) ||
+                        detailMaterial.productType ||
+                        detailMaterial.category ||
+                        '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Unidade
+                    </p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                      {detailMaterial.unit || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Natureza orçamentária
+                    </p>
+                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
+                      {formatBudgetNatureLabel(detailMaterial.budgetNature)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Média paga (últimas 10)
+                    </p>
+                    <p className="mt-1 text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                      {formatMoneyBr(
+                        purchaseHistoryData?.avgPaidUnitPrice ?? detailMaterial.avgPaidUnitPrice
+                      )}
+                      <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">
+                        / {detailMaterial.unit || 'un'}
+                      </span>
+                    </p>
+                  </div>
+                  {detailMaterial.description?.trim() ? (
+                    <div className="sm:col-span-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Descrição
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
+                        {detailMaterial.description.trim()}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {loadingPurchaseHistory ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Carregando histórico…</p>
+                  ) : !(purchaseHistoryData?.history?.length) ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhuma compra efetiva registrada para este item.
+                    </p>
+                  ) : (
+                    <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
+                      <table className="w-full min-w-[40rem] text-sm">
+                        <thead className="border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                              Data
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                              OC
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                              Fornecedor
+                            </th>
+                            <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">
+                              Qtd.
+                            </th>
+                            <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">
+                              V. unit.
+                            </th>
+                            <th className="px-3 py-2 text-right text-xs font-medium uppercase text-gray-500">
+                              Total
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {purchaseHistoryData.history.map((row) => (
+                            <tr key={row.id}>
+                              <td className="whitespace-nowrap px-3 py-2 text-gray-700 dark:text-gray-300">
+                                {formatDateBr(row.orderDate)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 font-medium text-gray-900 dark:text-gray-100">
+                                {formatOcNumber(row.orderNumber)}
+                              </td>
+                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                                {row.supplierName}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                                {Number(row.quantity).toLocaleString('pt-BR')} {row.unit}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-300">
+                                {formatMoneyBr(row.unitPrice)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums font-medium text-gray-900 dark:text-gray-100">
+                                {formatMoneyBr(row.totalPrice)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Lista todas as compras efetivas (após diretoria). A média paga (aba Detalhes) usa
+                    só as últimas 10, ponderada pela quantidade.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const m = detailMaterial;
+                    setDetailMaterial(null);
+                    if (m) handleEdit(m);
+                  }}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailMaterial(null)}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
 
         {/* Modal de confirmação de exclusão */}
         {showDeleteModal && (

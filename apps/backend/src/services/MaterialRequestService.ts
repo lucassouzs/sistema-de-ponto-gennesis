@@ -1,7 +1,21 @@
 import { prisma } from '../lib/prisma';
-import { type EngineeringMaterial, Prisma } from '@prisma/client';
+import { type EngineeringMaterial, Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
 import { resolveRmServiceOrderFields } from '../utils/materialRequestServiceOrder';
+
+/** OCs já aprovadas (ou etapas posteriores) — entram na média paga das últimas compras. */
+const EFFECTIVE_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = [
+  PurchaseOrderStatus.APPROVED,
+  PurchaseOrderStatus.PENDING_PROOF_VALIDATION,
+  PurchaseOrderStatus.PENDING_PROOF_CORRECTION,
+  PurchaseOrderStatus.PENDING_NF_ATTACHMENT,
+  PurchaseOrderStatus.SENT,
+  PurchaseOrderStatus.FINALIZED,
+  PurchaseOrderStatus.PARTIALLY_RECEIVED,
+  PurchaseOrderStatus.RECEIVED
+];
+
+const AVG_PAID_LAST_PURCHASES = 10;
 
 /** Lock de sessão Postgres para serializar geração de requestNumber (mesmo padrão de DpRequest). */
 const MATERIAL_REQUEST_NUMBER_ADVISORY_LOCK = 91827365;
@@ -134,6 +148,8 @@ export interface RmDropdownMaterial {
   description: string;
   unit: string;
   medianPrice: number | null;
+  /** Média ponderada das últimas 10 compras efetivas (OCs aprovadas+). */
+  avgPaidUnitPrice: number | null;
 }
 
 export interface CreateMaterialRequestData {
@@ -152,6 +168,8 @@ export interface CreateMaterialRequestData {
   items: {
     materialId: string;
     quantity: number;
+    /** Valor unitário informado na RM (editável; padrão = média paga). */
+    unitPrice?: number | null;
     notes?: string;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
@@ -176,6 +194,7 @@ export interface UpdateMaterialRequestCorrectionData {
   items: {
     materialId: string;
     quantity: number;
+    unitPrice?: number | null;
     notes?: string;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
@@ -205,6 +224,79 @@ export class MaterialRequestService {
     if (normalizeDemandSheetAttachments(data).length === 0) {
       throw new Error('Anexo da ficha de demanda é obrigatório');
     }
+  }
+
+  private weightedAvgFromPurchaseLines(
+    lines: Array<{ quantity: unknown; unitPrice: unknown }>
+  ): number | null {
+    let sumQty = 0;
+    let sumAmount = 0;
+    for (const it of lines) {
+      const qty = Number(it.quantity);
+      const unitPrice = Number(it.unitPrice);
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(unitPrice)) continue;
+      sumQty += qty;
+      sumAmount += qty * unitPrice;
+    }
+    if (sumQty <= 0) return null;
+    return Math.round((sumAmount / sumQty) * 100) / 100;
+  }
+
+  /** Média ponderada das últimas N compras efetivas por EngineeringMaterial.id. */
+  private async avgPaidByEngineeringMaterialIds(
+    engIds: string[]
+  ): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    const unique = [...new Set(engIds.filter(Boolean))];
+    if (unique.length === 0) return result;
+
+    const items = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialId: { in: unique },
+        purchaseOrder: { status: { in: EFFECTIVE_PURCHASE_ORDER_STATUSES } }
+      },
+      select: {
+        materialId: true,
+        quantity: true,
+        unitPrice: true,
+        createdAt: true,
+        purchaseOrder: { select: { orderDate: true } }
+      },
+      orderBy: [{ purchaseOrder: { orderDate: 'desc' } }, { createdAt: 'desc' }]
+    });
+
+    const byEng = new Map<string, Array<{ quantity: unknown; unitPrice: unknown }>>();
+    for (const it of items) {
+      const list = byEng.get(it.materialId) || [];
+      if (list.length >= AVG_PAID_LAST_PURCHASES) continue;
+      list.push({ quantity: it.quantity, unitPrice: it.unitPrice });
+      byEng.set(it.materialId, list);
+    }
+
+    for (const [engId, lines] of byEng) {
+      const avg = this.weightedAvgFromPurchaseLines(lines);
+      if (avg != null) result.set(engId, avg);
+    }
+    return result;
+  }
+
+  /**
+   * Prioridade: unitPrice do cliente (editável na RM) → média paga → mediana SINAPI → 0.
+   */
+  private resolveItemUnitPrice(
+    clientUnitPrice: number | null | undefined,
+    avgPaid: number | null | undefined,
+    medianPrice: unknown
+  ): number {
+    if (clientUnitPrice != null && clientUnitPrice !== undefined) {
+      const n = Number(clientUnitPrice);
+      if (Number.isFinite(n) && n >= 0) return Math.round(n * 100) / 100;
+    }
+    if (avgPaid != null && Number.isFinite(avgPaid) && avgPaid >= 0) {
+      return Math.round(avgPaid * 100) / 100;
+    }
+    const rawMedian = medianPrice != null ? Number(medianPrice) : 0;
+    return Number.isFinite(rawMedian) ? Math.round(rawMedian * 100) / 100 : 0;
   }
 
   /**
@@ -290,9 +382,15 @@ export class MaterialRequestService {
         name: cm.name,
         description: cm.description || eng.description || '',
         unit: eng.unit,
-        medianPrice: eng.medianPrice ? Number(eng.medianPrice) : null
+        medianPrice: eng.medianPrice ? Number(eng.medianPrice) : null,
+        avgPaidUnitPrice: null
       };
     });
+
+    const avgByEng = await this.avgPaidByEngineeringMaterialIds(mapped.map((m) => m.id));
+    for (const m of mapped) {
+      m.avgPaidUnitPrice = avgByEng.get(m.id) ?? null;
+    }
 
     mapped.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return mapped;
@@ -410,6 +508,10 @@ export class MaterialRequestService {
     const demandSheet = (data.demandSheet || '').trim() || null;
     const demandSheetFiles = normalizeDemandSheetAttachments(data);
 
+    const avgPaidByMaterial = await this.avgPaidByEngineeringMaterialIds(
+      data.items.map((i) => i.materialId)
+    );
+
     // Serializa geração de requestNumber + create (evita race em UNIQUE)
     const request = await prisma.$transaction(
       async (tx) => {
@@ -436,11 +538,13 @@ export class MaterialRequestService {
             create: data.items.map(item => {
               const material = materialMap.get(item.materialId);
               const qty = Number(item.quantity);
-              const rawMedian = material?.medianPrice;
-              const unitPriceNum = rawMedian != null ? Number(rawMedian) : 0;
-              const safeUnit = Number.isFinite(unitPriceNum) ? unitPriceNum : 0;
+              const safeUnit = this.resolveItemUnitPrice(
+                item.unitPrice,
+                avgPaidByMaterial.get(item.materialId),
+                material?.medianPrice
+              );
               const totalPrice = safeUnit * qty;
-              const safeTotal = Number.isFinite(totalPrice) ? totalPrice : 0;
+              const safeTotal = Number.isFinite(totalPrice) ? Math.round(totalPrice * 100) / 100 : 0;
 
               return {
                 materialId: item.materialId,
@@ -730,7 +834,7 @@ export class MaterialRequestService {
         );
         const files = parseDemandSheetAttachments(rows[0]?.demandSheetAttachments);
         if (files.length > 0) {
-          return {
+          return this.attachAvgPaidToMaterialRequestItems({
             ...enriched,
             demandSheetAttachments: files,
             demandSheetAttachmentUrl:
@@ -739,14 +843,40 @@ export class MaterialRequestService {
             demandSheetAttachmentName:
               (enriched as { demandSheetAttachmentName?: string | null }).demandSheetAttachmentName ??
               files[0].name,
-          };
+          });
         }
       } catch {
         // ignora se a coluna ainda não existir
       }
     }
 
-    return enriched;
+    return this.attachAvgPaidToMaterialRequestItems(enriched);
+  }
+
+  /** Anexa média paga (últimas 10 OCs) em cada item — só referência (mapa/modais), não afeta OC. */
+  private async attachAvgPaidToMaterialRequestItems<T extends { items?: Array<{ materialId?: string; material?: { id?: string } | null }> | null }>(
+    request: T | null
+  ): Promise<T | null> {
+    if (!request?.items?.length) return request;
+
+    const engIds = request.items
+      .map((it) => it.materialId || it.material?.id || '')
+      .filter(Boolean);
+    const avgByEng = await this.avgPaidByEngineeringMaterialIds(engIds);
+
+    const items = request.items.map((it) => {
+      const materialId = it.materialId || it.material?.id || '';
+      const avgPaidUnitPrice = materialId ? avgByEng.get(materialId) ?? null : null;
+      return {
+        ...it,
+        avgPaidUnitPrice,
+        material: it.material
+          ? { ...it.material, avgPaidUnitPrice }
+          : it.material,
+      };
+    });
+
+    return { ...request, items };
   }
 
   /**
@@ -925,14 +1055,20 @@ export class MaterialRequestService {
     const obra = (data.obra || '').trim() || null;
     const demandSheetFiles = normalizeDemandSheetAttachments(data);
 
+    const avgPaidByMaterial = await this.avgPaidByEngineeringMaterialIds(
+      data.items.map((i) => i.materialId)
+    );
+
     const itemCreates = data.items.map((item) => {
       const material = materialMap.get(item.materialId)!;
       const qty = Number(item.quantity);
-      const rawMedian = material.medianPrice;
-      const unitPriceNum = rawMedian != null ? Number(rawMedian) : 0;
-      const safeUnit = Number.isFinite(unitPriceNum) ? unitPriceNum : 0;
+      const safeUnit = this.resolveItemUnitPrice(
+        item.unitPrice,
+        avgPaidByMaterial.get(item.materialId),
+        material.medianPrice
+      );
       const totalPrice = safeUnit * qty;
-      const safeTotal = Number.isFinite(totalPrice) ? totalPrice : 0;
+      const safeTotal = Number.isFinite(totalPrice) ? Math.round(totalPrice * 100) / 100 : 0;
       return {
         materialId: item.materialId,
         quantity: qty,

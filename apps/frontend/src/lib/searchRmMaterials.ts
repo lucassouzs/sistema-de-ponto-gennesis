@@ -6,6 +6,9 @@ export type RmMaterialListItem = {
   name?: string;
   description?: string;
   unit?: string;
+  /** Média ponderada das últimas 10 compras efetivas. */
+  avgPaidUnitPrice?: number | null;
+  medianPrice?: number | null;
 };
 
 export function getRmMaterialLabel(material?: RmMaterialListItem | null): string {
