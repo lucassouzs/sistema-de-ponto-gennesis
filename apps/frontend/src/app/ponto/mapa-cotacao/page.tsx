@@ -1263,7 +1263,7 @@ export default function MapaCotacaoPage() {
                                   className={cadastroListClasses.thCenter}
                                   title="Referência da RM — não entra na OC"
                                 >
-                                  Valor unitário
+                                  Valor referência
                                 </th>
                                 {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
                                   const sup = suppliers.find((x) => x.id === supplierId);

@@ -2568,7 +2568,7 @@ function SolicitarMateriaisPage() {
                               </div>
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div>
-                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Valor unitário</label>
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Valor referência</label>
                                   <div className="relative">
                                     <input
                                       type="text"
@@ -2885,7 +2885,7 @@ function SolicitarMateriaisPage() {
                                       Un.
                                     </th>
                                     <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
-                                      Valor unitário
+                                      Valor referência
                                     </th>
                                   </tr>
                                 </thead>
@@ -3238,7 +3238,7 @@ function SolicitarMateriaisPage() {
                           </div>
                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
-                              <label className={RM_FORM_FIELD_LABEL_CLS}>Valor unitário</label>
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Valor referência</label>
                               <div className="relative">
                                 <input
                                   type="text"

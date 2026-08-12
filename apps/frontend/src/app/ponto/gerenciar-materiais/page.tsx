@@ -1007,7 +1007,7 @@ export default function GerenciarMateriaisPage() {
                                 Un.
                               </th>
                               <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
-                                Valor unitário
+                                Valor referência
                               </th>
                             </tr>
                           </thead>
