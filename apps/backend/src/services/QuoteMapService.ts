@@ -3,8 +3,10 @@ import { prisma } from '../lib/prisma';
 import { PurchaseOrderService } from './PurchaseOrderService';
 import fs from 'fs';
 import path from 'path';
+import { PassThrough } from 'stream';
 import PDFDocument from 'pdfkit';
 import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentBuffer } from '../lib/persistentUpload';
 import { shouldUseUnbBranding, resolvePdfLogoPathFromPublic } from '../lib/unbBranding';
 
 export class QuoteMapService {
@@ -66,14 +68,16 @@ export class QuoteMapService {
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
-    const outputDir = path.join(backendUploadsRoot, 'quote-maps', map.id);
-    fs.mkdirSync(outputDir, { recursive: true });
-    const filePath = path.join(outputDir, 'snapshot.pdf');
     const publicUrl = `/uploads/quote-maps/${map.id}/snapshot.pdf`;
 
-    await new Promise<void>((resolve, reject) => {
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
-      const stream = fs.createWriteStream(filePath);
+      const stream = new PassThrough();
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      stream.on('error', reject);
+      doc.on('error', reject);
+      stream.on('finish', () => resolve(Buffer.concat(chunks)));
       doc.pipe(stream);
 
       const pageWidth = doc.page.width;
@@ -196,9 +200,14 @@ export class QuoteMapService {
         });
 
       doc.end();
-      stream.on('finish', () => resolve());
-      stream.on('error', reject);
-      doc.on('error', reject);
+    });
+
+    await savePersistentBuffer({
+      folder: `quote-maps/${map.id}`,
+      fileName: 'snapshot.pdf',
+      buffer: pdfBuffer,
+      mimeType: 'application/pdf',
+      keepLocalCopy: true,
     });
 
     return publicUrl;

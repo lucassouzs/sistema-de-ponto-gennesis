@@ -1,12 +1,9 @@
 import { Router } from 'express';
 import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { StockController } from '../controllers/StockController';
 import { StockShortfallController } from '../controllers/StockShortfallController';
 import { authenticate } from '../middleware/auth';
-import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentUpload } from '../lib/persistentUpload';
 
 const router = Router();
 const stockController = new StockController();
@@ -89,25 +86,26 @@ router.post('/upload-invoice', (req, res, next) => {
     }
     next();
   });
-}, (req, res, next) => {
+}, async (req, res, next) => {
   try {
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'Selecione um arquivo para enviar' });
       return;
     }
 
-    const uploadsDir = path.join(backendUploadsRoot, 'stock-invoices');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const fileName = `nf-${uuidv4()}${ext.length <= 8 ? ext : '.bin'}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'stock-invoices',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileNamePrefix: 'nf-',
+    });
 
     res.json({
       success: true,
       data: {
-        url: `/uploads/stock-invoices/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {
@@ -125,25 +123,26 @@ router.post('/upload-withdrawal-sheet', (req, res, next) => {
     }
     next();
   });
-}, (req, res, next) => {
+}, async (req, res, next) => {
   try {
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'Selecione um arquivo para enviar' });
       return;
     }
 
-    const uploadsDir = path.join(backendUploadsRoot, 'stock-withdrawal-sheets');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const fileName = `ficha-retirada-${uuidv4()}${ext.length <= 8 ? ext : '.bin'}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'stock-withdrawal-sheets',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileNamePrefix: 'ficha-retirada-',
+    });
 
     res.json({
       success: true,
       data: {
-        url: `/uploads/stock-withdrawal-sheets/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {
@@ -161,25 +160,26 @@ router.post('/upload-payment-slip', (req, res, next) => {
     }
     next();
   });
-}, (req, res, next) => {
+}, async (req, res, next) => {
   try {
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'Selecione um arquivo para enviar' });
       return;
     }
 
-    const uploadsDir = path.join(backendUploadsRoot, 'stock-payment-slips');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const fileName = `boleto-${uuidv4()}${ext.length <= 8 ? ext : '.bin'}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'stock-payment-slips',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileNamePrefix: 'boleto-',
+    });
 
     res.json({
       success: true,
       data: {
-        url: `/uploads/stock-payment-slips/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {

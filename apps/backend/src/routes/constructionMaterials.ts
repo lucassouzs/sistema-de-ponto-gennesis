@@ -1,11 +1,8 @@
 import { Router } from 'express';
-import fs from 'fs';
 import multer from 'multer';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { ConstructionMaterialController } from '../controllers/ConstructionMaterialController';
 import { authenticate } from '../middleware/auth';
-import { backendUploadsRoot } from '../lib/uploads';
+import { savePersistentUpload } from '../lib/persistentUpload';
 
 const router = Router();
 const constructionMaterialController = new ConstructionMaterialController();
@@ -33,25 +30,25 @@ router.post('/upload-image', (req, res, next) => {
     }
     next();
   });
-}, (req, res, next) => {
+}, async (req, res, next) => {
   try {
     if (!req.file?.buffer) {
       res.status(400).json({ success: false, message: 'Selecione uma imagem para enviar' });
       return;
     }
 
-    const uploadsDir = path.join(backendUploadsRoot, 'construction-materials');
-    fs.mkdirSync(uploadsDir, { recursive: true });
-
-    const ext = path.extname(req.file.originalname || '') || '.bin';
-    const fileName = `${uuidv4()}${ext.length <= 8 ? ext : '.bin'}`;
-    fs.writeFileSync(path.join(uploadsDir, fileName), req.file.buffer);
+    const saved = await savePersistentUpload({
+      folder: 'construction-materials',
+      buffer: req.file.buffer,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+    });
 
     res.json({
       success: true,
       data: {
-        url: `/uploads/construction-materials/${fileName}`,
-        originalName: req.file.originalname || fileName
+        url: saved.url,
+        originalName: req.file.originalname || saved.fileName
       }
     });
   } catch (error) {

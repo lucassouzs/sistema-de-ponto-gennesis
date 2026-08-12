@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
 import { backendUploadsRoot } from '../lib/uploads';
+import { readPersistentUpload, savePersistentUpload } from '../lib/persistentUpload';
 import { getPrisma } from '../lib/prisma';
 import { buildLicitacaoTituloExibicao } from '../lib/licitacaoDisplay';
 import { extractRegiaoKeyFromAnaliseJson, extractRegiaoLabelFromAnaliseJson } from '../lib/licitacaoRegiao';
@@ -558,16 +558,10 @@ function serializeLicitacao(row: {
   };
 }
 
-function uploadsDir(): string {
-  const dir = path.join(backendUploadsRoot, UPLOAD_SUBDIR);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function readDocumentBuffer(storagePath: string): Buffer {
-  const relative = storagePath.replace(/^\/uploads\//, '');
-  const full = path.join(backendUploadsRoot, relative);
-  return fs.readFileSync(full);
+async function readDocumentBuffer(storagePath: string): Promise<Buffer> {
+  const buf = await readPersistentUpload(storagePath);
+  if (!buf) throw new Error('Arquivo do documento não encontrado');
+  return buf;
 }
 
 export class LicitacaoService {
@@ -947,15 +941,17 @@ export class LicitacaoService {
     if (!file.buffer?.length) throw new Error('Selecione um arquivo');
     if (file.size > MAX_FILE_SIZE) throw new Error('Arquivo muito grande. Máximo: 15 MB');
 
-    const ext = path.extname(file.originalname || '') || '.bin';
-    const safeExt = ext.length <= 8 ? ext : '.bin';
-    const fileName = `${uuidv4()}${safeExt}`;
-    fs.writeFileSync(path.join(uploadsDir(), fileName), file.buffer);
+    const saved = await savePersistentUpload({
+      folder: UPLOAD_SUBDIR,
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+    });
 
-    const storagePath = `/uploads/${UPLOAD_SUBDIR}/${fileName}`;
+    const storagePath = saved.url;
     const doc = await licitacaoStoreAddDocumento({
       licitacaoId,
-      originalName: file.originalname || fileName,
+      originalName: file.originalname || saved.fileName,
       storagePath,
       mimeType: file.mimetype || 'application/octet-stream',
       size: file.size,
@@ -998,11 +994,15 @@ export class LicitacaoService {
     const docs = await licitacaoStoreListDocumentos(licitacaoId);
     if (docs.length === 0) throw new Error('Anexe pelo menos um documento antes de analisar');
 
-    return docs.map((d) => ({
-      buffer: readDocumentBuffer(d.storagePath),
-      mimeType: d.mimeType,
-      name: d.originalName,
-    }));
+    const out: DocumentInput[] = [];
+    for (const d of docs) {
+      out.push({
+        buffer: await readDocumentBuffer(d.storagePath),
+        mimeType: d.mimeType,
+        name: d.originalName,
+      });
+    }
+    return out;
   }
 
   private async buildDocumentIndex(
