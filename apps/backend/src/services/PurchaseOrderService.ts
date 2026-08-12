@@ -3110,4 +3110,77 @@ export class PurchaseOrderService {
       }
     }
   }
+
+  async listComments(purchaseOrderId: string) {
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: { id: true },
+    });
+    if (!existing) throw new Error('Ordem de compra não encontrada');
+
+    const rows = await prisma.purchaseOrderComment.findMany({
+      where: { purchaseOrderId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        author: { select: { id: true, name: true, profilePhotoUrl: true } },
+      },
+    });
+
+    return rows.map((c) => ({
+      id: c.id,
+      content: c.content,
+      createdAt: c.createdAt.toISOString(),
+      author: {
+        id: c.author.id,
+        name: c.author.name,
+        profilePhotoUrl: c.author.profilePhotoUrl,
+      },
+    }));
+  }
+
+  async createComment(purchaseOrderId: string, userId: string, content: string) {
+    const text = content.trim();
+    if (!text) throw new Error('Escreva um comentário');
+    if (text.length > 4000) throw new Error('Comentário muito longo (máx. 4000 caracteres)');
+
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: { id: true },
+    });
+    if (!existing) throw new Error('Ordem de compra não encontrada');
+
+    const comment = await prisma.purchaseOrderComment.create({
+      data: {
+        purchaseOrderId,
+        userId,
+        content: text,
+      },
+      include: {
+        author: { select: { id: true, name: true, profilePhotoUrl: true } },
+      },
+    });
+
+    return {
+      id: comment.id,
+      content: comment.content,
+      createdAt: comment.createdAt.toISOString(),
+      author: {
+        id: comment.author.id,
+        name: comment.author.name,
+        profilePhotoUrl: comment.author.profilePhotoUrl,
+      },
+    };
+  }
+
+  async deleteComment(commentId: string, userId: string, isAdmin: boolean) {
+    const comment = await prisma.purchaseOrderComment.findUnique({
+      where: { id: commentId },
+      select: { id: true, userId: true },
+    });
+    if (!comment) throw new Error('Comentário não encontrado');
+    if (!isAdmin && comment.userId !== userId) {
+      throw new Error('Sem permissão para excluir este comentário');
+    }
+    await prisma.purchaseOrderComment.delete({ where: { id: commentId } });
+  }
 }

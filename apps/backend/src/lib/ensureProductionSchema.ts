@@ -132,6 +132,94 @@ async function ensureMaterialRequestItemColumns(prisma: PrismaClient): Promise<v
   }
 }
 
+async function ensureMaterialRequestCommentsTable(prisma: PrismaClient): Promise<void> {
+  if (await tableExists(prisma, 'material_request_comments')) return;
+  console.warn('[Schema] Tabela material_request_comments ausente — criando.');
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "material_request_comments" (
+      "id" TEXT NOT NULL,
+      "materialRequestId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "content" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "material_request_comments_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "material_request_comments_materialRequestId_idx"
+      ON "material_request_comments"("materialRequestId");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "material_request_comments_userId_idx"
+      ON "material_request_comments"("userId");
+  `);
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "material_request_comments"
+        ADD CONSTRAINT "material_request_comments_materialRequestId_fkey"
+        FOREIGN KEY ("materialRequestId") REFERENCES "material_requests"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    `);
+  } catch {
+    /* constraint already exists */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "material_request_comments"
+        ADD CONSTRAINT "material_request_comments_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    `);
+  } catch {
+    /* constraint already exists */
+  }
+}
+
+async function ensurePurchaseOrderCommentsTable(prisma: PrismaClient): Promise<void> {
+  if (await tableExists(prisma, 'purchase_order_comments')) return;
+  console.warn('[Schema] Tabela purchase_order_comments ausente — criando.');
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "purchase_order_comments" (
+      "id" TEXT NOT NULL,
+      "purchaseOrderId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "content" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "purchase_order_comments_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "purchase_order_comments_purchaseOrderId_idx"
+      ON "purchase_order_comments"("purchaseOrderId");
+  `);
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "purchase_order_comments_userId_idx"
+      ON "purchase_order_comments"("userId");
+  `);
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "purchase_order_comments"
+        ADD CONSTRAINT "purchase_order_comments_purchaseOrderId_fkey"
+        FOREIGN KEY ("purchaseOrderId") REFERENCES "purchase_orders"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    `);
+  } catch {
+    /* constraint already exists */
+  }
+  try {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "purchase_order_comments"
+        ADD CONSTRAINT "purchase_order_comments_userId_fkey"
+        FOREIGN KEY ("userId") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    `);
+  } catch {
+    /* constraint already exists */
+  }
+}
+
 async function ensureDemandSheetApprovals(prisma: PrismaClient): Promise<void> {
   if (!(await tableExists(prisma, 'demand_sheet_approvals'))) {
     console.warn('[Schema] Tabela demand_sheet_approvals ausente — criando.');
@@ -1177,6 +1265,8 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureContractAddendaTable(prisma);
     await ensureMaterialRequestColumns(prisma);
     await ensureMaterialRequestItemColumns(prisma);
+    await ensureMaterialRequestCommentsTable(prisma);
+    await ensurePurchaseOrderCommentsTable(prisma);
     await ensureDemandSheetApprovals(prisma);
     await ensurePurchaseOrderStageApprovals(prisma);
     await ensurePurchaseOrderAttachmentsColumn(prisma);

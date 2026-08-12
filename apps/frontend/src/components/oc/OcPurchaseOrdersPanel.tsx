@@ -107,6 +107,7 @@ import {
   ocToApprovalStatus,
 } from '@/app/ponto/aprovacoes/_components/ApprovalStatusBadge';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
+import { OcCommentsSection } from '@/components/oc/OcCommentsSection';
 import { FinancialControlEntryFormModal } from '@/components/financeiro/FinancialControlEntryFormModal';
 import {
   MONTHS_PT,
@@ -797,14 +798,15 @@ function parseStockMovementAttachmentsFromNotes(notes?: string | null): StockMov
   return bundle;
 }
 
-type OcDetailModalTab = 'resumo' | 'materiais' | 'pagamento' | 'documentos' | 'estoque';
+type OcDetailModalTab = 'resumo' | 'materiais' | 'pagamento' | 'documentos' | 'estoque' | 'comentarios';
 
 const OC_DETAIL_MODAL_TABS: { id: OcDetailModalTab; label: string }[] = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'materiais', label: 'Materiais' },
   { id: 'pagamento', label: 'Pagamento' },
   { id: 'estoque', label: 'Estoque' },
-  { id: 'documentos', label: 'Documentos' }
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'comentarios', label: 'Comentários' }
 ];
 
 /** Fases do fluxo em que a modal deve abrir direto na aba Pagamento. */
@@ -6056,6 +6058,12 @@ export function OcPurchaseOrdersPanel({
                   </div>
                 );
               })()
+              ) : null}
+              {ocDetailTab === 'comentarios' ? (
+                <OcCommentsSection
+                  purchaseOrderId={selectedOrder.id}
+                  currentUserId={currentUserId}
+                />
               ) : null}
             </div>
             )}

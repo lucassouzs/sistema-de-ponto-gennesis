@@ -53,6 +53,7 @@ import {
   type RmCardFilter
 } from './_lib/rmCardFilter';
 import { formatRmListDisplayId } from './_lib/rmListDisplay';
+import { RmCommentsSection } from './_components/RmCommentsSection';
 
 const ocFieldCls =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 disabled:cursor-not-allowed disabled:opacity-50';
@@ -945,6 +946,10 @@ export default function GerenciarMateriaisPage() {
                     </table>
                   </div>
                 </div>
+                <RmCommentsSection
+                  materialRequestId={selectedRequest.id}
+                  currentUserId={userData?.data?.id}
+                />
               </div>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-4 dark:border-gray-700">

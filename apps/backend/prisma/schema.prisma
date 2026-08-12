@@ -121,6 +121,8 @@ model User {
   toolRentalRequestsAssigned              ToolRentalRequest[]  @relation("ToolRentalRequestAssignedUser")
   toolRentalRequestsSuppliesApproved      ToolRentalRequest[]  @relation("ToolRentalRequestSuppliesApprover")
   toolRentalRequestEvents                 ToolRentalRequestEvent[] @relation("ToolRentalRequestEventActor")
+  materialRequestComments                 MaterialRequestComment[] @relation("MaterialRequestCommentAuthor")
+  purchaseOrderComments                   PurchaseOrderComment[] @relation("PurchaseOrderCommentAuthor")
 
   @@map("users")
 }
@@ -1554,6 +1556,7 @@ model MaterialRequest {
   items          MaterialRequestItem[]
   purchaseOrders PurchaseOrder[]
   quoteMaps      QuoteMap[]            @relation("QuoteMapMaterialRequest")
+  comments       MaterialRequestComment[]
 
   @@index([requestNumber])
   @@index([requestedBy])
@@ -1684,6 +1687,22 @@ model MaterialRequestItem {
   @@index([materialId])
   @@index([status])
   @@map("material_request_items")
+}
+
+model MaterialRequestComment {
+  id                String   @id @default(cuid())
+  materialRequestId String
+  userId            String
+  content           String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  materialRequest MaterialRequest @relation(fields: [materialRequestId], references: [id], onDelete: Cascade)
+  author          User            @relation("MaterialRequestCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([materialRequestId])
+  @@index([userId])
+  @@map("material_request_comments")
 }
 
 enum MaterialRequestItemStatus {
@@ -1911,6 +1930,7 @@ model PurchaseOrder {
   materialDeliveries MaterialDelivery[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
   invoiceNumbers    PurchaseOrderInvoiceNumber[]
+  comments          PurchaseOrderComment[]
 
   @@index([orderNumber])
   @@index([materialRequestId])
@@ -1919,6 +1939,22 @@ model PurchaseOrder {
   @@index([status])
   @@index([orderDate])
   @@map("purchase_orders")
+}
+
+model PurchaseOrderComment {
+  id              String   @id @default(cuid())
+  purchaseOrderId String
+  userId          String
+  content         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  author        User          @relation("PurchaseOrderCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([userId])
+  @@map("purchase_order_comments")
 }
 
 /// Número de NF vinculado à OC (unicidade global entre OCs).
