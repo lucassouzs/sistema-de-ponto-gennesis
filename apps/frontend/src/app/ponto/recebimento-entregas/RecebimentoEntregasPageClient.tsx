@@ -735,7 +735,8 @@ export default function RecebimentoEntregasPageClient() {
         <Modal
           isOpen={Boolean(confirmRow)}
           onClose={() => setConfirmRow(null)}
-          title="Confirmar recebimento"
+          confirmBeforeClose={false}
+      title="Confirmar recebimento"
         >
           {confirmRow ? (
             <div className="space-y-4">

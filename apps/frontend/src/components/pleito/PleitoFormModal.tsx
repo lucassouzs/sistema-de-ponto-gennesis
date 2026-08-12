@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
@@ -88,6 +89,12 @@ export function PleitoFormModal({ contractId, contractDisplay, pleitoToEdit, onC
   const [form, setForm] = useState(() => (pleitoToEdit ? pleitoToForm(pleitoToEdit) : emptyForm()));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -127,11 +134,11 @@ export function PleitoFormModal({ contractId, contractDisplay, pleitoToEdit, onC
 
   const modalContent = (
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-2">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} aria-hidden />
+      <div className="fixed inset-0 bg-black/50" onClick={requestClose} aria-hidden />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b bg-white dark:bg-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{isEdit ? 'Editar Ordem de Serviço' : 'Novo Ordem de Serviço'}</h3>
-          <button onClick={onClose} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+          <button onClick={requestClose} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -296,5 +303,11 @@ export function PleitoFormModal({ contractId, contractDisplay, pleitoToEdit, onC
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return createPortal(
+    <>
+      {modalContent}
+      {confirmUi}
+    </>,
+    document.body
+  );
 }

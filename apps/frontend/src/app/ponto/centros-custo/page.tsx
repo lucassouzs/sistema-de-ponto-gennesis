@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Building2, Plus, Search, X, Check, AlertCircle, Upload, Download, CheckCircle, FileSpreadsheet, Loader2, Filter } from 'lucide-react';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/CadastroListSummary';
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -665,18 +666,25 @@ function CostCenterFormModal({
   createMutation: any;
   updateMutation: any;
 }) {
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
+
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={onClose} />
+      <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {editingCostCenter ? 'Editar Centro de Custo' : 'Cadastrar Centro de Custo'}
           </h3>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
             aria-label="Fechar"
           >
@@ -772,7 +780,7 @@ function CostCenterFormModal({
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
               >
                 Cancelar
@@ -793,6 +801,8 @@ function CostCenterFormModal({
         </div>
       </div>
     </div>
+    {confirmUi}
+    </>
   );
 }
 
@@ -815,14 +825,15 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
   const [result, setResult] = useState<any>(null);
   const [isDragging, setIsDragging] = useState(false);
   
-  const handleClose = () => {
-    // limpar estado interno antes de fechar
+  const closeForm = useCallback(() => {
     setFile(null);
     setParsedRows([]);
     setResult(null);
     setIsDragging(false);
     onClose();
-  };
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
  
   // Garantir que ao fechar a modal (quando isOpen virar false) o estado interno seja limpo
   React.useEffect(() => {
@@ -1128,13 +1139,14 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={handleClose} />
+      <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Importar Centros de Custo</h3>
           <button
-            onClick={handleClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
             aria-label="Fechar"
           >
@@ -1380,7 +1392,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
               {/* Botão Importar */}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={onClose}
+                  onClick={requestClose}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancelar
@@ -1461,5 +1473,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
         </div>
       </div>
     </div>
+    {confirmUi}
+    </>
   );
 }

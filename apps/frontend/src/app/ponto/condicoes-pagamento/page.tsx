@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { CreditCard, Plus, Search, X } from 'lucide-react';
@@ -23,6 +23,7 @@ import {
 } from '@/components/oc/PaymentConditionSelect';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 const PAYMENT_TYPE_OPTIONS = labeledToSelectOptions([
   { value: 'AVISTA', label: 'À vista' },
@@ -187,6 +188,15 @@ export default function CondicoesPagamentoPage() {
     setFormParcelCount(1);
     setFormParcelDayStrs(['30']);
   };
+
+  const closePaymentForm = useCallback(() => {
+    setShowForm(false);
+    setEditing(null);
+    resetForm();
+  }, []);
+
+  const { requestClose: requestClosePaymentForm, confirmUi: paymentFormConfirmUi } =
+    useModalCloseConfirm(closePaymentForm, { isParentOpen: showForm });
 
   const openEdit = (r: PaymentConditionRow) => {
     setEditing(r);
@@ -424,11 +434,7 @@ export default function CondicoesPagamentoPage() {
               <div
                 className="absolute inset-0 bg-black/50"
                 aria-hidden
-                onClick={() => {
-                  setShowForm(false);
-                  setEditing(null);
-                  resetForm();
-                }}
+                onClick={requestClosePaymentForm}
               />
               <div className="relative z-[1101] max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -534,11 +540,7 @@ export default function CondicoesPagamentoPage() {
                 <div className="flex justify-end gap-2 mt-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditing(null);
-                      resetForm();
-                    }}
+                    onClick={requestClosePaymentForm}
                     className="px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg"
                   >
                     Cancelar
@@ -616,6 +618,8 @@ export default function CondicoesPagamentoPage() {
               </div>
             </div>
           )}
+
+          {paymentFormConfirmUi}
 
           {deleteId && (
             <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">

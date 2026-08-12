@@ -1,10 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+'use client';
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 import { MODAL_OVERLAY_CLASS } from '@/lib/zIndex';
 import { syncModalOpenClass } from '@/lib/modalBodyLock';
 import { useOpenTransition } from '@/hooks/useOpenTransition';
+import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
 
 let modalScrollLockCount = 0;
 
@@ -47,6 +50,13 @@ export interface ModalProps {
   closeOnOverlayClick?: boolean;
   /** Quando false, a tecla Escape não fecha o modal. */
   closeOnEscape?: boolean;
+  /**
+   * Quando true (padrão), pede confirmação antes de fechar (overlay / X / Escape).
+   * Use false em diálogos que já são confirmação (excluir, sair, etc.).
+   */
+  confirmBeforeClose?: boolean;
+  /** Mensagem do diálogo de confirmação. */
+  confirmCloseMessage?: string;
   showCloseButton?: boolean;
   headerActions?: React.ReactNode;
   /** Permite dropdowns absolutos saírem do conteúdo sem serem cortados. */
@@ -67,6 +77,8 @@ export const Modal: React.FC<ModalProps> = ({
   size = 'md',
   closeOnOverlayClick = true,
   closeOnEscape = true,
+  confirmBeforeClose = true,
+  confirmCloseMessage,
   showCloseButton = true,
   headerActions,
   contentOverflowVisible = false,
@@ -76,6 +88,19 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { present, visible } = useOpenTransition(isOpen, MODAL_ANIM_MS);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+
+  const requestClose = useCallback(() => {
+    if (confirmBeforeClose) {
+      setShowCloseConfirm(true);
+      return;
+    }
+    onClose();
+  }, [confirmBeforeClose, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) setShowCloseConfirm(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,9 +109,13 @@ export const Modal: React.FC<ModalProps> = ({
     if (root) registerModalRoot(root);
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (closeOnEscape && e.key === 'Escape') {
-        onClose();
+      if (!closeOnEscape || e.key !== 'Escape') return;
+      // Se o confirm já está aberto, Escape só cancela o confirm (não fecha o modal pai).
+      if (showCloseConfirm) {
+        setShowCloseConfirm(false);
+        return;
       }
+      requestClose();
     };
 
     const blockBackgroundScroll = (event: WheelEvent | TouchEvent) => {
@@ -108,7 +137,7 @@ export const Modal: React.FC<ModalProps> = ({
       unlockPageScroll();
       syncModalOpenClass();
     };
-  }, [isOpen, onClose, closeOnEscape]);
+  }, [isOpen, closeOnEscape, requestClose, showCloseConfirm]);
 
   if (!present) return null;
 
@@ -146,7 +175,7 @@ export const Modal: React.FC<ModalProps> = ({
             visible ? 'app-modal-backdrop--open' : 'app-modal-backdrop--closed',
           )}
           onMouseDown={(e) => {
-            if (closeOnOverlayClick && isOpen && e.target === e.currentTarget) onClose();
+            if (closeOnOverlayClick && isOpen && e.target === e.currentTarget) requestClose();
           }}
           onWheel={stopScrollChain}
           onTouchMove={stopScrollChain}
@@ -184,7 +213,7 @@ export const Modal: React.FC<ModalProps> = ({
                 {showCloseButton && (
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={requestClose}
                     className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                     aria-label="Fechar"
                   >
@@ -217,6 +246,16 @@ export const Modal: React.FC<ModalProps> = ({
           </div>
         </div>
       </div>
+
+      <ModalCloseConfirm
+        isOpen={showCloseConfirm}
+        onCancel={() => setShowCloseConfirm(false)}
+        onConfirm={() => {
+          setShowCloseConfirm(false);
+          onClose();
+        }}
+        message={confirmCloseMessage}
+      />
     </div>
   );
 

@@ -1,8 +1,9 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import multer from 'multer';
 import { ConstructionMaterialController } from '../controllers/ConstructionMaterialController';
 import { authenticate } from '../middleware/auth';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 
 const router = Router();
 const constructionMaterialController = new ConstructionMaterialController();
@@ -40,7 +41,7 @@ router.post('/upload-image', (req, res, next) => {
     const saved = await savePersistentUpload({
       folder: 'construction-materials',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
     });
 
@@ -48,7 +49,7 @@ router.post('/upload-image', (req, res, next) => {
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {

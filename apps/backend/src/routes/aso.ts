@@ -1,8 +1,9 @@
-import express, { Response, NextFunction } from 'express';
+﻿import express, { Response, NextFunction } from 'express';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { uploadAsoAttachment } from '../middleware/upload';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 import { AsoController } from '../controllers/AsoController';
 import { AsoService } from '../services/AsoService';
 
@@ -75,7 +76,7 @@ router.post(
       const saved = await savePersistentUpload({
         folder: 'aso',
         buffer: req.file.buffer,
-        originalName: req.file.originalname,
+        originalName: fixMulterOriginalName(req.file.originalname),
         mimeType: req.file.mimetype,
         includeSafeOriginalName: true,
       });

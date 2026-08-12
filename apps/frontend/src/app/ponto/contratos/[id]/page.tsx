@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { Button } from '@/components/ui/Button';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -1012,6 +1013,71 @@ export default function ContractDetailPage() {
   const [addendumDate, setAddendumDate] = useState('');
   const [addendumAmount, setAddendumAmount] = useState('');
   const [addendumNote, setAddendumNote] = useState('');
+
+  const closeAddendumModal = useCallback(() => {
+    setShowAddendumModal(false);
+  }, []);
+
+  const closeValorAnualAdjustModal = useCallback(() => {
+    setShowValorAnualAdjustModal(false);
+  }, []);
+
+  const closeProductionModal = useCallback(() => {
+    setShowProductionModal(false);
+  }, []);
+
+  const closeEditingProduction = useCallback(() => {
+    setEditingProduction(false);
+  }, []);
+
+  const closeBillingModal = useCallback(() => {
+    setShowBillingModal(false);
+    setBillingForm({ issueDate: '', invoiceNumber: '', serviceOrder: '', pleitoId: '', grossValue: '', netValue: '' });
+  }, []);
+
+  const closePleitoValoresModal = useCallback(() => {
+    setShowPleitoValoresModal(false);
+  }, []);
+
+  const closePleitoResumoModal = useCallback(() => {
+    setShowPleitoResumoModal(false);
+  }, []);
+
+  const closeSelectedBillingModal = useCallback(() => {
+    setSelectedBilling(null);
+    setEditingBilling(false);
+  }, []);
+
+  const closeSelectedPleitoModal = useCallback(() => {
+    setSelectedPleitoId(null);
+  }, []);
+
+  const { requestClose: requestCloseAddendumModal, confirmUi: addendumModalConfirmUi } =
+    useModalCloseConfirm(closeAddendumModal, { isParentOpen: showAddendumModal });
+
+  const { requestClose: requestCloseValorAnualAdjustModal, confirmUi: valorAnualAdjustModalConfirmUi } =
+    useModalCloseConfirm(closeValorAnualAdjustModal, { isParentOpen: showValorAnualAdjustModal });
+
+  const { requestClose: requestCloseProductionModal, confirmUi: productionModalConfirmUi } =
+    useModalCloseConfirm(closeProductionModal, { isParentOpen: showProductionModal && !editingProduction });
+
+  const { requestClose: requestCloseEditingProduction, confirmUi: editingProductionConfirmUi } =
+    useModalCloseConfirm(closeEditingProduction, { isParentOpen: editingProduction && !!selectedProduction });
+
+  const { requestClose: requestCloseBillingModal, confirmUi: billingModalConfirmUi } =
+    useModalCloseConfirm(closeBillingModal, { isParentOpen: showBillingModal });
+
+  const { requestClose: requestClosePleitoValoresModal, confirmUi: pleitoValoresModalConfirmUi } =
+    useModalCloseConfirm(closePleitoValoresModal, { isParentOpen: showPleitoValoresModal });
+
+  const { requestClose: requestClosePleitoResumoModal, confirmUi: pleitoResumoModalConfirmUi } =
+    useModalCloseConfirm(closePleitoResumoModal, { isParentOpen: showPleitoResumoModal });
+
+  const { requestClose: requestCloseSelectedBillingModal, confirmUi: selectedBillingModalConfirmUi } =
+    useModalCloseConfirm(closeSelectedBillingModal, { isParentOpen: !!selectedBilling });
+
+  const { requestClose: requestCloseSelectedPleitoModal, confirmUi: selectedPleitoModalConfirmUi } =
+    useModalCloseConfirm(closeSelectedPleitoModal, { isParentOpen: !!selectedPleitoId });
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -5642,14 +5708,14 @@ export default function ContractDetailPage() {
           {/* Modal de aditivos do contrato */}
           {showAddendumModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowAddendumModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseAddendumModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     <Plus className="w-5 h-5" />
                     Aditivos do contrato
                   </h3>
-                  <button type="button" onClick={() => setShowAddendumModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button type="button" onClick={requestCloseAddendumModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -5755,11 +5821,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {addendumModalConfirmUi}
 
           {/* Modal ajuste valor anual (orçamento do órgão) */}
           {showValorAnualAdjustModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowValorAnualAdjustModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseValorAnualAdjustModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -5768,7 +5835,7 @@ export default function ContractDetailPage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={() => setShowValorAnualAdjustModal(false)}
+                    onClick={requestCloseValorAnualAdjustModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -5875,11 +5942,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {valorAnualAdjustModalConfirmUi}
 
           {/* Modal Cadastrar Produção Semanal */}
           {showProductionModal && !editingProduction && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setShowProductionModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseProductionModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -5887,7 +5955,7 @@ export default function ContractDetailPage() {
                     Cadastrar Produção Semanal
                   </h3>
                   <button
-                    onClick={() => setShowProductionModal(false)}
+                    onClick={requestCloseProductionModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -5944,7 +6012,7 @@ export default function ContractDetailPage() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setShowProductionModal(false)}
+                      onClick={requestCloseProductionModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -5961,11 +6029,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {productionModalConfirmUi}
 
           {/* Modal Editar Produção Semanal */}
           {editingProduction && selectedProduction && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setEditingProduction(false)} />
+              <div className="absolute inset-0" onClick={requestCloseEditingProduction} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -5973,7 +6042,7 @@ export default function ContractDetailPage() {
                     Editar Produção Semanal
                   </h3>
                   <button
-                    onClick={() => setEditingProduction(false)}
+                    onClick={requestCloseEditingProduction}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -6039,7 +6108,7 @@ export default function ContractDetailPage() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setEditingProduction(false)}
+                      onClick={requestCloseEditingProduction}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -6056,11 +6125,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {editingProductionConfirmUi}
 
           {/* Modal Cadastrar Faturamento */}
           {showBillingModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setShowBillingModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -6068,7 +6138,7 @@ export default function ContractDetailPage() {
                     Cadastrar Faturamento
                   </h3>
                   <button
-                    onClick={() => setShowBillingModal(false)}
+                    onClick={requestCloseBillingModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -6194,7 +6264,7 @@ export default function ContractDetailPage() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setShowBillingModal(false)}
+                      onClick={requestCloseBillingModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -6211,6 +6281,7 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {billingModalConfirmUi}
 
           {/* Modal Novo Ordem de Serviço */}
           {showPleitoModal && !pleitoToEdit && (
@@ -6241,11 +6312,11 @@ export default function ContractDetailPage() {
           {/* Modal Informar Valores do Pleito */}
           {showPleitoValoresModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoValoresModal(false)} />
+              <div className="absolute inset-0" onClick={requestClosePleitoValoresModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informar valores do pleito</h3>
-                  <button onClick={() => setShowPleitoValoresModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button onClick={requestClosePleitoValoresModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -6342,7 +6413,7 @@ export default function ContractDetailPage() {
                   })}
                 </div>
                 <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                  <button onClick={() => setShowPleitoValoresModal(false)} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                  <button onClick={requestClosePleitoValoresModal} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
                     Cancelar
                   </button>
                   <button
@@ -6356,11 +6427,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {pleitoValoresModalConfirmUi}
 
           {/* Modal Resumo do Pleito */}
           {showPleitoResumoModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoResumoModal(false)} />
+              <div className="absolute inset-0" onClick={requestClosePleitoResumoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Resumo do Pleito</h3>
@@ -6372,7 +6444,7 @@ export default function ContractDetailPage() {
                       <FileDown className="w-4 h-4" />
                       Exportar PDF
                     </button>
-                    <button onClick={() => setShowPleitoResumoModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button onClick={requestClosePleitoResumoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -6418,11 +6490,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {pleitoResumoModalConfirmUi}
 
           {/* Modal Detalhes do Faturamento */}
           {selectedBilling && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => { setSelectedBilling(null); setEditingBilling(false); }} />
+              <div className="absolute inset-0" onClick={requestCloseSelectedBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -6448,7 +6521,7 @@ export default function ContractDetailPage() {
                         Editar
                       </button>
                     )}
-                    <button onClick={() => { setSelectedBilling(null); setEditingBilling(false); }} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button onClick={requestCloseSelectedBillingModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -6585,11 +6658,12 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {selectedBillingModalConfirmUi}
 
           {/* Modal Detalhes do Ordem de Serviço */}
           {selectedPleitoId && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setSelectedPleitoId(null)} />
+              <div className="absolute inset-0" onClick={requestCloseSelectedPleitoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -6597,7 +6671,7 @@ export default function ContractDetailPage() {
                     Detalhes do Ordem de Serviço
                   </h3>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setSelectedPleitoId(null)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button onClick={requestCloseSelectedPleitoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -6667,6 +6741,7 @@ export default function ContractDetailPage() {
               </div>
             </div>
           )}
+          {selectedPleitoModalConfirmUi}
 
           <Modal
             isOpen={showVisualizarPleitoModal}

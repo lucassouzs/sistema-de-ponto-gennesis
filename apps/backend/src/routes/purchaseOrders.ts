@@ -1,10 +1,11 @@
-import { Router, Response, NextFunction } from 'express';
+﻿import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
 import { PurchaseOrderService } from '../services/PurchaseOrderService';
 import { createError } from '../middleware/errorHandler';
 import { savePersistentUpload } from '../lib/persistentUpload';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 import {
   assertOcFlowStatusChange,
   assertUserHasOcModule,
@@ -188,14 +189,14 @@ router.post('/upload-attachment', (req: AuthRequest, res: Response, next: NextFu
     const saved = await savePersistentUpload({
       folder: 'purchase-orders',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
     });
     res.json({
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName,
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName,
       },
     });
   } catch (error) {
@@ -220,14 +221,14 @@ router.post('/upload-boleto', (req: AuthRequest, res: Response, next: NextFuncti
     const saved = await savePersistentUpload({
       folder: 'purchase-orders',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
     });
     res.json({
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {
@@ -252,7 +253,7 @@ router.post('/upload-nf', (req: AuthRequest, res: Response, next: NextFunction) 
     const saved = await savePersistentUpload({
       folder: 'purchase-orders',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
       fileNamePrefix: 'nf-',
     });
@@ -260,7 +261,7 @@ router.post('/upload-nf', (req: AuthRequest, res: Response, next: NextFunction) 
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {
@@ -285,7 +286,7 @@ router.post('/upload-payment-proof', (req: AuthRequest, res: Response, next: Nex
     const saved = await savePersistentUpload({
       folder: 'purchase-orders',
       buffer: req.file.buffer,
-      originalName: req.file.originalname,
+      originalName: fixMulterOriginalName(req.file.originalname),
       mimeType: req.file.mimetype,
       fileNamePrefix: 'proof-',
     });
@@ -293,7 +294,7 @@ router.post('/upload-payment-proof', (req: AuthRequest, res: Response, next: Nex
       success: true,
       data: {
         url: saved.url,
-        originalName: req.file.originalname || saved.fileName
+        originalName: fixMulterOriginalName(req.file.originalname) || saved.originalName || saved.fileName
       }
     });
   } catch (error) {

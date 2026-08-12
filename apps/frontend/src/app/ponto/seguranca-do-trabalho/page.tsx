@@ -2141,7 +2141,7 @@ export default function SegurancaDoTrabalhoPage() {
           )}
         </Modal>
 
-        <Modal isOpen={Boolean(deleteId)} onClose={() => setDeleteId(null)} title="Excluir ASO">
+        <Modal isOpen={Boolean(deleteId)} onClose={() => setDeleteId(null)} confirmBeforeClose={false} title="Excluir ASO">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             Tem certeza que deseja excluir este registro de ASO?
           </p>

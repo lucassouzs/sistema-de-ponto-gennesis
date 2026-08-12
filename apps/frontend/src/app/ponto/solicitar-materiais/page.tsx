@@ -28,10 +28,12 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
+import { fixMojibakeFileName } from '@/lib/fixMojibakeFileName';
 import toast from 'react-hot-toast';
 import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import {
@@ -405,7 +407,9 @@ function parseFdAttachments(r: {
         if (!item || typeof item !== 'object') return null;
         const url = String((item as { url?: unknown }).url || '').trim();
         if (!url) return null;
-        const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+        const name =
+          fixMojibakeFileName(String((item as { name?: unknown }).name || '').trim()) ||
+          'Arquivo anexado';
         return { url, name };
       })
       .filter((item): item is FdAttachment => Boolean(item));
@@ -415,7 +419,7 @@ function parseFdAttachments(r: {
   return [
     {
       url,
-      name: String(r.demandSheetAttachmentName || '').trim() || 'Arquivo anexado',
+      name: fixMojibakeFileName(String(r.demandSheetAttachmentName || '').trim()) || 'Arquivo anexado',
     },
   ];
 }
@@ -843,7 +847,7 @@ function RmDemandSheetAttachmentsField({
     <div className="space-y-3">
       <ul className="divide-y divide-gray-200 dark:divide-gray-700">
         {files.map((file, index) => {
-          const displayName = file.name?.trim() || 'Arquivo anexado';
+          const displayName = fixMojibakeFileName(file.name) || 'Arquivo anexado';
           return (
             <li
               key={`${file.url}-${index}`}
@@ -1716,7 +1720,7 @@ function SolicitarMateriaisPage() {
           next[index] = {
             ...next[index],
             attachmentUrl: d.url!,
-            attachmentName: d.originalName || ''
+            attachmentName: fixMojibakeFileName(d.originalName || file.name) || ''
           };
           return { ...prev, items: next };
         });
@@ -1726,7 +1730,7 @@ function SolicitarMateriaisPage() {
           next[index] = {
             ...next[index],
             attachmentUrl: d.url!,
-            attachmentName: d.originalName || ''
+            attachmentName: fixMojibakeFileName(d.originalName || file.name) || ''
           };
           return { ...prev, items: next };
         });
@@ -1769,7 +1773,7 @@ function SolicitarMateriaisPage() {
         if (!d?.url) throw new Error('Resposta inválida do servidor');
         uploaded.push({
           url: d.url,
-          name: d.originalName || file.name || 'Arquivo anexado',
+          name: fixMojibakeFileName(d.originalName || file.name) || 'Arquivo anexado',
         });
       }
       if (form === 'new') {
@@ -2827,6 +2831,7 @@ function SolicitarMateriaisPage() {
                                         ? 'min-w-0 text-left text-sm text-gray-900 dark:text-gray-100'
                                         : 'min-w-0 text-sm text-gray-900 dark:text-gray-100 sm:text-right'
                                     }
+
                                   >
                                     {row.value}
                                   </dd>
@@ -2986,71 +2991,19 @@ function SolicitarMateriaisPage() {
           </div>
         )}
 
-        {showCloseNewRequestConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowCloseNewRequestConfirm(false)}
-            />
-            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Deseja fechar?
-              </h3>
-              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
-                Tem certeza que deseja fechar a solicitação? Os dados preenchidos serão perdidos.
-              </p>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCloseNewRequestConfirm(false)}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={closeNewRequestModal}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ModalCloseConfirm
+          isOpen={showCloseNewRequestConfirm}
+          onCancel={() => setShowCloseNewRequestConfirm(false)}
+          onConfirm={closeNewRequestModal}
+          message="Tem certeza que deseja fechar a solicitação? Os dados preenchidos serão perdidos."
+        />
 
-        {showCloseDetailConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowCloseDetailConfirm(false)}
-            />
-            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Deseja fechar?
-              </h3>
-              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
-                Tem certeza que deseja fechar os detalhes da solicitação?
-              </p>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCloseDetailConfirm(false)}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={closeDetailModal}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ModalCloseConfirm
+          isOpen={showCloseDetailConfirm}
+          onCancel={() => setShowCloseDetailConfirm(false)}
+          onConfirm={closeDetailModal}
+          message="Tem certeza que deseja fechar os detalhes da solicitação?"
+        />
 
         {correctionEditId && (
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">

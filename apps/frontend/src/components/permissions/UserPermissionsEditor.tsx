@@ -1904,6 +1904,7 @@ export function UserPermissionsEditor({
       <Modal
         isOpen={permissionActionModal === 'restore'}
         onClose={closePermissionActionModal}
+        confirmBeforeClose={false}
         title="Restaurar padrões do cargo"
         size="sm"
       >

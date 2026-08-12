@@ -11,6 +11,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
+import { fixMojibakeFileName } from '@/lib/fixMojibakeFileName';
 import toast from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { OcStyledCheckbox, type PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
@@ -48,6 +49,7 @@ import { MaterialRequestsRmList } from './_components/MaterialRequestsRmList';
 import { AsyncSearchSelectDropdown } from '@/components/ui/AsyncSearchSelectDropdown';
 import { searchOcSuppliers } from '@/components/oc/searchOcSuppliers';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
+import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
 import { OC_PIX_KEY_TYPE_OPTIONS } from '@/components/oc/OcPurchaseOrderFormFields';
 import {
   getMaterialRequestCancellationReason,
@@ -399,7 +401,7 @@ export default function GerenciarMateriaisPage() {
     if (!d?.url) throw new Error('Resposta inválida do servidor');
     return {
       url: d.url,
-      name: d.originalName || file.name || 'Arquivo anexado',
+      name: fixMojibakeFileName(d.originalName || file.name) || 'Arquivo anexado',
     };
   };
 
@@ -408,7 +410,7 @@ export default function GerenciarMateriaisPage() {
       ? request.demandSheetAttachments
           .map((file) => ({
             url: String(file?.url || '').trim(),
-            name: String(file?.name || '').trim() || 'Arquivo anexado',
+            name: fixMojibakeFileName(String(file?.name || '').trim()) || 'Arquivo anexado',
           }))
           .filter((file) => file.url)
       : [];
@@ -417,7 +419,7 @@ export default function GerenciarMateriaisPage() {
       return [
         {
           url: request.demandSheetAttachmentUrl,
-          name: request.demandSheetAttachmentName || 'Arquivo anexado',
+          name: fixMojibakeFileName(request.demandSheetAttachmentName) || 'Arquivo anexado',
         },
       ];
     }
@@ -1226,38 +1228,12 @@ export default function GerenciarMateriaisPage() {
           );
         })()}
 
-        {showCloseDetailsConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowCloseDetailsConfirm(false)}
-            />
-            <div className="app-modal-panel app-modal-panel--open relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
-              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Deseja fechar?
-              </h3>
-              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
-                Tem certeza que deseja fechar os detalhes da requisição?
-              </p>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowCloseDetailsConfirm(false)}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={closeDetailsModal}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ModalCloseConfirm
+          isOpen={showCloseDetailsConfirm}
+          onCancel={() => setShowCloseDetailsConfirm(false)}
+          onConfirm={closeDetailsModal}
+          message="Tem certeza que deseja fechar os detalhes da requisição?"
+        />
 
         {/* Modal Criar OC */}
         {showCreateOCModal && selectedRequest && (

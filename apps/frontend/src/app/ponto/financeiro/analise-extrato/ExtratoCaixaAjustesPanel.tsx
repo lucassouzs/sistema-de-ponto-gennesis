@@ -700,7 +700,8 @@ export function ExtratoCaixaAjustesPanel({
       <Modal
         isOpen={deleteTarget != null}
         onClose={() => !deleteMutation.isPending && setDeleteTarget(null)}
-        title="Excluir ajuste"
+        confirmBeforeClose={false}
+      title="Excluir ajuste"
         size="sm"
       >
         <p className="text-sm text-gray-600 dark:text-gray-400">

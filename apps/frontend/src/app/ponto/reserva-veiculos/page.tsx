@@ -1362,7 +1362,8 @@ export default function ReservaVeiculosPage() {
           <Modal
             isOpen={Boolean(deleteId)}
             onClose={() => setDeleteId(null)}
-            title="Excluir reserva"
+            confirmBeforeClose={false}
+      title="Excluir reserva"
             size="md"
           >
             <p className="text-sm text-gray-600 dark:text-gray-400">

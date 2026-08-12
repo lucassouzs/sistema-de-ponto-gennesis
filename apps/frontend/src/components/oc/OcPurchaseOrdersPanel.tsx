@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
@@ -65,6 +65,7 @@ import { ymdAddDays } from '@/components/oc/boletoParcelasUtils';
 import { canActOnOcApprovalStatus } from '@/lib/ocApprovalPermissions';
 import { isUnbRelatedLabel } from '@/lib/unbBranding';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import {
   orderNeedsPaymentBoleto,
   showInAttachBoletoTab,
@@ -2432,6 +2433,25 @@ export function OcPurchaseOrdersPanel({
   const [correctionReason, setCorrectionReason] = useState('');
   const [pdfExportingId, setPdfExportingId] = useState<string | null>(null);
   const [showEditOcModal, setShowEditOcModal] = useState(false);
+
+  const closeSelectedOrder = useCallback(() => {
+    setSelectedOrder(null);
+  }, []);
+  const {
+    requestClose: requestCloseSelectedOrder,
+    confirmUi: selectedOrderConfirmUi,
+  } = useModalCloseConfirm(closeSelectedOrder, {
+    isParentOpen: !!selectedOrder && !showEditOcModal && !correctionTarget,
+  });
+
+  const closeEditOc = useCallback(() => {
+    setShowEditOcModal(false);
+  }, []);
+  const { requestClose: requestCloseEditOc, confirmUi: editOcConfirmUi } = useModalCloseConfirm(
+    closeEditOc,
+    { isParentOpen: showEditOcModal }
+  );
+
   const [orderDetailLoadingId, setOrderDetailLoadingId] = useState<string | null>(null);
   const [cnabSelectedIds, setCnabSelectedIds] = useState<Set<string>>(() => new Set());
   const [cnabGenerating, setCnabGenerating] = useState(false);
@@ -4888,8 +4908,9 @@ export function OcPurchaseOrdersPanel({
       )}
 
       {showEditOcModal && selectedOrder && editOcForm && (
+        <>
         <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowEditOcModal(false)} />
+          <div className="absolute inset-0 bg-black/50" onClick={requestCloseEditOc} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
@@ -4903,7 +4924,7 @@ export function OcPurchaseOrdersPanel({
               </div>
               <button
                 type="button"
-                onClick={() => setShowEditOcModal(false)}
+                onClick={requestCloseEditOc}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400"
                 title="Fechar"
               >
@@ -4964,12 +4985,15 @@ export function OcPurchaseOrdersPanel({
             </div>
           </div>
         </div>
+        {editOcConfirmUi}
+        </>
       )}
 
       {selectedOrder && !showEditOcModal && !correctionTarget && typeof document !== 'undefined'
         ? createPortal(
+        <>
         <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedOrder(null)} />
+          <div className="absolute inset-0 bg-black/50" onClick={requestCloseSelectedOrder} />
           <div
             className={`relative my-auto flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 ${
               selectedOrder.status !== 'IN_REVIEW' && ocDetailTab === 'comentarios'
@@ -4992,7 +5016,7 @@ export function OcPurchaseOrdersPanel({
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedOrder(null)}
+                onClick={requestCloseSelectedOrder}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400 shrink-0"
                 aria-label="Fechar"
               >
@@ -6170,7 +6194,9 @@ export function OcPurchaseOrdersPanel({
             </div>
             )}
           </div>
-        </div>,
+        </div>
+        {selectedOrderConfirmUi}
+        </>,
         document.body
       )
       : null}

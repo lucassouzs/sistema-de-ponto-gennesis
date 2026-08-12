@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Save, AlertCircle, CheckCircle, Eye, EyeOff, ChevronRight, ChevronLeft, User, Briefcase, DollarSign, CreditCard, Clock, Loader2 } from 'lucide-react';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -16,6 +16,7 @@ import {
 import { TOMADORES_LIST } from '@/constants/tomadores';
 import { CARGOS_AVAILABLE } from '@/constants/cargos';
 import { useCostCenters } from '@/hooks/useCostCenters';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 
@@ -140,18 +141,12 @@ interface CreateEmployeeFormProps {
 }
 
 export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
-  const handleCancel = () => {
-    setShowCancelConfirm(true);
-  };
-
-  const handleConfirmCancel = () => {
-    setShowCancelConfirm(false);
+  const closeForm = useCallback(() => {
     onClose();
-  };
+  }, [onClose]);
 
-  const handleCancelCancel = () => {
-    setShowCancelConfirm(false);
-  };
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm);
+
   // Lista de setores disponíveis
   const sectors = [
     'Projetos',
@@ -287,7 +282,6 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [warningMessage, setWarningMessage] = useState<string>('');
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCheckingCpf, setIsCheckingCpf] = useState(false);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const emailCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1052,7 +1046,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
 
   return (
     <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={handleCancel} />
+      <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
       <div className="relative mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-800">
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 sm:px-6 dark:border-gray-700">
           <div className="min-w-0">
@@ -1062,7 +1056,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
           </div>
           <button
             type="button"
-            onClick={handleCancel}
+            onClick={requestClose}
             className="shrink-0 rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             aria-label="Fechar"
           >
@@ -1911,7 +1905,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
           <div className="flex items-center justify-between border-t border-gray-200 pt-5 dark:border-gray-700">
             <button
               type="button"
-              onClick={handleCancel}
+              onClick={requestClose}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               Cancelar
@@ -1972,39 +1966,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
         </div>
       </div>
 
-      {/* Modal de Confirmação de Cancelamento */}
-      {showCancelConfirm && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={handleCancelCancel} />
-          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-              <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
-              Cancelar Cadastro?
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
-              Tem certeza que deseja cancelar o cadastro? Todos os dados preenchidos serão perdidos.
-            </p>
-            <div className="flex items-center justify-center space-x-3">
-              <button
-                type="button"
-                onClick={handleCancelCancel}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-              >
-                Voltar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCancel}
-                className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {confirmUi}
     </div>
   );
 }

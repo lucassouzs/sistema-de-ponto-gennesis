@@ -1566,6 +1566,7 @@ function DrivePageContent() {
         <Modal
           isOpen={!!deleteTarget}
           onClose={() => setDeleteTarget(null)}
+          confirmBeforeClose={false}
           title={isTrashView ? 'Excluir permanentemente' : 'Mover para a lixeira'}
           size="sm"
         >

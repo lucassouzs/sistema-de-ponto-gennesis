@@ -4,6 +4,7 @@ import { RequestHandler } from 'express';
 import AWS from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 import { backendUploadsRoot } from './uploads';
+import { fixMulterOriginalName } from './fixUploadFileName';
 
 type UploadFileInput = {
   folder: string;
@@ -21,6 +22,8 @@ type UploadFileResult = {
   url: string;
   key: string;
   fileName: string;
+  /** Nome original com acentos corrigidos (quando Multer entregou mojibake). */
+  originalName: string;
 };
 
 function s3Enabled(): boolean {
@@ -85,7 +88,9 @@ export async function savePersistentUpload(input: UploadFileInput): Promise<Uplo
     throw new Error('Pasta de upload inválida');
   }
 
-  const fileName = buildFileName(input);
+  const originalName = fixMulterOriginalName(input.originalName);
+  const normalizedInput: UploadFileInput = { ...input, originalName };
+  const fileName = buildFileName(normalizedInput);
   const key = `${folder}/${fileName}`;
   const url = `/uploads/${key}`;
   const contentType = input.mimeType || 'application/octet-stream';
@@ -102,14 +107,14 @@ export async function savePersistentUpload(input: UploadFileInput): Promise<Uplo
           ACL: 'private',
         })
         .promise();
-      return { url, key, fileName };
+      return { url, key, fileName, originalName };
     } catch (error) {
       console.warn(`[persistentUpload] Falha S3 em ${key}. Gravando local.`, error);
     }
   }
 
   saveLocally(folder, fileName, input.buffer);
-  return { url, key, fileName };
+  return { url, key, fileName, originalName };
 }
 
 /**
@@ -147,13 +152,13 @@ export async function savePersistentBuffer(input: {
       if (input.keepLocalCopy) {
         saveLocally(folder, fileName, input.buffer);
       }
-      return { url, key, fileName };
+      return { url, key, fileName, originalName: fileName };
     } catch (error) {
       console.warn(`[persistentUpload] Falha S3 em ${key}. Gravando local.`, error);
     }
   }
   saveLocally(folder, fileName, input.buffer);
-  return { url, key, fileName };
+  return { url, key, fileName, originalName: fileName };
 }
 
 /** Lê arquivo local ou, se sumiu do disco, o objeto no S3. */

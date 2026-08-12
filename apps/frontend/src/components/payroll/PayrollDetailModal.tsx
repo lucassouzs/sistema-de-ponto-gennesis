@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Calendar, User, Building, DollarSign, Clock, AlertTriangle, CreditCard, Moon, Save } from 'lucide-react';
 import { PayrollEmployee } from '@/types';
 import api from '@/lib/api';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 
 interface PayrollDetailModalProps {
   employee: PayrollEmployee;
@@ -503,11 +504,19 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
   const totalProventosComAcrescimos = totalProventos + (employee.totalAdjustments || 0);
   const liquidoComAcrescimos = liquidoReceber + (employee.totalAdjustments || 0);
 
+  const closeModal = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeModal, { isParentOpen: isOpen });
+
   if (!isOpen) return null;
 
   return (
+    <>
     <div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="absolute inset-0" onClick={requestClose} aria-hidden />
+      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700 rounded-t-lg">
           <div className="flex items-center justify-between">
@@ -530,7 +539,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               </div>
             </div>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
@@ -2555,7 +2564,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               Gênnesis Engenharia - Folha de Pagamento de {monthName} de {year}
             </p>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 transition-colors"
             >
               Fechar
@@ -2564,5 +2573,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
         </div>
       </div>
     </div>
+    {confirmUi}
+    </>
   );
 }

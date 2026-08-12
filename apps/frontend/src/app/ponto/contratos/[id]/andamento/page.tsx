@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import jsPDF from 'jspdf';
 import { ArrowLeft, AlertCircle, ClipboardList, Edit2, FileDown, Percent, Plus, X, Search, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { Button } from '@/components/ui/Button';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -358,6 +359,42 @@ export default function AndamentoListPage() {
   const [showPleitoResumoModal, setShowPleitoResumoModal] = useState(false);
   const [showPleitoModal, setShowPleitoModal] = useState(false);
   const [pleitoToEdit, setPleitoToEdit] = useState<(PleitoFormData & { id: string }) | null>(null);
+
+  const closePleitoValoresModal = useCallback(() => {
+    setShowPleitoValoresModal(false);
+  }, []);
+
+  const closeHistoricoPleitosModal = useCallback(() => {
+    setShowHistoricoPleitosModal(false);
+  }, []);
+
+  const closePleitoResumoModal = useCallback(() => {
+    setShowPleitoResumoModal(false);
+  }, []);
+
+  const closeHistoricoBatchNfModal = useCallback(() => {
+    setShowHistoricoBatchNfModal(false);
+    setHistoricoBatchInvoiceModalValue('');
+  }, []);
+
+  const closeSelectedPleitoModal = useCallback(() => {
+    setSelectedPleitoId(null);
+  }, []);
+
+  const { requestClose: requestClosePleitoValoresModal, confirmUi: pleitoValoresModalConfirmUi } =
+    useModalCloseConfirm(closePleitoValoresModal, { isParentOpen: showPleitoValoresModal });
+
+  const { requestClose: requestCloseHistoricoPleitosModal, confirmUi: historicoPleitosModalConfirmUi } =
+    useModalCloseConfirm(closeHistoricoPleitosModal, { isParentOpen: showHistoricoPleitosModal });
+
+  const { requestClose: requestClosePleitoResumoModal, confirmUi: pleitoResumoModalConfirmUi } =
+    useModalCloseConfirm(closePleitoResumoModal, { isParentOpen: showPleitoResumoModal });
+
+  const { requestClose: requestCloseHistoricoBatchNfModal, confirmUi: historicoBatchNfModalConfirmUi } =
+    useModalCloseConfirm(closeHistoricoBatchNfModal, { isParentOpen: showHistoricoBatchNfModal });
+
+  const { requestClose: requestCloseSelectedPleitoModal, confirmUi: selectedPleitoModalConfirmUi } =
+    useModalCloseConfirm(closeSelectedPleitoModal, { isParentOpen: !!selectedPleitoId });
 
   const isAllYears = selectedYear === 0;
 
@@ -1587,13 +1624,13 @@ export default function AndamentoListPage() {
 
           {showPleitoValoresModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoValoresModal(false)} />
+              <div className="absolute inset-0" onClick={requestClosePleitoValoresModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Informar valores do pleito
                   </h3>
-                  <button onClick={() => setShowPleitoValoresModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button onClick={requestClosePleitoValoresModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -1664,7 +1701,7 @@ export default function AndamentoListPage() {
                   })}
 
                   <div className="px-0 py-0 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 pt-4">
-                    <button onClick={() => setShowPleitoValoresModal(false)} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                    <button onClick={requestClosePleitoValoresModal} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
                       Cancelar
                     </button>
                     <button
@@ -1679,16 +1716,17 @@ export default function AndamentoListPage() {
               </div>
             </div>
           )}
+          {pleitoValoresModalConfirmUi}
 
           {showHistoricoPleitosModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowHistoricoPleitosModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseHistoricoPleitosModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-[95vw] w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Histórico de Pleitos
                   </h3>
-                  <button onClick={() => setShowHistoricoPleitosModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button onClick={requestCloseHistoricoPleitosModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -1881,10 +1919,11 @@ export default function AndamentoListPage() {
               </div>
             </div>
           )}
+          {historicoPleitosModalConfirmUi}
 
           {showPleitoResumoModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoResumoModal(false)} />
+              <div className="absolute inset-0" onClick={requestClosePleitoResumoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Resumo do Pleito</h3>
@@ -1897,7 +1936,7 @@ export default function AndamentoListPage() {
                       <FileDown className="w-4 h-4" />
                       Exportar PDF
                     </button>
-                    <button type="button" onClick={() => setShowPleitoResumoModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button type="button" onClick={requestClosePleitoResumoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -1943,15 +1982,16 @@ export default function AndamentoListPage() {
               </div>
             </div>
           )}
+          {pleitoResumoModalConfirmUi}
 
           {showHistoricoBatchNfModal && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowHistoricoBatchNfModal(false)} />
+              <div className="absolute inset-0" onClick={requestCloseHistoricoBatchNfModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
                 <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Faturar 100% das OSs selecionadas</h3>
                   <button
-                    onClick={() => setShowHistoricoBatchNfModal(false)}
+                    onClick={requestCloseHistoricoBatchNfModal}
                     className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-4 h-4" />
@@ -1973,7 +2013,7 @@ export default function AndamentoListPage() {
                 <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowHistoricoBatchNfModal(false)}
+                    onClick={requestCloseHistoricoBatchNfModal}
                     className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     Cancelar
@@ -1989,10 +2029,11 @@ export default function AndamentoListPage() {
               </div>
             </div>
           )}
+          {historicoBatchNfModalConfirmUi}
 
           {selectedPleitoId && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setSelectedPleitoId(null)} />
+              <div className="absolute inset-0" onClick={requestCloseSelectedPleitoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -2016,7 +2057,7 @@ export default function AndamentoListPage() {
                         Editar
                       </button>
                     )}
-                    <button type="button" onClick={() => setSelectedPleitoId(null)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button type="button" onClick={requestCloseSelectedPleitoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -2088,6 +2129,7 @@ export default function AndamentoListPage() {
               </div>
             </div>
           )}
+          {selectedPleitoModalConfirmUi}
         </div>
       </MainLayout>
     </ProtectedRoute>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -54,6 +54,7 @@ import {
 import { maskCurrencyInputBrOrEmpty } from '@/lib/maskCurrencyBr';
 import { resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import toast from 'react-hot-toast';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -824,6 +825,9 @@ export default function EstoquePage() {
     resetMovementForm();
   };
 
+  const { requestClose: requestCloseMovementModal, confirmUi: movementModalConfirmUi } =
+    useModalCloseConfirm(closeMovementModal, { isParentOpen: isMovementModalOpen });
+
   const createMovementMutation = useMutation({
     mutationFn: async (data: MovementPayload[]) => {
       const responses = await Promise.all(data.map((payload) => api.post('/stock/movements', payload)));
@@ -1337,11 +1341,11 @@ export default function EstoquePage() {
   useEffect(() => {
     if (!isMovementModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeMovementModal();
+      if (e.key === 'Escape') requestCloseMovementModal();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isMovementModalOpen]);
+  }, [isMovementModalOpen, requestCloseMovementModal]);
 
   const selectedOrderDetail: PurchaseOrderDetail | null = selectedPurchaseOrderData?.data || null;
 
@@ -2769,7 +2773,7 @@ export default function EstoquePage() {
 
           {isMovementModalOpen && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40" onClick={closeMovementModal} aria-hidden />
+              <div className="absolute inset-0 bg-black/40" onClick={requestCloseMovementModal} aria-hidden />
               <div
                 className="relative flex max-h-[min(92vh,900px)] w-full max-w-4xl flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
                 role="dialog"
@@ -2782,7 +2786,7 @@ export default function EstoquePage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={closeMovementModal}
+                    onClick={requestCloseMovementModal}
                     className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-0 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                     aria-label="Fechar"
                   >
@@ -3367,7 +3371,7 @@ export default function EstoquePage() {
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={closeMovementModal}
+                  onClick={requestCloseMovementModal}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   Cancelar
@@ -3385,6 +3389,8 @@ export default function EstoquePage() {
               </div>
             </div>
           )}
+
+          {movementModalConfirmUi}
 
           <Modal
             isOpen={isExportModalOpen}

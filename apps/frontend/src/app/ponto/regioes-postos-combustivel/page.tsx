@@ -540,7 +540,8 @@ export default function RegioesPostosCombustivelPage() {
         <Modal
           isOpen={!!deleteStationId}
           onClose={() => setDeleteStationId(null)}
-          title="Excluir posto"
+          confirmBeforeClose={false}
+      title="Excluir posto"
           size="sm"
         >
           <div className="space-y-4">

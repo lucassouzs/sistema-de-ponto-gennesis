@@ -633,7 +633,8 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
           setShowApproveModal(false);
           setCertificateToApprove(null);
         }}
-        title="Confirmar Aprovação"
+        confirmBeforeClose={false}
+      title="Confirmar Aprovação"
       >
         {certificateToApprove && (
           <div className="space-y-4">
@@ -680,7 +681,8 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
           setCertificateToReject(null);
           setRejectReason('');
         }}
-        title="Rejeitar Ausência"
+        confirmBeforeClose={false}
+      title="Rejeitar Ausência"
       >
         {certificateToReject && (
           <div className="space-y-4">
@@ -731,7 +733,8 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
           setShowCancelModal(false);
           setCertificateToCancel(null);
         }}
-        title="Confirmar Cancelamento"
+        confirmBeforeClose={false}
+      title="Confirmar Cancelamento"
       >
         {certificateToCancel && (
           <div className="space-y-4">

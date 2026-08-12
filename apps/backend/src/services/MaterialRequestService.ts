@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import { type EngineeringMaterial, Prisma, PurchaseOrderStatus } from '@prisma/client';
 import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
 import { resolveRmServiceOrderFields } from '../utils/materialRequestServiceOrder';
+import { fixMulterOriginalName } from '../lib/fixUploadFileName';
 
 /** OCs já aprovadas (ou etapas posteriores) — entram na média paga das últimas compras. */
 const EFFECTIVE_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = [
@@ -39,7 +40,9 @@ function parseDemandSheetAttachments(raw: unknown): DemandSheetAttachment[] {
     if (!item || typeof item !== 'object') continue;
     const url = String((item as { url?: unknown }).url || '').trim();
     if (!url) continue;
-    const name = String((item as { name?: unknown }).name || '').trim() || 'Arquivo anexado';
+    const name =
+      fixMulterOriginalName(String((item as { name?: unknown }).name || '').trim()) ||
+      'Arquivo anexado';
     out.push({ url, name });
   }
   return out;
@@ -57,7 +60,9 @@ export function normalizeDemandSheetAttachments(data: {
   return [
     {
       url,
-      name: (data.demandSheetAttachmentName || '').trim() || 'Arquivo anexado',
+      name:
+        fixMulterOriginalName((data.demandSheetAttachmentName || '').trim()) ||
+        'Arquivo anexado',
     },
   ];
 }

@@ -1103,7 +1103,8 @@ function ResponsaveisTecnicosContent() {
         <Modal
           isOpen={showBulkDeleteModal}
           onClose={() => !bulkDeleteMutation.isPending && setShowBulkDeleteModal(false)}
-          title="Excluir selecionados"
+          confirmBeforeClose={false}
+      title="Excluir selecionados"
         >
           <p className="text-sm text-gray-700 dark:text-gray-300">
             Tem certeza que deseja excluir{' '}
