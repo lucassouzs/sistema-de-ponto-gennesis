@@ -1389,6 +1389,49 @@ interface MonthGroupProps {
 }
 
 const ACTION_MENU_WIDTH_PX = 192;
+const ACTION_MENU_MAX_HEIGHT_PX = 280;
+const ACTION_MENU_GAP_PX = 4;
+const ACTION_MENU_VIEWPORT_PAD_PX = 8;
+/** Altura mínima desejada (~3 itens do menu). */
+const ACTION_MENU_MIN_HEIGHT_PX = 140;
+
+type ActionMenuCoords = {
+  entryId: string;
+  top: number;
+  left: number;
+  maxHeight: number;
+  placement: 'below' | 'above';
+};
+
+function computeActionMenuPosition(rect: DOMRect, entryId: string): ActionMenuCoords {
+  let left = rect.right - ACTION_MENU_WIDTH_PX;
+  left = Math.max(
+    ACTION_MENU_VIEWPORT_PAD_PX,
+    Math.min(left, window.innerWidth - ACTION_MENU_WIDTH_PX - ACTION_MENU_VIEWPORT_PAD_PX)
+  );
+
+  const spaceBelow =
+    window.innerHeight - rect.bottom - ACTION_MENU_GAP_PX - ACTION_MENU_VIEWPORT_PAD_PX;
+  const spaceAbove = rect.top - ACTION_MENU_GAP_PX - ACTION_MENU_VIEWPORT_PAD_PX;
+
+  if (spaceBelow >= ACTION_MENU_MIN_HEIGHT_PX || spaceBelow >= spaceAbove) {
+    return {
+      entryId,
+      top: rect.bottom + ACTION_MENU_GAP_PX,
+      left,
+      maxHeight: Math.min(ACTION_MENU_MAX_HEIGHT_PX, Math.max(spaceBelow, ACTION_MENU_MIN_HEIGHT_PX)),
+      placement: 'below'
+    };
+  }
+
+  return {
+    entryId,
+    top: rect.top - ACTION_MENU_GAP_PX,
+    left,
+    maxHeight: Math.min(ACTION_MENU_MAX_HEIGHT_PX, Math.max(spaceAbove, ACTION_MENU_MIN_HEIGHT_PX)),
+    placement: 'above'
+  };
+}
 
 function DetailSection({
   title,
@@ -1469,11 +1512,7 @@ function MonthGroup({
 
   const [page, setPage] = useState(1);
   const [detailEntry, setDetailEntry] = useState<FinancialControlEntry | null>(null);
-  const [actionMenu, setActionMenu] = useState<{
-    entryId: string;
-    top: number;
-    left: number;
-  } | null>(null);
+  const [actionMenu, setActionMenu] = useState<ActionMenuCoords | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(items.length / MONTH_GROUP_PAGE_SIZE));
   const startIndex = (page - 1) * MONTH_GROUP_PAGE_SIZE;
@@ -1633,12 +1672,7 @@ function MonthGroup({
                             const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
                             setActionMenu((prev) => {
                               if (prev?.entryId === entry.id) return null;
-                              let left = r.right - ACTION_MENU_WIDTH_PX;
-                              left = Math.max(
-                                8,
-                                Math.min(left, window.innerWidth - ACTION_MENU_WIDTH_PX - 8)
-                              );
-                              return { entryId: entry.id, top: r.bottom + 4, left };
+                              return computeActionMenuPosition(r, entry.id);
                             });
                           }}
                           disabled={isDeleting}
@@ -1682,6 +1716,8 @@ function MonthGroup({
           onClose={() => setActionMenu(null)}
           top={actionMenu.top}
           left={actionMenu.left}
+          maxHeight={actionMenu.maxHeight}
+          placement={actionMenu.placement}
           panelClassName="w-48"
         >
           <button

@@ -4949,9 +4949,11 @@ export function OcPurchaseOrdersPanel({
         <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedOrder(null)} />
           <div
-            className={`relative my-auto flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 max-h-[min(92dvh,calc(100dvh-2rem))] ${
-              selectedOrder.status === 'IN_REVIEW' ? 'max-w-2xl' : 'max-w-4xl'
-            }`}
+            className={`relative my-auto flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 ${
+              selectedOrder.status !== 'IN_REVIEW' && ocDetailTab === 'comentarios'
+                ? 'h-[min(92dvh,calc(100dvh-2rem))]'
+                : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
+            } ${selectedOrder.status === 'IN_REVIEW' ? 'max-w-2xl' : 'max-w-4xl'}`}
             role="dialog"
             aria-modal="true"
           >
@@ -4960,7 +4962,7 @@ export function OcPurchaseOrdersPanel({
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
                   {selectedOrder.status === 'IN_REVIEW'
                     ? 'Ordem de Compra'
-                    : `Ordem de Compra ${formatOcListDisplayId(selectedOrder.orderNumber)}`}
+                    : `Ordem de Compra No. ${formatOcListDisplayId(selectedOrder.orderNumber)}`}
                 </h2>
                 {selectedOrder.status === 'IN_REVIEW' ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{selectedOrder.orderNumber}</p>
@@ -5004,7 +5006,14 @@ export function OcPurchaseOrdersPanel({
                 </div>
               </div>
             ) : null}
-            <div ref={ocDetailScrollRef} className="flex-1 overflow-y-auto px-5 py-4">
+            <div
+              ref={ocDetailScrollRef}
+              className={
+                selectedOrder.status !== 'IN_REVIEW' && ocDetailTab === 'comentarios'
+                  ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-5 pt-4 pb-4'
+                  : 'flex-1 overflow-y-auto px-5 py-4'
+              }
+            >
             {selectedOrder.status === 'IN_REVIEW' ? (
               <>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
@@ -5040,7 +5049,13 @@ export function OcPurchaseOrdersPanel({
                 />
               </>
             ) : (
-            <div className="space-y-5 text-sm">
+            <div
+              className={
+                ocDetailTab === 'comentarios'
+                  ? 'flex h-full min-h-0 flex-col text-sm'
+                  : 'space-y-5 text-sm'
+              }
+            >
               {ocDetailTab === 'resumo' ? (
                 (() => {
                   const cc = selectedOrder.materialRequest?.costCenter;

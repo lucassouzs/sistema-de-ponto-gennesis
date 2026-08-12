@@ -178,6 +178,10 @@ const APPROVE_STATUS = new Set([
   'VALIDATED',
   'APROVADO',
   'APROVADA',
+  // Fluxo OC (aprovações intermediárias)
+  'PENDING',
+  'PENDING_DIRETORIA',
+  'PENDING_PROOF_VALIDATION',
 ]);
 
 const REJECT_STATUS = new Set([
@@ -190,6 +194,8 @@ const REJECT_STATUS = new Set([
   'REJEITADO',
   'REJEITADA',
   'DENIED',
+  'IN_REVIEW',
+  'PENDING_PROOF_CORRECTION',
 ]);
 
 let baseClient: PrismaClient | null = null;
@@ -210,9 +216,11 @@ export function buildAuditSummary(action: AuditAction, entity: string): string {
     case 'DELETE':
       return `Excluiu ${label.toLowerCase()}`;
     case 'APPROVE':
-      return `Aprovou ${label.toLowerCase()}`;
+      return entity === 'PurchaseOrder' ? 'Aprovou a ordem de compra' : `Aprovou ${label.toLowerCase()}`;
     case 'REJECT':
-      return `Rejeitou ${label.toLowerCase()}`;
+      return entity === 'PurchaseOrder'
+        ? 'enviou a ordem de compra para correção/rejeição'
+        : `Rejeitou ${label.toLowerCase()}`;
     default:
       return label;
   }

@@ -161,10 +161,15 @@ export function getPrisma(): PrismaClient {
   const p = prisma as PrismaClient & {
     licitacao?: unknown;
     licitacaoDocumento?: unknown;
+    purchaseOrderComment?: unknown;
+    materialRequestComment?: unknown;
   };
-  if (!p.licitacao || !p.licitacaoDocumento) {
+  const missingLicitacao = !p.licitacao || !p.licitacaoDocumento;
+  const missingComments = !p.purchaseOrderComment || !p.materialRequestComment;
+  if (missingLicitacao || missingComments) {
     console.warn(
-      '[Prisma] Recriando PrismaClient — modelos de Licitações ausentes na instância em memória.'
+      '[Prisma] Recriando PrismaClient — modelos ausentes na instância em memória.',
+      { missingLicitacao, missingComments }
     );
     const previous = prisma;
     prisma = buildPrismaClient();

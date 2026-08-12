@@ -39,9 +39,15 @@ function authorInitials(name: string): string {
 type RmCommentsSectionProps = {
   materialRequestId: string;
   currentUserId?: string | null;
+  /** Layout em tela cheia da aba (lista com scroll + composer fixo embaixo). */
+  fillHeight?: boolean;
 };
 
-export function RmCommentsSection({ materialRequestId, currentUserId }: RmCommentsSectionProps) {
+export function RmCommentsSection({
+  materialRequestId,
+  currentUserId,
+  fillHeight = false
+}: RmCommentsSectionProps) {
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const queryKey = ['material-request-comments', materialRequestId] as const;
@@ -90,72 +96,76 @@ export function RmCommentsSection({ materialRequestId, currentUserId }: RmCommen
     postMutation.mutate(content);
   };
 
-  return (
-    <div className="border-t border-gray-200 pt-4 dark:border-gray-600">
-      <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Comentários</h4>
-
-      <div className="mb-3 max-h-56 min-h-[6rem] overflow-y-auto">
-        {isLoading ? (
-          <p className="py-6 text-center text-sm text-gray-400">Carregando…</p>
-        ) : comments.length === 0 ? (
-          <p className="flex min-h-[6rem] items-center justify-center px-2 text-center text-sm text-gray-400">
-            Nenhum comentário ainda.
-          </p>
-        ) : (
-          <div className="space-y-3 pb-1">
-            {comments.map((comment) => {
-              const canDelete = currentUserId === comment.author.id;
-              return (
-                <div
-                  key={comment.id}
-                  className="group/comment flex items-start gap-2.5 rounded-lg px-1 py-1 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40"
-                >
-                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[11px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-200">
-                    {authorInitials(comment.author.name)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-gray-900 dark:text-gray-100">
-                        {comment.author.name}
+  const list = (
+    <>
+      {isLoading ? (
+        <p className="py-16 text-center text-sm text-gray-400">Carregando…</p>
+      ) : comments.length === 0 ? (
+        <p
+          className={`flex items-center justify-center px-2 text-center text-sm text-gray-400 ${
+            fillHeight ? 'h-full min-h-[12rem]' : 'min-h-[6rem]'
+          }`}
+        >
+          Nenhum comentário ainda.
+        </p>
+      ) : (
+        <div className="space-y-3 pb-2">
+          {comments.map((comment) => {
+            const canDelete = currentUserId === comment.author.id;
+            return (
+              <div
+                key={comment.id}
+                className="group/comment flex items-start gap-2.5 rounded-lg px-1 py-1"
+              >
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[11px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                  {authorInitials(comment.author.name)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium leading-tight text-gray-900 dark:text-gray-100">
+                      {comment.author.name}
+                    </span>
+                    <div className="relative flex h-6 min-w-[3.25rem] shrink-0 items-center justify-end">
+                      <span
+                        className={`text-[10px] leading-none whitespace-nowrap text-gray-400 transition-opacity duration-150 ${
+                          canDelete ? 'group-hover/comment:invisible group-hover/comment:opacity-0' : ''
+                        }`}
+                      >
+                        {formatRelativeTime(comment.createdAt)}
                       </span>
-                      <div className="relative flex h-6 min-w-[3.25rem] shrink-0 items-center justify-end">
-                        <span
-                          className={`text-[10px] leading-none whitespace-nowrap text-gray-400 transition-opacity duration-150 ${
-                            canDelete ? 'group-hover/comment:invisible group-hover/comment:opacity-0' : ''
-                          }`}
+                      {canDelete ? (
+                        <button
+                          type="button"
+                          onClick={() => deleteMutation.mutate(comment.id)}
+                          disabled={deleteMutation.isPending}
+                          className="absolute inset-0 flex items-center justify-end rounded-md text-gray-400 opacity-0 invisible transition-all duration-150 hover:text-red-600 group-hover/comment:visible group-hover/comment:opacity-100"
+                          title="Excluir comentário"
                         >
-                          {formatRelativeTime(comment.createdAt)}
-                        </span>
-                        {canDelete ? (
-                          <button
-                            type="button"
-                            onClick={() => deleteMutation.mutate(comment.id)}
-                            disabled={deleteMutation.isPending}
-                            className="absolute inset-0 flex items-center justify-end rounded-md text-gray-400 opacity-0 invisible transition-all duration-150 hover:text-red-600 group-hover/comment:visible group-hover/comment:opacity-100"
-                            title="Excluir comentário"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        ) : null}
-                      </div>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                     </div>
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-snug text-gray-600 dark:text-gray-300">
-                      {comment.content}
-                    </p>
                   </div>
+                  <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-snug text-gray-600 dark:text-gray-300">
+                    {comment.content}
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
 
+  const composer = (
+    <>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Escrever um comentário..."
         rows={2}
-        className={`${FORM_FIELD_TEXTAREA_CLS} mb-2 !min-h-0 py-2 text-sm`}
+        className={`${FORM_FIELD_TEXTAREA_CLS} mb-0 !min-h-0 resize-none py-2 text-sm`}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
@@ -171,6 +181,25 @@ export function RmCommentsSection({ materialRequestId, currentUserId }: RmCommen
       >
         {postMutation.isPending ? 'Enviando…' : 'Comentar'}
       </button>
+    </>
+  );
+
+  if (fillHeight) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">{list}</div>
+        <div className="shrink-0 space-y-2 border-t border-gray-200 bg-white pt-3 dark:border-gray-700 dark:bg-gray-800">
+          {composer}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-gray-200 pt-4 dark:border-gray-600">
+      <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Comentários</h4>
+      <div className="mb-3 max-h-56 min-h-[6rem] overflow-y-auto">{list}</div>
+      <div className="space-y-2">{composer}</div>
     </div>
   );
 }

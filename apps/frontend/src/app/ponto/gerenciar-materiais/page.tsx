@@ -14,6 +14,7 @@ import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import toast from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { OcStyledCheckbox, type PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
+import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import {
   PaymentConditionSelect,
   resolvePaymentConditionMeta,
@@ -25,7 +26,14 @@ import {
   type OcBoletoCreationSlot
 } from '@/components/oc/OcBoletoCreationFields';
 import type { MaterialRequest } from './_lib/types';
-import { getStatusInfo, materialItemLabel, rmContractDisplay, rmSolicitante } from './_lib/display';
+import {
+  getPriorityInfo,
+  getStatusInfo,
+  materialItemLabel,
+  rmContractDisplay,
+  rmOsDisplay,
+  rmSolicitante
+} from './_lib/display';
 import {
   formatCurrencyBR,
   numericQuantityFromInput,
@@ -54,6 +62,90 @@ import {
 } from './_lib/rmCardFilter';
 import { formatRmListDisplayId } from './_lib/rmListDisplay';
 import { RmCommentsSection } from './_components/RmCommentsSection';
+
+type RmDetailModalTab = 'resumo' | 'materiais' | 'documentos' | 'comentarios';
+
+const RM_DETAIL_MODAL_TABS: { id: RmDetailModalTab; label: string }[] = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'materiais', label: 'Materiais' },
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'comentarios', label: 'Comentários' }
+];
+
+function RmDetailDocSection({
+  title,
+  description,
+  headerRight,
+  children
+}: {
+  title: string;
+  description?: string;
+  headerRight?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-0 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="flex items-start justify-between gap-3 border-b border-gray-200 pb-3 dark:border-gray-700">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            {title}
+          </h3>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {headerRight}
+      </div>
+      <div className="divide-y divide-gray-200 dark:divide-gray-700">{children}</div>
+    </section>
+  );
+}
+
+function RmDetailDocumentItem({
+  label,
+  subtitle,
+  url,
+  fileName,
+  pending = false,
+  actions
+}: {
+  label: string;
+  subtitle?: string;
+  url?: string | null;
+  fileName?: string | null;
+  pending?: boolean;
+  actions?: React.ReactNode;
+}) {
+  const trimmedUrl = (url || '').trim();
+  const isPending = pending || !trimmedUrl;
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 first:pt-3 last:pb-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</p>
+        {subtitle ? (
+          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {isPending ? (
+          <span className="inline-flex whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+            Pendente
+          </span>
+        ) : (
+          <OcAttachmentActions
+            url={trimmedUrl}
+            fileName={fileName || label}
+            variant="buttons"
+          />
+        )}
+        {actions}
+      </div>
+    </div>
+  );
+}
 
 const ocFieldCls =
   'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 disabled:cursor-not-allowed disabled:opacity-50';
@@ -151,6 +243,7 @@ export default function GerenciarMateriaisPage() {
   const [showCreateOCModal, setShowCreateOCModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showCloseDetailsConfirm, setShowCloseDetailsConfirm] = useState(false);
+  const [rmDetailTab, setRmDetailTab] = useState<RmDetailModalTab>('resumo');
   const [ocSupplierId, setOcSupplierId] = useState('');
   const [ocSupplierSearch, setOcSupplierSearch] = useState('');
   const [ocPaymentType, setOcPaymentType] = useState<string>(OC_TYPE_AVISTA);
@@ -420,6 +513,7 @@ export default function GerenciarMateriaisPage() {
     setShowCloseDetailsConfirm(false);
     setShowDetailsModal(false);
     setSelectedRequest(null);
+    setRmDetailTab('resumo');
   };
 
   const requestCloseDetailsModal = () => {
@@ -693,6 +787,7 @@ export default function GerenciarMateriaisPage() {
               try {
                 const res = await api.get(`/material-requests/${request.id}`);
                 setSelectedRequest((res.data?.data ?? res.data) as MaterialRequest);
+                setRmDetailTab('resumo');
                 setShowDetailsModal(true);
               } catch {
                 toast.error('Erro ao carregar detalhes da RM');
@@ -706,221 +801,351 @@ export default function GerenciarMateriaisPage() {
           const detailOrders = ordersByMaterialRequestId.get(selectedRequest.id) ?? [];
           const displayStatus = getMaterialRequestDisplayStatus(selectedRequest, detailOrders);
           const statusInfo = getStatusInfo(displayStatus);
+          const priorityInfo = getPriorityInfo(selectedRequest.priority);
           const cancellationReason = getMaterialRequestCancellationReason(selectedRequest, detailOrders);
+          const rmDisplayNo =
+            formatRmListDisplayId(selectedRequest.requestNumber) ||
+            selectedRequest.id.slice(0, 8);
+          const fdFiles = getDemandSheetFiles(selectedRequest);
+          const isCommentsTab = rmDetailTab === 'comentarios';
+
+          const infoRows: { label: string; value: React.ReactNode; stacked?: boolean }[] = [
+            { label: 'Status', value: (
+              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusInfo.color}`}>
+                {statusInfo.label}
+              </span>
+            )},
+            { label: 'Prioridade', value: (
+              <span className={priorityInfo.color}>{priorityInfo.label}</span>
+            )},
+            { label: 'Solicitante', value: rmSolicitante(selectedRequest)?.name || '—' },
+            { label: 'Contrato', value: rmContractDisplay(selectedRequest) },
+            { label: 'Ordem de serviço', value: rmOsDisplay(selectedRequest) },
+            {
+              label: 'Centro de custo',
+              value: selectedRequest.costCenter?.name?.trim() || '—'
+            },
+          ];
+          if (selectedRequest.project?.name) {
+            infoRows.push({ label: 'Projeto', value: selectedRequest.project.name });
+          }
+          if (selectedRequest.createdAt) {
+            const created = new Date(selectedRequest.createdAt);
+            infoRows.push({
+              label: 'Data',
+              value: Number.isNaN(created.getTime())
+                ? '—'
+                : created.toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+            });
+          }
+          if (selectedRequest.demandSheet) {
+            infoRows.push({ label: 'Ficha de Demanda', value: selectedRequest.demandSheet });
+          }
+          if (displayStatus === 'CANCELLED') {
+            infoRows.push({
+              label: 'Motivo do cancelamento',
+              value: (
+                <span className="whitespace-pre-wrap leading-relaxed">
+                  {cancellationReason || 'Motivo não informado.'}
+                </span>
+              ),
+              stacked: true
+            });
+          }
+          if (selectedRequest.description?.trim()) {
+            infoRows.push({
+              label: 'Descrição',
+              value: (
+                <span className="whitespace-pre-wrap leading-relaxed">
+                  {selectedRequest.description}
+                </span>
+              ),
+              stacked: true
+            });
+          }
 
           return (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={requestCloseDetailsModal}
               aria-hidden
             />
             <div
-              className="relative flex max-h-[min(90vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
+              className={`relative my-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 ${
+                isCommentsTab
+                  ? 'h-[min(92dvh,calc(100dvh-2rem))]'
+                  : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
+              }`}
               role="dialog"
               aria-modal="true"
               aria-labelledby="rm-details-modal-title"
             >
-              <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
-                <h3
-                  id="rm-details-modal-title"
-                  className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-                >
-                  Detalhes da Requisição
-                </h3>
+              <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
+                <div className="min-w-0">
+                  <h2
+                    id="rm-details-modal-title"
+                    className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100"
+                  >
+                    Requisição de Material No. {rmDisplayNo}
+                  </h2>
+                </div>
                 <button
                   type="button"
                   onClick={requestCloseDetailsModal}
-                  className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                  className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                   aria-label="Fechar"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Número</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {formatRmListDisplayId(selectedRequest.requestNumber) ||
-                      `#${selectedRequest.id.slice(0, 8)}`}
-                  </p>
+
+              <div
+                className="shrink-0 border-b border-gray-200 px-5 dark:border-gray-700"
+                role="tablist"
+                aria-label="Seções da RM"
+              >
+                <div className="table-scroll -mb-px flex gap-1">
+                  {RM_DETAIL_MODAL_TABS.map((tab) => {
+                    const active = rmDetailTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => setRmDetailTab(tab.id)}
+                        className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                          active
+                            ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
-                  <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusInfo.color}`}>
-                    {statusInfo.label}
-                  </span>
-                </div>
-                {displayStatus === 'CANCELLED' && (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Motivo do cancelamento</p>
-                    <p className="text-gray-900 dark:text-gray-100 whitespace-pre-wrap">
-                      {cancellationReason || 'Motivo não informado.'}
-                    </p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Solicitante</p>
-                  <p className="text-gray-900 dark:text-gray-100">{rmSolicitante(selectedRequest)?.name || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Contrato</p>
-                  <p className="text-gray-900 dark:text-gray-100">{rmContractDisplay(selectedRequest)}</p>
-                </div>
-                {selectedRequest.project && (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Projeto</p>
-                    <p className="text-gray-900 dark:text-gray-100">{selectedRequest.project.name}</p>
-                  </div>
-                )}
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Descrição</p>
-                  <p className="text-gray-900 dark:text-gray-100">{selectedRequest.description || 'Sem descrição'}</p>
-                </div>
-                {selectedRequest.demandSheet ? (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Ficha de Demanda</p>
-                    <p className="text-gray-900 dark:text-gray-100">{selectedRequest.demandSheet}</p>
-                  </div>
-                ) : null}
-                {(() => {
-                  const fdFiles = getDemandSheetFiles(selectedRequest);
-                  if (fdFiles.length === 0 && !isAdministrator) return null;
-                  return (
-                    <div>
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Anexos</p>
-                        {isAdministrator ? (
-                          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
-                            <Paperclip className="h-3.5 w-3.5" />
-                            Anexar
-                            <input
-                              type="file"
-                              className="hidden"
-                              disabled={adminAttachmentBusy}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = '';
-                                if (file) void handleAdminReplaceDemandFile(selectedRequest, null, file);
-                              }}
-                            />
-                          </label>
-                        ) : null}
-                      </div>
-                      {fdFiles.length === 0 ? (
-                        <p className="text-xs text-gray-400">Nenhum anexo</p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {fdFiles.map((file, index) => (
-                            <li
-                              key={`${file.url}-${index}`}
-                              className="flex flex-wrap items-center gap-2"
+              </div>
+
+              <div
+                className={
+                  isCommentsTab
+                    ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-5 pb-4 pt-4'
+                    : 'min-h-0 flex-1 overflow-y-auto px-5 py-4'
+                }
+              >
+                <div
+                  className={
+                    isCommentsTab ? 'flex h-full min-h-0 flex-col text-sm' : 'space-y-5 text-sm'
+                  }
+                >
+                  {rmDetailTab === 'resumo' ? (
+                    <div className="space-y-4">
+                      <dl className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {infoRows.map((row) => (
+                          <div
+                            key={row.label}
+                            className={
+                              row.stacked
+                                ? 'flex flex-col gap-1.5 py-3'
+                                : 'flex flex-col gap-0.5 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6'
+                            }
+                          >
+                            <dt className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                              {row.label}
+                            </dt>
+                            <dd
+                              className={
+                                row.stacked
+                                  ? 'min-w-0 text-left text-sm text-gray-900 dark:text-gray-100'
+                                  : 'min-w-0 text-sm text-gray-900 dark:text-gray-100 sm:text-right'
+                              }
                             >
-                              <a
-                                href={absoluteUploadUrl(file.url)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
-                              >
-                                {file.name || 'Ver anexo'}
-                              </a>
-                              {isAdministrator ? (
-                                <span className="inline-flex items-center gap-1">
-                                  <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
-                                    Trocar
-                                    <input
-                                      type="file"
-                                      className="hidden"
-                                      disabled={adminAttachmentBusy}
-                                      onChange={(e) => {
-                                        const nextFile = e.target.files?.[0];
-                                        e.target.value = '';
-                                        if (nextFile) {
-                                          void handleAdminReplaceDemandFile(
-                                            selectedRequest,
-                                            index,
-                                            nextFile
-                                          );
-                                        }
-                                      }}
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    disabled={adminAttachmentBusy}
-                                    onClick={() =>
-                                      void handleAdminRemoveDemandFile(selectedRequest, index)
-                                    }
-                                    className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 disabled:opacity-50"
-                                  >
-                                    Remover
-                                  </button>
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                              {row.value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
                     </div>
-                  );
-                })()}
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Itens</p>
-                  <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 dark:bg-gray-700/50">
-                        <tr>
-                          <th className="text-left p-2">Material</th>
-                          <th className="text-right p-2">Qtd</th>
-                          <th className="text-right p-2">Unidade</th>
-                          <th className="text-left p-2">Anexo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedRequest.items?.map((item: any) => (
-                          <tr key={item.id} className="border-t border-gray-200 dark:border-gray-600">
-                            <td className="p-2 text-gray-900 dark:text-gray-100">
-                              {materialItemLabel(item)}
-                            </td>
-                            <td className="p-2 text-right">{item.quantity}</td>
-                            <td className="p-2 text-right">{item.unit || '-'}</td>
-                            <td className="p-2 text-left">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {item.attachmentUrl ? (
-                                  <a
-                                    href={absoluteUploadUrl(item.attachmentUrl)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
-                                  >
-                                    {item.attachmentName || 'Ver anexo'}
-                                  </a>
-                                ) : (
-                                  <span className="text-gray-400 text-xs">—</span>
-                                )}
-                                {isAdministrator ? (
-                                  <>
+                  ) : null}
+
+                  {rmDetailTab === 'materiais' ? (
+                    selectedRequest.items?.length ? (
+                      <div className="table-scroll">
+                        <table className="w-full text-xs sm:text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 text-left dark:border-gray-700">
+                              <th className="w-12 whitespace-nowrap pb-3 pr-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Item
+                              </th>
+                              <th className="px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Material
+                              </th>
+                              <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Qtd
+                              </th>
+                              <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Un.
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {selectedRequest.items.map((item, idx) => (
+                              <tr
+                                key={item.id}
+                                className="text-gray-900 dark:text-gray-100"
+                              >
+                                <td className="py-3 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
+                                  {idx + 1}
+                                </td>
+                                <td className="max-w-[220px] px-2 py-3 align-top sm:max-w-none">
+                                  {materialItemLabel(item)}
+                                  {(item.notes || item.observation)?.trim() ? (
+                                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                      {(item.notes || item.observation)?.trim()}
+                                    </p>
+                                  ) : null}
+                                </td>
+                                <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
+                                  {Number(item.quantity)}
+                                </td>
+                                <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                  {item.unit || '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="py-10 text-center text-sm text-gray-400">
+                        Nenhum material nesta requisição.
+                      </p>
+                    )
+                  ) : null}
+
+                  {rmDetailTab === 'documentos' ? (
+                    <div className="space-y-4">
+                      <RmDetailDocSection
+                        title="Ficha de Demanda"
+                        headerRight={
+                          isAdministrator ? (
+                            <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              Anexar
+                              <input
+                                type="file"
+                                className="hidden"
+                                disabled={adminAttachmentBusy}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  e.target.value = '';
+                                  if (file) {
+                                    void handleAdminReplaceDemandFile(selectedRequest, null, file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          ) : null
+                        }
+                      >
+                        {fdFiles.length === 0 ? (
+                          <RmDetailDocumentItem
+                            label="Arquivo"
+                            subtitle="Não anexado"
+                            pending
+                          />
+                        ) : (
+                          fdFiles.map((file, index) => (
+                            <RmDetailDocumentItem
+                              key={`${file.url}-${index}`}
+                              label={fdFiles.length > 1 ? `Arquivo ${index + 1}` : 'Arquivo'}
+                              subtitle={file.name || 'Anexo'}
+                              url={file.url}
+                              fileName={file.name}
+                              actions={
+                                isAdministrator ? (
+                                  <span className="inline-flex items-center gap-1">
                                     <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
-                                      {item.attachmentUrl ? 'Trocar' : 'Anexar'}
+                                      Trocar
                                       <input
                                         type="file"
                                         className="hidden"
                                         disabled={adminAttachmentBusy}
                                         onChange={(e) => {
-                                          const file = e.target.files?.[0];
+                                          const nextFile = e.target.files?.[0];
                                           e.target.value = '';
-                                          if (file) {
-                                            void handleAdminReplaceItemAttachment(
+                                          if (nextFile) {
+                                            void handleAdminReplaceDemandFile(
                                               selectedRequest,
-                                              item.id,
-                                              file
+                                              index,
+                                              nextFile
                                             );
                                           }
                                         }}
                                       />
                                     </label>
-                                    {item.attachmentUrl ? (
+                                    <button
+                                      type="button"
+                                      disabled={adminAttachmentBusy}
+                                      onClick={() =>
+                                        void handleAdminRemoveDemandFile(selectedRequest, index)
+                                      }
+                                      className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                    >
+                                      Remover
+                                    </button>
+                                  </span>
+                                ) : null
+                              }
+                            />
+                          ))
+                        )}
+                      </RmDetailDocSection>
+
+                      {(() => {
+                        const itemsWithAttachments = (selectedRequest.items ?? [])
+                          .map((item, idx) => ({ item, idx }))
+                          .filter(({ item }) => Boolean(item.attachmentUrl?.trim()));
+                        if (itemsWithAttachments.length === 0) return null;
+                        return (
+                          <RmDetailDocSection title="Anexos dos materiais">
+                            {itemsWithAttachments.map(({ item, idx }) => (
+                              <RmDetailDocumentItem
+                                key={item.id}
+                                label={`Item ${idx + 1} · ${materialItemLabel(item)}`}
+                                subtitle={item.attachmentName || 'Anexo'}
+                                url={item.attachmentUrl}
+                                fileName={item.attachmentName}
+                                actions={
+                                  isAdministrator ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                                        Trocar
+                                        <input
+                                          type="file"
+                                          className="hidden"
+                                          disabled={adminAttachmentBusy}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (file) {
+                                              void handleAdminReplaceItemAttachment(
+                                                selectedRequest,
+                                                item.id,
+                                                file
+                                              );
+                                            }
+                                          }}
+                                        />
+                                      </label>
                                       <button
                                         type="button"
                                         disabled={adminAttachmentBusy}
@@ -931,47 +1156,44 @@ export default function GerenciarMateriaisPage() {
                                             null
                                           )
                                         }
-                                        className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 disabled:opacity-50"
+                                        className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                                       >
                                         Remover
                                       </button>
-                                    ) : null}
-                                  </>
-                                ) : null}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                                    </span>
+                                  ) : null
+                                }
+                              />
+                            ))}
+                          </RmDetailDocSection>
+                        );
+                      })()}
+                    </div>
+                  ) : null}
+
+                  {rmDetailTab === 'comentarios' ? (
+                    <RmCommentsSection
+                      materialRequestId={selectedRequest.id}
+                      currentUserId={userData?.data?.id}
+                      fillHeight
+                    />
+                  ) : null}
                 </div>
-                <RmCommentsSection
-                  materialRequestId={selectedRequest.id}
-                  currentUserId={userData?.data?.id}
-                />
               </div>
-              </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-4 dark:border-gray-700">
-                {selectedRequest.status === 'IN_REVIEW' &&
-                  userData?.data?.id === rmSolicitante(selectedRequest)?.id && (
-                    <Link
-                      href={`/ponto/solicitar-materiais?editRm=${selectedRequest.id}`}
-                      onClick={closeDetailsModal}
-                      className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Editar RM
-                    </Link>
-                  )}
-                <button
-                  type="button"
-                  onClick={closeDetailsModal}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                >
-                  Fechar
-                </button>
-              </div>
+
+              {selectedRequest.status === 'IN_REVIEW' &&
+              userData?.data?.id === rmSolicitante(selectedRequest)?.id ? (
+                <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
+                  <Link
+                    href={`/ponto/solicitar-materiais?editRm=${selectedRequest.id}`}
+                    onClick={closeDetailsModal}
+                    className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Editar RM
+                  </Link>
+                </div>
+              ) : null}
             </div>
           </div>
           );

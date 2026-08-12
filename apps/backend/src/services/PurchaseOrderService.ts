@@ -1,4 +1,4 @@
-import { prisma } from '../lib/prisma';
+import { prisma, getPrisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { BorderService, BorderData } from './BorderService';
@@ -3112,30 +3112,162 @@ export class PurchaseOrderService {
   }
 
   async listComments(purchaseOrderId: string) {
-    const existing = await prisma.purchaseOrder.findUnique({
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        findMany: (args: unknown) => Promise<any[]>;
+      };
+      auditLog?: {
+        findMany: (args: unknown) => Promise<any[]>;
+      };
+    };
+
+    const existing = await db.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
-      select: { id: true },
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        creator: { select: { id: true, name: true, profilePhotoUrl: true } },
+        comprasApprovedAt: true,
+        comprasApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+        gestorApprovedAt: true,
+        gestorApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+        approvedAt: true,
+        approver: { select: { id: true, name: true, profilePhotoUrl: true } },
+        invoiceNumbers: { select: { id: true, number: true, createdAt: true } },
+      },
     });
     if (!existing) throw new Error('Ordem de compra não encontrada');
 
-    const rows = await prisma.purchaseOrderComment.findMany({
-      where: { purchaseOrderId },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        author: { select: { id: true, name: true, profilePhotoUrl: true } },
-      },
-    });
+    type Author = { id: string; name: string; profilePhotoUrl?: string | null };
+    type FeedItem = {
+      id: string;
+      kind: 'comment' | 'system';
+      content: string;
+      createdAt: string;
+      author: Author | null;
+    };
 
-    return rows.map((c) => ({
-      id: c.id,
-      content: c.content,
-      createdAt: c.createdAt.toISOString(),
-      author: {
-        id: c.author.id,
-        name: c.author.name,
-        profilePhotoUrl: c.author.profilePhotoUrl,
-      },
-    }));
+    const feed: FeedItem[] = [];
+
+    const pushSystem = (id: string, at: Date | string | null | undefined, text: string, author?: Author | null) => {
+      if (!at || !text.trim()) return;
+      const createdAt = typeof at === 'string' ? at : at.toISOString();
+      feed.push({
+        id,
+        kind: 'system',
+        content: text.trim(),
+        createdAt,
+        author: author ?? null,
+      });
+    };
+
+    if (existing.creator) {
+      pushSystem(
+        `sys-created-${existing.id}`,
+        existing.createdAt,
+        `${existing.creator.name} criou a ordem de compra`,
+        existing.creator
+      );
+    }
+    if (existing.comprasApprovedAt && existing.comprasApprover) {
+      pushSystem(
+        `sys-compras-${existing.id}`,
+        existing.comprasApprovedAt,
+        `${existing.comprasApprover.name} aprovou no compras`,
+        existing.comprasApprover
+      );
+    }
+    if (existing.gestorApprovedAt && existing.gestorApprover) {
+      pushSystem(
+        `sys-gestor-${existing.id}`,
+        existing.gestorApprovedAt,
+        `${existing.gestorApprover.name} aprovou como gestor`,
+        existing.gestorApprover
+      );
+    }
+    if (existing.approvedAt && existing.approver) {
+      pushSystem(
+        `sys-approved-${existing.id}`,
+        existing.approvedAt,
+        `${existing.approver.name} aprovou como diretoria`,
+        existing.approver
+      );
+    }
+    for (const inv of existing.invoiceNumbers || []) {
+      pushSystem(
+        `sys-nf-${inv.id}`,
+        inv.createdAt,
+        `NF ${inv.number} foi adicionada à ordem de compra`
+      );
+    }
+
+    // Eventos de auditoria (rejeição / exclusão — aprovações já vêm dos campos da OC)
+    if (db.auditLog?.findMany) {
+      try {
+        const audits = await db.auditLog.findMany({
+          where: {
+            entity: 'PurchaseOrder',
+            entityId: purchaseOrderId,
+            action: { in: ['REJECT', 'DELETE'] },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 50,
+        });
+        const userIds = Array.from(
+          new Set(audits.map((a: any) => a.userId).filter(Boolean))
+        ) as string[];
+        const users =
+          userIds.length > 0
+            ? await db.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, name: true, profilePhotoUrl: true },
+              })
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+        for (const a of audits) {
+          const summary = String(a.summary || '').trim();
+          if (!summary) continue;
+          const author = a.userId ? userById.get(a.userId) || null : null;
+          const who = author?.name ? `${author.name} ` : '';
+          const rest = summary.charAt(0).toLowerCase() + summary.slice(1);
+          pushSystem(
+            `sys-audit-${a.id}`,
+            a.createdAt,
+            `${who}${rest}`.replace(/\s+/g, ' ').trim(),
+            author
+          );
+        }
+      } catch (err) {
+        console.warn('[PurchaseOrder] falha ao carregar auditoria no feed:', err);
+      }
+    }
+
+    if (db.purchaseOrderComment?.findMany) {
+      const rows = await db.purchaseOrderComment.findMany({
+        where: { purchaseOrderId },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          author: { select: { id: true, name: true, profilePhotoUrl: true } },
+        },
+      });
+      for (const c of rows) {
+        feed.push({
+          id: c.id,
+          kind: 'comment',
+          content: c.content,
+          createdAt: c.createdAt.toISOString(),
+          author: {
+            id: c.author.id,
+            name: c.author.name,
+            profilePhotoUrl: c.author.profilePhotoUrl,
+          },
+        });
+      }
+    }
+
+    feed.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return feed;
   }
 
   async createComment(purchaseOrderId: string, userId: string, content: string) {
@@ -3143,13 +3275,25 @@ export class PurchaseOrderService {
     if (!text) throw new Error('Escreva um comentário');
     if (text.length > 4000) throw new Error('Comentário muito longo (máx. 4000 caracteres)');
 
-    const existing = await prisma.purchaseOrder.findUnique({
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        create: (args: unknown) => Promise<any>;
+      };
+    };
+
+    if (!db.purchaseOrderComment?.create) {
+      throw new Error(
+        'Comentários de OC indisponíveis no servidor. Rode `npx prisma generate` em apps/backend e reinicie o backend.'
+      );
+    }
+
+    const existing = await db.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
       select: { id: true },
     });
     if (!existing) throw new Error('Ordem de compra não encontrada');
 
-    const comment = await prisma.purchaseOrderComment.create({
+    const comment = await db.purchaseOrderComment.create({
       data: {
         purchaseOrderId,
         userId,
@@ -3162,6 +3306,7 @@ export class PurchaseOrderService {
 
     return {
       id: comment.id,
+      kind: 'comment' as const,
       content: comment.content,
       createdAt: comment.createdAt.toISOString(),
       author: {
@@ -3173,7 +3318,16 @@ export class PurchaseOrderService {
   }
 
   async deleteComment(commentId: string, userId: string, isAdmin: boolean) {
-    const comment = await prisma.purchaseOrderComment.findUnique({
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        findUnique: (args: unknown) => Promise<any>;
+        delete: (args: unknown) => Promise<any>;
+      };
+    };
+    if (!db.purchaseOrderComment?.findUnique) {
+      throw new Error('Comentários de OC indisponíveis no servidor');
+    }
+    const comment = await db.purchaseOrderComment.findUnique({
       where: { id: commentId },
       select: { id: true, userId: true },
     });
@@ -3181,6 +3335,6 @@ export class PurchaseOrderService {
     if (!isAdmin && comment.userId !== userId) {
       throw new Error('Sem permissão para excluir este comentário');
     }
-    await prisma.purchaseOrderComment.delete({ where: { id: commentId } });
+    await db.purchaseOrderComment.delete({ where: { id: commentId } });
   }
 }
