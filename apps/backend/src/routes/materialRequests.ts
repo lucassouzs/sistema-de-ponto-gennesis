@@ -4,7 +4,7 @@ import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdministrator } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
 import { MaterialRequestService } from '../services/MaterialRequestService';
 import { createError } from '../middleware/errorHandler';
@@ -408,5 +408,63 @@ router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) =
     next(error);
   }
 });
+
+/** Administrador: troca anexos da ficha de demanda (lista completa). */
+router.patch(
+  '/:id/admin/demand-sheet-attachments',
+  requireAdministrator,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const raw = req.body?.attachments;
+      if (!Array.isArray(raw)) {
+        throw createError('Informe a lista de anexos', 400);
+      }
+      const attachments = raw.map((file: { url?: unknown; name?: unknown }) => ({
+        url: String(file?.url || '').trim(),
+        name: String(file?.name || '').trim() || 'Arquivo anexado',
+      }));
+      const request = await materialRequestService.adminReplaceDemandSheetAttachments(
+        id,
+        attachments
+      );
+      res.json({ success: true, data: request, message: 'Anexos atualizados' });
+    } catch (error) {
+      if (error instanceof Error && /não encontrada/i.test(error.message)) {
+        res.status(404).json({ success: false, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+);
+
+/** Administrador: troca o anexo de um item da RM. */
+router.patch(
+  '/:id/items/:itemId/admin/attachment',
+  requireAdministrator,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id, itemId } = req.params;
+      const urlRaw = req.body?.url;
+      const nameRaw = req.body?.name;
+      const url =
+        urlRaw === null || urlRaw === undefined || String(urlRaw).trim() === ''
+          ? null
+          : String(urlRaw).trim();
+      const request = await materialRequestService.adminReplaceItemAttachment(id, itemId, {
+        url,
+        name: nameRaw === null || nameRaw === undefined ? null : String(nameRaw),
+      });
+      res.json({ success: true, data: request, message: 'Anexo do item atualizado' });
+    } catch (error) {
+      if (error instanceof Error && /não encontrado/i.test(error.message)) {
+        res.status(404).json({ success: false, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+);
 
 export default router;

@@ -49,11 +49,29 @@ export function normalizeDemandSheetAttachments(data: {
 }
 
 function demandSheetAttachmentFields(files: DemandSheetAttachment[]) {
+  // Client Prisma local ainda pode não ter `demandSheetAttachments` (Json) gerado —
+  // só setamos Url/Name aqui; o JSON é persistido em `persistDemandSheetAttachmentsJson`.
   return {
     demandSheetAttachmentUrl: files[0]?.url ?? null,
     demandSheetAttachmentName: files[0]?.name ?? null,
-    demandSheetAttachments: files.length > 0 ? (files as Prisma.InputJsonValue) : Prisma.DbNull,
   };
+}
+
+type PrismaExecutor = {
+  $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
+};
+
+/** Persiste a lista JSON mesmo se o Prisma Client estiver desatualizado. */
+async function persistDemandSheetAttachmentsJson(
+  client: PrismaExecutor,
+  id: string,
+  files: DemandSheetAttachment[]
+) {
+  await client.$executeRawUnsafe(
+    `UPDATE "material_requests" SET "demandSheetAttachments" = $1::jsonb WHERE "id" = $2`,
+    JSON.stringify(files),
+    id
+  );
 }
 
 type NestedPurchaseOrderWithCondition = {
@@ -454,6 +472,9 @@ export class MaterialRequestService {
             }
           }
         }
+      }).then(async (created) => {
+        await persistDemandSheetAttachmentsJson(tx, created.id, demandSheetFiles);
+        return created;
       });
     },
       MATERIAL_REQUEST_CREATE_TX_OPTIONS,
@@ -696,7 +717,36 @@ export class MaterialRequestService {
         }
       }
     });
-    return withEnrichedMaterialRequestPurchaseOrders(request);
+    const enriched = await withEnrichedMaterialRequestPurchaseOrders(request);
+    if (!enriched) return enriched;
+
+    // Client Prisma desatualizado pode omitir a coluna JSON — carrega via SQL.
+    const currentList = (enriched as { demandSheetAttachments?: unknown }).demandSheetAttachments;
+    if (!Array.isArray(currentList) || currentList.length === 0) {
+      try {
+        const rows = await prisma.$queryRawUnsafe<Array<{ demandSheetAttachments: unknown }>>(
+          `SELECT "demandSheetAttachments" FROM "material_requests" WHERE "id" = $1 LIMIT 1`,
+          id
+        );
+        const files = parseDemandSheetAttachments(rows[0]?.demandSheetAttachments);
+        if (files.length > 0) {
+          return {
+            ...enriched,
+            demandSheetAttachments: files,
+            demandSheetAttachmentUrl:
+              (enriched as { demandSheetAttachmentUrl?: string | null }).demandSheetAttachmentUrl ??
+              files[0].url,
+            demandSheetAttachmentName:
+              (enriched as { demandSheetAttachmentName?: string | null }).demandSheetAttachmentName ??
+              files[0].name,
+          };
+        }
+      } catch {
+        // ignora se a coluna ainda não existir
+      }
+    }
+
+    return enriched;
   }
 
   /**
@@ -888,6 +938,11 @@ export class MaterialRequestService {
       };
     });
 
+    const attachmentFiles =
+      data.demandSheetAttachments !== undefined || data.demandSheetAttachmentUrl !== undefined
+        ? demandSheetFiles
+        : normalizeDemandSheetAttachments(existing);
+
     await prisma.materialRequest.update({
       where: { id },
       data: {
@@ -898,11 +953,7 @@ export class MaterialRequestService {
         obra,
         description: data.description ?? null,
         demandSheet: data.demandSheet !== undefined ? (data.demandSheet || '').trim() || null : existing.demandSheet,
-        ...demandSheetAttachmentFields(
-          data.demandSheetAttachments !== undefined || data.demandSheetAttachmentUrl !== undefined
-            ? demandSheetFiles
-            : normalizeDemandSheetAttachments(existing)
-        ),
+        ...demandSheetAttachmentFields(attachmentFiles),
         priority: data.priority || existing.priority,
         ...(data.submitForApproval ? { status: 'PENDING' } : {}),
         updatedAt: new Date(),
@@ -912,6 +963,8 @@ export class MaterialRequestService {
         }
       }
     });
+
+    await persistDemandSheetAttachmentsJson(prisma, id, attachmentFiles);
 
     return await this.getMaterialRequestById(id);
   }
@@ -1022,5 +1075,67 @@ export class MaterialRequestService {
     }
 
     return item;
+  }
+
+  /** Administrador: substitui a lista de anexos da ficha de demanda da RM. */
+  async adminReplaceDemandSheetAttachments(
+    id: string,
+    attachments: DemandSheetAttachment[]
+  ) {
+    const existing = await prisma.materialRequest.findUnique({ where: { id } });
+    if (!existing) throw new Error('Requisição não encontrada');
+
+    const files = attachments
+      .map((file) => ({
+        url: String(file?.url || '').trim(),
+        name: String(file?.name || '').trim() || 'Arquivo anexado',
+      }))
+      .filter((file) => file.url.length > 0);
+
+    await prisma.materialRequest.update({
+      where: { id },
+      data: {
+        ...demandSheetAttachmentFields(files),
+        updatedAt: new Date(),
+      },
+    });
+
+    await persistDemandSheetAttachmentsJson(prisma, id, files);
+
+    const updated = await this.getMaterialRequestById(id);
+    if (!updated) return updated;
+    return {
+      ...updated,
+      ...demandSheetAttachmentFields(files),
+      demandSheetAttachments: files,
+    };
+  }
+
+  /** Administrador: troca ou remove o anexo de um item da RM. */
+  async adminReplaceItemAttachment(
+    requestId: string,
+    itemId: string,
+    attachment: { url: string | null; name: string | null }
+  ) {
+    const item = await prisma.materialRequestItem.findFirst({
+      where: { id: itemId, materialRequestId: requestId },
+    });
+    if (!item) throw new Error('Item da requisição não encontrado');
+
+    const url = attachment.url ? String(attachment.url).trim().slice(0, 2000) : null;
+    const name = url
+      ? String(attachment.name || '').trim().slice(0, 500) || 'Arquivo anexado'
+      : null;
+
+    await prisma.materialRequestItem.update({
+      where: { id: itemId },
+      data: {
+        attachmentUrl: url,
+        attachmentName: name,
+        updatedAt: new Date(),
+      },
+    });
+
+    return await this.getMaterialRequestById(requestId);
   }
 }

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Pencil, X, CheckCircle, ClipboardList, Clock, ShoppingCart, XCircle } from 'lucide-react';
+import { Pencil, X, CheckCircle, ClipboardList, Clock, ShoppingCart, XCircle, Paperclip } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -149,6 +149,7 @@ export default function GerenciarMateriaisPage() {
   const [selectedRequest, setSelectedRequest] = useState<MaterialRequest | null>(null);
   const [showCreateOCModal, setShowCreateOCModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showCloseDetailsConfirm, setShowCloseDetailsConfirm] = useState(false);
   const [ocSupplierId, setOcSupplierId] = useState('');
   const [ocSupplierSearch, setOcSupplierSearch] = useState('');
   const [ocPaymentType, setOcPaymentType] = useState<string>(OC_TYPE_AVISTA);
@@ -219,7 +220,7 @@ export default function GerenciarMateriaisPage() {
 
   // Quando abrir o modal de OC, preenche com TODOS os itens da SC (o comprador pode desmarcar).
   useEffect(() => {
-    if (showCreateOCModal && selectedRequest) {
+    if (showCreateOCModal && selectedRequest?.items?.length) {
       setOcSelectedItemIds(new Set(selectedRequest.items.map((i) => i.id)));
       setOcQuantityStrByItemId(
         Object.fromEntries(selectedRequest.items.map((i) => [i.id, String(i.quantity)]))
@@ -229,15 +230,15 @@ export default function GerenciarMateriaisPage() {
   }, [showCreateOCModal, selectedRequest]);
 
   const ocSelectedItems =
-    selectedRequest?.items.filter((i) => ocSelectedItemIds.has(i.id)) ?? [];
+    selectedRequest?.items?.filter((i) => ocSelectedItemIds.has(i.id)) ?? [];
 
   const ocAllItemsSelected = Boolean(
-    selectedRequest?.items.length &&
+    selectedRequest?.items?.length &&
       selectedRequest.items.every((i) => ocSelectedItemIds.has(i.id))
   );
 
   const ocSubtotalItens = useMemo(() => {
-    if (!selectedRequest) return 0;
+    if (!selectedRequest?.items?.length) return 0;
     let s = 0;
     for (const item of selectedRequest.items) {
       if (!ocSelectedItemIds.has(item.id)) continue;
@@ -268,7 +269,7 @@ export default function GerenciarMateriaisPage() {
   };
 
   const selectAllOcItems = () => {
-    if (!selectedRequest) return;
+    if (!selectedRequest?.items?.length) return;
     setOcSelectedItemIds(new Set(selectedRequest.items.map((i) => i.id)));
     setOcQuantityStrByItemId((prev) => {
       const next = { ...prev };
@@ -291,7 +292,138 @@ export default function GerenciarMateriaisPage() {
   };
   const [rmCardFilter, setRmCardFilter] = useState<RmCardFilter>(DEFAULT_RM_CARD_FILTER);
   const [searchTerm, setSearchTerm] = useState('');
-  const { isUnbUser, unbCostCenterIds } = usePermissions();
+  const { isUnbUser, unbCostCenterIds, isAdministrator } = usePermissions();
+  const [adminAttachmentBusy, setAdminAttachmentBusy] = useState(false);
+
+  const uploadRmAttachmentFile = async (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await api.post('/material-requests/upload-item-attachment', fd);
+    const d = res.data?.data as { url?: string; originalName?: string } | undefined;
+    if (!d?.url) throw new Error('Resposta inválida do servidor');
+    return {
+      url: d.url,
+      name: d.originalName || file.name || 'Arquivo anexado',
+    };
+  };
+
+  const getDemandSheetFiles = (request: MaterialRequest) => {
+    const fromList = Array.isArray(request.demandSheetAttachments)
+      ? request.demandSheetAttachments
+          .map((file) => ({
+            url: String(file?.url || '').trim(),
+            name: String(file?.name || '').trim() || 'Arquivo anexado',
+          }))
+          .filter((file) => file.url)
+      : [];
+    if (fromList.length > 0) return fromList;
+    if (request.demandSheetAttachmentUrl) {
+      return [
+        {
+          url: request.demandSheetAttachmentUrl,
+          name: request.demandSheetAttachmentName || 'Arquivo anexado',
+        },
+      ];
+    }
+    return [] as Array<{ url: string; name: string }>;
+  };
+
+  const applyAdminRequestUpdate = (request: MaterialRequest) => {
+    setSelectedRequest((prev) => {
+      if (!request?.id) return prev;
+      return {
+        ...prev,
+        ...request,
+        items: Array.isArray(request.items) && request.items.length > 0
+          ? request.items
+          : prev?.items ?? [],
+      };
+    });
+    void queryClient.invalidateQueries({ queryKey: ['material-requests-manage'] });
+  };
+
+  const handleAdminSaveDemandAttachments = async (
+    request: MaterialRequest,
+    attachments: Array<{ url: string; name: string }>
+  ) => {
+    setAdminAttachmentBusy(true);
+    try {
+      const res = await api.patch(`/material-requests/${request.id}/admin/demand-sheet-attachments`, {
+        attachments,
+      });
+      const updated = res.data?.data as MaterialRequest | undefined;
+      if (!updated) throw new Error('Resposta inválida do servidor');
+      applyAdminRequestUpdate(updated);
+      toast.success('Anexos atualizados');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err.response?.data?.message || err.message || 'Não foi possível atualizar os anexos');
+    } finally {
+      setAdminAttachmentBusy(false);
+    }
+  };
+
+  const handleAdminReplaceDemandFile = async (
+    request: MaterialRequest,
+    replaceIndex: number | null,
+    file: File
+  ) => {
+    try {
+      const uploaded = await uploadRmAttachmentFile(file);
+      const current = getDemandSheetFiles(request);
+      const next =
+        replaceIndex === null
+          ? [...current, uploaded]
+          : current.map((item, index) => (index === replaceIndex ? uploaded : item));
+      await handleAdminSaveDemandAttachments(request, next);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err.response?.data?.message || err.message || 'Não foi possível enviar o arquivo');
+    }
+  };
+
+  const handleAdminRemoveDemandFile = async (request: MaterialRequest, removeIndex: number) => {
+    const next = getDemandSheetFiles(request).filter((_, index) => index !== removeIndex);
+    await handleAdminSaveDemandAttachments(request, next);
+  };
+
+  const handleAdminReplaceItemAttachment = async (
+    request: MaterialRequest,
+    itemId: string,
+    file: File | null
+  ) => {
+    setAdminAttachmentBusy(true);
+    try {
+      let payload: { url: string | null; name: string | null } = { url: null, name: null };
+      if (file) {
+        const uploaded = await uploadRmAttachmentFile(file);
+        payload = { url: uploaded.url, name: uploaded.name };
+      }
+      const res = await api.patch(
+        `/material-requests/${request.id}/items/${itemId}/admin/attachment`,
+        payload
+      );
+      const updated = res.data?.data as MaterialRequest | undefined;
+      if (!updated) throw new Error('Resposta inválida do servidor');
+      applyAdminRequestUpdate(updated);
+      toast.success(file ? 'Anexo do item atualizado' : 'Anexo do item removido');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err.response?.data?.message || err.message || 'Não foi possível atualizar o anexo');
+    } finally {
+      setAdminAttachmentBusy(false);
+    }
+  };
+
+  const closeDetailsModal = () => {
+    setShowCloseDetailsConfirm(false);
+    setShowDetailsModal(false);
+    setSelectedRequest(null);
+  };
+
+  const requestCloseDetailsModal = () => {
+    setShowCloseDetailsConfirm(true);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -579,10 +711,7 @@ export default function GerenciarMateriaisPage() {
           <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                setShowDetailsModal(false);
-                setSelectedRequest(null);
-              }}
+              onClick={requestCloseDetailsModal}
               aria-hidden
             />
             <div
@@ -600,10 +729,7 @@ export default function GerenciarMateriaisPage() {
                 </h3>
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedRequest(null);
-                  }}
+                  onClick={requestCloseDetailsModal}
                   className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                   aria-label="Fechar"
                 >
@@ -658,43 +784,83 @@ export default function GerenciarMateriaisPage() {
                   </div>
                 ) : null}
                 {(() => {
-                  const fromList = Array.isArray(selectedRequest.demandSheetAttachments)
-                    ? selectedRequest.demandSheetAttachments
-                        .map((file) => ({
-                          url: String(file?.url || '').trim(),
-                          name: String(file?.name || '').trim() || 'Arquivo anexado',
-                        }))
-                        .filter((file) => file.url)
-                    : [];
-                  const fdFiles =
-                    fromList.length > 0
-                      ? fromList
-                      : selectedRequest.demandSheetAttachmentUrl
-                        ? [
-                            {
-                              url: selectedRequest.demandSheetAttachmentUrl,
-                              name: selectedRequest.demandSheetAttachmentName || 'Arquivo anexado',
-                            },
-                          ]
-                        : [];
-                  if (fdFiles.length === 0) return null;
+                  const fdFiles = getDemandSheetFiles(selectedRequest);
+                  if (fdFiles.length === 0 && !isAdministrator) return null;
                   return (
                     <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Anexos</p>
-                      <ul className="space-y-1">
-                        {fdFiles.map((file, index) => (
-                          <li key={`${file.url}-${index}`}>
-                            <a
-                              href={absoluteUploadUrl(file.url)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Anexos</p>
+                        {isAdministrator ? (
+                          <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                            <Paperclip className="h-3.5 w-3.5" />
+                            Anexar
+                            <input
+                              type="file"
+                              className="hidden"
+                              disabled={adminAttachmentBusy}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (file) void handleAdminReplaceDemandFile(selectedRequest, null, file);
+                              }}
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+                      {fdFiles.length === 0 ? (
+                        <p className="text-xs text-gray-400">Nenhum anexo</p>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {fdFiles.map((file, index) => (
+                            <li
+                              key={`${file.url}-${index}`}
+                              className="flex flex-wrap items-center gap-2"
                             >
-                              {file.name || 'Ver anexo'}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
+                              <a
+                                href={absoluteUploadUrl(file.url)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                              >
+                                {file.name || 'Ver anexo'}
+                              </a>
+                              {isAdministrator ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                                    Trocar
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      disabled={adminAttachmentBusy}
+                                      onChange={(e) => {
+                                        const nextFile = e.target.files?.[0];
+                                        e.target.value = '';
+                                        if (nextFile) {
+                                          void handleAdminReplaceDemandFile(
+                                            selectedRequest,
+                                            index,
+                                            nextFile
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    disabled={adminAttachmentBusy}
+                                    onClick={() =>
+                                      void handleAdminRemoveDemandFile(selectedRequest, index)
+                                    }
+                                    className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 disabled:opacity-50"
+                                  >
+                                    Remover
+                                  </button>
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   );
                 })()}
@@ -719,18 +885,59 @@ export default function GerenciarMateriaisPage() {
                             <td className="p-2 text-right">{item.quantity}</td>
                             <td className="p-2 text-right">{item.unit || '-'}</td>
                             <td className="p-2 text-left">
-                              {item.attachmentUrl ? (
-                                <a
-                                  href={absoluteUploadUrl(item.attachmentUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
-                                >
-                                  {item.attachmentName || 'Ver anexo'}
-                                </a>
-                              ) : (
-                                <span className="text-gray-400 text-xs">—</span>
-                              )}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {item.attachmentUrl ? (
+                                  <a
+                                    href={absoluteUploadUrl(item.attachmentUrl)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                                  >
+                                    {item.attachmentName || 'Ver anexo'}
+                                  </a>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">—</span>
+                                )}
+                                {isAdministrator ? (
+                                  <>
+                                    <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                                      {item.attachmentUrl ? 'Trocar' : 'Anexar'}
+                                      <input
+                                        type="file"
+                                        className="hidden"
+                                        disabled={adminAttachmentBusy}
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          e.target.value = '';
+                                          if (file) {
+                                            void handleAdminReplaceItemAttachment(
+                                              selectedRequest,
+                                              item.id,
+                                              file
+                                            );
+                                          }
+                                        }}
+                                      />
+                                    </label>
+                                    {item.attachmentUrl ? (
+                                      <button
+                                        type="button"
+                                        disabled={adminAttachmentBusy}
+                                        onClick={() =>
+                                          void handleAdminReplaceItemAttachment(
+                                            selectedRequest,
+                                            item.id,
+                                            null
+                                          )
+                                        }
+                                        className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40 disabled:opacity-50"
+                                      >
+                                        Remover
+                                      </button>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -745,10 +952,7 @@ export default function GerenciarMateriaisPage() {
                   userData?.data?.id === rmSolicitante(selectedRequest)?.id && (
                     <Link
                       href={`/ponto/solicitar-materiais?editRm=${selectedRequest.id}`}
-                      onClick={() => {
-                        setShowDetailsModal(false);
-                        setSelectedRequest(null);
-                      }}
+                      onClick={closeDetailsModal}
                       className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
                     >
                       <Pencil className="h-4 w-4" />
@@ -757,10 +961,7 @@ export default function GerenciarMateriaisPage() {
                   )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    setSelectedRequest(null);
-                  }}
+                  onClick={closeDetailsModal}
                   className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                 >
                   Fechar
@@ -770,6 +971,39 @@ export default function GerenciarMateriaisPage() {
           </div>
           );
         })()}
+
+        {showCloseDetailsConfirm && (
+          <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowCloseDetailsConfirm(false)}
+            />
+            <div className="app-modal-panel relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+              <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Deseja fechar?
+              </h3>
+              <p className="mb-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                Tem certeza que deseja fechar os detalhes da requisição?
+              </p>
+              <div className="flex items-center justify-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCloseDetailsConfirm(false)}
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 transition-colors hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDetailsModal}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal Criar OC */}
         {showCreateOCModal && selectedRequest && (
