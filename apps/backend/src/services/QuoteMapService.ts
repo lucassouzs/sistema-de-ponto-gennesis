@@ -172,6 +172,7 @@ export class QuoteMapService {
         unit: string;
         unitPrice: number;
         totalPrice: number;
+        notes?: string | null;
       }>;
     };
 
@@ -207,6 +208,7 @@ export class QuoteMapService {
               unit: it.unit || '—',
               unitPrice,
               totalPrice: total,
+              notes: typeof it.notes === 'string' ? it.notes.trim() || null : null,
             };
           }),
         });
@@ -229,6 +231,10 @@ export class QuoteMapService {
               si.supplierId === supplierId && si.materialRequestItemId === w.materialRequestItemId
           );
           const unitPrice = this.toNumber(quote?.unitPrice);
+          const rmNote =
+            (typeof mri?.notes === 'string' && mri.notes.trim()) ||
+            (typeof mri?.observation === 'string' && mri.observation.trim()) ||
+            '';
           return {
             label:
               mri?.material?.description?.trim() ||
@@ -239,6 +245,7 @@ export class QuoteMapService {
             unit: mri?.unit || '—',
             unitPrice,
             totalPrice: qty * unitPrice,
+            notes: rmNote || null,
           };
         });
         sections.push({
@@ -634,9 +641,16 @@ export class QuoteMapService {
         let productsTotal = 0;
         section.items.forEach((item, idx) => {
           productsTotal += item.totalPrice;
+          const detail = (item.notes || '').trim();
           doc.font('Helvetica').fontSize(8);
           const descHeight = doc.heightOfString(item.label || '—', { width: wDesc - 4 });
-          const rowH = Math.max(18, descHeight + 8);
+          let detailHeight = 0;
+          if (detail) {
+            doc.fontSize(7);
+            detailHeight = doc.heightOfString(detail, { width: wDesc - 4 });
+            doc.fontSize(8);
+          }
+          const rowH = Math.max(18, descHeight + (detail ? 2 + detailHeight : 0) + 8);
           if (y + rowH > pageHeight - 70) {
             doc.addPage();
             y = 40;
@@ -647,6 +661,13 @@ export class QuoteMapService {
           doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
           doc.text(String(idx + 1), col.item + 3, rowY, { width: wItem - 4, lineBreak: false });
           doc.text(item.label || '—', col.desc, rowY, { width: wDesc - 4 });
+          if (detail) {
+            doc
+              .fillColor('#64748B')
+              .fontSize(7)
+              .text(detail, col.desc, rowY + descHeight + 1, { width: wDesc - 4 });
+            doc.fillColor('#0F172A').fontSize(8);
+          }
           doc.text(String(item.quantity), col.qty, rowY, {
             width: wQty - 2,
             align: 'center',

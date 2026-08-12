@@ -179,11 +179,18 @@ function OcCard({
                     </td>
                     <td className="max-w-[200px] px-2 py-2.5 align-top sm:max-w-none">
                       {materialLineLabel(line.material)}
-                      {line.notes?.trim() ? (
-                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                          {line.notes.trim()}
-                        </p>
-                      ) : null}
+                      {(() => {
+                        const detail =
+                          line.notes?.trim() ||
+                          (typeof line.materialRequestItem?.notes === 'string'
+                            ? line.materialRequestItem.notes.trim()
+                            : '');
+                        return detail ? (
+                          <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
+                            {detail}
+                          </p>
+                        ) : null;
+                      })()}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-right align-top tabular-nums">
                       {Number(line.quantity)}

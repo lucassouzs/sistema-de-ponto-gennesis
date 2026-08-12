@@ -10,8 +10,6 @@ import {
   AlertCircle,
   Send,
   Pencil,
-  Paperclip,
-  ExternalLink,
   Loader2,
   Search,
   Filter,
@@ -30,7 +28,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
-import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import toast from 'react-hot-toast';
 import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses } from '@/components/ui/RowActionMenu';
@@ -141,6 +138,46 @@ function SolicitacaoDetailDocumentItem({
     </div>
   );
 }
+
+function RmFormSection({
+  title,
+  description,
+  headerRight,
+  children
+}: {
+  title: string;
+  description?: string;
+  headerRight?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            {title}
+          </h4>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {headerRight}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+const RM_FORM_LABEL_CLS =
+  'mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400';
+const RM_FORM_FIELD_LABEL_CLS =
+  'mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400';
+const RM_ADD_FILE_BTN_CLS =
+  'inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-50 hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:border-gray-500 dark:hover:bg-gray-700/80 dark:hover:text-gray-100';
+const RM_ADD_ITEM_BTN_CLS =
+  'inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-red-300 bg-red-50/50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:border-red-400 hover:bg-red-50 hover:text-red-800 dark:border-red-800/60 dark:bg-red-950/25 dark:text-red-300 dark:hover:border-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-200';
 
 const RM_STAT_CARDS: {
   filter: RmCardFilter;
@@ -640,8 +677,7 @@ function RmAttachmentField({
   disabled = false,
   onFileSelect,
   onRemove,
-  chooseLabel = 'Escolher arquivo',
-  size = 'md'
+  chooseLabel = 'Adicionar anexo'
 }: {
   fileUrl?: string;
   fileName?: string;
@@ -652,81 +688,57 @@ function RmAttachmentField({
   chooseLabel?: string;
   size?: 'sm' | 'md';
 }) {
-  const isSm = size === 'sm';
-  const shellClass = isSm
-    ? 'rounded border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
-    : 'rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800';
-  const chooseBtnClass = isSm
-    ? 'inline-flex w-full items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50'
-    : 'inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50';
+  const addButton = (
+    <label
+      className={`${RM_ADD_FILE_BTN_CLS} ${
+        disabled || uploading ? 'pointer-events-none opacity-50' : ''
+      }`}
+    >
+      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+      <span>{uploading ? 'Enviando...' : fileUrl ? 'Trocar arquivo' : chooseLabel}</span>
+      <input
+        type="file"
+        className="hidden"
+        disabled={disabled || uploading}
+        accept={RM_ATTACHMENT_ACCEPT}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFileSelect(file);
+          e.currentTarget.value = '';
+        }}
+      />
+    </label>
+  );
 
   if (!fileUrl) {
-    return (
-      <label className={`${chooseBtnClass} ${disabled || uploading ? 'pointer-events-none' : ''}`}>
-        {uploading ? <Loader2 className={isSm ? 'h-3.5 w-3.5 animate-spin' : 'h-4 w-4 animate-spin'} /> : <Paperclip className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />}
-        <span>{uploading ? 'Enviando...' : chooseLabel}</span>
-        <input
-          type="file"
-          className="hidden"
-          disabled={disabled || uploading}
-          accept={RM_ATTACHMENT_ACCEPT}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onFileSelect(file);
-            e.currentTarget.value = '';
-          }}
-        />
-      </label>
-    );
+    return addButton;
   }
 
   const displayName = fileName?.trim() || 'Arquivo anexado';
 
   return (
-    <div className={`${shellClass} overflow-hidden`}>
-      <div className={`flex items-center gap-2 ${isSm ? 'px-2 py-2' : 'px-3 py-2.5'}`}>
-        <Paperclip className={`shrink-0 text-gray-500 dark:text-gray-400 ${isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
-        <span
-          className={`min-w-0 flex-1 truncate font-medium text-gray-900 dark:text-gray-100 ${isSm ? 'text-xs' : 'text-sm'}`}
-          title={displayName}
-        >
-          {displayName}
-        </span>
-        <a
-          href={absoluteUploadUrl(fileUrl)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`inline-flex shrink-0 items-center gap-1 font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 ${isSm ? 'text-xs' : 'text-sm'}`}
-        >
-          <ExternalLink className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-          Abrir
-        </a>
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={disabled || uploading}
-          aria-label="Remover anexo"
-          className={`shrink-0 rounded-md p-1 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400 ${isSm ? '' : ''}`}
-        >
-          <X className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-        </button>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title={displayName}>
+            {displayName}
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Anexo do item</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <OcAttachmentActions url={fileUrl} fileName={displayName} variant="buttons" />
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={disabled || uploading}
+            aria-label="Remover anexo"
+            className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
-      <label
-        className={`block cursor-pointer border-t border-gray-200 text-center font-medium text-blue-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-blue-400 dark:hover:bg-gray-800/80 ${isSm ? 'px-2 py-1.5 text-xs' : 'px-3 py-2 text-sm'} ${disabled || uploading ? 'pointer-events-none opacity-50' : ''}`}
-      >
-        {uploading ? 'Enviando...' : 'Trocar arquivo'}
-        <input
-          type="file"
-          className="hidden"
-          disabled={disabled || uploading}
-          accept={RM_ATTACHMENT_ACCEPT}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onFileSelect(file);
-            e.currentTarget.value = '';
-          }}
-        />
-      </label>
+      {addButton}
     </div>
   );
 }
@@ -737,9 +749,8 @@ function RmDemandSheetAttachmentsField({
   disabled = false,
   onFilesSelect,
   onRemove,
-  chooseLabel = 'Escolher arquivo',
+  chooseLabel = 'Adicionar arquivo',
   addLabel = 'Adicionar arquivo',
-  size = 'md',
 }: {
   files: FdAttachment[];
   uploading?: boolean;
@@ -750,99 +761,74 @@ function RmDemandSheetAttachmentsField({
   addLabel?: string;
   size?: 'sm' | 'md';
 }) {
-  const isSm = size === 'sm';
-  const shellClass = isSm
-    ? 'rounded border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
-    : 'rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800';
-  const chooseBtnClass = isSm
-    ? 'inline-flex w-full items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50'
-    : 'inline-flex w-full items-center justify-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50';
-
   const pickFiles = (list: FileList | null) => {
     if (!list?.length) return;
     onFilesSelect(Array.from(list));
   };
 
+  const addButton = (
+    <label
+      className={`${RM_ADD_FILE_BTN_CLS} ${
+        disabled || uploading ? 'pointer-events-none opacity-50' : ''
+      }`}
+    >
+      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+      <span>{uploading ? 'Enviando...' : files.length === 0 ? chooseLabel : addLabel}</span>
+      <input
+        type="file"
+        multiple
+        className="hidden"
+        disabled={disabled || uploading}
+        accept={RM_ATTACHMENT_ACCEPT}
+        onChange={(e) => {
+          pickFiles(e.target.files);
+          e.currentTarget.value = '';
+        }}
+      />
+    </label>
+  );
+
   if (files.length === 0) {
-    return (
-      <label className={`${chooseBtnClass} ${disabled || uploading ? 'pointer-events-none' : ''}`}>
-        {uploading ? <Loader2 className={isSm ? 'h-3.5 w-3.5 animate-spin' : 'h-4 w-4 animate-spin'} /> : <Paperclip className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />}
-        <span>{uploading ? 'Enviando...' : chooseLabel}</span>
-        <input
-          type="file"
-          multiple
-          className="hidden"
-          disabled={disabled || uploading}
-          accept={RM_ATTACHMENT_ACCEPT}
-          onChange={(e) => {
-            pickFiles(e.target.files);
-            e.currentTarget.value = '';
-          }}
-        />
-      </label>
-    );
+    return addButton;
   }
 
   return (
-    <div className={`${shellClass} overflow-hidden`}>
-      <ul className="divide-y divide-gray-200 dark:divide-gray-600">
+    <div className="space-y-3">
+      <ul className="divide-y divide-gray-200 dark:divide-gray-700">
         {files.map((file, index) => {
           const displayName = file.name?.trim() || 'Arquivo anexado';
           return (
             <li
               key={`${file.url}-${index}`}
-              className={`flex items-center gap-2 ${isSm ? 'px-2 py-2' : 'px-3 py-2.5'}`}
+              className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
             >
-              <Paperclip className={`shrink-0 text-gray-500 dark:text-gray-400 ${isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'}`} />
-              <span
-                className={`min-w-0 flex-1 truncate font-medium text-gray-900 dark:text-gray-100 ${isSm ? 'text-xs' : 'text-sm'}`}
-                title={displayName}
-              >
-                {displayName}
-              </span>
-              <a
-                href={absoluteUploadUrl(file.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex shrink-0 items-center gap-1 font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 ${isSm ? 'text-xs' : 'text-sm'}`}
-              >
-                <ExternalLink className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-                Abrir
-              </a>
-              <button
-                type="button"
-                onClick={() => onRemove(index)}
-                disabled={disabled || uploading}
-                aria-label="Remover anexo"
-                className="shrink-0 rounded-md p-1 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-              >
-                <X className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100" title={displayName}>
+                  {displayName}
+                </p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Anexo</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <OcAttachmentActions
+                  url={file.url}
+                  fileName={displayName}
+                  variant="buttons"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(index)}
+                  disabled={disabled || uploading}
+                  aria-label="Remover anexo"
+                  className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </li>
           );
         })}
       </ul>
-      <label
-        className={`flex cursor-pointer items-center justify-center gap-1.5 border-t border-gray-200 text-center font-medium text-blue-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-blue-400 dark:hover:bg-gray-800/80 ${isSm ? 'px-2 py-1.5 text-xs' : 'px-3 py-2 text-sm'} ${disabled || uploading ? 'pointer-events-none opacity-50' : ''}`}
-      >
-        {uploading ? (
-          <Loader2 className={isSm ? 'h-3.5 w-3.5 animate-spin' : 'h-4 w-4 animate-spin'} />
-        ) : (
-          <Plus className={isSm ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-        )}
-        <span>{uploading ? 'Enviando...' : addLabel}</span>
-        <input
-          type="file"
-          multiple
-          className="hidden"
-          disabled={disabled || uploading}
-          accept={RM_ATTACHMENT_ACCEPT}
-          onChange={(e) => {
-            pickFiles(e.target.files);
-            e.currentTarget.value = '';
-          }}
-        />
-      </label>
+      {addButton}
     </div>
   );
 }
@@ -2267,116 +2253,134 @@ function SolicitarMateriaisPage() {
           )}
 
           {isNewRequestModalOpen && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/40" onClick={requestCloseNewRequestModal} aria-hidden />
+            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
               <div
-                className="relative flex max-h-[min(92vh,720px)] w-full max-w-3xl flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
+                className="absolute inset-0 bg-black/50"
+                onClick={requestCloseNewRequestModal}
+                aria-hidden
+              />
+              <div
+                className="relative my-auto flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="new-request-modal-title"
               >
-                <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+                <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
                   <h3
                     id="new-request-modal-title"
-                    className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+                    className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100"
                   >
                     Nova Solicitação de Material
                   </h3>
                   <button
                     type="button"
                     onClick={requestCloseNewRequestModal}
-                    className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-0 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                    className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                     aria-label="Fechar"
                   >
                     <X className="h-5 w-5" />
                   </button>
                 </div>
-                <div className="overflow-y-auto px-5 py-4 [&_*:focus]:outline-none [&_*:focus]:ring-0 [&_*:focus-visible]:outline-none [&_*:focus-visible]:ring-0">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Contrato *
-                    </label>
-                    {loadingContracts ? (
-                      <SingleSelectSearchDropdown
-                        value=""
-                        onChange={() => undefined}
-                        options={[]}
-                        disabled
-                        placeholder="Carregando contratos..."
-                        allowEmpty={false}
-                      />
-                    ) : (
-                      <>
-                        <SingleSelectSearchDropdown
-                          value={formData.contractId}
-                          onChange={handleNewContractChange}
-                          options={contractSelectOptions}
-                          allowEmpty={false}
-                          disabled={Boolean(lockedUnbContractId)}
-                          placeholder="Digite para buscar contrato..."
-                          searchPlaceholder="Pesquisar contrato..."
-                          emptyOptionsMessage="Nenhum contrato disponível."
-                          emptySearchMessage="Nenhum contrato encontrado para esta busca."
-                        />
-                        <input type="hidden" required value={formData.contractId} readOnly />
-                      </>
-                    )}
-                    {!loadingContracts && contractOptions.length === 0 && (
-                      <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
-                        Nenhum contrato disponível. Cadastre contratos em Contratos.
-                      </p>
-                    )}
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Ordem de Serviço *
-                    </label>
-                    <ServiceOrderSearchSelect
-                      contractId={formData.contractId}
-                      serviceOrders={newFormServiceOrders}
-                      loading={loadingNewFormServiceOrders}
-                      serviceOrderId={formData.serviceOrderId}
-                      serviceOrderLabel={formData.serviceOrder}
-                      onSelect={handleNewServiceOrderSelect}
-                      onClear={handleNewServiceOrderClear}
-                      required
-                    />
-                    <input type="hidden" required value={formData.serviceOrderId} readOnly />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Obra
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.obra}
-                      onChange={(e) => setFormData({ ...formData, obra: e.target.value })}
-                      className={FORM_FIELD_INPUT_CLS}
-                      placeholder="Identificação da obra (opcional)"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Descrição
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={3}
-                      className={FORM_FIELD_TEXTAREA_CLS}
-                      placeholder="Descreva a necessidade dos materiais..."
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div className="space-y-4">
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex min-h-0 flex-1 flex-col [&_*:focus]:outline-none [&_*:focus]:ring-0 [&_*:focus-visible]:outline-none [&_*:focus-visible]:ring-0"
+                >
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                    <RmFormSection title="Dados da solicitação">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                          <label className={RM_FORM_LABEL_CLS}>Contrato *</label>
+                          {loadingContracts ? (
+                            <SingleSelectSearchDropdown
+                              value=""
+                              onChange={() => undefined}
+                              options={[]}
+                              disabled
+                              placeholder="Carregando contratos..."
+                              allowEmpty={false}
+                            />
+                          ) : (
+                            <>
+                              <SingleSelectSearchDropdown
+                                value={formData.contractId}
+                                onChange={handleNewContractChange}
+                                options={contractSelectOptions}
+                                allowEmpty={false}
+                                disabled={Boolean(lockedUnbContractId)}
+                                placeholder="Digite para buscar contrato..."
+                                searchPlaceholder="Pesquisar contrato..."
+                                emptyOptionsMessage="Nenhum contrato disponível."
+                                emptySearchMessage="Nenhum contrato encontrado para esta busca."
+                              />
+                              <input type="hidden" required value={formData.contractId} readOnly />
+                            </>
+                          )}
+                          {!loadingContracts && contractOptions.length === 0 && (
+                            <p className="mt-1 text-xs text-yellow-600 dark:text-yellow-400">
+                              Nenhum contrato disponível. Cadastre contratos em Contratos.
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className={RM_FORM_LABEL_CLS}>Ordem de Serviço *</label>
+                          <ServiceOrderSearchSelect
+                            contractId={formData.contractId}
+                            serviceOrders={newFormServiceOrders}
+                            loading={loadingNewFormServiceOrders}
+                            serviceOrderId={formData.serviceOrderId}
+                            serviceOrderLabel={formData.serviceOrder}
+                            onSelect={handleNewServiceOrderSelect}
+                            onClear={handleNewServiceOrderClear}
+                            required
+                          />
+                          <input type="hidden" required value={formData.serviceOrderId} readOnly />
+                        </div>
+                        <div>
+                          <label className={RM_FORM_LABEL_CLS}>Obra</label>
+                          <input
+                            type="text"
+                            value={formData.obra}
+                            onChange={(e) => setFormData({ ...formData, obra: e.target.value })}
+                            className={FORM_FIELD_INPUT_CLS}
+                            placeholder="Identificação da obra (opcional)"
+                          />
+                        </div>
+                        <div>
+                          <label className={RM_FORM_LABEL_CLS}>Prioridade *</label>
+                          <SingleSelectSearchDropdown
+                            value={formData.priority}
+                            onChange={(priority) => setFormData({ ...formData, priority })}
+                            options={RM_PRIORITY_OPTIONS}
+                            allowEmpty={false}
+                            placeholder="Selecionar prioridade..."
+                            searchPlaceholder="Pesquisar prioridade..."
+                          />
+                        </div>
+                      </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Ficha de Demanda{isNewFormUnbCostCenter ? '' : ' *'}
+                        <label className={RM_FORM_LABEL_CLS}>Descrição</label>
+                        <textarea
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          rows={3}
+                          className={FORM_FIELD_TEXTAREA_CLS}
+                          placeholder="Descreva a necessidade dos materiais..."
+                        />
+                      </div>
+                    </RmFormSection>
+
+                    <RmFormSection
+                      title="Ficha de demanda"
+                      description={
+                        isNewFormUnbCostCenter
+                          ? 'Número opcional para este contrato.'
+                          : 'Informe o número ou referência da FD.'
+                      }
+                    >
+                      <div>
+                        <label className={RM_FORM_LABEL_CLS}>
+                          Número da FD{isNewFormUnbCostCenter ? '' : ' *'}
                         </label>
                         <input
                           type="text"
@@ -2391,67 +2395,60 @@ function SolicitarMateriaisPage() {
                           }
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Anexar arquivos{isNewFormUnbCostCenter ? '' : ' *'}
-                        </label>
-                        <RmDemandSheetAttachmentsField
-                          files={formData.demandSheetAttachments}
-                          uploading={uploadingDemandSheetAttachment === 'new'}
-                          disabled={!!uploadingDemandSheetAttachment}
-                          onFilesSelect={(files) => void handleDemandSheetAttachmentFiles('new', files)}
-                          onRemove={(index) => removeDemandSheetAttachment('new', index)}
-                        />
-                        {!isNewFormUnbCostCenter ? (
-                          <input
-                            type="hidden"
-                            required
-                            value={formData.demandSheetAttachments[0]?.url || ''}
-                            readOnly
-                          />
-                        ) : null}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Prioridade *
-                      </label>
-                      <SingleSelectSearchDropdown
-                        value={formData.priority}
-                        onChange={(priority) => setFormData({ ...formData, priority })}
-                        options={RM_PRIORITY_OPTIONS}
-                        allowEmpty={false}
-                        placeholder="Selecionar prioridade..."
-                        searchPlaceholder="Pesquisar prioridade..."
-                      />
-                    </div>
-                  </div>
+                    </RmFormSection>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                      Itens *
-                    </label>
-                    <div className="space-y-3">
-                      {formData.items.map((item, index) => (
-                        <div key={index} className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                          <div className="flex items-start justify-between mb-3">
-                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Item {index + 1}</span>
-                            {formData.items.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveItem(index)}
-                                className="text-red-600 dark:text-red-400 hover:text-red-700"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                Material *
-                              </label>
+                    <RmFormSection
+                      title="Documentos"
+                      description={
+                        isNewFormUnbCostCenter
+                          ? 'Anexe arquivos da solicitação, se houver (opcional).'
+                          : 'Anexe os documentos da solicitação (FD, orçamento, etc.). Obrigatório.'
+                      }
+                    >
+                      <RmDemandSheetAttachmentsField
+                        files={formData.demandSheetAttachments}
+                        uploading={uploadingDemandSheetAttachment === 'new'}
+                        disabled={!!uploadingDemandSheetAttachment}
+                        onFilesSelect={(files) => void handleDemandSheetAttachmentFiles('new', files)}
+                        onRemove={(index) => removeDemandSheetAttachment('new', index)}
+                        chooseLabel="Adicionar arquivo"
+                        addLabel="Adicionar arquivo"
+                      />
+                      {!isNewFormUnbCostCenter ? (
+                        <input
+                          type="hidden"
+                          required
+                          value={formData.demandSheetAttachments[0]?.url || ''}
+                          readOnly
+                        />
+                      ) : null}
+                    </RmFormSection>
+
+                    <RmFormSection title={`Itens (${formData.items.length})`}>
+                      <div className="space-y-3">
+                        {formData.items.map((item, index) => (
+                          <div
+                            key={index}
+                            className="rounded-xl border border-gray-200 p-3.5 dark:border-gray-700"
+                          >
+                            <div className="mb-3 flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                Item {index + 1}
+                              </span>
+                              {formData.items.length > 1 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveItem(index)}
+                                  className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                  aria-label={`Remover item ${index + 1}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              ) : null}
+                            </div>
+                            <div className="space-y-3">
                               <div>
+                                <label className={RM_FORM_FIELD_LABEL_CLS}>Material *</label>
                                 <AsyncSearchSelectDropdown<RmMaterialListItem>
                                   value={item.materialId}
                                   selectedLabel={newItemMaterialLabels[index]}
@@ -2465,88 +2462,90 @@ function SolicitarMateriaisPage() {
                                 />
                                 <input type="hidden" required value={item.materialId} readOnly />
                               </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                Quantidade *
-                              </label>
-                              <RmQuantityInput
-                                required
-                                value={item.quantity}
-                                unit={item.unit}
-                                onChange={(quantity) => handleItemChange(index, 'quantity', quantity)}
-                              />
-                            </div>
-                            <div className="sm:col-span-2">
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                Observação
-                              </label>
-                              <input
-                                type="text"
-                                value={item.observation}
-                                onChange={(e) => handleItemChange(index, 'observation', e.target.value)}
-                                className={FORM_FIELD_INPUT_CLS}
-                              />
-                            </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                                Anexo (opcional)
-                              </label>
-                              <RmAttachmentField
-                                size="sm"
-                                fileUrl={item.attachmentUrl}
-                                fileName={item.attachmentName}
-                                uploading={
-                                  uploadingAttachment?.form === 'new' && uploadingAttachment.index === index
-                                }
-                                disabled={!!uploadingAttachment}
-                                onFileSelect={(file) => void handleItemAttachmentFile('new', index, file)}
-                                onRemove={() => clearItemAttachment('new', index)}
-                              />
+                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                                <div className="sm:col-span-1">
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Qtd *</label>
+                                  <RmQuantityInput
+                                    required
+                                    value={item.quantity}
+                                    unit={item.unit}
+                                    onChange={(quantity) =>
+                                      handleItemChange(index, 'quantity', quantity)
+                                    }
+                                  />
+                                </div>
+                                <div className="sm:col-span-3">
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Observação</label>
+                                  <input
+                                    type="text"
+                                    value={item.observation}
+                                    onChange={(e) =>
+                                      handleItemChange(index, 'observation', e.target.value)
+                                    }
+                                    className={FORM_FIELD_INPUT_CLS}
+                                    placeholder="Opcional"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className={RM_FORM_FIELD_LABEL_CLS}>Anexo</label>
+                                <RmAttachmentField
+                                  fileUrl={item.attachmentUrl}
+                                  fileName={item.attachmentName}
+                                  uploading={
+                                    uploadingAttachment?.form === 'new' &&
+                                    uploadingAttachment.index === index
+                                  }
+                                  disabled={!!uploadingAttachment}
+                                  onFileSelect={(file) =>
+                                    void handleItemAttachmentFile('new', index, file)
+                                  }
+                                  onRemove={() => clearItemAttachment('new', index)}
+                                  chooseLabel="Adicionar anexo"
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddItem}
-                      className="mt-3 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Adicionar Item
-                    </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={handleAddItem}
+                          className={RM_ADD_ITEM_BTN_CLS}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Adicionar item
+                        </button>
+                      </div>
+                    </RmFormSection>
+
+                    {createMutation.isError ? (
+                      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                        <p className="text-sm text-red-700 dark:text-red-300">
+                          {(createMutation.error as any)?.response?.data?.message ||
+                            'Erro ao criar solicitação'}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
 
-                  {createMutation.isError && (
-                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-sm text-red-700 dark:text-red-300">
-                        {(createMutation.error as any)?.response?.data?.message || 'Erro ao criar solicitação'}
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-3">
+                  <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
                     <button
                       type="button"
                       onClick={requestCloseNewRequestModal}
-                      className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                      className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                     >
                       Cancelar
                     </button>
                     <button
                       type="submit"
                       disabled={createMutation.isPending}
-                      className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-lg hover:bg-blue-700 dark:hover:bg-blue-800 disabled:opacity-50"
+                      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
                     >
                       {createMutation.isPending ? 'Criando...' : 'Criar Solicitação'}
                     </button>
                   </div>
                 </form>
-                </div>
               </div>
             </div>
           )}
@@ -2820,7 +2819,7 @@ function SolicitarMateriaisPage() {
 
                         {detailTab === 'documentos' ? (
                           <div className="space-y-4">
-                            <SolicitacaoDetailDocSection title="Ficha de Demanda">
+                            <SolicitacaoDetailDocSection title="Documentos">
                               {fdAttachments.length === 0 ? (
                                 <SolicitacaoDetailDocumentItem
                                   label="Arquivo"
@@ -2953,155 +2952,176 @@ function SolicitarMateriaisPage() {
         )}
 
         {correctionEditId && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={() => !updateCorrectionMutation.isPending && setCorrectionEditId(null)}
+              aria-hidden
             />
-            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
-                Editar requisição (Correção RM)
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Ajuste os dados e salve. Use &quot;Salvar e reenviar&quot; quando quiser voltar a fila de aprovação do compras.
-              </p>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Contrato *
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={editFormData.contractId}
-                    onChange={handleEditContractChange}
-                    options={contractSelectOptions}
-                    allowEmpty={false}
-                    disabled={Boolean(lockedUnbContractId)}
-                    placeholder="Digite para buscar contrato..."
-                    searchPlaceholder="Pesquisar contrato..."
-                    emptyOptionsMessage="Nenhum contrato disponível."
-                    emptySearchMessage="Nenhum contrato encontrado para esta busca."
-                  />
-                  <input type="hidden" value={editFormData.contractId} readOnly />
+            <div
+              className="relative my-auto flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="correction-request-modal-title"
+            >
+              <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
+                <div className="min-w-0">
+                  <h2
+                    id="correction-request-modal-title"
+                    className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100"
+                  >
+                    Editar requisição (Correção RM)
+                  </h2>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    Ajuste os dados e salve. Use &quot;Salvar e reenviar&quot; para voltar à fila de aprovação.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  disabled={updateCorrectionMutation.isPending}
+                  onClick={() => setCorrectionEditId(null)}
+                  className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-gray-700"
+                  aria-label="Fechar"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Ordem de Serviço *
-                  </label>
-                  <ServiceOrderSearchSelect
-                    contractId={editFormData.contractId}
-                    serviceOrders={editFormServiceOrders}
-                    loading={loadingEditFormServiceOrders}
-                    serviceOrderId={editFormData.serviceOrderId}
-                    serviceOrderLabel={editFormData.serviceOrder}
-                    onSelect={handleEditServiceOrderSelect}
-                    onClear={handleEditServiceOrderClear}
-                    inputSize="sm"
-                    emptyContractHint="Selecione o contrato"
-                    required
-                  />
-                  <input type="hidden" required value={editFormData.serviceOrderId} readOnly />
-                  {editFormData.serviceOrder &&
-                    !editFormData.serviceOrderId &&
-                    editFormServiceOrders.length > 0 && (
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Valor anterior: {editFormData.serviceOrder}. Selecione a OS correspondente na lista, se existir.
-                      </p>
-                    )}
-                </div>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                <RmFormSection title="Dados da solicitação">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className={RM_FORM_LABEL_CLS}>Contrato *</label>
+                      <SingleSelectSearchDropdown
+                        value={editFormData.contractId}
+                        onChange={handleEditContractChange}
+                        options={contractSelectOptions}
+                        allowEmpty={false}
+                        disabled={Boolean(lockedUnbContractId)}
+                        placeholder="Digite para buscar contrato..."
+                        searchPlaceholder="Pesquisar contrato..."
+                        emptyOptionsMessage="Nenhum contrato disponível."
+                        emptySearchMessage="Nenhum contrato encontrado para esta busca."
+                      />
+                      <input type="hidden" value={editFormData.contractId} readOnly />
+                    </div>
+                    <div>
+                      <label className={RM_FORM_LABEL_CLS}>Ordem de Serviço *</label>
+                      <ServiceOrderSearchSelect
+                        contractId={editFormData.contractId}
+                        serviceOrders={editFormServiceOrders}
+                        loading={loadingEditFormServiceOrders}
+                        serviceOrderId={editFormData.serviceOrderId}
+                        serviceOrderLabel={editFormData.serviceOrder}
+                        onSelect={handleEditServiceOrderSelect}
+                        onClear={handleEditServiceOrderClear}
+                        inputSize="sm"
+                        emptyContractHint="Selecione o contrato"
+                        required
+                      />
+                      <input type="hidden" required value={editFormData.serviceOrderId} readOnly />
+                      {editFormData.serviceOrder &&
+                      !editFormData.serviceOrderId &&
+                      editFormServiceOrders.length > 0 ? (
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Valor anterior: {editFormData.serviceOrder}. Selecione a OS correspondente
+                          na lista, se existir.
+                        </p>
+                      ) : null}
+                    </div>
+                    <div>
+                      <label className={RM_FORM_LABEL_CLS}>Obra</label>
+                      <input
+                        type="text"
+                        value={editFormData.obra}
+                        onChange={(e) => setEditFormData({ ...editFormData, obra: e.target.value })}
+                        className={FORM_FIELD_INPUT_CLS}
+                        placeholder="Identificação da obra (opcional)"
+                      />
+                    </div>
+                    <div>
+                      <label className={RM_FORM_LABEL_CLS}>Prioridade</label>
+                      <SingleSelectSearchDropdown
+                        value={editFormData.priority}
+                        onChange={(priority) => setEditFormData({ ...editFormData, priority })}
+                        options={RM_PRIORITY_OPTIONS}
+                        allowEmpty={false}
+                        placeholder="Selecionar prioridade..."
+                        searchPlaceholder="Pesquisar prioridade..."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={RM_FORM_LABEL_CLS}>Descrição</label>
+                    <textarea
+                      value={editFormData.description}
+                      onChange={(e) =>
+                        setEditFormData({ ...editFormData, description: e.target.value })
+                      }
+                      rows={3}
+                      className={FORM_FIELD_TEXTAREA_CLS}
+                    />
+                  </div>
+                </RmFormSection>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Obra
-                  </label>
-                  <input
-                    type="text"
-                    value={editFormData.obra}
-                    onChange={(e) => setEditFormData({ ...editFormData, obra: e.target.value })}
-                    className={FORM_FIELD_INPUT_CLS}
-                    placeholder="Identificação da obra (opcional)"
-                  />
-                </div>
+                <RmFormSection
+                  title="Ficha de demanda"
+                  description="Número ou referência da FD (opcional)."
+                >
+                  <div>
+                    <label className={RM_FORM_LABEL_CLS}>Número da FD</label>
+                    <input
+                      type="text"
+                      value={editFormData.demandSheet}
+                      onChange={(e) =>
+                        setEditFormData({ ...editFormData, demandSheet: e.target.value })
+                      }
+                      className={FORM_FIELD_INPUT_CLS}
+                      placeholder="Número ou referência da FD (opcional)"
+                    />
+                  </div>
+                </RmFormSection>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Descrição
-                  </label>
-                  <textarea
-                    value={editFormData.description}
-                    onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                    rows={3}
-                    className={FORM_FIELD_INPUT_CLS}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Prioridade
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={editFormData.priority}
-                    onChange={(priority) => setEditFormData({ ...editFormData, priority })}
-                    options={RM_PRIORITY_OPTIONS}
-                    allowEmpty={false}
-                    placeholder="Selecionar prioridade..."
-                    searchPlaceholder="Pesquisar prioridade..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Ficha de Demanda
-                  </label>
-                  <input
-                    type="text"
-                    value={editFormData.demandSheet}
-                    onChange={(e) => setEditFormData({ ...editFormData, demandSheet: e.target.value })}
-                    className={FORM_FIELD_INPUT_CLS}
-                    placeholder="Número ou referência da FD (opcional)"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Anexar arquivos
-                  </label>
+                <RmFormSection
+                  title="Documentos"
+                  description="Anexe documentos da solicitação (FD, orçamento, etc.)."
+                >
                   <RmDemandSheetAttachmentsField
-                    size="sm"
                     files={editFormData.demandSheetAttachments}
                     uploading={uploadingDemandSheetAttachment === 'edit'}
                     disabled={!!uploadingDemandSheetAttachment}
                     onFilesSelect={(files) => void handleDemandSheetAttachmentFiles('edit', files)}
                     onRemove={(index) => removeDemandSheetAttachment('edit', index)}
-                    chooseLabel="Arquivo"
+                    chooseLabel="Adicionar arquivo"
                     addLabel="Adicionar arquivo"
                   />
-                </div>
+                </RmFormSection>
 
-                <div>
-                  <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Itens *</span>
+                <RmFormSection title={`Itens (${editFormData.items.length})`}>
                   <div className="space-y-3">
                     {editFormData.items.map((item, index) => (
                       <div
                         key={index}
-                        className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-600"
+                        className="rounded-xl border border-gray-200 p-3.5 dark:border-gray-700"
                       >
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Item {index + 1}</span>
-                          {editFormData.items.length > 1 && (
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            Item {index + 1}
+                          </span>
+                          {editFormData.items.length > 1 ? (
                             <button
                               type="button"
                               onClick={() => handleEditRemoveItem(index)}
-                              className="text-red-600 dark:text-red-400"
+                              className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                              aria-label={`Remover item ${index + 1}`}
                             >
-                              <X className="w-4 h-4" />
+                              <X className="h-4 w-4" />
                             </button>
-                          )}
+                          ) : null}
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div>
-                            <label className="block text-xs text-gray-500 mb-0.5">Material *</label>
+                            <label className={RM_FORM_FIELD_LABEL_CLS}>Material *</label>
                             <AsyncSearchSelectDropdown<RmMaterialListItem>
                               value={item.materialId}
                               selectedLabel={editItemMaterialLabels[index]}
@@ -3114,64 +3134,69 @@ function SolicitarMateriaisPage() {
                               queryKeyPrefix="rm-materials-search"
                             />
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                            <div className="sm:col-span-1">
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Qtd *</label>
+                              <RmQuantityInput
+                                size="sm"
+                                value={item.quantity}
+                                unit={item.unit}
+                                onChange={(quantity) =>
+                                  handleEditItemChange(index, 'quantity', quantity)
+                                }
+                              />
+                            </div>
+                            <div className="sm:col-span-3">
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Observação</label>
+                              <input
+                                type="text"
+                                value={item.observation}
+                                onChange={(e) =>
+                                  handleEditItemChange(index, 'observation', e.target.value)
+                                }
+                                className={FORM_FIELD_INPUT_CLS}
+                                placeholder="Opcional"
+                              />
+                            </div>
+                          </div>
                           <div>
-                            <label className="block text-xs text-gray-500 mb-0.5">Quantidade *</label>
-                            <RmQuantityInput
-                              size="sm"
-                              value={item.quantity}
-                              unit={item.unit}
-                              onChange={(quantity) =>
-                                handleEditItemChange(index, 'quantity', quantity)
-                              }
-                            />
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="block text-xs text-gray-500 mb-0.5">Observação</label>
-                            <input
-                              type="text"
-                              value={item.observation}
-                              onChange={(e) => handleEditItemChange(index, 'observation', e.target.value)}
-                              className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-800"
-                            />
-                          </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-0.5">Anexo (opcional)</label>
+                            <label className={RM_FORM_FIELD_LABEL_CLS}>Anexo</label>
                             <RmAttachmentField
-                              size="sm"
                               fileUrl={item.attachmentUrl}
                               fileName={item.attachmentName}
                               uploading={
-                                uploadingAttachment?.form === 'edit' && uploadingAttachment.index === index
+                                uploadingAttachment?.form === 'edit' &&
+                                uploadingAttachment.index === index
                               }
                               disabled={!!uploadingAttachment}
-                              onFileSelect={(file) => void handleItemAttachmentFile('edit', index, file)}
+                              onFileSelect={(file) =>
+                                void handleItemAttachmentFile('edit', index, file)
+                              }
                               onRemove={() => clearItemAttachment('edit', index)}
-                              chooseLabel="Arquivo"
+                              chooseLabel="Adicionar anexo"
                             />
                           </div>
                         </div>
                       </div>
                     ))}
+                    <button
+                      type="button"
+                      onClick={handleEditAddItem}
+                      className={RM_ADD_ITEM_BTN_CLS}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar item
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleEditAddItem}
-                    className="mt-3 text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Adicionar item
-                  </button>
-                </div>
+                </RmFormSection>
               </div>
 
-              <div className="mt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <div className="flex shrink-0 flex-col-reverse flex-wrap gap-2 border-t border-gray-200 px-5 py-3 sm:flex-row sm:justify-end dark:border-gray-700">
                 <button
                   type="button"
                   disabled={updateCorrectionMutation.isPending}
                   onClick={() => setCorrectionEditId(null)}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
                 >
                   Fechar
                 </button>
@@ -3179,7 +3204,7 @@ function SolicitarMateriaisPage() {
                   type="button"
                   disabled={updateCorrectionMutation.isPending}
                   onClick={() => submitCorrectionEdit(false)}
-                  className="px-4 py-2 border border-blue-600 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-700"
                 >
                   {updateCorrectionMutation.isPending ? 'Salvando...' : 'Salvar alterações'}
                 </button>
@@ -3187,9 +3212,11 @@ function SolicitarMateriaisPage() {
                   type="button"
                   disabled={updateCorrectionMutation.isPending}
                   onClick={() => submitCorrectionEdit(true)}
-                  className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
                 >
-                  {updateCorrectionMutation.isPending ? 'Enviando...' : 'Salvar e reenviar para aprovação'}
+                  {updateCorrectionMutation.isPending
+                    ? 'Enviando...'
+                    : 'Salvar e reenviar para aprovação'}
                 </button>
               </div>
             </div>

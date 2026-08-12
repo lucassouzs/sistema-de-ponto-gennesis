@@ -243,7 +243,11 @@ export interface PurchaseOrder {
   items?: Array<{
     materialId?: string;
     materialRequestItemId?: string | null;
-    materialRequestItem?: { quantity?: number | string | null } | null;
+    materialRequestItem?: {
+      quantity?: number | string | null;
+      notes?: string | null;
+      observation?: string | null;
+    } | null;
     quantity: number;
     unitPrice: number;
     totalPrice: number;
@@ -1322,6 +1326,20 @@ function materialLineLabel(
   return '—';
 }
 
+/** Detalhamento do item (mapa de cotação → notes da OC; fallback observação da RM). */
+function purchaseOrderItemDetailText(
+  line: NonNullable<PurchaseOrder['items']>[number]
+): string {
+  const fromOc = typeof line.notes === 'string' ? line.notes.trim() : '';
+  if (fromOc) return fromOc;
+  const mri = line.materialRequestItem;
+  if (!mri || typeof mri !== 'object') return '';
+  const fromRmNotes = typeof mri.notes === 'string' ? mri.notes.trim() : '';
+  if (fromRmNotes) return fromRmNotes;
+  const fromRmObs = typeof mri.observation === 'string' ? mri.observation.trim() : '';
+  return fromRmObs;
+}
+
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 }
@@ -1355,24 +1373,34 @@ function OcOrderMaterialsTable({ order }: { order: PurchaseOrder }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-          {order.items?.map((line, idx) => (
-            <tr key={idx} className="text-gray-900 dark:text-gray-100">
-              <td className="py-3 pr-2 text-center tabular-nums align-top font-medium text-gray-500 dark:text-gray-400">
-                {idx + 1}
-              </td>
-              <td className="py-3 px-2 align-top max-w-[220px] sm:max-w-none">{materialLineLabel(line.material)}</td>
-              <td className="py-3 px-2 text-right whitespace-nowrap align-top tabular-nums">
-                {Number(line.quantity)}
-              </td>
-              <td className="py-3 px-2 text-center whitespace-nowrap align-top">{line.unit || '—'}</td>
-              <td className="py-3 px-2 text-right whitespace-nowrap align-top tabular-nums">
-                {formatCurrency(Number(line.unitPrice))}
-              </td>
-              <td className="py-3 pl-2 text-right whitespace-nowrap align-top font-medium tabular-nums">
-                {formatCurrency(Number(line.totalPrice))}
-              </td>
-            </tr>
-          ))}
+          {order.items?.map((line, idx) => {
+            const detail = purchaseOrderItemDetailText(line);
+            return (
+              <tr key={idx} className="text-gray-900 dark:text-gray-100">
+                <td className="py-3 pr-2 text-center tabular-nums align-top font-medium text-gray-500 dark:text-gray-400">
+                  {idx + 1}
+                </td>
+                <td className="py-3 px-2 align-top max-w-[220px] sm:max-w-none">
+                  <span className="block">{materialLineLabel(line.material)}</span>
+                  {detail ? (
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {detail}
+                    </p>
+                  ) : null}
+                </td>
+                <td className="py-3 px-2 text-right whitespace-nowrap align-top tabular-nums">
+                  {Number(line.quantity)}
+                </td>
+                <td className="py-3 px-2 text-center whitespace-nowrap align-top">{line.unit || '—'}</td>
+                <td className="py-3 px-2 text-right whitespace-nowrap align-top tabular-nums">
+                  {formatCurrency(Number(line.unitPrice))}
+                </td>
+                <td className="py-3 pl-2 text-right whitespace-nowrap align-top font-medium tabular-nums">
+                  {formatCurrency(Number(line.totalPrice))}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr className="border-t border-gray-200 dark:border-gray-700">
@@ -3765,21 +3793,13 @@ export function OcPurchaseOrdersPanel({
     lastOcDetailOrderIdRef.current = o.id;
     setOcDetailTab(defaultOcDetailModalTab(o.status));
     setSelectedOrder(o);
-    const cachedDetail = queryClient.getQueryData<PurchaseOrder>(['purchase-order-detail', o.id]);
-    if (cachedDetail && cachedDetail.status !== o.status) {
-      queryClient.setQueryData<PurchaseOrder>(['purchase-order-detail', o.id], {
-        ...cachedDetail,
-        status: o.status,
-        updatedAt: o.updatedAt || cachedDetail.updatedAt
-      });
-    }
-    void queryClient.prefetchQuery({
+    void queryClient.fetchQuery({
       queryKey: ['purchase-order-detail', o.id],
       queryFn: async () => {
         const res = await api.get(`/purchase-orders/${o.id}`);
         return res.data?.data as PurchaseOrder | undefined;
       },
-      staleTime: 60_000
+      staleTime: 0
     });
   };
 
