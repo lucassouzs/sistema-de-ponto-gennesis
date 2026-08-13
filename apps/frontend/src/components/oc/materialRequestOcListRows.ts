@@ -18,6 +18,7 @@ export type MaterialRequestOcListPurchaseOrder = {
   paymentBoletoInstallments?: unknown;
   paymentParcelCount?: number;
   paymentBoletoPhaseReleased?: boolean | null;
+  items?: Array<{ materialRequestItemId?: string | null } | null> | null;
 };
 
 export type MaterialRequestOcListRow = {

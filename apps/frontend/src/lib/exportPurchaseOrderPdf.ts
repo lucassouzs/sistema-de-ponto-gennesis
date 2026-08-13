@@ -7,6 +7,7 @@ import {
   type OcPdfCompanyHeader,
 } from '@/lib/unbBranding';
 import { formatPaymentConditionDisplay, type PaymentConditionRow } from '@/components/oc/PaymentConditionSelect';
+import { buildOcPdfDownloadFileName } from '@/components/oc/ocListDisplay';
 
 const PAYMENT_TYPE: Record<string, string> = {
   AVISTA: 'À vista',
@@ -520,5 +521,5 @@ export async function exportPurchaseOrderPdf(
     });
   });
 
-  pdf.save(`Ordem_de_Compra_${ocDisplayNumber}.pdf`);
+  pdf.save(buildOcPdfDownloadFileName(order.orderNumber, order.supplier?.name));
 }

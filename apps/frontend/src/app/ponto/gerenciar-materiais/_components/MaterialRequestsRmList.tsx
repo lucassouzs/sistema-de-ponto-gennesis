@@ -30,23 +30,31 @@ import {
   rmSolicitante,
   rmTitulo
 } from '../_lib/display';
-import { getMaterialRequestDisplayStatus } from '../_lib/search';
+import { getMaterialRequestDisplayStatus, isMaterialRequestEffectivelyCancelled } from '../_lib/search';
 import { formatRmListDisplayId } from '../_lib/rmListDisplay';
 import {
   materialRequestOcListRows,
 } from '@/components/oc/materialRequestOcListRows';
+import { getRmItemCoverageCounts } from '@/lib/rmProcurementCoverage';
+import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import {
   Z_ACTION_MENU,
 } from '@/lib/zIndex';
 const cellPad = 'px-2 sm:px-3 py-3';
 const cellPadTh = 'px-2 sm:px-3 py-4';
 const rmColCls = 'w-[4%] min-w-[3rem] max-w-[4.5rem]';
+const itensColCls = 'w-[7%] min-w-[4.5rem]';
+const tipoColCls = 'w-[9%] min-w-[5.5rem]';
 const ocColCls = 'w-[5%] min-w-[3.5rem]';
 const actionColCls = 'w-[4%] min-w-[3rem] max-w-[4.5rem]';
 const thTextCls = `${cellPadTh} text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider`;
 const thCenterCls = `${cellPadTh} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap`;
 const rmThCls = `${thCenterCls} ${rmColCls} !pl-2 sm:!pl-3 !pr-1`;
 const rmTdCls = `${cadastroListClasses.tdMono} ${rmColCls} text-center !pl-2 sm:!pl-3 !pr-1`;
+const itensThCls = `${thCenterCls} ${itensColCls}`;
+const itensTdCls = `${cellPad} ${itensColCls} text-center align-middle`;
+const tipoThCls = `${thCenterCls} ${tipoColCls}`;
+const tipoTdCls = `${cellPad} ${tipoColCls} text-center align-middle`;
 const ocThCls = `${thCenterCls} ${ocColCls}`;
 const ocTdCls = `${cadastroListClasses.tdMono} ${ocColCls} text-center align-middle !px-2 sm:!px-3`;
 const tdTextCls = `${cellPad} text-left text-sm text-gray-700 dark:text-gray-300 min-w-0`;
@@ -257,13 +265,15 @@ export function MaterialRequestsRmList({
               <table className={`${cadastroListClasses.table} text-sm`}>
                 <colgroup>
                   <col className="w-[4%]" />
-                  <col className={showStatusColumn ? 'w-[14%]' : 'w-[16%]'} />
                   <col className={showStatusColumn ? 'w-[12%]' : 'w-[14%]'} />
-                  <col className={showStatusColumn ? 'w-[16%]' : 'w-[18%]'} />
                   <col className={showStatusColumn ? 'w-[10%]' : 'w-[12%]'} />
-                  {showStatusColumn ? <col className="w-[10%]" /> : null}
+                  <col className={showStatusColumn ? 'w-[14%]' : 'w-[16%]'} />
+                  <col className={showStatusColumn ? 'w-[8%]' : 'w-[10%]'} />
+                  {showStatusColumn ? <col className="w-[8%]" /> : null}
+                  <col className={itensColCls} />
+                  <col className={tipoColCls} />
                   <col className={ocColCls} />
-                  <col className={showStatusColumn ? 'w-[13%]' : 'w-[15%]'} />
+                  <col className={showStatusColumn ? 'w-[11%]' : 'w-[13%]'} />
                   <col className="w-[4%]" />
                 </colgroup>
                 <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -276,6 +286,8 @@ export function MaterialRequestsRmList({
                     <th className={thCenterCls}>Contrato</th>
                     <th className={thCenterCls}>Prioridade</th>
                     {showStatusColumn && <th className={thCenterCls}>Status</th>}
+                    <th className={itensThCls}>Itens</th>
+                    <th className={tipoThCls}>Tipo</th>
                     <th className={ocThCls}>OC</th>
                     <th className={thCenterCls}>Status OC</th>
                     <th
@@ -293,6 +305,16 @@ export function MaterialRequestsRmList({
                     const ocRows = materialRequestOcListRows(request, ocs);
                     const displayStatus = getMaterialRequestDisplayStatus(request, ocs);
                     const statusInfo = getStatusInfo(displayStatus);
+                    const { total: itemTotal, pending: itemPending } = getRmItemCoverageCounts(
+                      request,
+                      ocs
+                    );
+                    const showPendingLine =
+                      request.status === 'APPROVED' &&
+                      !isMaterialRequestEffectivelyCancelled(request, ocs) &&
+                      itemPending != null &&
+                      itemPending > 0;
+                    const tipoLabel = formatRmItemProductKinds(request.itemProductKinds);
 
                     return (
                       <tr
@@ -331,6 +353,34 @@ export function MaterialRequestsRmList({
                             </span>
                           </td>
                         )}
+                        <td className={itensTdCls}>
+                          {itemTotal == null ? (
+                            <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500">—</span>
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-0.5 leading-tight">
+                              <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                                {itemTotal}
+                              </span>
+                              {showPendingLine ? (
+                                <span
+                                  className="text-[11px] font-medium text-amber-700 dark:text-amber-300 whitespace-nowrap"
+                                  title={`${itemPending} item(ns) ainda sem ordem de compra`}
+                                >
+                                  {itemPending} pendente{itemPending === 1 ? '' : 's'}
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
+                        </td>
+                        <td className={tipoTdCls} title={tipoLabel === '—' ? undefined : tipoLabel}>
+                          {tipoLabel === '—' ? (
+                            <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500">—</span>
+                          ) : (
+                            <span className="text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                              {tipoLabel}
+                            </span>
+                          )}
+                        </td>
                         <td className={ocTdCls}>
                           {ocRows.length === 0 ? (
                             <span className="block text-center text-xs sm:text-sm text-gray-400 dark:text-gray-500">—</span>

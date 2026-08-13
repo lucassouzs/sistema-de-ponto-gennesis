@@ -30,6 +30,11 @@ import {
 } from '../gerenciar-materiais/_lib/display';
 import { formatRmListDisplayId } from '../gerenciar-materiais/_lib/rmListDisplay';
 import type { MaterialRequest as MaterialRequestBase } from '../gerenciar-materiais/_lib/types';
+import {
+  getCoveredRmItemIdsFromOrders,
+  getOpenRmItemIds,
+  rmHasOpenItemsForProcurement,
+} from '@/lib/rmProcurementCoverage';
 
 type MaterialRequestItem = {
   id: string;
@@ -73,10 +78,12 @@ type MaterialRequest = MaterialRequestBase & {
 };
 
 type PurchaseOrderLite = {
+  status?: string;
   materialRequestId?: string;
   materialRequest?: { id?: string };
   supplierId?: string;
   supplier?: { id?: string };
+  items?: Array<{ materialRequestItemId?: string | null }>;
 };
 
 type Supplier = {
@@ -612,20 +619,33 @@ export default function MapaCotacaoPage() {
 
   const allOrders: PurchaseOrderLite[] = ordersData?.data || [];
 
-  /** RMs que já possuem ao menos uma OC (para ocultar no seletor de novas cotações) */
-  const materialRequestIdsWithOc = useMemo(() => {
-    const s = new Set<string>();
+  const rawApprovedRequestsForCoverage: MaterialRequest[] =
+    requestsData?.data?.requests || requestsData?.data || [];
+
+  /** RMs cujos itens já estão todos cobertos por OC ativa (não entram no seletor). */
+  const materialRequestIdsFullyCovered = useMemo(() => {
+    const ordersByRm = new Map<string, PurchaseOrderLite[]>();
     for (const o of allOrders) {
       const mid = o.materialRequestId ?? o.materialRequest?.id;
-      if (mid) s.add(mid);
+      if (!mid) continue;
+      const list = ordersByRm.get(mid) ?? [];
+      list.push(o);
+      ordersByRm.set(mid, list);
+    }
+    const s = new Set<string>();
+    for (const r of rawApprovedRequestsForCoverage) {
+      if (r.status !== 'APPROVED') continue;
+      const orders = ordersByRm.get(r.id) ?? [];
+      if (orders.length === 0) continue;
+      if (!rmHasOpenItemsForProcurement(r, orders)) s.add(r.id);
     }
     return s;
-  }, [allOrders]);
+  }, [allOrders, rawApprovedRequestsForCoverage]);
 
-  const rawApprovedRequests: MaterialRequest[] = requestsData?.data?.requests || requestsData?.data || [];
+  const rawApprovedRequests: MaterialRequest[] = rawApprovedRequestsForCoverage;
 
   /**
-   * Lista elegível: RMs aprovadas sem OC.
+   * Lista elegível: RMs aprovadas com itens ainda sem OC ativa.
    * Mantém a RM selecionada mesmo após a 1ª OC, para permitir gerar OC dos demais fornecedores vencedores.
    */
   const approvedRequests = useMemo(
@@ -633,72 +653,80 @@ export default function MapaCotacaoPage() {
       rawApprovedRequests.filter(
         (r) =>
           r.status === 'APPROVED' &&
-          (r.id === selectedRequestId || !materialRequestIdsWithOc.has(r.id))
+          (r.id === selectedRequestId || !materialRequestIdsFullyCovered.has(r.id))
       ),
-    [rawApprovedRequests, materialRequestIdsWithOc, selectedRequestId]
+    [rawApprovedRequests, materialRequestIdsFullyCovered, selectedRequestId]
   );
 
-  /** Fornecedores que já têm OC vinculada à RM selecionada */
-  const ocSupplierIdsForSelectedRequest = useMemo(() => {
-    if (!selectedRequestId) return new Set<string>();
-    const s = new Set<string>();
+  const materialRequestOptions = useMemo(() => {
+    const ordersByRm = new Map<string, PurchaseOrderLite[]>();
     for (const o of allOrders) {
       const mid = o.materialRequestId ?? o.materialRequest?.id;
-      if (mid !== selectedRequestId) continue;
-      const sid = o.supplierId ?? o.supplier?.id;
-      if (sid) s.add(sid);
+      if (!mid) continue;
+      const list = ordersByRm.get(mid) ?? [];
+      list.push(o);
+      ordersByRm.set(mid, list);
     }
-    return s;
-  }, [allOrders, selectedRequestId]);
 
-  const materialRequestOptions = useMemo(
-    () =>
-      approvedRequests.map((r) => {
-        const rm = formatRmListDisplayId(r.requestNumber) || r.id.slice(0, 8);
-        const os = rmOsDisplay(r);
-        const contract = rmContractDisplay(r);
-        const solicitante = rmSolicitante(r)?.name?.trim() || '';
-        const costCenter = r.costCenter?.name?.trim() || '';
-        const date = r.createdAt ? formatDateTimeBR(r.createdAt) : '';
-        const summaryItemCount = (r as unknown as { _count?: { items?: number } })._count?.items;
-        const itemCount =
-          Array.isArray(r.items) && r.items.length > 0
-            ? r.items.length
-            : typeof summaryItemCount === 'number'
-              ? summaryItemCount
-              : null;
+    return approvedRequests.map((r) => {
+      const rm = formatRmListDisplayId(r.requestNumber) || r.id.slice(0, 8);
+      const os = rmOsDisplay(r);
+      const contract = rmContractDisplay(r);
+      const solicitante = rmSolicitante(r)?.name?.trim() || '';
+      const costCenter = r.costCenter?.name?.trim() || '';
+      const date = r.createdAt ? formatDateTimeBR(r.createdAt) : '';
+      const orders = ordersByRm.get(r.id) ?? [];
+      const summaryItemCount = (r as unknown as { _count?: { items?: number } })._count?.items;
 
-        const qtyText =
-          itemCount != null
-            ? `${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`
+      const totalCount =
+        Array.isArray(r.items) && r.items.length > 0
+          ? r.items.length
+          : typeof summaryItemCount === 'number'
+            ? summaryItemCount
             : null;
-        const peopleDateLine = [solicitante || null, date || null]
-          .filter(Boolean)
-          .join(' - ');
 
-        return {
-          value: r.id,
-          label:
-            contract !== '—' ? `RM ${rm} - ${contract}` : `RM ${rm}`,
-          description:
-            [qtyText, peopleDateLine || null].filter(Boolean).join('\n') ||
-            undefined,
-          searchText: [
-            rm,
-            os,
-            contract,
-            solicitante,
-            costCenter,
-            date,
-            r.description,
-            r.id,
-          ]
-            .filter(Boolean)
-            .join(' '),
-        };
-      }),
-    [approvedRequests]
-  );
+      let pendingCount: number | null = null;
+      if (Array.isArray(r.items) && r.items.length > 0) {
+        pendingCount = getOpenRmItemIds(r, orders).length;
+      } else if (typeof summaryItemCount === 'number') {
+        const covered = getCoveredRmItemIdsFromOrders(orders).size;
+        pendingCount = Math.max(0, summaryItemCount - covered);
+      }
+
+      let qtyText: string | null = null;
+      if (totalCount != null && pendingCount != null) {
+        qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${pendingCount} pendente${
+          pendingCount === 1 ? '' : 's'
+        }`;
+      } else if (pendingCount != null) {
+        qtyText = `${pendingCount} ${pendingCount === 1 ? 'item pendente' : 'itens pendentes'}`;
+      } else if (totalCount != null) {
+        qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'}`;
+      }
+      const peopleDateLine = [solicitante || null, date || null]
+        .filter(Boolean)
+        .join(' - ');
+
+      return {
+        value: r.id,
+        label: contract !== '—' ? `RM ${rm} - ${contract}` : `RM ${rm}`,
+        description:
+          [qtyText, peopleDateLine || null].filter(Boolean).join('\n') || undefined,
+        searchText: [
+          rm,
+          os,
+          contract,
+          solicitante,
+          costCenter,
+          date,
+          r.description,
+          r.id,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      };
+    });
+  }, [approvedRequests, allOrders]);
 
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-map'],
@@ -736,8 +764,26 @@ export default function MapaCotacaoPage() {
     refetchOnWindowFocus: false,
   });
 
-  const selectedRequest =
+  const selectedRequestRaw =
     selectedRequestFull?.id === selectedRequestId ? selectedRequestFull : null;
+
+  const coveredItemIdsForSelected = useMemo(() => {
+    if (!selectedRequestId) return new Set<string>();
+    return getCoveredRmItemIdsFromOrders(
+      allOrders.filter(
+        (o) => (o.materialRequestId ?? o.materialRequest?.id) === selectedRequestId
+      )
+    );
+  }, [allOrders, selectedRequestId]);
+
+  /** Itens ainda sem OC ativa — mapa de cotação só trabalha com estes. */
+  const selectedRequest = useMemo(() => {
+    if (!selectedRequestRaw) return null;
+    const openItems = (selectedRequestRaw.items ?? []).filter(
+      (i) => !coveredItemIdsForSelected.has(i.id)
+    );
+    return { ...selectedRequestRaw, items: openItems };
+  }, [selectedRequestRaw, coveredItemIdsForSelected]);
 
   useEffect(() => {
     if (!selectedRequestId) return;
@@ -772,6 +818,20 @@ export default function MapaCotacaoPage() {
     setOcModalSupplierId(null);
     setGeneratedOcSupplierIds(new Set());
   }, [selectedRequestId]);
+
+  /** Se a cobertura mudou (ex.: item devolvido à RM), libera gerar OC de novo para o fornecedor. */
+  const openItemIdsKey = useMemo(
+    () =>
+      (selectedRequest?.items ?? [])
+        .map((i) => i.id)
+        .sort()
+        .join(','),
+    [selectedRequest?.items]
+  );
+
+  useEffect(() => {
+    setGeneratedOcSupplierIds(new Set());
+  }, [openItemIdsKey]);
 
   useEffect(() => {
     if (!selectedRequest) return;
@@ -928,11 +988,10 @@ export default function MapaCotacaoPage() {
   const generateOrdersMutation = useMutation({
     mutationFn: async (supplierId: string) => {
       if (!selectedRequest) throw new Error('Selecione uma requisição na fase RMs Aprovadas.');
-      if (
-        ocSupplierIdsForSelectedRequest.has(supplierId) ||
-        generatedOcSupplierIds.has(supplierId)
-      ) {
-        throw new Error('Já existe OC para este fornecedor nesta RM.');
+      if (generatedOcSupplierIds.has(supplierId)) {
+        throw new Error(
+          'OC já gerada para este fornecedor neste mapa. Se devolveu um item à RM, recarregue ou monte a cotação de novo.'
+        );
       }
       if ((wonItemsBySupplier[supplierId] ?? []).length === 0) {
         throw new Error('Este fornecedor não venceu nenhum item da cotação.');
@@ -1088,6 +1147,8 @@ export default function MapaCotacaoPage() {
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
       queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' });
       queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['material-requests-approved-map'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['material-request-detail'], refetchType: 'all' });
       toast.success('OC gerada com sucesso!');
     },
     onError: (error: any) => {
@@ -1471,9 +1532,7 @@ export default function MapaCotacaoPage() {
                                   {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
                                     const wonCount = (wonItemsBySupplier[supplierId] ?? []).length;
                                     const totals = computedSupplierTotals[supplierId];
-                                    const alreadyHasOc =
-                                      ocSupplierIdsForSelectedRequest.has(supplierId) ||
-                                      generatedOcSupplierIds.has(supplierId);
+                                    const alreadyHasOc = generatedOcSupplierIds.has(supplierId);
                                     const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
                                       supplierIndex === supplierIds.length - 1
                                         ? 'border-r border-gray-200 dark:border-gray-700'

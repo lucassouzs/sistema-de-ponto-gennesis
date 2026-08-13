@@ -11,6 +11,14 @@ import {
   type StockPaymentSlipParsed
 } from '../utils/stockMovementNotes';
 import { isValidNfNumber, normalizeNfNumberKey } from '../utils/nfInvoiceNumber';
+import {
+  isOcStatusAllowingReturnItemToRm,
+  OC_STATUSES_COVERING_RM_ITEMS,
+} from '../lib/rmProcurementCoverage';
+import {
+  getContractGestorCostCenterIds,
+  userHasContractGestorAssignment,
+} from '../lib/contractGestorApprovalAccess';
 
 /** Lock distinto do requestNumber de RM (91827365) — serializa só a sequência de OC. */
 const PURCHASE_ORDER_NUMBER_ADVISORY_LOCK = 91827366;
@@ -731,7 +739,9 @@ const purchaseOrderIncludeListSummary = {
       costCenter: { select: { id: true, code: true, name: true } }
     }
   },
-  creator: { select: { id: true, name: true } }
+  creator: { select: { id: true, name: true } },
+  /** Vínculos leves para saber quais itens da RM já estão em OC ativa. */
+  items: { select: { materialRequestItemId: true } }
 } as const;
 
 /**
@@ -3344,5 +3354,185 @@ export class PurchaseOrderService {
       throw new Error('Sem permissão para excluir este comentário');
     }
     await db.purchaseOrderComment.delete({ where: { id: commentId } });
+  }
+
+  /**
+   * Remove um item da OC e devolve à RM para novo mapa/cotação (mesmo requestNumber).
+   * Só em fases pré-aprovação; exige ≥2 itens na OC.
+   */
+  async returnItemToMaterialRequest(
+    purchaseOrderId: string,
+    purchaseOrderItemId: string,
+    userId: string,
+    isAdmin: boolean,
+    reason: string
+  ) {
+    const reasonText = reason.trim();
+    if (!reasonText) throw new Error('Informe o motivo da retirada do item');
+    if (reasonText.length > 2000) throw new Error('Motivo muito longo (máx. 2000 caracteres)');
+    if (!userId) throw new Error('Usuário não autenticado');
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        items: {
+          include: {
+            material: { select: { id: true, name: true, description: true, sinapiCode: true } },
+          },
+        },
+        materialRequest: {
+          select: {
+            id: true,
+            requestNumber: true,
+            status: true,
+            costCenter: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+
+    if (!isOcStatusAllowingReturnItemToRm(order.status)) {
+      throw new Error(
+        'Só é possível retirar itens da OC antes da validação de comprovante / conclusão do fluxo'
+      );
+    }
+
+    // Pagamento: se já existe lançamento no Controle Financeiro, não permite.
+    if (order.status === 'APPROVED') {
+      const launchCount = await prisma.financialControlEntry.count({
+        where: { ocNumber: { equals: order.orderNumber, mode: 'insensitive' } },
+      });
+      if (launchCount > 0) {
+        throw new Error(
+          'Não é possível devolver itens após o lançamento financeiro desta OC'
+        );
+      }
+    }
+
+    // Administrador ou gestor do contrato (centro de custo da RM).
+    if (!isAdmin) {
+      if (!(await userHasContractGestorAssignment(userId))) {
+        throw new Error('Sem permissão: apenas o gestor do contrato pode devolver itens à RM');
+      }
+      const costCenterId = order.materialRequest?.costCenter?.id ?? null;
+      const scopeIds = await getContractGestorCostCenterIds(userId);
+      if (!costCenterId || scopeIds.length === 0 || !scopeIds.includes(costCenterId)) {
+        throw new Error('Sem permissão para devolver itens de OC deste contrato');
+      }
+    }
+
+    const line = order.items.find((i) => i.id === purchaseOrderItemId);
+    if (!line) throw new Error('Item não encontrado nesta ordem de compra');
+
+    const isLastItem = order.items.length <= 1;
+
+    const materialLabel =
+      line.material?.name?.trim() ||
+      line.material?.description?.trim() ||
+      line.material?.sinapiCode?.trim() ||
+      line.materialId;
+
+    const actorName = await resolveUserDisplayName(userId);
+    const at = new Date().toLocaleString('pt-BR');
+    const noteHeader = actorName
+      ? `[Item devolvido à RM — ${at} — ${actorName}]`
+      : `[Item devolvido à RM — ${at}]`;
+    const noteBody = `${materialLabel} (qtd ${Number(line.quantity)} ${line.unit || ''}). Motivo: ${reasonText}`;
+    const cancelNote = isLastItem
+      ? `\n\n[OC cancelada — último item devolvido à RM em ${at}]`
+      : '';
+    const note = `${noteHeader}\n${noteBody}${cancelNote}`;
+    const nextNotes = order.notes?.trim() ? `${order.notes.trim()}\n\n${note}` : note;
+
+    const rmItemId = line.materialRequestItemId;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.purchaseOrderItem.delete({ where: { id: line.id } });
+
+      const remaining = await tx.purchaseOrderItem.findMany({
+        where: { purchaseOrderId },
+        select: { totalPrice: true },
+      });
+      const itemsSum = remaining.reduce(
+        (acc, i) => acc.plus(new Decimal(i.totalPrice)),
+        new Decimal(0)
+      );
+      const freight =
+        order.freightAmount != null ? new Decimal(order.freightAmount) : new Decimal(0);
+      const amountToPay = itemsSum.plus(freight);
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          amountToPay,
+          notes: nextNotes,
+          // Último item: cancela só a OC (não a RM) para o item voltar ao mapa.
+          ...(remaining.length === 0 ? { status: 'CANCELLED' as const } : {}),
+          updatedAt: new Date(),
+        },
+      });
+
+      if (rmItemId) {
+        await tx.materialRequestItem.update({
+          where: { id: rmItemId },
+          data: {
+            status: 'APPROVED',
+            fulfilledQuantity: null,
+            updatedAt: new Date(),
+          },
+        });
+
+        // Remove vencedores/preços do item em mapas antigos para não travar nova cotação.
+        await tx.quoteMapWinnerItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+        await tx.quoteMapSupplierItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+      }
+
+      if (order.materialRequestId && order.materialRequest?.status === 'APPROVED') {
+        // Mantém RM APPROVED; comentário para auditoria.
+        await tx.materialRequestComment.create({
+          data: {
+            materialRequestId: order.materialRequestId,
+            userId,
+            content: isLastItem
+              ? `Último item devolvido da OC ${order.orderNumber} (OC cancelada) para nova cotação: ${noteBody}`
+              : `Item devolvido da OC ${order.orderNumber} para nova cotação: ${noteBody}`,
+          },
+        });
+      }
+
+      await tx.purchaseOrderComment.create({
+        data: {
+          purchaseOrderId,
+          userId,
+          content: isLastItem
+            ? `Último item retirado e devolvido à RM (OC cancelada): ${noteBody}`
+            : `Item retirado e devolvido à RM: ${noteBody}`,
+        },
+      });
+    });
+
+    const fresh = await this.getById(purchaseOrderId);
+    if (!fresh) throw new Error('Ordem de compra não encontrada após a retirada');
+    return fresh;
+  }
+
+  /** Itens da RM que já estão em OC ativa (não rejeitada/cancelada). */
+  async getCoveredMaterialRequestItemIds(materialRequestId: string): Promise<string[]> {
+    const rows = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialRequestItemId: { not: null },
+        purchaseOrder: {
+          materialRequestId,
+          status: { in: [...OC_STATUSES_COVERING_RM_ITEMS] },
+        },
+      },
+      select: { materialRequestItemId: true },
+    });
+    const ids = new Set<string>();
+    for (const row of rows) {
+      if (row.materialRequestItemId) ids.add(row.materialRequestItemId);
+    }
+    return [...ids];
   }
 }

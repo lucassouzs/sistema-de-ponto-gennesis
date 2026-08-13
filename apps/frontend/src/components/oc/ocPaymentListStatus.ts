@@ -1,4 +1,5 @@
 import type { FinancialControlEntry } from '@/lib/financialControlEntry';
+import { hasFinancialEntryForOcInstallment } from '@/components/financeiro/financialControlEntry';
 import {
   allMultiInstallmentsPaid,
   parsePaymentBoletoInstallments,
@@ -7,7 +8,7 @@ import {
   type OrderProofValidationPick,
 } from '@/components/oc/ocPaymentBoleto';
 
-export type OcPaymentListStatus = 'pendente' | 'pago';
+export type OcPaymentListStatus = 'pendente' | 'lancado';
 
 export function isOcPaymentCompleted(o: OrderProofValidationPick): boolean {
   if (o.paymentType === 'BOLETO') {
@@ -22,8 +23,8 @@ export function isOcPaymentCompleted(o: OrderProofValidationPick): boolean {
 }
 
 /**
- * Na lista da aba Pagamento da OC, "Pago" = já existe lançamento no Controle Financeiro
- * (status LANCADO etc.), não só quando o título está como PAGO no financeiro.
+ * Na lista da aba Pagamento da OC, "Lançado" = já existe lançamento no Controle Financeiro
+ * (da parcela corrente, em boleto parcelado).
  */
 function isFinanceEntryLaunched(
   e: Pick<FinancialControlEntry, 'status' | 'paidDate'>
@@ -32,54 +33,52 @@ function isFinanceEntryLaunched(
   return true;
 }
 
-function countPaidInstallments(o: OrderProofValidationPick): number {
-  const n = o.paymentParcelCount ?? 1;
-  const rows = parsePaymentBoletoInstallments(o.paymentBoletoInstallments);
-  let paid = 0;
-  for (let i = 0; i < n; i++) {
-    if (rowStatus(rows[i]) === 'PAID') paid++;
-  }
-  return paid;
-}
-
 export function getOcPaymentListStatus(
   o: OrderProofValidationPick,
-  entriesForOc: Pick<FinancialControlEntry, 'status' | 'paidDate'>[]
+  entriesForOc: Pick<
+    FinancialControlEntry,
+    'status' | 'paidDate' | 'parcelNumber' | 'dueDate'
+  >[]
 ): OcPaymentListStatus {
   const launchedEntries = entriesForOc.filter(isFinanceEntryLaunched);
-  const launchedFinanceCount = launchedEntries.length;
 
   if (o.paymentType === 'BOLETO' && (o.paymentParcelCount ?? 1) > 1) {
     const n = o.paymentParcelCount ?? 1;
     const rows = parsePaymentBoletoInstallments(o.paymentBoletoInstallments);
-    const paidInstallments = countPaidInstallments(o);
-
-    if (allMultiInstallmentsPaid(rows, n)) return 'pago';
-
     const curIdx = visiblePaymentBoletoInstallmentIndex(o);
-    if (curIdx != null && rowStatus(rows[curIdx]) === 'PAID') return 'pago';
 
-    // Um lançamento por parcela: se já lançou a parcela atual, mostra Pago.
-    if (launchedFinanceCount > paidInstallments) {
-      if (curIdx == null || curIdx === paidInstallments) return 'pago';
+    if (allMultiInstallmentsPaid(rows, n)) return 'lancado';
+
+    if (curIdx != null) {
+      if (rowStatus(rows[curIdx]) === 'PAID') return 'lancado';
+      if (
+        hasFinancialEntryForOcInstallment(launchedEntries, {
+          installmentIndex: curIdx,
+          parcelCount: n,
+          installmentDueDate: rows[curIdx]?.dueDate,
+        })
+      ) {
+        return 'lancado';
+      }
+      return 'pendente';
     }
 
-    return 'pendente';
+    return launchedEntries.length > 0 ? 'lancado' : 'pendente';
   }
 
-  if (launchedFinanceCount === 0 && !isOcPaymentCompleted(o)) return 'pendente';
-  return 'pago';
+  if (launchedEntries.length === 0 && !isOcPaymentCompleted(o)) return 'pendente';
+  return 'lancado';
 }
 
 export function ocPaymentListStatusLabel(status: OcPaymentListStatus): string {
-  return status === 'pago' ? 'Pago' : 'Pendente';
+  return status === 'lancado' ? 'Lançado' : 'Pendente';
 }
 
 const ocListStatusPillBase =
   'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap';
 
 export function ocPaymentListStatusClass(status: OcPaymentListStatus): string {
-  return status === 'pago'
+  return status === 'lancado'
     ? `${ocListStatusPillBase} bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200`
     : `${ocListStatusPillBase} bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200`;
 }

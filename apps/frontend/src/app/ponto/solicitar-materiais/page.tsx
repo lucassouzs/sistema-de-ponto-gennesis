@@ -63,7 +63,10 @@ import {
 } from '@/components/oc/ocStatusLabels';
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
+import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
+import { getActiveOcForRmItem, getRmItemCoverageCounts } from '@/lib/rmProcurementCoverage';
+import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { isMaterialRequestEffectivelyCancelled } from '@/app/ponto/gerenciar-materiais/_lib/search';
 import {
@@ -2050,6 +2053,12 @@ function SolicitarMateriaisPage() {
                           <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap min-w-[100px]">
                             Status
                           </th>
+                          <th className="w-[7%] min-w-[4.5rem] px-2 sm:px-3 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                            Itens
+                          </th>
+                          <th className="w-[9%] min-w-[5.5rem] px-2 sm:px-3 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                            Tipo
+                          </th>
                           <th className="w-[4%] min-w-[3rem] max-w-[4.5rem] px-2 sm:px-3 py-4 !pl-2 sm:!pl-3 !pr-1 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
                             OC
                           </th>
@@ -2067,14 +2076,37 @@ function SolicitarMateriaisPage() {
                             request: Record<string, unknown> & {
                               id: string;
                               status?: string;
+                              items?: Array<{ id: string }>;
+                              _count?: { items?: number };
+                              itemProductKinds?: string[];
                               purchaseOrders?: MaterialRequestOcListPurchaseOrder[];
                             }
                           ) => {
                             const rmFase = materialRequestRmFaseAtual(request);
-                            const ocRows = materialRequestOcListRows(
-                              request,
-                              Array.isArray(request.purchaseOrders) ? request.purchaseOrders : []
-                            );
+                            const pos = Array.isArray(request.purchaseOrders)
+                              ? request.purchaseOrders
+                              : [];
+                            const ocRows = materialRequestOcListRows(request, pos);
+                            const { total: itemTotal, pending: itemPending } =
+                              getRmItemCoverageCounts(
+                                {
+                                  id: request.id,
+                                  status: String(request.status || ''),
+                                  items: request.items,
+                                  _count: request._count,
+                                  purchaseOrders: pos
+                                },
+                                pos
+                              );
+                            const showPendingLine =
+                              request.status === 'APPROVED' &&
+                              !isMaterialRequestEffectivelyCancelled(
+                                { status: String(request.status || '') } as MaterialRequest,
+                                pos as Parameters<typeof isMaterialRequestEffectivelyCancelled>[1]
+                              ) &&
+                              itemPending != null &&
+                              itemPending > 0;
+                            const tipoLabel = formatRmItemProductKinds(request.itemProductKinds);
                             return (
                             <tr
                               key={request.id}
@@ -2123,6 +2155,41 @@ function SolicitarMateriaisPage() {
                                 <span className={rmFase.badgeClassName} title={rmFase.text}>
                                   {rmFase.text}
                                 </span>
+                              </td>
+                              <td className="w-[7%] min-w-[4.5rem] px-2 sm:px-3 py-3 text-center align-middle">
+                                {itemTotal == null ? (
+                                  <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500">
+                                    —
+                                  </span>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center gap-0.5 leading-tight">
+                                    <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                                      {itemTotal}
+                                    </span>
+                                    {showPendingLine ? (
+                                      <span
+                                        className="text-[11px] font-medium text-amber-700 dark:text-amber-300 whitespace-nowrap"
+                                        title={`${itemPending} item(ns) ainda sem ordem de compra`}
+                                      >
+                                        {itemPending} pendente{itemPending === 1 ? '' : 's'}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                )}
+                              </td>
+                              <td
+                                className="w-[9%] min-w-[5.5rem] px-2 sm:px-3 py-3 text-center align-middle"
+                                title={tipoLabel === '—' ? undefined : tipoLabel}
+                              >
+                                {tipoLabel === '—' ? (
+                                  <span className="text-xs sm:text-sm text-gray-400 dark:text-gray-500">
+                                    —
+                                  </span>
+                                ) : (
+                                  <span className="text-xs sm:text-sm font-medium text-gray-800 dark:text-gray-200 whitespace-nowrap">
+                                    {tipoLabel}
+                                  </span>
+                                )}
                               </td>
                               <td className={`${cadastroListClasses.tdMono} w-[4%] min-w-[3rem] max-w-[4.5rem] text-center !pl-2 sm:!pl-3 !pr-1 py-3 align-middle`}>
                                 {ocRows.length === 0 ? (
@@ -2884,8 +2951,11 @@ function SolicitarMateriaisPage() {
                                     <th className="whitespace-nowrap px-2 pb-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Un.
                                     </th>
-                                    <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                                    <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Valor referência
+                                    </th>
+                                    <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Situação
                                     </th>
                                   </tr>
                                 </thead>
@@ -2900,6 +2970,16 @@ function SolicitarMateriaisPage() {
                                     const note = (item.notes || item.observation)?.trim();
                                     const unitPrice =
                                       (item as { unitPrice?: number | null }).unitPrice ?? null;
+                                    const activeOc = item.id
+                                      ? getActiveOcForRmItem(item.id, pos)
+                                      : null;
+                                    const pendingOc =
+                                      !activeOc &&
+                                      statusKey === 'APPROVED' &&
+                                      !isMaterialRequestEffectivelyCancelled(
+                                        { status: statusKey } as MaterialRequest,
+                                        pos
+                                      );
                                     return (
                                       <tr
                                         key={item.id || idx}
@@ -2922,8 +3002,35 @@ function SolicitarMateriaisPage() {
                                         <td className="whitespace-nowrap px-2 py-3 text-center align-top">
                                           {item.unit || '—'}
                                         </td>
-                                        <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
+                                        <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
                                           {formatRmAvgPaid(unitPrice)}
+                                        </td>
+                                        <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                          {activeOc ? (
+                                            <span
+                                              className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                                              title={
+                                                activeOc.orderNumber
+                                                  ? `Vinculado à OC ${activeOc.orderNumber}`
+                                                  : 'Item em ordem de compra'
+                                              }
+                                            >
+                                              {activeOc.orderNumber
+                                                ? `OC ${formatOcListDisplayId(activeOc.orderNumber)}`
+                                                : 'Em OC'}
+                                            </span>
+                                          ) : pendingOc ? (
+                                            <span
+                                              className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                              title="Aguardando mapa de cotação / nova OC"
+                                            >
+                                              Pendente
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                                              —
+                                            </span>
+                                          )}
                                         </td>
                                       </tr>
                                     );

@@ -24,6 +24,7 @@ import {
   CircleDollarSign,
   Clock,
   LayoutList,
+  Undo2,
 } from 'lucide-react';
 import { FinancialControlEntryModal } from '@/components/financeiro/FinancialControlEntryModal';
 import { buildFormFromPurchaseOrder, hasFinancialEntryForOcInstallment } from '@/components/financeiro/financialControlEntry';
@@ -38,7 +39,7 @@ import {
   rowActionMenuButtonClass
 } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
-import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
+import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
@@ -63,6 +64,7 @@ import { BoletoParcelasModal } from '@/components/oc/BoletoParcelasModal';
 import { BoletoParcelasList } from '@/components/oc/BoletoParcelasList';
 import { ymdAddDays } from '@/components/oc/boletoParcelasUtils';
 import { canActOnOcApprovalStatus } from '@/lib/ocApprovalPermissions';
+import { canReturnOcItemToRm } from '@/lib/rmProcurementCoverage';
 import { isUnbRelatedLabel } from '@/lib/unbBranding';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
@@ -244,6 +246,7 @@ export interface PurchaseOrder {
   approvedBy?: string | null;
   /** Ausente na listagem `summary=1`; preenchido no GET por id. */
   items?: Array<{
+    id?: string;
     materialId?: string;
     materialRequestItemId?: string | null;
     materialRequestItem?: {
@@ -536,17 +539,21 @@ function orderAlreadyHasNfNumber(
 
 /** Total da OC na listagem: itens + frete (fallback em registros antigos só com amountToPay). */
 function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amountToPay'>): number {
-  const hasLineItems = (o.items?.length ?? 0) > 0;
-  // Listagem summary não traz items — preferir amountToPay
+  const pricedItems = (o.items ?? []).filter(
+    (i) => i.totalPrice != null && i.totalPrice !== '' && Number.isFinite(Number(i.totalPrice))
+  );
+  const hasPricedLineItems = pricedItems.length > 0;
+  // Listagem summary pode trazer só materialRequestItemId (cobertura RM) — sem preço.
+  // Nesse caso usar amountToPay, não somar NaN.
   if (
-    !hasLineItems &&
+    !hasPricedLineItems &&
     o.amountToPay != null &&
     o.amountToPay !== '' &&
     Number.isFinite(Number(o.amountToPay))
   ) {
     return Number(o.amountToPay);
   }
-  const items = o.items?.reduce((s, i) => s + Number(i.totalPrice), 0) ?? 0;
+  const items = pricedItems.reduce((s, i) => s + Number(i.totalPrice), 0);
   const fRaw = o.freightAmount;
   if (fRaw != null && fRaw !== '' && Number.isFinite(Number(fRaw))) {
     return Math.round((items + Number(fRaw)) * 100) / 100;
@@ -558,7 +565,10 @@ function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amo
 }
 
 function orderFreightValue(o: Pick<PurchaseOrder, 'freightAmount' | 'amountToPay' | 'items'>): number {
-  const items = o.items?.reduce((s, i) => s + Number(i.totalPrice), 0) ?? 0;
+  const pricedItems = (o.items ?? []).filter(
+    (i) => i.totalPrice != null && i.totalPrice !== '' && Number.isFinite(Number(i.totalPrice))
+  );
+  const items = pricedItems.reduce((s, i) => s + Number(i.totalPrice), 0);
   const fRaw = o.freightAmount;
   if (fRaw != null && fRaw !== '' && Number.isFinite(Number(fRaw))) {
     return Math.max(0, Number(fRaw));
@@ -1147,12 +1157,19 @@ async function openQuoteMapSnapshotPdf(mapId: string) {
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
 
-async function downloadQuoteMapSnapshotPdf(mapId: string, orderNumber?: string | number | null) {
+async function downloadQuoteMapSnapshotPdf(
+  mapId: string,
+  orderNumber?: string | number | null,
+  supplierName?: string | null
+) {
   const response = await api.get(`/quote-maps/${mapId}/snapshot-pdf`, { responseType: 'blob' });
   const blobUrl = window.URL.createObjectURL(response.data);
   const anchor = document.createElement('a');
   anchor.href = blobUrl;
-  anchor.download = `mapa-cotacao-oc-${orderNumber ?? mapId.slice(0, 8)}.pdf`;
+  anchor.download = buildOcPdfDownloadFileName(
+    orderNumber != null ? String(orderNumber) : null,
+    supplierName
+  );
   anchor.click();
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
@@ -1347,11 +1364,27 @@ function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 }
 
-function totalOrder(items?: { totalPrice: number }[] | null) {
-  return (items ?? []).reduce((s, i) => s + Number(i.totalPrice), 0);
+function totalOrder(items?: { totalPrice?: number | string | null }[] | null) {
+  return (items ?? []).reduce((s, i) => {
+    const n = Number(i.totalPrice);
+    return s + (Number.isFinite(n) ? n : 0);
+  }, 0);
 }
 
-function OcOrderMaterialsTable({ order }: { order: PurchaseOrder }) {
+function OcOrderMaterialsTable({
+  order,
+  canReturnItem,
+  onReturnItem,
+  returningItemId,
+}: {
+  order: PurchaseOrder;
+  canReturnItem?: boolean;
+  onReturnItem?: (item: NonNullable<PurchaseOrder['items']>[number]) => void;
+  returningItemId?: string | null;
+}) {
+  const showActions = Boolean(canReturnItem && onReturnItem);
+  const itemCount = order.items?.length ?? 0;
+
   return (
     <div className="table-scroll">
       <table className="w-full text-xs sm:text-sm">
@@ -1373,13 +1406,19 @@ function OcOrderMaterialsTable({ order }: { order: PurchaseOrder }) {
             <th className="pb-3 pl-2 font-medium text-xs text-gray-500 dark:text-gray-400 text-right whitespace-nowrap">
               Total
             </th>
+            {showActions ? (
+              <th className="w-[1%] pb-3 pl-2 pr-0 text-center text-xs font-medium whitespace-nowrap text-gray-500 dark:text-gray-400">
+                Ações
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {order.items?.map((line, idx) => {
             const detail = purchaseOrderItemDetailText(line);
+            const canReturnThis = showActions && Boolean(line.id);
             return (
-              <tr key={idx} className="text-gray-900 dark:text-gray-100">
+              <tr key={line.id || idx} className="text-gray-900 dark:text-gray-100">
                 <td className="py-3 pr-2 text-center tabular-nums align-top font-medium text-gray-500 dark:text-gray-400">
                   {idx + 1}
                 </td>
@@ -1401,18 +1440,44 @@ function OcOrderMaterialsTable({ order }: { order: PurchaseOrder }) {
                 <td className="py-3 pl-2 text-right whitespace-nowrap align-top font-medium tabular-nums">
                   {formatCurrency(Number(line.totalPrice))}
                 </td>
+                {showActions ? (
+                  <td className="w-[1%] py-3 pl-2 pr-0 text-center align-top whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => onReturnItem?.(line)}
+                      disabled={!canReturnThis || returningItemId === line.id}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      title={
+                        itemCount <= 1
+                          ? 'Devolver à RM (cancela esta OC)'
+                          : 'Devolver à RM'
+                      }
+                      aria-label="Devolver à RM"
+                    >
+                      {returningItemId === line.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             );
           })}
         </tbody>
         <tfoot>
           <tr className="border-t border-gray-200 dark:border-gray-700">
-            <td colSpan={5} className="pt-3.5 pr-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+            <td
+              colSpan={showActions ? 6 : 5}
+              className="pt-3.5 pr-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400"
+            >
               Total
             </td>
             <td className="pt-3.5 pl-2 text-right font-semibold tabular-nums text-red-700 dark:text-red-300 whitespace-nowrap">
               {formatCurrency(totalOrder(order.items))}
             </td>
+            {showActions ? <td className="w-[1%] pt-3.5 pl-2 pr-0" /> : null}
           </tr>
         </tfoot>
       </table>
@@ -2402,7 +2467,10 @@ export function OcPurchaseOrdersPanel({
     canActOcValidateProof,
     canActOcProofCorrection,
     canActOcAttachNf,
-    canActOcCorrection
+    canActOcCorrection,
+    dpApprovalContractIds,
+    gestorCostCenterIds: permissionGestorCostCenterIds,
+    ocGestorScopedCostCenterIds,
   } = usePermissions();
   /** Ações de aprovação só quando a tela pede explicitamente (ex.: página Aprovações). */
   const approvalActionsEnabled = allowApprovalActions;
@@ -2431,6 +2499,11 @@ export function OcPurchaseOrdersPanel({
   const [rejectReason, setRejectReason] = useState('');
   const [correctionTarget, setCorrectionTarget] = useState<PurchaseOrder | null>(null);
   const [correctionReason, setCorrectionReason] = useState('');
+  const [returnItemTarget, setReturnItemTarget] = useState<{
+    orderId: string;
+    item: NonNullable<PurchaseOrder['items']>[number];
+  } | null>(null);
+  const [returnItemReason, setReturnItemReason] = useState('');
   const [pdfExportingId, setPdfExportingId] = useState<string | null>(null);
   const [showEditOcModal, setShowEditOcModal] = useState(false);
 
@@ -2718,6 +2791,28 @@ export function OcPurchaseOrdersPanel({
 
   const hasFinancialEntryForOc = financialEntriesByOc.length > 0;
 
+  /**
+   * Coluna Ações / Devolver à RM: administrador ou gestor do contrato (daquele centro de custo).
+   * Em APPROVED (Anexar boleto / Pagamento): some se já houver lançamento financeiro.
+   */
+  const canReturnOcItemOnOrder = (order: PurchaseOrder) => {
+    const hasLaunch =
+      order.id === selectedOrder?.id ? hasFinancialEntryForOc : false;
+    const launchLoading =
+      order.id === selectedOrder?.id &&
+      order.status === 'APPROVED' &&
+      financialEntriesLoading;
+    if (launchLoading) return false;
+    if (!canReturnOcItemToRm(order.status, { hasFinancialEntry: hasLaunch })) return false;
+    if (isAdministrator) return true;
+    if (!dpApprovalContractIds.length) return false;
+    const costCenterId = order.materialRequest?.costCenter?.id;
+    const scope =
+      gestorCostCenterIds ?? ocGestorScopedCostCenterIds ?? permissionGestorCostCenterIds;
+    if (!costCenterId || !scope?.length) return false;
+    return scope.includes(costCenterId);
+  };
+
   const hasFinancialEntryForCurrentProofInstallment = useMemo(() => {
     if (!selectedOrder || !hasFinancialEntryForOc) return false;
     if (
@@ -2851,6 +2946,46 @@ export function OcPurchaseOrdersPanel({
         id: context?.toastId
       });
     }
+  });
+
+  const returnItemToRmMutation = useMutation({
+    mutationFn: async ({
+      orderId,
+      itemId,
+      reason,
+    }: {
+      orderId: string;
+      itemId: string;
+      reason: string;
+    }) => {
+      const res = await api.post(`/purchase-orders/${orderId}/items/${itemId}/return-to-rm`, {
+        reason,
+      });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      const updated = data?.data as PurchaseOrder | undefined;
+      const cancelledLastItem =
+        updated?.status === 'CANCELLED' || (updated?.items?.length ?? 0) === 0;
+      setReturnItemTarget(null);
+      setReturnItemReason('');
+      if (cancelledLastItem) {
+        setSelectedOrder(null);
+        toast.success('Item devolvido à RM e OC cancelada. Pode refazer o mapa de cotação.');
+      } else if (updated?.id) {
+        setSelectedOrder(updated);
+        queryClient.setQueryData(['purchase-order-detail', updated.id], updated);
+        toast.success('Item devolvido à RM. Pode refazer o mapa de cotação só com esse item.');
+      } else {
+        toast.success('Item devolvido à RM. Pode refazer o mapa de cotação só com esse item.');
+      }
+      invalidateOcAndLinkedRmQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['material-requests-approved-map'] });
+      queryClient.invalidateQueries({ queryKey: ['material-request-detail'] });
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message || 'Erro ao devolver item à RM');
+    },
   });
 
   const openOcCorrectionModal = (order: PurchaseOrder) => {
@@ -4856,6 +4991,78 @@ export function OcPurchaseOrdersPanel({
         </div>
       )}
 
+      {returnItemTarget && (
+        <Modal
+          isOpen={!!returnItemTarget}
+          onClose={() => {
+            if (returnItemToRmMutation.isPending) return;
+            setReturnItemTarget(null);
+            setReturnItemReason('');
+          }}
+          title="Devolver item à RM"
+          size="md"
+          confirmBeforeClose={false}
+          elevated
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {(selectedOrder?.items?.length ?? 0) <= 1
+                ? 'Este é o único item da OC. Ao devolver, a OC será cancelada e o item volta para a mesma RM, para um novo mapa de cotação.'
+                : 'O item sai desta OC e volta para a mesma RM, para um novo mapa de cotação com outro fornecedor. A OC permanece com os demais itens.'}
+            </p>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
+              <p className="text-xs text-gray-500 dark:text-gray-400">Item</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {materialLineLabel(returnItemTarget.item.material)}
+              </p>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Qtd {Number(returnItemTarget.item.quantity)} {returnItemTarget.item.unit || ''}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Motivo *
+              </label>
+              <textarea
+                value={returnItemReason}
+                onChange={(e) => setReturnItemReason(e.target.value)}
+                rows={3}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                placeholder="Ex.: fornecedor não tinha o item no momento da compra"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => {
+                  setReturnItemTarget(null);
+                  setReturnItemReason('');
+                }}
+                disabled={returnItemToRmMutation.isPending}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!returnItemReason.trim() || returnItemToRmMutation.isPending || !returnItemTarget.item.id}
+                onClick={() => {
+                  if (!returnItemTarget.item.id) return;
+                  returnItemToRmMutation.mutate({
+                    orderId: returnItemTarget.orderId,
+                    itemId: returnItemTarget.item.id,
+                    reason: returnItemReason.trim(),
+                  });
+                }}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {returnItemToRmMutation.isPending ? 'Devolvendo…' : 'Devolver à RM'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {correctionTarget && (
         <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
@@ -5262,7 +5469,19 @@ export function OcPurchaseOrdersPanel({
               ) : null}
 
               {ocDetailTab === 'materiais' ? (
-                <OcOrderMaterialsTable order={selectedOrder} />
+                <OcOrderMaterialsTable
+                  order={selectedOrder}
+                  canReturnItem={canReturnOcItemOnOrder(selectedOrder)}
+                  returningItemId={
+                    returnItemToRmMutation.isPending && returnItemTarget
+                      ? returnItemTarget.item.id
+                      : null
+                  }
+                  onReturnItem={(item) => {
+                    setReturnItemReason('');
+                    setReturnItemTarget({ orderId: selectedOrder.id, item });
+                  }}
+                />
               ) : null}
               {ocDetailTab === 'pagamento' ? (
               <>
@@ -6083,7 +6302,8 @@ export function OcPurchaseOrdersPanel({
                               try {
                                 await downloadQuoteMapSnapshotPdf(
                                   quoteMap.id,
-                                  selectedOrder.orderNumber
+                                  selectedOrder.orderNumber,
+                                  selectedOrder.supplier?.name
                                 );
                               } catch {
                                 toast.error('Não foi possível baixar o mapa de cotação.');
@@ -6547,7 +6767,7 @@ export function OcPurchaseOrdersPanel({
                     orderForActionMenu,
                     menuFinanceEntries
                   );
-                  if (menuPaymentStatus === 'pago') return null;
+                  if (menuPaymentStatus === 'lancado') return null;
                   return (
                     <button
                       type="button"

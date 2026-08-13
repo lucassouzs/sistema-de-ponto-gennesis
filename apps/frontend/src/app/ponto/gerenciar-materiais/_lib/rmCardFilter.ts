@@ -5,6 +5,7 @@ import {
   matchesMaterialRequestSearch,
   normalizeFluxSearch
 } from './search';
+import { rmHasOpenItemsForProcurement } from '@/lib/rmProcurementCoverage';
 
 export type RmCardFilter = 'all' | 'pending' | 'approved' | 'awaitingOc' | 'cancelled';
 
@@ -17,7 +18,7 @@ export function isMaterialRequestAwaitingOc(
   return (
     request.status === 'APPROVED' &&
     !isMaterialRequestEffectivelyCancelled(request, orders) &&
-    orders.length === 0
+    rmHasOpenItemsForProcurement(request, orders)
   );
 }
 

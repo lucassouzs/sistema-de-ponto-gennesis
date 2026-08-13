@@ -8,6 +8,7 @@ import PDFDocument from 'pdfkit';
 import { backendUploadsRoot } from '../lib/uploads';
 import { savePersistentBuffer } from '../lib/persistentUpload';
 import { shouldUseUnbBranding, resolvePdfLogoPathFromPublic, resolvePdfCompanyHeader } from '../lib/unbBranding';
+import { OC_STATUSES_COVERING_RM_ITEMS } from '../lib/rmProcurementCoverage';
 
 export class QuoteMapService {
   private purchaseOrderService = new PurchaseOrderService();
@@ -852,6 +853,26 @@ export class QuoteMapService {
     if (!rm) throw new Error('SC não encontrada');
     if (rm.status !== 'APPROVED') throw new Error('A SC precisa estar aprovada');
 
+    const coveredRows = await this.db.purchaseOrderItem.findMany({
+      where: {
+        materialRequestItemId: { not: null },
+        purchaseOrder: {
+          materialRequestId: rm.id,
+          status: { in: [...OC_STATUSES_COVERING_RM_ITEMS] },
+        },
+      },
+      select: { materialRequestItemId: true },
+    });
+    const coveredItemIds = new Set<string>(
+      coveredRows
+        .map((r: { materialRequestItemId: string | null }) => r.materialRequestItemId)
+        .filter(Boolean)
+    );
+    const openItems = rm.items.filter((item: { id: string }) => !coveredItemIds.has(item.id));
+    if (openItems.length === 0) {
+      throw new Error('Todos os itens desta SC já estão em ordem de compra ativa');
+    }
+
     const supplierIds = Array.from(new Set(data.supplierIds));
     if (supplierIds.length === 0) throw new Error('Selecione ao menos um fornecedor no mapa');
 
@@ -878,12 +899,16 @@ export class QuoteMapService {
     const unitPriceMap = new Map<string, Decimal>(); // key: supplierId:itemId
     for (const q of data.unitPrices) {
       if (!supplierIds.includes(q.supplierId)) continue;
+      if (coveredItemIds.has(q.materialRequestItemId)) continue;
       unitPriceMap.set(`${q.supplierId}:${q.materialRequestItemId}`, new Decimal(q.unitPrice));
     }
 
     await this.db.$transaction(
       data.unitPrices
-        .filter((q) => supplierIds.includes(q.supplierId))
+        .filter(
+          (q) =>
+            supplierIds.includes(q.supplierId) && !coveredItemIds.has(q.materialRequestItemId)
+        )
         .map((q) =>
           this.db.quoteMapSupplierItem.create({
             data: {
@@ -902,7 +927,7 @@ export class QuoteMapService {
 
     const qtyOverrides = data.itemQuantities ?? {};
 
-    for (const item of rm.items) {
+    for (const item of openItems) {
       let bestSupplierId: string | null = null;
       let bestScore: Decimal | null = null;
       let bestUnitPrice: Decimal | null = null;
@@ -1028,10 +1053,29 @@ export class QuoteMapService {
     const qtyOverrides = data.itemQuantities ?? {};
     const notesBySupplierItem = data.itemNotesBySupplierItem ?? {};
 
-    const winners = await this.db.quoteMapWinnerItem.findMany({
+    const winnersRaw = await this.db.quoteMapWinnerItem.findMany({
       where: { quoteMapId, winnerSupplierId: { in: supplierIds } },
       include: { materialRequestItem: true }
     });
+
+    const coveredRows = await this.db.purchaseOrderItem.findMany({
+      where: {
+        materialRequestItemId: { not: null },
+        purchaseOrder: {
+          materialRequestId: rm.id,
+          status: { in: [...OC_STATUSES_COVERING_RM_ITEMS] },
+        },
+      },
+      select: { materialRequestItemId: true },
+    });
+    const coveredItemIds = new Set<string>(
+      coveredRows
+        .map((r: { materialRequestItemId: string | null }) => r.materialRequestItemId)
+        .filter(Boolean)
+    );
+    const winners = (winnersRaw as any[]).filter(
+      (w) => !coveredItemIds.has(w.materialRequestItemId)
+    );
 
     if (winners.length === 0) {
       throw new Error('Nenhum item foi vencido pelos fornecedores selecionados');

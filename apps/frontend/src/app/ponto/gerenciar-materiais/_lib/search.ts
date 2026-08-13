@@ -3,6 +3,7 @@ import { orderNeedsFinanceBoleto } from './flux';
 import type { FluxTab, MaterialRequest } from './types';
 import { rmContractDisplay, rmOsDisplay, rmSolicitante } from './display';
 import { formatRmListDisplayId } from './rmListDisplay';
+import { rmHasOpenItemsForProcurement } from '@/lib/rmProcurementCoverage';
 
 export const normalizeFluxSearch = (value?: string | null) =>
   (value || '')
@@ -129,6 +130,8 @@ export function getFluxTabForMaterialRequest(
   if (request.status === 'PENDING') return 'rm_PENDING';
   if (request.status === 'IN_REVIEW') return 'rm_IN_REVIEW';
   if (request.status === 'APPROVED') {
+    // Parcialmente atendida (itens devolvidos) continua em RMs Aprovadas.
+    if (rmHasOpenItemsForProcurement(request, ordersForRequest)) return 'rm_APPROVED';
     if (materialRequestIdsWithOc.has(request.id)) return null;
     return 'rm_APPROVED';
   }

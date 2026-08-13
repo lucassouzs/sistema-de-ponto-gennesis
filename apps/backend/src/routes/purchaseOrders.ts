@@ -802,4 +802,46 @@ router.patch('/:id/reopen-payment-boleto', async (req: AuthRequest, res: Respons
   }
 });
 
+router.post(
+  '/:id/items/:itemId/return-to-rm',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+      const reason =
+        typeof req.body?.reason === 'string'
+          ? req.body.reason
+          : typeof req.body?.rejectionReason === 'string'
+            ? req.body.rejectionReason
+            : '';
+      const order = await service.returnItemToMaterialRequest(
+        req.params.id,
+        req.params.itemId,
+        req.user.id,
+        !!req.user.isAdmin,
+        reason
+      );
+      res.json({
+        success: true,
+        data: order,
+        message: 'Item retirado da OC e devolvido à RM para nova cotação',
+      });
+    } catch (error) {
+      if (error instanceof Error && /Sem permissão/.test(error.message)) {
+        res.status(403).json({ success: false, message: error.message });
+        return;
+      }
+      if (
+        error instanceof Error &&
+        /Ordem de compra não encontrada|Item não encontrado|Só é possível|precisa ficar|Informe o motivo|Motivo muito|Usuário não autenticado|lançamento financeiro/.test(
+          error.message
+        )
+      ) {
+        res.status(400).json({ success: false, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+);
+
 export default router;

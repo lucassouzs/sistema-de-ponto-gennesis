@@ -14,6 +14,31 @@ export function formatOcListDisplayId(orderNumber: string): string {
   return trimmed;
 }
 
+/**
+ * Nome de arquivo ao baixar PDF da OC / mapa.
+ * Ex.: OC-2026-0026 + "ACO POTIGUAR" → `OC26-ACO-POTIGUAR.pdf`
+ */
+export function buildOcPdfDownloadFileName(
+  orderNumber?: string | null,
+  supplierName?: string | null
+): string {
+  const short = formatOcListDisplayId(String(orderNumber ?? '').trim());
+  const ocPart = short && short !== '—' ? `OC${short}` : 'OC';
+
+  const safeSupplier = String(supplierName ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]+/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+    .toUpperCase();
+
+  return `${ocPart}-${safeSupplier || 'FORNECEDOR'}.pdf`;
+}
+
 /** Observação padrão ao lançar OC no controle financeiro. */
 export function formatOcFinancialControlOriginNote(orderNumber: string): string {
   const short = formatOcListDisplayId(orderNumber);

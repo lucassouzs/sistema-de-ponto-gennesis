@@ -35,6 +35,8 @@ import {
   rmOsDisplay,
   rmSolicitante
 } from './_lib/display';
+import { getCoveredRmItemIds, getActiveOcForRmItem } from '@/lib/rmProcurementCoverage';
+import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import {
   formatCurrencyBR,
   numericQuantityFromInput,
@@ -316,29 +318,35 @@ export default function GerenciarMateriaisPage() {
     setOcUnitPriceStrByItemId({});
   };
 
-  // Quando abrir o modal de OC, preenche com TODOS os itens da SC (o comprador pode desmarcar).
+  // Quando abrir o modal de OC, preenche com itens da SC ainda sem OC ativa.
   useEffect(() => {
-    if (showCreateOCModal && selectedRequest?.items?.length) {
-      setOcSelectedItemIds(new Set(selectedRequest.items.map((i) => i.id)));
-      setOcQuantityStrByItemId(
-        Object.fromEntries(selectedRequest.items.map((i) => [i.id, String(i.quantity)]))
-      );
-      setOcUnitPriceStrByItemId({});
-    }
+    if (!showCreateOCModal || !selectedRequest?.items?.length) return;
+    const covered = getCoveredRmItemIds(selectedRequest);
+    const openItems = selectedRequest.items.filter((i) => !covered.has(i.id));
+    setOcSelectedItemIds(new Set(openItems.map((i) => i.id)));
+    setOcQuantityStrByItemId(
+      Object.fromEntries(openItems.map((i) => [i.id, String(i.quantity)]))
+    );
+    setOcUnitPriceStrByItemId({});
   }, [showCreateOCModal, selectedRequest]);
 
+  const ocFormItems = useMemo(() => {
+    if (!selectedRequest?.items?.length) return [];
+    const covered = getCoveredRmItemIds(selectedRequest);
+    return selectedRequest.items.filter((i) => !covered.has(i.id));
+  }, [selectedRequest]);
+
   const ocSelectedItems =
-    selectedRequest?.items?.filter((i) => ocSelectedItemIds.has(i.id)) ?? [];
+    ocFormItems.filter((i) => ocSelectedItemIds.has(i.id));
 
   const ocAllItemsSelected = Boolean(
-    selectedRequest?.items?.length &&
-      selectedRequest.items.every((i) => ocSelectedItemIds.has(i.id))
+    ocFormItems.length && ocFormItems.every((i) => ocSelectedItemIds.has(i.id))
   );
 
   const ocSubtotalItens = useMemo(() => {
-    if (!selectedRequest?.items?.length) return 0;
+    if (!ocFormItems.length) return 0;
     let s = 0;
-    for (const item of selectedRequest.items) {
+    for (const item of ocFormItems) {
       if (!ocSelectedItemIds.has(item.id)) continue;
       const q =
         numericQuantityFromInput(ocQuantityStrByItemId[item.id] ?? '') ??
@@ -347,7 +355,7 @@ export default function GerenciarMateriaisPage() {
       s += q * unit;
     }
     return Math.round(s * 100) / 100;
-  }, [selectedRequest, ocSelectedItemIds, ocQuantityStrByItemId, ocUnitPriceStrByItemId]);
+  }, [ocFormItems, ocSelectedItemIds, ocQuantityStrByItemId, ocUnitPriceStrByItemId]);
 
   const ocFreteParsed =
     ocFreteStr.trim() === '' ? 0 : parseCurrencyInputBr(ocFreteStr);
@@ -367,18 +375,18 @@ export default function GerenciarMateriaisPage() {
   };
 
   const selectAllOcItems = () => {
-    if (!selectedRequest?.items?.length) return;
-    setOcSelectedItemIds(new Set(selectedRequest.items.map((i) => i.id)));
+    if (!ocFormItems.length) return;
+    setOcSelectedItemIds(new Set(ocFormItems.map((i) => i.id)));
     setOcQuantityStrByItemId((prev) => {
       const next = { ...prev };
-      for (const it of selectedRequest.items) {
+      for (const it of ocFormItems) {
         if (next[it.id] === undefined) next[it.id] = String(it.quantity);
       }
       return next;
     });
     setOcUnitPriceStrByItemId((prev) => {
       const next = { ...prev };
-      for (const it of selectedRequest.items) {
+      for (const it of ocFormItems) {
         if (next[it.id] === undefined) next[it.id] = '';
       }
       return next;
@@ -1006,13 +1014,25 @@ export default function GerenciarMateriaisPage() {
                               <th className="whitespace-nowrap px-2 pb-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Un.
                               </th>
-                              <th className="whitespace-nowrap pb-3 pl-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
+                              <th className="whitespace-nowrap px-2 pb-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Valor referência
+                              </th>
+                              <th className="whitespace-nowrap pb-3 pl-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Situação
                               </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {selectedRequest.items.map((item, idx) => (
+                            {selectedRequest.items.map((item, idx) => {
+                              const activeOc = getActiveOcForRmItem(item.id, detailOrders);
+                              const pendingOc =
+                                !activeOc &&
+                                selectedRequest.status === 'APPROVED' &&
+                                !isMaterialRequestEffectivelyCancelled(
+                                  selectedRequest,
+                                  detailOrders
+                                );
+                              return (
                               <tr
                                 key={item.id}
                                 className="text-gray-900 dark:text-gray-100"
@@ -1034,7 +1054,7 @@ export default function GerenciarMateriaisPage() {
                                 <td className="whitespace-nowrap px-2 py-3 text-center align-top">
                                   {item.unit || '—'}
                                 </td>
-                                <td className="whitespace-nowrap py-3 pl-2 text-right align-top tabular-nums">
+                                <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
                                   {(() => {
                                     const n = Number(item.unitPrice);
                                     if (!Number.isFinite(n) || n < 0) return '—';
@@ -1044,8 +1064,34 @@ export default function GerenciarMateriaisPage() {
                                     });
                                   })()}
                                 </td>
+                                <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
+                                  {activeOc ? (
+                                    <span
+                                      className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                                      title={
+                                        activeOc.orderNumber
+                                          ? `Vinculado à OC ${activeOc.orderNumber}`
+                                          : 'Item em ordem de compra'
+                                      }
+                                    >
+                                      {activeOc.orderNumber
+                                        ? `OC ${formatOcListDisplayId(activeOc.orderNumber)}`
+                                        : 'Em OC'}
+                                    </span>
+                                  ) : pendingOc ? (
+                                    <span
+                                      className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                                      title="Aguardando mapa de cotação / nova OC"
+                                    >
+                                      Pendente
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                                  )}
+                                </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1324,7 +1370,7 @@ export default function GerenciarMateriaisPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                        {selectedRequest.items.map((item) => {
+                        {ocFormItems.map((item) => {
                           const isSelected = ocSelectedItemIds.has(item.id);
                           return (
                             <tr key={item.id} className="bg-white dark:bg-gray-800">

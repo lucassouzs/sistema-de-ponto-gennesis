@@ -102,6 +102,8 @@ export interface MaterialRequest {
     name: string;
   };
   rejectionReason?: string;
+  /** Derivado na API: Materiais e/ou Serviços conforme productType dos itens. */
+  itemProductKinds?: Array<'Materiais' | 'Serviços'>;
 }
 
 export type GerenciarStats = {

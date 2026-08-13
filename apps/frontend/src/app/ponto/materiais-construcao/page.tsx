@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,9 +27,7 @@ import {
 } from '@/components/ui/CadastroListSummary';
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
-import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { Modal } from '@/components/ui/Modal';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -1482,69 +1480,84 @@ export default function MateriaisConstrucaoPage() {
           size="xl"
         >
           {detailMaterial ? (
-            <div className="space-y-5">
-              <SegmentedControl
+            <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+              <div
+                className="-mb-px flex gap-1 border-b border-gray-200 dark:border-gray-700"
+                role="tablist"
                 aria-label="Seções do material"
-                value={detailTab}
-                onChange={setDetailTab}
-                options={[
-                  { value: 'detalhes', label: 'Detalhes' },
-                  { value: 'historico', label: 'Histórico de compras' },
-                ]}
-              />
+              >
+                {(
+                  [
+                    { value: 'detalhes', label: 'Detalhes' },
+                    { value: 'historico', label: 'Histórico de compras' },
+                  ] as const
+                ).map((tab) => {
+                  const active = detailTab === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setDetailTab(tab.value)}
+                      className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+                        active
+                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
 
               {detailTab === 'detalhes' ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Tipo
-                    </p>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      {normalizeProductType(detailMaterial.productType || detailMaterial.category) ||
-                        detailMaterial.productType ||
-                        detailMaterial.category ||
-                        '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Unidade
-                    </p>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      {detailMaterial.unit || '—'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Natureza orçamentária
-                    </p>
-                    <p className="mt-1 text-sm text-gray-900 dark:text-gray-100">
-                      {formatBudgetNatureLabel(detailMaterial.budgetNature)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                      Média paga (últimas 10)
-                    </p>
-                    <p className="mt-1 text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
-                      {formatMoneyBr(
-                        purchaseHistoryData?.avgPaidUnitPrice ?? detailMaterial.avgPaidUnitPrice
-                      )}
-                      <span className="ml-1 text-xs font-normal text-gray-500 dark:text-gray-400">
-                        / {detailMaterial.unit || 'un'}
-                      </span>
-                    </p>
-                  </div>
-                  {detailMaterial.description?.trim() ? (
-                    <div className="sm:col-span-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                        Descrição
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
-                        {detailMaterial.description.trim()}
-                      </p>
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <dl className="divide-y divide-gray-100 text-sm dark:divide-gray-700">
+                    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-4">
+                      <dt className="font-medium text-gray-700 dark:text-gray-300">Tipo</dt>
+                      <dd className="break-words text-gray-600 dark:text-gray-400">
+                        {normalizeProductType(detailMaterial.productType || detailMaterial.category) ||
+                          detailMaterial.productType ||
+                          detailMaterial.category ||
+                          '—'}
+                      </dd>
                     </div>
-                  ) : null}
+                    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-4">
+                      <dt className="font-medium text-gray-700 dark:text-gray-300">Unidade</dt>
+                      <dd className="break-words text-gray-600 dark:text-gray-400">
+                        {detailMaterial.unit || '—'}
+                      </dd>
+                    </div>
+                    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-4">
+                      <dt className="font-medium text-gray-700 dark:text-gray-300">
+                        Natureza orçamentária
+                      </dt>
+                      <dd className="break-words text-gray-600 dark:text-gray-400">
+                        {formatBudgetNatureLabel(detailMaterial.budgetNature)}
+                      </dd>
+                    </div>
+                    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-4">
+                      <dt className="font-medium text-gray-700 dark:text-gray-300">
+                        Média paga (últimas 10)
+                      </dt>
+                      <dd className="break-words tabular-nums text-gray-600 dark:text-gray-400">
+                        {formatMoneyBr(
+                          purchaseHistoryData?.avgPaidUnitPrice ?? detailMaterial.avgPaidUnitPrice
+                        )}
+                        <span className="ml-1 text-xs text-gray-500 dark:text-gray-500">
+                          / {detailMaterial.unit || 'un'}
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="grid gap-1 px-3 py-2.5 sm:grid-cols-[minmax(0,11rem)_1fr] sm:gap-4">
+                      <dt className="font-medium text-gray-700 dark:text-gray-300">Descrição</dt>
+                      <dd className="whitespace-pre-wrap break-words text-gray-600 dark:text-gray-400">
+                        {detailMaterial.description?.trim() || '—'}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1616,21 +1629,21 @@ export default function MateriaisConstrucaoPage() {
               <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
                 <button
                   type="button"
+                  onClick={() => setDetailMaterial(null)}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     const m = detailMaterial;
                     setDetailMaterial(null);
                     if (m) handleEdit(m);
                   }}
-                  className="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
                 >
                   Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetailMaterial(null)}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white transition-colors hover:bg-red-700"
-                >
-                  Fechar
                 </button>
               </div>
             </div>
@@ -1638,37 +1651,41 @@ export default function MateriaisConstrucaoPage() {
         </Modal>
 
         {/* Modal de confirmação de exclusão */}
-        {showDeleteModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteModal(null)} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full">
-                <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
-                Excluir Material?
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
-                Tem certeza que deseja excluir este material? Esta ação não pode ser desfeita.
-              </p>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  onClick={() => setShowDeleteModal(null)}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handleDelete(showDeleteModal)}
-                  disabled={deleteMutation.isPending}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors text-sm"
-                >
-                  {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
-                </button>
+        <Modal
+          isOpen={!!showDeleteModal}
+          onClose={() => setShowDeleteModal(null)}
+          title="Excluir Material?"
+          size="md"
+          confirmBeforeClose={false}
+        >
+          <div className="space-y-6">
+            <div className="flex items-center justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
+            <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir este material? Esta ação não pode ser desfeita.
+            </p>
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(null)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => showDeleteModal && handleDelete(showDeleteModal)}
+                disabled={deleteMutation.isPending}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
           </div>
-        )}
+        </Modal>
 
         <Modal
           isOpen={showImportModal}
@@ -2034,12 +2051,6 @@ function MaterialFormModal({
 }) {
   const [useCustomUnit, setUseCustomUnit] = useState(false);
 
-  const closeForm = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
-  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
-
   const unitSelectOptions = useMemo(
     () =>
       labeledToSelectOptions([
@@ -2076,202 +2087,183 @@ function MaterialFormModal({
     setUseCustomUnit(!unitOptions.includes(unit));
   }, [isOpen, editingMaterial?.id, formData.unit, unitOptions]);
 
-  if (!isOpen) return null;
-
   const selectFieldClass =
     'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
 
   return (
-    <>
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={requestClose} />
-      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {editingMaterial ? 'Editar cadastro' : 'Novo cadastro'}
-          </h3>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingMaterial ? 'Editar cadastro' : 'Novo cadastro'}
+      size="lg"
+    >
+      <form onSubmit={onSubmit} className="space-y-4">
+        {editingMaterial ? (
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-900/40">
+            <p className="text-xs text-gray-500 dark:text-gray-400">ID</p>
+            <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
+              {formatCadastroListId(editingMaterial.code)}
+            </p>
+          </div>
+        ) : null}
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Nome *
+          </label>
+          <input
+            type="text"
+            required
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            placeholder="Ex: Cimento Portland"
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Tipo do Produto *
+          </label>
+          <div className="flex gap-2">
+            {PRODUCT_TYPES.map((tipo) => (
+              <ButtonSeg
+                key={tipo}
+                active={formData.productType === tipo}
+                onClick={() => setFormData({ ...formData, productType: tipo })}
+                label={tipo}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Descrição do Produto
+          </label>
+          <textarea
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            placeholder="Detalhes do produto ou serviço..."
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Unidade de Medida *
+          </label>
+          <StringSingleSelectDropdown
+            value={useCustomUnit ? UNIT_OTHER_VALUE : formData.unit}
+            onChange={(value) => {
+              if (value === UNIT_OTHER_VALUE) {
+                setUseCustomUnit(true);
+                setFormData({ ...formData, unit: '' });
+                return;
+              }
+              setUseCustomUnit(false);
+              setFormData({ ...formData, unit: value });
+            }}
+            options={unitSelectOptions}
+            placeholder="Selecione a unidade"
+            emptyOptionLabel="Selecione a unidade"
+            className="w-full"
+          />
+          {useCustomUnit ? (
+            <input
+              type="text"
+              required
+              value={formData.unit}
+              onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+              className={`${selectFieldClass} mt-2`}
+              placeholder="Digite a unidade (ex: ton, m³/h)"
+            />
+          ) : null}
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Natureza Orçamentária *
+          </label>
+          <StringSingleSelectDropdown
+            value={formData.budgetNatureId}
+            onChange={(budgetNatureId) => setFormData({ ...formData, budgetNatureId })}
+            options={budgetNatureSelectOptions}
+            placeholder="Selecione a natureza"
+            emptyOptionLabel="Selecione a natureza"
+            className="w-full"
+          />
+        </div>
+
+        <div className="flex items-center">
+          <label className="flex cursor-pointer items-center space-x-3 group">
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                className="sr-only"
+              />
+              <div
+                className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-all duration-200 ${
+                  formData.isActive
+                    ? 'border-red-600 bg-red-600 dark:border-red-500 dark:bg-red-500'
+                    : 'border-gray-300 bg-white group-hover:border-red-500 dark:border-gray-600 dark:bg-gray-800 dark:group-hover:border-red-400'
+                }`}
+              >
+                {formData.isActive ? (
+                  <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : null}
+              </div>
+            </div>
+            <span className="text-sm font-medium text-gray-700 transition-colors group-hover:text-gray-900 dark:text-gray-300 dark:group-hover:text-gray-100">
+              Ativo
+            </span>
+          </label>
+        </div>
+
+        {(createMutation.isError || updateMutation.isError) && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
+            <div className="flex-1">
+              <p className="mb-1 text-sm font-medium text-red-700 dark:text-red-300">
+                Erro ao salvar material
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {(createMutation.error as any)?.response?.data?.message ||
+                  (updateMutation.error as any)?.response?.data?.message ||
+                  (createMutation.error as any)?.message ||
+                  (updateMutation.error as any)?.message ||
+                  'Ocorreu um erro inesperado. Verifique os dados e tente novamente.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
           <button
-            onClick={requestClose}
-            className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
-            aria-label="Fechar"
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
           >
-            <X className="w-5 h-5" />
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={createMutation.isPending || updateMutation.isPending}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+          >
+            {createMutation.isPending || updateMutation.isPending
+              ? 'Salvando...'
+              : editingMaterial
+                ? 'Atualizar'
+                : 'Criar'}
           </button>
         </div>
-
-        <div className="p-6">
-          <form onSubmit={onSubmit} className="space-y-4">
-            {editingMaterial ? (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-900/40">
-                <p className="text-xs text-gray-500 dark:text-gray-400">ID</p>
-                <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
-                  {formatCadastroListId(editingMaterial.code)}
-                </p>
-              </div>
-            ) : null}
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Nome *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                placeholder="Ex: Cimento Portland"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Tipo do Produto *
-              </label>
-              <div className="flex gap-2">
-                {PRODUCT_TYPES.map((tipo) => (
-                  <ButtonSeg
-                    key={tipo}
-                    active={formData.productType === tipo}
-                    onClick={() => setFormData({ ...formData, productType: tipo })}
-                    label={tipo}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Descrição do Produto
-              </label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                placeholder="Detalhes do produto ou serviço..."
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Unidade de Medida *
-              </label>
-              <StringSingleSelectDropdown
-                value={useCustomUnit ? UNIT_OTHER_VALUE : formData.unit}
-                onChange={(value) => {
-                  if (value === UNIT_OTHER_VALUE) {
-                    setUseCustomUnit(true);
-                    setFormData({ ...formData, unit: '' });
-                    return;
-                  }
-                  setUseCustomUnit(false);
-                  setFormData({ ...formData, unit: value });
-                }}
-                options={unitSelectOptions}
-                placeholder="Selecione a unidade"
-                emptyOptionLabel="Selecione a unidade"
-                className="w-full"
-              />
-              {useCustomUnit ? (
-                <input
-                  type="text"
-                  required
-                  value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  className={`${selectFieldClass} mt-2`}
-                  placeholder="Digite a unidade (ex: ton, m³/h)"
-                />
-              ) : null}
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Natureza Orçamentária *
-              </label>
-              <StringSingleSelectDropdown
-                value={formData.budgetNatureId}
-                onChange={(budgetNatureId) =>
-                  setFormData({ ...formData, budgetNatureId })
-                }
-                options={budgetNatureSelectOptions}
-                placeholder="Selecione a natureza"
-                emptyOptionLabel="Selecione a natureza"
-                className="w-full"
-              />
-            </div>
-
-            <div className="flex items-center">
-              <label className="flex items-center space-x-3 cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={formData.isActive}
-                    onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                    className="sr-only"
-                  />
-                  <div className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
-                    formData.isActive 
-                      ? 'bg-red-600 dark:bg-red-500 border-red-600 dark:border-red-500' 
-                      : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 group-hover:border-red-500 dark:group-hover:border-red-400'
-                  }`}>
-                    {formData.isActive && (
-                      <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-                </div>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
-                  Ativo
-                </span>
-              </label>
-            </div>
-
-            {(createMutation.isError || updateMutation.isError) && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-red-700 dark:text-red-300 mb-1">
-                    Erro ao salvar material
-                  </p>
-                  <p className="text-xs text-red-600 dark:text-red-400">
-                    {(createMutation.error as any)?.response?.data?.message || 
-                     (updateMutation.error as any)?.response?.data?.message || 
-                     (createMutation.error as any)?.message ||
-                     (updateMutation.error as any)?.message ||
-                     'Ocorreu um erro inesperado. Verifique os dados e tente novamente.'}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
-                type="button"
-                onClick={requestClose}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors text-sm"
-              >
-                {createMutation.isPending || updateMutation.isPending
-                  ? 'Salvando...'
-                  : editingMaterial
-                  ? 'Atualizar'
-                  : 'Criar'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    {confirmUi}
-    </>
+      </form>
+    </Modal>
   );
 }

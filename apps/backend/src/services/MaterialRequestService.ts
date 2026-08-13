@@ -145,6 +145,166 @@ async function withEnrichedMaterialRequestsPurchaseOrders<
   });
 }
 
+export type RmItemProductKind = 'Materiais' | 'Serviços';
+
+function constructionMaterialIdFromSinapi(code?: string | null): string | null {
+  const s = (code || '').trim();
+  if (!s.startsWith('CM-')) return null;
+  const id = s.slice(3).trim();
+  return id || null;
+}
+
+function mapProductTypeToRmKind(productType?: string | null): RmItemProductKind | null {
+  const v = (productType || '').trim().toLowerCase();
+  if (!v) return null;
+  if (v === 'produto' || v === 'product' || v === 'material' || v === 'materiais') {
+    return 'Materiais';
+  }
+  if (
+    v === 'serviço' ||
+    v === 'servico' ||
+    v === 'service' ||
+    v === 'serviços' ||
+    v === 'servicos'
+  ) {
+    return 'Serviços';
+  }
+  return null;
+}
+
+/** Fallback para materiais SINAPI legados (sem espelho CM-*). */
+function mapEngineeringCategoryToRmKind(category?: {
+  code?: string | null;
+  name?: string | null;
+} | null): RmItemProductKind | null {
+  const code = (category?.code || '').trim().toUpperCase();
+  const name = (category?.name || '').trim().toLowerCase();
+  if (code === 'MO' || name.includes('mão de obra') || name.includes('mao de obra')) {
+    return 'Serviços';
+  }
+  if (code === 'MAT' || name === 'materiais' || name.includes('material')) {
+    return 'Materiais';
+  }
+  // Equipamentos / outros físicos → Materiais na visão da RM
+  if (code === 'EQP' || name.includes('equipamento')) {
+    return 'Materiais';
+  }
+  if (name.includes('serviço') || name.includes('servico')) {
+    return 'Serviços';
+  }
+  return null;
+}
+
+type RmItemForProductKind = {
+  material?: {
+    sinapiCode?: string | null;
+    name?: string | null;
+    description?: string | null;
+    category?: { code?: string | null; name?: string | null } | null;
+  } | null;
+};
+
+/** Deriva se a RM tem itens de Materiais e/ou Serviços. */
+async function withRmItemProductKinds<T extends { items?: RmItemForProductKind[] | null }>(
+  requests: T[]
+): Promise<Array<T & { itemProductKinds: RmItemProductKind[] }>> {
+  const cmIds = new Set<string>();
+  const namesForFallback = new Set<string>();
+
+  for (const r of requests) {
+    for (const item of r.items ?? []) {
+      const mat = item.material;
+      const cmId = constructionMaterialIdFromSinapi(mat?.sinapiCode);
+      if (cmId) cmIds.add(cmId);
+      const label = (mat?.name || mat?.description || '').trim();
+      if (label) namesForFallback.add(label);
+    }
+  }
+
+  const typeByCmId = new Map<string, string | null>();
+  if (cmIds.size > 0) {
+    const rows = await prisma.constructionMaterial.findMany({
+      where: { id: { in: Array.from(cmIds) } },
+      select: { id: true, productType: true, category: true }
+    });
+    for (const row of rows) {
+      typeByCmId.set(row.id, row.productType || row.category);
+    }
+  }
+
+  const typeByName = new Map<string, RmItemProductKind>();
+  if (namesForFallback.size > 0) {
+    const names = Array.from(namesForFallback);
+    const exactRows = await prisma.constructionMaterial.findMany({
+      where: {
+        OR: names.map((name) => ({ name: { equals: name, mode: 'insensitive' as const } }))
+      },
+      select: { name: true, productType: true, category: true }
+    });
+    for (const row of exactRows) {
+      const key = (row.name || '').trim().toLowerCase();
+      const kind = mapProductTypeToRmKind(row.productType || row.category);
+      if (key && kind) typeByName.set(key, kind);
+    }
+
+    // Prefixo: se todos os candidatos batem o mesmo tipo (ex.: "CIMENTO" → vários Produto).
+    const unresolvedNames = names.filter((n) => !typeByName.has(n.trim().toLowerCase()));
+    for (const name of unresolvedNames) {
+      const prefix = name.trim();
+      if (prefix.length < 3) continue;
+      const candidates = await prisma.constructionMaterial.findMany({
+        where: { name: { startsWith: prefix, mode: 'insensitive' } },
+        select: { productType: true, category: true },
+        take: 30
+      });
+      const candidateKinds = new Set<RmItemProductKind>();
+      for (const row of candidates) {
+        const kind = mapProductTypeToRmKind(row.productType || row.category);
+        if (kind) candidateKinds.add(kind);
+      }
+      if (candidateKinds.size === 1) {
+        typeByName.set(prefix.toLowerCase(), Array.from(candidateKinds)[0]!);
+      }
+    }
+  }
+
+  return requests.map((r) => {
+    const kinds = new Set<RmItemProductKind>();
+    for (const item of r.items ?? []) {
+      const mat = item.material;
+      let kind: RmItemProductKind | null = null;
+      const cmId = constructionMaterialIdFromSinapi(mat?.sinapiCode);
+      const hadCmLink = Boolean(cmId);
+
+      if (cmId && typeByCmId.has(cmId)) {
+        kind = mapProductTypeToRmKind(typeByCmId.get(cmId) ?? null);
+      }
+
+      if (!kind) {
+        const label = (mat?.name || mat?.description || '').trim().toLowerCase();
+        if (label && typeByName.has(label)) {
+          kind = typeByName.get(label) ?? null;
+        }
+      }
+
+      if (!kind) {
+        kind = mapEngineeringCategoryToRmKind(mat?.category ?? null);
+      }
+
+      // Espelho CM-* órfão (cadastro apagado): veio do catálogo de construção → Materiais.
+      if (!kind && hadCmLink) {
+        kind = 'Materiais';
+      }
+
+      if (kind) kinds.add(kind);
+    }
+    const itemProductKinds = (['Materiais', 'Serviços'] as RmItemProductKind[]).filter((k) =>
+      kinds.has(k)
+    );
+    return { ...r, itemProductKinds };
+  });
+}
+
 export interface RmDropdownMaterial {
   id: string;
   code: string;
@@ -701,7 +861,8 @@ export class MaterialRequestService {
           paymentBoletoUrl: true,
           boletoAttachmentUrl: true,
           paymentBoletoInstallments: true,
-          paymentBoletoPhaseReleased: true
+          paymentBoletoPhaseReleased: true,
+          items: { select: { materialRequestItemId: true } }
         },
         orderBy: { createdAt: 'asc' as const }
       }
@@ -736,7 +897,8 @@ export class MaterialRequestService {
                       name: true,
                       description: true,
                       unit: true,
-                      sinapiCode: true
+                      sinapiCode: true,
+                      category: { select: { code: true, name: true } }
                     }
                   }
                 }
@@ -744,13 +906,27 @@ export class MaterialRequestService {
             }
           : {
               ...baseInclude,
+              items: {
+                select: {
+                  id: true,
+                  material: {
+                    select: {
+                      sinapiCode: true,
+                      name: true,
+                      description: true,
+                      category: { select: { code: true, name: true } }
+                    }
+                  }
+                }
+              },
               _count: { select: { items: true } }
             }
       }),
       prisma.materialRequest.count({ where })
     ]);
 
-    const enrichedRequests = await withEnrichedMaterialRequestsPurchaseOrders(requests);
+    const withPos = await withEnrichedMaterialRequestsPurchaseOrders(requests);
+    const enrichedRequests = await withRmItemProductKinds(withPos);
 
     return {
       requests: enrichedRequests,
@@ -820,7 +996,8 @@ export class MaterialRequestService {
             paymentBoletoUrl: true,
             boletoAttachmentUrl: true,
             paymentBoletoInstallments: true,
-            paymentBoletoPhaseReleased: true
+            paymentBoletoPhaseReleased: true,
+            items: { select: { materialRequestItemId: true } }
           },
           orderBy: { createdAt: 'asc' }
         }
