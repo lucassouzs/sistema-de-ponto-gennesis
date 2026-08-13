@@ -130,10 +130,10 @@ export default function FuncionariosPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            Funcionários
+            Funcionários e Externos
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Cadastre e gerencie os funcionários da empresa
+            Cadastre e gerencie os funcionários e externos da empresa
           </p>
         </div>
 

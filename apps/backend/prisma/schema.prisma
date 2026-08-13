@@ -121,6 +121,10 @@ model User {
   toolRentalRequestsAssigned              ToolRentalRequest[]  @relation("ToolRentalRequestAssignedUser")
   toolRentalRequestsSuppliesApproved      ToolRentalRequest[]  @relation("ToolRentalRequestSuppliesApprover")
   toolRentalRequestEvents                 ToolRentalRequestEvent[] @relation("ToolRentalRequestEventActor")
+  gestaoOsWorkOrdersRequested             GestaoOsWorkOrder[]  @relation("GestaoOsRequester")
+  gestaoOsWorkOrdersAssigned              GestaoOsWorkOrder[]  @relation("GestaoOsAssignee")
+  gestaoOsWorkOrderEvents                 GestaoOsWorkOrderEvent[] @relation("GestaoOsEventActor")
+  gestaoOsMemberships                     GestaoOsMembership[] @relation("GestaoOsMembershipUser")
 
   @@map("users")
 }
@@ -3802,4 +3806,324 @@ model ToolRentalRequestEvent {
 
   @@index([requestId, createdAt])
   @@map("tool_rental_request_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sistema de Gestão - OS (manutenção predial / patrimonial)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum GestaoOsPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum GestaoOsMaintenanceType {
+  CORRECTIVE
+  PREVENTIVE
+  PREDICTIVE
+}
+
+enum GestaoOsStatus {
+  OPEN
+  UNDER_REVIEW
+  APPROVED
+  IN_PROGRESS
+  WAITING_PARTS
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+/// Perfis de acesso no módulo Gestao OS (por empresa).
+enum GestaoOsProfile {
+  REQUESTER
+  MANAGER
+  TECHNICIAN
+  ADMIN
+}
+
+/// Configurações gerais do módulo Gestão de OS (ex.: numeração).
+model GestaoOsSettings {
+  id           String   @id @default("default")
+  /// Próximo número mínimo a usar na numeração das OS (não afeta número do chamado).
+  nextOsNumber Int      @default(1)
+  /// true após migração que separou sequência de chamado da de OS.
+  chamadoSeqSeparated Boolean @default(false)
+  updatedAt    DateTime @updatedAt
+
+  @@map("gestao_os_settings")
+}
+
+/// Empresa (tenant) — base multi-empresa simples.
+model GestaoOsCompany {
+  id        String   @id @default(cuid())
+  name      String
+  tradeName String?
+  document  String?
+  code      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches   GestaoOsBranch[]
+  buildings  GestaoOsBuilding[]
+  providers  GestaoOsProvider[]
+  categories GestaoOsServiceCategory[]
+  members    GestaoOsMembership[]
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([name])
+  @@index([document])
+  @@map("gestao_os_companies")
+}
+
+/// Filial da empresa.
+model GestaoOsBranch {
+  id        String   @id @default(cuid())
+  companyId String
+  name      String
+  code      String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   GestaoOsCompany  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  buildings GestaoOsBuilding[]
+
+  @@index([companyId])
+  @@index([name])
+  @@map("gestao_os_branches")
+}
+
+/// Prestador de serviço / fornecedor de manutenção.
+model GestaoOsProvider {
+  id          String   @id @default(cuid())
+  companyId   String?
+  name        String
+  document    String?
+  specialty   String?
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?  @db.Text
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company    GestaoOsCompany?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([companyId])
+  @@index([name])
+  @@index([document])
+  @@map("gestao_os_providers")
+}
+
+/// Tipo / categoria de serviço (elétrica, hidráulica, etc.).
+model GestaoOsServiceCategory {
+  id          String   @id @default(cuid())
+  companyId   String?
+  name        String
+  code        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company GestaoOsCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([name])
+  @@unique([companyId, name])
+  @@map("gestao_os_service_categories")
+}
+
+/// Vínculo usuário ↔ empresa + perfil no Gestao OS.
+model GestaoOsMembership {
+  id        String         @id @default(cuid())
+  companyId String
+  userId    String
+  profile   GestaoOsProfile @default(REQUESTER)
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  company GestaoOsCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User            @relation("GestaoOsMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@index([profile])
+  @@map("gestao_os_memberships")
+}
+
+/// Prédio / edifício da hierarquia de locais.
+model GestaoOsBuilding {
+  id        String   @id @default(cuid())
+  companyId String?
+  branchId  String?
+  name      String
+  code      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company    GestaoOsCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branch     GestaoOsBranch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  sectors    GestaoOsSector[]
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([companyId])
+  @@index([branchId])
+  @@index([name])
+  @@map("gestao_os_buildings")
+}
+
+/// Andar / Setor dentro de um prédio.
+model GestaoOsSector {
+  id         String   @id @default(cuid())
+  buildingId String
+  name       String
+  code       String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  building   GestaoOsBuilding @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  places     GestaoOsPlace[]
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([buildingId])
+  @@index([name])
+  @@map("gestao_os_sectors")
+}
+
+/// Sala / Local dentro de um setor.
+model GestaoOsPlace {
+  id        String   @id @default(cuid())
+  sectorId  String
+  name      String
+  code      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sector     GestaoOsSector @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  assets     GestaoOsAsset[]
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([sectorId])
+  @@index([name])
+  @@map("gestao_os_places")
+}
+
+/// Ativo / equipamento vinculado a um local (com QR Code).
+model GestaoOsAsset {
+  id        String   @id @default(cuid())
+  placeId   String
+  name      String
+  code      String?
+  category  String?
+  /// Token estável usado no QR Code do ativo.
+  qrToken   String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  place      GestaoOsPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  workOrders GestaoOsWorkOrder[]
+
+  @@index([placeId])
+  @@index([name])
+  @@map("gestao_os_assets")
+}
+
+/// Ordem de serviço / chamado de manutenção predial.
+model GestaoOsWorkOrder {
+  id            String @id @default(cuid())
+  /// Número do chamado (sempre gerado na abertura).
+  displayNumber Int    @unique
+  /// Número da OS — gerado na primeira análise (Em Análise). Null = ainda só chamado.
+  osNumber      Int?   @unique
+  companyId     String?
+
+  status           GestaoOsStatus          @default(OPEN)
+  priority         GestaoOsPriority        @default(MEDIUM)
+  maintenanceType  GestaoOsMaintenanceType?
+  category         String
+  description      String                  @db.Text
+
+  buildingId String?
+  sectorId   String?
+  placeId    String?
+  assetId    String?
+  providerId String?
+
+  company  GestaoOsCompany?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  building GestaoOsBuilding? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  sector   GestaoOsSector?   @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  place    GestaoOsPlace?    @relation(fields: [placeId], references: [id], onDelete: SetNull)
+  asset    GestaoOsAsset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  provider GestaoOsProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  /// Snapshot textual do local (cascata) no momento da abertura.
+  locationLabel String?
+
+  requesterId String
+  requester   User   @relation("GestaoOsRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+
+  assigneeId String?
+  assignee   User?   @relation("GestaoOsAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  /// Nome livre da empresa prestadora (quando não for cadastro).
+  providerName String?
+
+  /// Anexos: [{ url, name, mimeType? }]
+  attachments Json?
+
+  cancelReason   String? @db.Text
+  completionNote String? @db.Text
+  rating         Int?
+  ratingComment  String? @db.Text
+
+  openedAt     DateTime  @default(now())
+  approvedAt   DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  closedAt     DateTime?
+  cancelledAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events GestaoOsWorkOrderEvent[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([companyId])
+  @@index([requesterId])
+  @@index([assigneeId])
+  @@index([buildingId])
+  @@index([providerId])
+  @@index([openedAt])
+  @@map("gestao_os_work_orders")
+}
+
+model GestaoOsWorkOrderEvent {
+  id          String         @id @default(cuid())
+  workOrderId String
+  fromStatus  GestaoOsStatus?
+  toStatus    GestaoOsStatus
+  note        String?        @db.Text
+  actorId     String?
+  createdAt   DateTime       @default(now())
+
+  workOrder GestaoOsWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  actor     User?             @relation("GestaoOsEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId, createdAt])
+  @@map("gestao_os_work_order_events")
 }

@@ -111,7 +111,10 @@ export default function LoginPage() {
               <img 
                 src={logoSrc}
                 alt={logoAlt}
+                width={220}
+                height={56}
                 className="h-14 w-auto max-w-[220px] object-contain"
+                style={{ maxHeight: 56, maxWidth: 220, width: 'auto', height: 'auto' }}
               />
             </div>
 

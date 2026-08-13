@@ -98,6 +98,7 @@ import materialDeliveryRoutes from './routes/materialDeliveries';
 import fuelRefuelRequestRoutes from './routes/fuelRefuelRequests';
 import fuelGasStationRoutes from './routes/fuelGasStations';
 import logisticsDeliveryRequestRoutes from './routes/logisticsDeliveryRequests';
+import gestaoOsRoutes from './routes/gestaoOs';
 import approvalsRoutes from './routes/approvals';
 import licitacoesRoutes from './routes/licitacoes';
 import pncpRoutes from './routes/pncp';
@@ -381,6 +382,7 @@ app.use('/api/material-deliveries', materialDeliveryRoutes);
 app.use('/api/fuel-refuel-requests', fuelRefuelRequestRoutes);
 app.use('/api/fuel-gas-stations', fuelGasStationRoutes);
 app.use('/api/logistics-delivery-requests', logisticsDeliveryRequestRoutes);
+app.use('/api/gestao-os', gestaoOsRoutes);
 app.use('/api/approvals', approvalsRoutes);
 // Rotas explícitas de licitações (garantem checklist mesmo se o router interno estiver desatualizado)
 app.get('/api/licitacoes/checklist-template', authenticate, (req, res, next) =>

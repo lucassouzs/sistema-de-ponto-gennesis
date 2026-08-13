@@ -895,12 +895,12 @@ export function EmployeeList({
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                Funcionários
+                Funcionários e Externos
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {canCreateEmployees || canEditEmployees || canDeleteEmployees
-                  ? 'Visualizar e gerenciar funcionários cadastrados'
-                  : 'Visualizar funcionários cadastrados'}
+                  ? 'Visualizar e gerenciar funcionários e externos cadastrados'
+                  : 'Visualizar funcionários e externos cadastrados'}
               </p>
             </div>
           </div>
