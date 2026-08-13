@@ -255,7 +255,7 @@ export function ContractOsDetailModal({
   onClose: () => void;
   loading?: boolean;
   pleito: ContractOsDetailPleito | null | undefined;
-  contract?: { name: string; number: string } | null;
+  contract?: { name?: string; number?: string } | null;
   allPleitos: ContractPleitoHistorico[];
   billings: ContractBillingHistorico[];
   headerActions?: React.ReactNode;
@@ -296,10 +296,10 @@ export function ContractOsDetailModal({
     : pleito?.reportsBilling;
 
   const infoRows: InfoRow[] = [];
-  if (contract) {
+  if (contract?.name || contract?.number) {
     infoRows.push({
       label: 'Contrato',
-      value: `${contract.name} - nº ${contract.number}`,
+      value: `${contract.name?.trim() || '—'} - nº ${contract.number?.trim() || '—'}`,
     });
   }
   if (pleito) {
