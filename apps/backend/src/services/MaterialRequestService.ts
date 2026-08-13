@@ -168,6 +168,8 @@ export interface UpdateMaterialRequestStatusData {
   approvedBy?: string;
   rejectedBy?: string;
   rejectionReason?: string;
+  /** Observação do compras ao enviar para Correção RM (o que deve ser alterado). */
+  correctionNote?: string;
 }
 
 export interface UpdateMaterialRequestCorrectionData {
@@ -770,9 +772,29 @@ export class MaterialRequestService {
     // Fase "REJECTED" foi removida do fluxo: tratar como CANCELLED por compatibilidade.
     const nextStatus = (data.status === 'REJECTED' ? 'CANCELLED' : data.status) as UpdateMaterialRequestStatusData['status'];
 
+    const correctionNote = String(data.correctionNote ?? '').trim();
+
     if (data.status === 'IN_REVIEW') {
-      if (existing.status !== 'PENDING') {
-        throw new Error('Apenas requisições pendentes podem ser enviadas para correção');
+      if (existing.status !== 'PENDING' && existing.status !== 'APPROVED') {
+        throw new Error(
+          'Apenas requisições pendentes ou aprovadas (sem OC) podem ser enviadas para correção'
+        );
+      }
+      if (existing.status === 'APPROVED') {
+        const ocCount = await prisma.purchaseOrder.count({
+          where: { materialRequestId: id },
+        });
+        if (ocCount > 0) {
+          throw new Error(
+            'Não é possível enviar para correção: esta RM já possui ordem de compra vinculada'
+          );
+        }
+      }
+      if (!correctionNote) {
+        throw new Error('Informe o que precisa ser alterado na correção');
+      }
+      if (correctionNote.length > 4000) {
+        throw new Error('Observação muito longa (máx. 4000 caracteres)');
       }
     }
 
@@ -805,17 +827,28 @@ export class MaterialRequestService {
       updatedAt: new Date()
     };
 
+    if (nextStatus === 'IN_REVIEW') {
+      updateData.approvedBy = null;
+      updateData.approvedAt = null;
+      // Reutiliza rejectionReason como “motivo da correção” enquanto status = IN_REVIEW.
+      updateData.rejectionReason = correctionNote;
+    }
+
+    if (nextStatus === 'PENDING' && existing.status === 'IN_REVIEW') {
+      updateData.rejectionReason = null;
+    }
+
     if (nextStatus === 'APPROVED' && data.approvedBy) {
       updateData.approvedBy = data.approvedBy;
       updateData.approvedAt = new Date();
+      updateData.rejectionReason = null;
     }
 
     if (nextStatus === 'CANCELLED' && data.rejectedBy) {
       updateData.rejectedBy = data.rejectedBy;
       updateData.rejectedAt = new Date();
-      if (data.rejectionReason !== undefined) {
-        updateData.rejectionReason = data.rejectionReason;
-      }
+      updateData.rejectionReason =
+        data.rejectionReason !== undefined ? data.rejectionReason : null;
     }
 
     // Se todos os itens foram atendidos, marcar como FULFILLED
@@ -823,7 +856,7 @@ export class MaterialRequestService {
       updateData.completedAt = new Date();
     }
 
-    return await prisma.materialRequest.update({
+    const updated = await prisma.materialRequest.update({
       where: { id },
       data: updateData,
       include: {
@@ -843,6 +876,18 @@ export class MaterialRequestService {
         }
       }
     });
+
+    if (nextStatus === 'IN_REVIEW' && correctionNote) {
+      await prisma.materialRequestComment.create({
+        data: {
+          materialRequestId: id,
+          userId,
+          content: `Observação para correção: ${correctionNote}`,
+        },
+      });
+    }
+
+    return updated;
   }
 
   /**
@@ -968,7 +1013,9 @@ export class MaterialRequestService {
         demandSheet: data.demandSheet !== undefined ? (data.demandSheet || '').trim() || null : existing.demandSheet,
         ...demandSheetAttachmentFields(attachmentFiles),
         priority: data.priority || existing.priority,
-        ...(data.submitForApproval ? { status: 'PENDING' } : {}),
+        ...(data.submitForApproval
+          ? { status: 'PENDING' as const, rejectionReason: null }
+          : {}),
         updatedAt: new Date(),
         items: {
           deleteMany: {},

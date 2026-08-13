@@ -1144,6 +1144,18 @@ function SolicitarMateriaisPage() {
     });
   }, [requestsData, isUnbUser, unbCostCenterIds]);
 
+  const correctionNoteFromCompras = useMemo(() => {
+    if (!correctionEditId) return '';
+    const fromDetail = String(
+      (correctionRmDetail as { rejectionReason?: string | null } | undefined)?.rejectionReason || ''
+    ).trim();
+    if (fromDetail) return fromDetail;
+    const fromList = requests.find((x: { id: string }) => x.id === correctionEditId) as
+      | { rejectionReason?: string | null }
+      | undefined;
+    return String(fromList?.rejectionReason || '').trim();
+  }, [correctionEditId, correctionRmDetail, requests]);
+
   const normalizedRequests = useMemo(
     () => (Array.isArray(requests) ? requests : []) as MaterialRequest[],
     [requests]
@@ -2796,6 +2808,13 @@ function SolicitarMateriaisPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Ajuste os dados e salve. Use &quot;Salvar e reenviar&quot; quando quiser voltar a fila de aprovação do compras.
               </p>
+
+              {correctionNoteFromCompras ? (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+                  <p className="font-medium">Observação do compras</p>
+                  <p className="mt-1 whitespace-pre-wrap">{correctionNoteFromCompras}</p>
+                </div>
+              ) : null}
 
               <div className="space-y-4">
                 <div>

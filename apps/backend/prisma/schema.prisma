@@ -1999,8 +1999,8 @@ model PurchaseOrderItem {
   materialId            String
   quantity              Decimal  @db.Decimal(10, 2)
   unit                  String
-  unitPrice             Decimal  @db.Decimal(12, 2)
-  totalPrice            Decimal  @db.Decimal(12, 2)
+  unitPrice             Decimal  @db.Decimal(12, 5)
+  totalPrice            Decimal  @db.Decimal(14, 5)
   notes                 String?
   receivedQuantity      Decimal? @default(0) @db.Decimal(10, 2) // Quantidade já recebida
   createdAt             DateTime @default(now())
@@ -2077,7 +2077,7 @@ model QuoteMapSupplierItem {
   quoteMapId            String
   supplierId            String
   materialRequestItemId String
-  unitPrice             Decimal @db.Decimal(12, 2)
+  unitPrice             Decimal @db.Decimal(12, 5)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2100,8 +2100,8 @@ model QuoteMapWinnerItem {
   materialRequestItemId String
   winnerSupplierId      String
 
-  winnerScore     Decimal @db.Decimal(15, 2)
-  winnerUnitPrice Decimal @db.Decimal(12, 2)
+  winnerScore     Decimal @db.Decimal(15, 5)
+  winnerUnitPrice Decimal @db.Decimal(12, 5)
   freight         Decimal @db.Decimal(12, 2)
 
   createdAt DateTime @default(now())

@@ -130,6 +130,7 @@ export function RmApprovalsSection() {
   const [detailRequest, setDetailRequest] = useState<MaterialRequest | null>(null);
   const [approveTarget, setApproveTarget] = useState<MaterialRequest | null>(null);
   const [correctionTarget, setCorrectionTarget] = useState<MaterialRequest | null>(null);
+  const [correctionNote, setCorrectionNote] = useState('');
   const [cancelTarget, setCancelTarget] = useState<MaterialRequest | null>(null);
   const [actionMenu, setActionMenu] = useState<{
     requestId: string;
@@ -227,13 +228,17 @@ export function RmApprovalsSection() {
   });
 
   const correctionMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.patch(`/material-requests/${id}/status`, { status: 'IN_REVIEW' });
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch(`/material-requests/${id}/status`, {
+        status: 'IN_REVIEW',
+        correctionNote: note,
+      });
       return res.data;
     },
     onSuccess: async () => {
       toast.success('Requisição enviada para correção.');
       setCorrectionTarget(null);
+      setCorrectionNote('');
       setDetailRequest(null);
       await invalidateRmQueries();
     },
@@ -585,26 +590,58 @@ export function RmApprovalsSection() {
       {correctionTarget && (
         <Modal
           isOpen
-          onClose={() => setCorrectionTarget(null)}
+          onClose={() => {
+            if (correctionMutation.isPending) return;
+            setCorrectionTarget(null);
+            setCorrectionNote('');
+          }}
           confirmBeforeClose={false}
           title="Enviar para Correção RM"
           size="md"
         >
-          <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
             O solicitante poderá ajustar a requisição e reenviá-la para análise.
           </p>
+          <div className="mb-6">
+            <label
+              htmlFor="rm-approval-correction-note"
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Observação *
+            </label>
+            <textarea
+              id="rm-approval-correction-note"
+              value={correctionNote}
+              onChange={(e) => setCorrectionNote(e.target.value)}
+              rows={4}
+              maxLength={4000}
+              placeholder="Descreva o que precisa ser alterado..."
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+              disabled={correctionMutation.isPending}
+            />
+          </div>
           <div className="flex justify-end gap-3">
             <button
               type="button"
-              onClick={() => setCorrectionTarget(null)}
+              onClick={() => {
+                setCorrectionTarget(null);
+                setCorrectionNote('');
+              }}
               className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
             >
               Voltar
             </button>
             <button
               type="button"
-              onClick={() => correctionMutation.mutate(correctionTarget.id)}
-              disabled={correctionMutation.isPending}
+              onClick={() => {
+                const note = correctionNote.trim();
+                if (!note) {
+                  toast.error('Informe o que precisa ser alterado na correção');
+                  return;
+                }
+                correctionMutation.mutate({ id: correctionTarget.id, note });
+              }}
+              disabled={!correctionNote.trim() || correctionMutation.isPending}
               className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
             >
               {correctionMutation.isPending ? 'Enviando...' : 'Enviar para correção'}
@@ -715,6 +752,7 @@ export function RmApprovalsSection() {
                   role="menuitem"
                   onClick={() => {
                     setActionMenu(null);
+                    setCorrectionNote('');
                     setCorrectionTarget(requestForMenu);
                   }}
                   className={MENU_ITEM_BORDER_CLASS}
