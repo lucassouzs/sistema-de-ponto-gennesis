@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { FileSpreadsheet, RotateCcw, Truck, X } from 'lucide-react';
+import { FileSpreadsheet, RotateCcw, Truck, Wrench, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
@@ -21,7 +21,12 @@ import {
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
-import { maskCurrencyInputBrOrEmpty, parseCurrencyInputBr } from '@/lib/maskCurrencyBr';
+import {
+  formatUnitPriceBr,
+  maskCurrencyInputBrOrEmpty,
+  maskUnitPriceInputBr,
+  parseUnitPriceInputBr,
+} from '@/lib/maskCurrencyBr';
 import {
   materialItemLabel,
   rmContractDisplay,
@@ -114,51 +119,20 @@ type PurchaseOrderCreateInput = {
 };
 
 function parseCurrencyBR(input: string): number | null {
-  const t = input.trim().replace(/\s/g, '');
-  if (!t) return null;
-
-  // Aceita formatos:
-  // - BR: 1.234,56 (ponto milhar + vírgula decimal)
-  // - ou número puro: 1234,56
-  // - ou padrão americano: 1234.56 (ponto decimal)
-  const hasComma = t.includes(',');
-  const hasDot = t.includes('.');
-
-  let normalized = t;
-  if (hasComma && hasDot) {
-    // Ex: 1.234,56
-    normalized = t.replace(/\./g, '').replace(',', '.');
-  } else if (hasComma) {
-    // Ex: 1234,56
-    normalized = t.replace(',', '.');
-  } else if (hasDot) {
-    const parts = t.split('.');
-    // Ex: 1234.56 (1 ponto e até 2 casas decimais) => ponto é decimal
-    if (parts.length === 2 && parts[1].length <= 2) {
-      normalized = t;
-    } else {
-      // Ex: 1.234.567 (pontos como milhar)
-      normalized = t.replace(/\./g, '');
-    }
-  }
-
-  // remove qualquer caractere estranho e garante formato numérico
-  normalized = normalized.replace(/[^0-9.-]/g, '');
-
-  const n = parseFloat(normalized);
-  return Number.isFinite(n) ? n : null;
+  return parseUnitPriceInputBr(input);
 }
 
 function parseMapUnitPrice(input: string): number | null {
-  const t = input.trim();
-  if (!t) return null;
-  const fromMask = parseCurrencyInputBr(t);
-  if (fromMask !== null) return fromMask;
-  return parseCurrencyBR(t);
+  return parseUnitPriceInputBr(input);
 }
 
 function formatCurrencyBR(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+}
+
+/** Preço unitário da cotação: até 5 casas (ex. R$ 0,03230). */
+function formatMapUnitPriceBR(v: number): string {
+  return formatUnitPriceBr(v);
 }
 
 function formatDateTimeBR(dateString: string) {
@@ -175,7 +149,7 @@ const mapFieldCls =
 const mapClickDisplayCls =
   'mx-auto inline-flex h-8 min-w-[4.5rem] max-w-[8rem] items-center justify-center rounded-lg px-2 text-center text-sm font-medium tabular-nums text-gray-900 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-gray-100 dark:hover:bg-gray-700/60';
 
-const mapClickInputCls = `${mapFieldCls} mx-auto block max-w-[8rem] text-center`;
+const mapClickInputCls = `${mapFieldCls} mx-auto block max-w-[9.5rem] text-center`;
 
 function MapFreightCell({
   value,
@@ -293,7 +267,8 @@ function MapSupplierPriceCell({
   }, [editing, showInput, isEmpty]);
 
   const commit = (next = draft) => {
-    onChange(next);
+    const parsed = parseMapUnitPrice(next);
+    onChange(parsed == null ? '' : formatMapUnitPriceBR(parsed));
     setEditing(false);
   };
 
@@ -318,11 +293,11 @@ function MapSupplierPriceCell({
           <input
             ref={inputRef}
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             aria-label={ariaLabel}
             value={draft}
             placeholder="R$ 0,00"
-            onChange={(e) => setDraft(maskCurrencyInputBrOrEmpty(e.target.value))}
+            onChange={(e) => setDraft(maskUnitPriceInputBr(e.target.value))}
             onBlur={() => commit()}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -351,7 +326,11 @@ function MapSupplierPriceCell({
       ) : (
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          onClick={() => {
+            const n = parseMapUnitPrice(value);
+            setDraft(n == null ? '' : maskUnitPriceInputBr(formatMapUnitPriceBR(n)));
+            setEditing(true);
+          }}
           className={`${fillCls} transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500 ${
             isWinner
               ? 'hover:bg-green-100/60 dark:hover:bg-green-900/40'
@@ -361,7 +340,7 @@ function MapSupplierPriceCell({
           title="Clique para editar"
         >
           <span className={unitCls}>
-            {unitPrice == null ? '—' : formatCurrencyBR(unitPrice)}
+            {unitPrice == null ? '—' : formatMapUnitPriceBR(unitPrice)}
           </span>
           <span className={totalCls}>
             {itemTotal == null ? '—' : formatCurrencyBR(itemTotal)}
@@ -549,6 +528,8 @@ export default function MapaCotacaoPage() {
   const [unitPriceBySupplierItem, setUnitPriceBySupplierItem] = useState<Record<string, string>>({});
 
   const [quoteMapId, setQuoteMapId] = useState<string>('');
+  const [showCorrectionConfirm, setShowCorrectionConfirm] = useState(false);
+  const [correctionNote, setCorrectionNote] = useState('');
 
   const [ocModalSupplierId, setOcModalSupplierId] = useState<string | null>(null);
   /** Fornecedores cuja OC acabou de ser gerada nesta sessão (antes do refetch das OCs) */
@@ -928,8 +909,8 @@ export default function MapaCotacaoPage() {
       const unitPriceCounts = new Map<number, number>();
       for (const p of perSupplier) {
         if (p.unitPrice == null) continue;
-        const cents = Math.round(p.unitPrice * 100);
-        unitPriceCounts.set(cents, (unitPriceCounts.get(cents) ?? 0) + 1);
+        const micros = Math.round(p.unitPrice * 100000);
+        unitPriceCounts.set(micros, (unitPriceCounts.get(micros) ?? 0) + 1);
       }
       let technicalTie = false;
       unitPriceCounts.forEach((count) => {
@@ -984,6 +965,51 @@ export default function MapaCotacaoPage() {
   }, [selectedSupplierIds, wonItemsBySupplier, freightBySupplier, unitPriceBySupplierItem, ocItemQtyByItemId]);
 
   const [isGenerating, setIsGenerating] = useState(false);
+
+  const clearMapSelection = () => {
+    setSelectedRequestId('');
+    setQuoteMapId('');
+    setSelectedSupplierIds(new Set());
+    setOcModalSupplierId(null);
+    setFreightBySupplier({});
+    setUnitPriceBySupplierItem({});
+    setSupplierItemDetailByKey({});
+    setPaymentDraftBySupplier({});
+    setGeneratedOcSupplierIds(new Set());
+    setOcItemQtyByItemId({});
+  };
+
+  const selectedRequestLabel = useMemo(() => {
+    if (!selectedRequestId) return '';
+    const r = approvedRequests.find((x) => x.id === selectedRequestId);
+    if (!r) return '—';
+    return `RM ${formatRmListDisplayId(r.requestNumber)}`;
+  }, [approvedRequests, selectedRequestId]);
+
+  const sendToCorrectionMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch(`/material-requests/${id}/status`, {
+        status: 'IN_REVIEW',
+        correctionNote: note,
+      });
+      return res.data;
+    },
+    onSuccess: async () => {
+      toast.success('RM enviada para correção. O solicitante poderá editar os itens.');
+      setShowCorrectionConfirm(false);
+      setCorrectionNote('');
+      clearMapSelection();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['material-requests-approved-map'] }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['approval-notification-counts'] }),
+      ]);
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message || 'Erro ao enviar RM para correção');
+    },
+  });
 
   const generateOrdersMutation = useMutation({
     mutationFn: async (supplierId: string) => {
@@ -1211,15 +1237,24 @@ export default function MapaCotacaoPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedRequestId('');
-                      setQuoteMapId('');
-                      setSelectedSupplierIds(new Set());
-                      setOcModalSupplierId(null);
-                      setFreightBySupplier({});
-                      setUnitPriceBySupplierItem({});
-                      setSupplierItemDetailByKey({});
-                      setPaymentDraftBySupplier({});
+                      setCorrectionNote('');
+                      setShowCorrectionConfirm(true);
                     }}
+                    disabled={!selectedRequestId || sendToCorrectionMutation.isPending}
+                    title={
+                      selectedRequestId
+                        ? 'Enviar RM para correção'
+                        : 'Selecione uma RM para enviar à correção'
+                    }
+                    aria-label="Enviar RM para correção"
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <Wrench className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="hidden sm:inline">Correção</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearMapSelection}
                     title="Limpar"
                     aria-label="Limpar seleção"
                     className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
@@ -1434,7 +1469,7 @@ export default function MapaCotacaoPage() {
                                           <span className="text-sm font-medium tabular-nums text-green-700 dark:text-green-300">
                                             {winnerUnit == null
                                               ? '—'
-                                              : formatCurrencyBR(winnerUnit)}
+                                              : formatMapUnitPriceBR(winnerUnit)}
                                           </span>
                                           <span className="text-xs tabular-nums text-emerald-600 dark:text-emerald-400/90">
                                             {winnerTotal == null
@@ -1703,7 +1738,7 @@ export default function MapaCotacaoPage() {
                               <td
                                 className={`${cadastroListClasses.tdNumeric} tabular-nums font-medium text-gray-900 dark:text-gray-100`}
                               >
-                                {unitParsed == null ? '—' : formatCurrencyBR(unitParsed)}
+                                {unitParsed == null ? '—' : formatMapUnitPriceBR(unitParsed)}
                               </td>
                             </tr>
                           );
@@ -2015,6 +2050,75 @@ export default function MapaCotacaoPage() {
             </Modal>
           );
         })()}
+
+          <Modal
+            isOpen={showCorrectionConfirm}
+            onClose={() => {
+              if (sendToCorrectionMutation.isPending) return;
+              setShowCorrectionConfirm(false);
+              setCorrectionNote('');
+            }}
+            title="Enviar para correção"
+            size="sm"
+            confirmBeforeClose={false}
+          >
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              Deseja enviar a {selectedRequestLabel || 'RM selecionada'} para correção? O solicitante
+              poderá editar, adicionar ou retirar itens. Depois precisará reenviar e a RM será
+              aprovada novamente.
+            </p>
+            <div className="mb-6">
+              <label
+                htmlFor="mapa-correction-note"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Observação *
+              </label>
+              <textarea
+                id="mapa-correction-note"
+                value={correctionNote}
+                onChange={(e) => setCorrectionNote(e.target.value)}
+                rows={4}
+                maxLength={4000}
+                placeholder="Descreva o que precisa ser alterado..."
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                disabled={sendToCorrectionMutation.isPending}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCorrectionConfirm(false);
+                  setCorrectionNote('');
+                }}
+                disabled={sendToCorrectionMutation.isPending}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedRequestId) return;
+                  const note = correctionNote.trim();
+                  if (!note) {
+                    toast.error('Informe o que precisa ser alterado na correção');
+                    return;
+                  }
+                  sendToCorrectionMutation.mutate({ id: selectedRequestId, note });
+                }}
+                disabled={
+                  !selectedRequestId ||
+                  !correctionNote.trim() ||
+                  sendToCorrectionMutation.isPending
+                }
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {sendToCorrectionMutation.isPending ? 'Enviando…' : 'Enviar para correção'}
+              </button>
+            </div>
+          </Modal>
       </MainLayout>
     </ProtectedRoute>
   );

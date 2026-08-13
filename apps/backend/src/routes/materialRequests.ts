@@ -277,7 +277,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
   try {
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, correctionNote } = req.body;
 
     const existing = await prisma.materialRequest.findUnique({ where: { id } });
     if (!existing) throw createError('Requisição não encontrada', 404);
@@ -301,11 +301,12 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
       status,
       approvedBy: status === 'APPROVED' ? req.user.id : undefined,
       rejectedBy: status === 'CANCELLED' || status === 'REJECTED' ? req.user.id : undefined,
-      rejectionReason: undefined
+      rejectionReason: undefined,
+      correctionNote: typeof correctionNote === 'string' ? correctionNote : undefined,
     }, req.user.id);
     res.json({ success: true, data: request, message: 'Status atualizado' });
   } catch (error) {
-    if (error instanceof Error && /Apenas |Aprove apenas|Não é possível cancelar|Sem permissão/.test(error.message)) {
+    if (error instanceof Error && /Apenas |Aprove apenas|Não é possível|Sem permissão|Informe o que|Observação muito/.test(error.message)) {
       const status = /Sem permissão/.test(error.message) ? 403 : 400;
       res.status(status).json({ success: false, message: error.message });
       return;

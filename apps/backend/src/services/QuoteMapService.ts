@@ -15,7 +15,12 @@ export class QuoteMapService {
   private db: any = prisma as any;
 
   private formatCurrency(value: number) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 5,
+    }).format(value);
   }
 
   private formatDateBr(value?: string | Date | null): string {

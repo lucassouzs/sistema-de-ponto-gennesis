@@ -1256,6 +1256,36 @@ async function ensureDriveStarTrashColumns(prisma: PrismaClient): Promise<void> 
   `);
 }
 
+async function ensureQuoteMapUnitPricePrecision(prisma: PrismaClient): Promise<void> {
+  // Preço unitário da cotação / OC com até 5 casas (ex.: 0,03230).
+  if (await tableExists(prisma, 'quote_map_supplier_items')) {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "quote_map_supplier_items"
+      ALTER COLUMN "unitPrice" TYPE DECIMAL(12, 5);
+    `);
+  }
+  if (await tableExists(prisma, 'quote_map_winner_items')) {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "quote_map_winner_items"
+      ALTER COLUMN "winnerUnitPrice" TYPE DECIMAL(12, 5);
+    `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "quote_map_winner_items"
+      ALTER COLUMN "winnerScore" TYPE DECIMAL(15, 5);
+    `);
+  }
+  if (await tableExists(prisma, 'purchase_order_items')) {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "purchase_order_items"
+      ALTER COLUMN "unitPrice" TYPE DECIMAL(12, 5);
+    `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "purchase_order_items"
+      ALTER COLUMN "totalPrice" TYPE DECIMAL(14, 5);
+    `);
+  }
+}
+
 /**
  * Corrige drift conhecido entre Prisma schema e bancos de produção onde migrate deploy não aplicou tudo.
  * DDL idempotente (IF NOT EXISTS / duplicate_object).
@@ -1293,6 +1323,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureDriveStarTrashColumns(prisma);
     await ensureUserActivityTracking(prisma);
     await ensureAuditLogTracking(prisma);
+    await ensureQuoteMapUnitPricePrecision(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);
