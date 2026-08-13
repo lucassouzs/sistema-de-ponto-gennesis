@@ -394,6 +394,13 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     category: 'Controle',
     group: 'Ordem de Compra',
   },
+  {
+    key: pathToModuleKey('/ponto/controle/oc-devolver-item-rm'),
+    name: 'Devolver item da OC à RM',
+    href: '/ponto/controle/oc-devolver-item-rm',
+    category: 'Controle',
+    group: 'Ordem de Compra',
+  },
 ] as const;
 
 const keySet = new Set(PERMISSION_MODULES.map((m) => m.key));

@@ -2470,6 +2470,7 @@ export function OcPurchaseOrdersPanel({
     canActOcProofCorrection,
     canActOcAttachNf,
     canActOcCorrection,
+    canReturnOcItemToRmPermission,
     dpApprovalContractIds,
     gestorCostCenterIds: permissionGestorCostCenterIds,
     ocGestorScopedCostCenterIds,
@@ -2794,7 +2795,7 @@ export function OcPurchaseOrdersPanel({
   const hasFinancialEntryForOc = financialEntriesByOc.length > 0;
 
   /**
-   * Coluna Ações / Devolver à RM: administrador ou gestor do contrato (daquele centro de custo).
+   * Coluna Ações / Devolver à RM: admin ou permissão Controle «Devolver item da OC à RM».
    * Em APPROVED (Anexar boleto / Pagamento): some se já houver lançamento financeiro.
    */
   const canReturnOcItemOnOrder = (order: PurchaseOrder) => {
@@ -2806,13 +2807,7 @@ export function OcPurchaseOrdersPanel({
       financialEntriesLoading;
     if (launchLoading) return false;
     if (!canReturnOcItemToRm(order.status, { hasFinancialEntry: hasLaunch })) return false;
-    if (isAdministrator) return true;
-    if (!dpApprovalContractIds.length) return false;
-    const costCenterId = order.materialRequest?.costCenter?.id;
-    const scope =
-      gestorCostCenterIds ?? ocGestorScopedCostCenterIds ?? permissionGestorCostCenterIds;
-    if (!costCenterId || !scope?.length) return false;
-    return scope.includes(costCenterId);
+    return canReturnOcItemToRmPermission;
   };
 
   const hasFinancialEntryForCurrentProofInstallment = useMemo(() => {

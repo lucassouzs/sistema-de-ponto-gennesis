@@ -16,6 +16,7 @@ export const OC_TAB_VALIDATE_PROOF_KEY = pathToModuleKey('/ponto/controle/oc-val
 export const OC_TAB_PROOF_CORRECTION_KEY = pathToModuleKey('/ponto/controle/oc-corrigir-comprovante');
 export const OC_TAB_ATTACH_NF_KEY = pathToModuleKey('/ponto/controle/oc-anexar-nf');
 export const OC_TAB_CORRECTION_KEY = pathToModuleKey('/ponto/controle/oc-correcao');
+export const OC_RETURN_ITEM_TO_RM_KEY = pathToModuleKey('/ponto/controle/oc-devolver-item-rm');
 
 /** Módulos que liberam listagem completa de OCs (sem filtro só de gestor de contrato). */
 const OC_FULL_LIST_MODULE_KEYS = [
@@ -81,6 +82,23 @@ export async function userHasOcGestorApprovePermission(userId: string): Promise<
 
 export async function userHasOcDiretoriaApprovePermission(userId: string): Promise<boolean> {
   return userHasModule(userId, OC_APPROVE_DIRETORIA_MODULE_KEY);
+}
+
+/** Controle: devolver item da OC à RM (qualquer pessoa com a permissão). */
+export async function userHasOcReturnItemToRmPermission(userId: string): Promise<boolean> {
+  return userHasModule(userId, OC_RETURN_ITEM_TO_RM_KEY);
+}
+
+export async function assertUserCanReturnOcItemToRm(
+  userId: string,
+  isAdmin: boolean
+): Promise<void> {
+  if (isAdmin) return;
+  if (await userHasOcReturnItemToRmPermission(userId)) return;
+  throw createError(
+    'Sem permissão: libere «Devolver item da OC à RM» em Controle → Ordem de Compra',
+    403
+  );
 }
 
 export async function assertUserHasOcModule(

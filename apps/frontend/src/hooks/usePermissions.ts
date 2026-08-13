@@ -324,6 +324,11 @@ export function usePermissions() {
     isAdministrator || !!permissionData?.isAdmin || can(pk('/ponto/controle/oc-anexar-nf'));
   const canActOcCorrection =
     isAdministrator || !!permissionData?.isAdmin || can(pk('/ponto/controle/oc-correcao'));
+  /** Controle: devolver item da OC à RM. */
+  const canReturnOcItemToRmPermission =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/controle/oc-devolver-item-rm'));
 
   /** Aprovação de RMs: gestor por contrato ou permissão legada Controle. */
   const canApproveMaterialRequests =
@@ -484,6 +489,7 @@ export function usePermissions() {
     canActOcProofCorrection,
     canActOcAttachNf,
     canActOcCorrection,
+    canReturnOcItemToRmPermission,
     canApproveMaterialRequests,
     canApproveFuel,
     canViewKanbanValues,

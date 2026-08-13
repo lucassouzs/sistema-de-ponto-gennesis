@@ -1601,7 +1601,6 @@ export default function AndamentoListPage() {
           {showPleitoModal && !pleitoToEdit && (
             <PleitoFormModal
               contractId={contractId}
-              contractDisplay={contract ? `${contract.name} - nº ${contract.number}` : undefined}
               onClose={() => setShowPleitoModal(false)}
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
@@ -1612,7 +1611,6 @@ export default function AndamentoListPage() {
           {pleitoToEdit && (
             <PleitoFormModal
               contractId={contractId}
-              contractDisplay={contract ? `${contract.name} - nº ${contract.number}` : undefined}
               pleitoToEdit={pleitoToEdit}
               onClose={() => setPleitoToEdit(null)}
               onSuccess={() => {

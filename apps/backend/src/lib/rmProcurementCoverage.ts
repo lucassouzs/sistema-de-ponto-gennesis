@@ -15,7 +15,7 @@ export const OC_STATUSES_COVERING_RM_ITEMS = [
   'RECEIVED',
 ] as const;
 
-/** Fases em que Compras/gestor pode retirar um item e devolver à RM. */
+/** Fases em que quem tem a permissão Controle pode retirar um item e devolver à RM. */
 export const OC_STATUSES_ALLOW_RETURN_ITEM_TO_RM = [
   'DRAFT',
   'PENDING_COMPRAS',

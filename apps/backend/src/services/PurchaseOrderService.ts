@@ -15,10 +15,7 @@ import {
   isOcStatusAllowingReturnItemToRm,
   OC_STATUSES_COVERING_RM_ITEMS,
 } from '../lib/rmProcurementCoverage';
-import {
-  getContractGestorCostCenterIds,
-  userHasContractGestorAssignment,
-} from '../lib/contractGestorApprovalAccess';
+import { assertUserCanReturnOcItemToRm } from '../lib/ocApprovalAccess';
 
 /** Lock distinto do requestNumber de RM (91827365) — serializa só a sequência de OC. */
 const PURCHASE_ORDER_NUMBER_ADVISORY_LOCK = 91827366;
@@ -3410,17 +3407,8 @@ export class PurchaseOrderService {
       }
     }
 
-    // Administrador ou gestor do contrato (centro de custo da RM).
-    if (!isAdmin) {
-      if (!(await userHasContractGestorAssignment(userId))) {
-        throw new Error('Sem permissão: apenas o gestor do contrato pode devolver itens à RM');
-      }
-      const costCenterId = order.materialRequest?.costCenter?.id ?? null;
-      const scopeIds = await getContractGestorCostCenterIds(userId);
-      if (!costCenterId || scopeIds.length === 0 || !scopeIds.includes(costCenterId)) {
-        throw new Error('Sem permissão para devolver itens de OC deste contrato');
-      }
-    }
+    // Administrador ou permissão Controle «Devolver item da OC à RM».
+    await assertUserCanReturnOcItemToRm(userId, isAdmin);
 
     const line = order.items.find((i) => i.id === purchaseOrderItemId);
     if (!line) throw new Error('Item não encontrado nesta ordem de compra');

@@ -112,7 +112,6 @@ export function OsPleitosPanel({
   const [pleitoToEdit, setPleitoToEdit] = useState<{
     pleito: PleitoFormData & { id: string };
     contractId: string;
-    contractDisplay?: string;
   } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -276,9 +275,6 @@ export function OsPleitosPanel({
     setPleitoToEdit({
       pleito: { ...(p as unknown as PleitoFormData), id: p.id },
       contractId,
-      contractDisplay: p.updatedContract
-        ? `${p.updatedContract.name}${p.updatedContract.number ? ` — nº ${p.updatedContract.number}` : ''}`
-        : undefined
     });
   };
 
@@ -649,7 +645,6 @@ export function OsPleitosPanel({
       {pleitoToEdit?.contractId ? (
         <PleitoFormModal
           contractId={pleitoToEdit.contractId}
-          contractDisplay={pleitoToEdit.contractDisplay}
           pleitoToEdit={pleitoToEdit.pleito}
           onClose={() => setPleitoToEdit(null)}
           onSuccess={handleEditSuccess}
