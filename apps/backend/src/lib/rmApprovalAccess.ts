@@ -6,9 +6,11 @@ import {
   getContractGestorListScopeCostCenterIds,
   userHasContractGestorAssignment,
 } from './contractGestorApprovalAccess';
+import { userIsDepartmentCompras } from './fuelSuppliesAccess';
 
 export const RM_APPROVE_MODULE_KEY = pathToModuleKey('/ponto/controle/aprovar-requisicoes-materiais');
 export const GERENCIAR_MATERIAIS_MODULE_KEY = pathToModuleKey('/ponto/gerenciar-materiais');
+export const MAPA_COTACAO_MODULE_KEY = pathToModuleKey('/ponto/mapa-cotacao');
 
 /** Gestor por contrato ou permissão legada Controle. */
 export async function userHasRmApprovePermission(userId: string): Promise<boolean> {
@@ -23,6 +25,39 @@ export async function userHasRmApprovePermission(userId: string): Promise<boolea
     select: { id: true },
   });
   return !!row;
+}
+
+/** Mesma regra da tela Mapa de Cotação: admin, dept. Compras ou permissão do módulo. */
+export async function userHasMapaCotacaoAccess(
+  userId: string,
+  isAdmin?: boolean,
+): Promise<boolean> {
+  if (isAdmin) return true;
+  if (await userIsDepartmentCompras(userId)) return true;
+  const row = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: MAPA_COTACAO_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
+      allowed: true,
+    },
+    select: { id: true },
+  });
+  return !!row;
+}
+
+/**
+ * Enviar RM para Correção (IN_REVIEW): aprovador de RM ou quem usa o mapa de cotação.
+ * Não exige gestor por contrato — Compras no mapa também pode devolver.
+ */
+export async function assertUserCanSendRmToCorrection(
+  userId: string,
+  isAdmin?: boolean,
+): Promise<void> {
+  if (isAdmin) return;
+  if (await userHasRmApprovePermission(userId)) return;
+  if (await userHasMapaCotacaoAccess(userId, false)) return;
+  throw createError('Sem permissão para enviar requisição para correção', 403);
 }
 
 export async function userHasFullMaterialRequestListAccess(

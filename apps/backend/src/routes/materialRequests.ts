@@ -10,6 +10,7 @@ import { savePersistentUpload } from '../lib/persistentUpload';
 import {
   assertUserCanApproveMaterialRequests,
   assertUserCanApproveMaterialRequestForCostCenter,
+  assertUserCanSendRmToCorrection,
   getRmApproverListScopeCostCenterIds,
   isRmApproverStatusChange,
 } from '../lib/rmApprovalAccess';
@@ -288,7 +289,10 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
       existing.costCenterId,
     );
 
-    if (isRmApproverStatusChange(status, existing.requestedBy, req.user.id)) {
+    if (status === 'IN_REVIEW') {
+      // Correção: aprovador de RM ou quem tem acesso ao mapa de cotação (Compras).
+      await assertUserCanSendRmToCorrection(req.user.id, req.user.isAdmin);
+    } else if (isRmApproverStatusChange(status, existing.requestedBy, req.user.id)) {
       await assertUserCanApproveMaterialRequests(req.user.id, req.user.isAdmin);
       await assertUserCanApproveMaterialRequestForCostCenter(
         req.user.id,
