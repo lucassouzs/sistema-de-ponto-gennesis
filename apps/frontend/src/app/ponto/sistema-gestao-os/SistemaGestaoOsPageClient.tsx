@@ -202,7 +202,7 @@ export default function SistemaGestaoOsPageClient() {
 
   useEffect(() => {
     if (qrHandled) return;
-    const qr = searchParams.get('qr');
+    const qr = searchParams?.get('qr');
     if (!qr) return;
     let cancelled = false;
     (async () => {

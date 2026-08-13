@@ -539,9 +539,10 @@ function orderAlreadyHasNfNumber(
 
 /** Total da OC na listagem: itens + frete (fallback em registros antigos só com amountToPay). */
 function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amountToPay'>): number {
-  const pricedItems = (o.items ?? []).filter(
-    (i) => i.totalPrice != null && i.totalPrice !== '' && Number.isFinite(Number(i.totalPrice))
-  );
+  const pricedItems = (o.items ?? []).filter((i) => {
+    if (i.totalPrice == null) return false;
+    return Number.isFinite(Number(i.totalPrice));
+  });
   const hasPricedLineItems = pricedItems.length > 0;
   // Listagem summary pode trazer só materialRequestItemId (cobertura RM) — sem preço.
   // Nesse caso usar amountToPay, não somar NaN.
@@ -565,9 +566,10 @@ function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amo
 }
 
 function orderFreightValue(o: Pick<PurchaseOrder, 'freightAmount' | 'amountToPay' | 'items'>): number {
-  const pricedItems = (o.items ?? []).filter(
-    (i) => i.totalPrice != null && i.totalPrice !== '' && Number.isFinite(Number(i.totalPrice))
-  );
+  const pricedItems = (o.items ?? []).filter((i) => {
+    if (i.totalPrice == null) return false;
+    return Number.isFinite(Number(i.totalPrice));
+  });
   const items = pricedItems.reduce((s, i) => s + Number(i.totalPrice), 0);
   const fRaw = o.freightAmount;
   if (fRaw != null && fRaw !== '' && Number.isFinite(Number(fRaw))) {

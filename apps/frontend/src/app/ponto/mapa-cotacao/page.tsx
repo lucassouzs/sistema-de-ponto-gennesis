@@ -83,7 +83,7 @@ type MaterialRequest = MaterialRequestBase & {
 };
 
 type PurchaseOrderLite = {
-  status?: string;
+  status: string;
   materialRequestId?: string;
   materialRequest?: { id?: string };
   supplierId?: string;

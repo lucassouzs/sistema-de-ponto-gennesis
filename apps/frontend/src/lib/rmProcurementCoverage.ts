@@ -2,7 +2,7 @@
 const OC_CLOSED_STATUSES = new Set(['REJECTED', 'CANCELLED']);
 
 export type OcCoverageOrder = {
-  status: string;
+  status?: string | null;
   items?: Array<{ materialRequestItemId?: string | null } | null> | null;
 };
 
@@ -14,8 +14,8 @@ export type RmCoverageRequest = {
   purchaseOrders?: OcCoverageOrder[] | null;
 };
 
-export function isOcCoveringRmItems(status: string): boolean {
-  return !OC_CLOSED_STATUSES.has(status);
+export function isOcCoveringRmItems(status?: string | null): boolean {
+  return !OC_CLOSED_STATUSES.has(String(status || ''));
 }
 
 export function getCoveredRmItemIdsFromOrders(orders: OcCoverageOrder[]): Set<string> {

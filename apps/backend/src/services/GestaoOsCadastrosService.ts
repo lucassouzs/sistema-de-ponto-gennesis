@@ -1,8 +1,26 @@
 import { GestaoOsProfile, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
-import QRCode from 'qrcode';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
+
+async function qrCodeToDataUrl(
+  text: string,
+  opts?: { margin?: number; width?: number; errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H' }
+): Promise<string> {
+  try {
+    const QRCode = (await import('qrcode')).default;
+    return QRCode.toDataURL(text, opts);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Cannot find module 'qrcode'") || msg.includes('Cannot find package')) {
+      throw createError(
+        'Dependência qrcode não instalada. Rode npm install na raiz do monorepo e reinicie o backend.',
+        500
+      );
+    }
+    throw e;
+  }
+}
 
 function newQrToken(): string {
   return randomBytes(16).toString('hex');
@@ -367,7 +385,7 @@ export class GestaoOsCadastrosService {
       asset.qrToken = updated.qrToken;
     }
     const payloadUrl = assetQrPayloadUrl(asset.qrToken);
-    const dataUrl = await QRCode.toDataURL(payloadUrl, {
+    const dataUrl = await qrCodeToDataUrl(payloadUrl, {
       errorCorrectionLevel: 'M',
       margin: 1,
       width: 320
