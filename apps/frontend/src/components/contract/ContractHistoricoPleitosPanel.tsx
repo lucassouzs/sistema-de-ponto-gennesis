@@ -168,13 +168,11 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
     [historicoYears]
   );
 
+  // Lista respeita os filtros de status; "Todas" mostra inclusive pleitos 100% faturados.
   const filteredPleitos = useMemo(() => {
     const searchQuery = searchTerm.trim().toLowerCase();
-    const includeFaturados100 = histEtiquetaFilter === 'faturado-100';
 
     return generatedPleitos.filter((p) => {
-      if (!includeFaturados100 && isPleitoFullyBilled(p, billings)) return false;
-
       const year = p.creationYear ?? getDateYear(p.createdAt as unknown as string);
       const monthRaw = p.creationMonth ? parseInt(String(p.creationMonth).replace(/\D/g, '') || '0', 10) : null;
       const month = monthRaw && monthRaw > 0 ? monthRaw : getDateMonth(p.createdAt as unknown as string);

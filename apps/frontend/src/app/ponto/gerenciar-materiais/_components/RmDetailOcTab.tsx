@@ -244,9 +244,16 @@ type Props = {
   materialRequestStatus?: string;
   orders: PurchaseOrder[];
   enabled?: boolean;
+  /** Mensagem quando não há OCs (padrão: texto da RM). */
+  emptyMessage?: string;
 };
 
-export function RmDetailOcTab({ materialRequestStatus, orders, enabled = true }: Props) {
+export function RmDetailOcTab({
+  materialRequestStatus,
+  orders,
+  enabled = true,
+  emptyMessage
+}: Props) {
   const sorted = useMemo(() => sortMaterialRequestPurchaseOrders(orders), [orders]);
   const ids = useMemo(() => sorted.map((o) => o.id), [sorted]);
 
@@ -287,6 +294,11 @@ export function RmDetailOcTab({ materialRequestStatus, orders, enabled = true }:
   const loading = enabled && ids.length > 0 && detailQueries.some((q) => q.isLoading && !q.data);
 
   if (ids.length === 0) {
+    if (emptyMessage) {
+      return (
+        <p className="py-10 text-center text-sm text-gray-400 dark:text-gray-500">{emptyMessage}</p>
+      );
+    }
     const waitRows = materialRequestOcListRows(
       { status: materialRequestStatus },
       []

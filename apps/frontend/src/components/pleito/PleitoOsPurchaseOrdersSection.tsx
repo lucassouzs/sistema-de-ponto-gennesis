@@ -54,12 +54,16 @@ const OC_ITEMS_TABLE_COL = {
 export function PleitoOsPurchaseOrdersSection({
   serviceOrderId,
   serviceOrderText,
+  variant = 'section',
 }: {
   serviceOrderId?: string | null;
   serviceOrderText?: string | null;
+  /** `tab`: sem borda/título superior (modal de OS em abas). */
+  variant?: 'section' | 'tab';
 }) {
   const trimmedText = serviceOrderText?.trim() || '';
   const canFetch = Boolean(serviceOrderId || trimmedText);
+  const isTab = variant === 'tab';
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pleito-os-purchase-orders', serviceOrderId, trimmedText],
@@ -80,9 +84,11 @@ export function PleitoOsPurchaseOrdersSection({
 
   if (!canFetch) {
     return (
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OCs vinculadas</p>
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+      <div className={isTab ? 'space-y-2' : 'pt-4 border-t border-gray-200 dark:border-gray-700'}>
+        {!isTab ? (
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OCs vinculadas</p>
+        ) : null}
+        <p className={`text-sm text-gray-500 dark:text-gray-400 ${isTab ? '' : 'mt-2'}`}>
           Esta ordem de serviço não possui vínculo para buscar OCs.
         </p>
       </div>
@@ -90,13 +96,19 @@ export function PleitoOsPurchaseOrdersSection({
   }
 
   return (
-    <div className="pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3">
-      <div>
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OCs vinculadas</p>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+    <div className={isTab ? 'space-y-3' : 'pt-4 border-t border-gray-200 dark:border-gray-700 space-y-3'}>
+      {!isTab ? (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OCs vinculadas</p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            Ordens de compra das requisições de material desta OS.
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Ordens de compra das requisições de material desta OS.
         </p>
-      </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Carregando OCs...</p>

@@ -23,7 +23,7 @@ import {
   pleitoStatusSelectBase
 } from '@/lib/pleitoStatusStyles';
 import { PleitoFormModal } from '@/components/pleito/PleitoFormModal';
-import { PleitoOsPurchaseOrdersSection } from '@/components/pleito/PleitoOsPurchaseOrdersSection';
+import { ContractOsDetailModal } from '@/components/contract/ContractOsDetailModal';
 import { useContractTableColumnCustomizer } from '@/components/useContractTableColumnCustomizer';
 import { formatOsSePasta, formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
 import toast from 'react-hot-toast';
@@ -2031,104 +2031,34 @@ export default function AndamentoListPage() {
           )}
           {historicoBatchNfModalConfirmUi}
 
-          {selectedPleitoId && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={requestCloseSelectedPleitoModal} />
-              <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5" />
-                    Detalhes do Ordem de Serviço
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    {pleitoDetailData?.data && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPleitoToEdit({
-                            ...(pleitoDetailData.data as PleitoFormData),
-                            id: (pleitoDetailData.data as { id: string }).id
-                          });
-                          setSelectedPleitoId(null);
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Editar
-                      </button>
-                    )}
-                    <button type="button" onClick={requestCloseSelectedPleitoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="p-6">
-                  {loadingPleitoDetail ? (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Carregando...</div>
-                  ) : pleitoDetailData?.data ? (() => {
-                    const pleito = pleitoDetailData.data as ContractPleito;
-                    const osSe = pleito.divSe || '';
-                    const acumuladoFaturado = billings
-                      .filter((b) => (b.serviceOrder || '').trim() === osSe.trim())
-                      .reduce((sum, b) => sum + b.grossValue, 0);
-                    const orcamento = pleito.budget ? Number(pleito.budget) : 0;
-                    const statusFaturamentoPct = orcamento > 0 ? (acumuladoFaturado / orcamento) * 100 : null;
-                    const pendenteFaturamento = orcamento - acumuladoFaturado;
-
-                    return (
-                      <div className="space-y-4">
-                        {contract && (
-                          <div className="pb-4 border-b border-gray-200 dark:border-gray-700">
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contrato</p>
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-0.5">{contract.name} - nº {contract.number}</p>
-                          </div>
-                        )}
-                        {([
-                          ['OS / SE', formatOsSePasta(pleito.divSe, pleito.folderNumber)],
-                          ['Descrição do serviço', pleito.serviceDescription],
-                          ['Lote', pleito.lot],
-                          ['Local', pleito.location],
-                          ['Unidade', pleito.unit],
-                          ['Status Orçamento', pleito.budgetStatus],
-                          ['Status Execução', pleito.executionStatus],
-                          ['Orçamento', pleito.budget ? formatCurrency(Number(pleito.budget)) : null],
-                          ['Orçamento R01', pleito.budgetAmount1 ? formatCurrency(Number(pleito.budgetAmount1)) : null],
-                          ['Orçamento R02', pleito.budgetAmount2 ? formatCurrency(Number(pleito.budgetAmount2)) : null],
-                          ['Orçamento R03', pleito.budgetAmount3 ? formatCurrency(Number(pleito.budgetAmount3)) : null],
-                          ['Orçamento R04', pleito.budgetAmount4 ? formatCurrency(Number(pleito.budgetAmount4)) : null],
-                          ['Acumulado faturado', formatCurrency(acumuladoFaturado)],
-                          ['Status Faturamento (%)', statusFaturamentoPct != null ? `${statusFaturamentoPct.toFixed(1)}%` : '-'],
-                          ['Pendente faturamento', formatCurrency(pendenteFaturamento)],
-                          ['Data início', pleito.startDate ? formatDate(pleito.startDate) : null],
-                          ['Data término', pleito.endDate ? formatDate(pleito.endDate) : null],
-                          ['Mês/Ano criação', pleito.creationMonth && pleito.creationYear ? `${String(pleito.creationMonth).padStart(2, '0')}/${pleito.creationYear}` : null],
-                          ['Engenheiro', pleito.engineer],
-                          ['Encarregado', pleito.supervisor],
-                          ['RVI', pleito.pv],
-                          ['RVF', pleito.ipi],
-                          ['Feedback Relatorios', displayReportsBilling(pleito.reportsBilling)],
-                          ['Preenchimento', pleito.createdAt ? formatDateTimeBr(pleito.createdAt) : null]
-                        ] as [string, string | number | null | undefined][]).map(([label, value]) =>
-                          value != null && value !== '' ? (
-                            <div key={label}>
-                              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{label}</p>
-                              <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">{String(value)}</p>
-                            </div>
-                          ) : null
-                        )}
-                        <PleitoOsPurchaseOrdersSection
-                          serviceOrderId={pleito.serviceOrderId}
-                          serviceOrderText={pleito.divSe}
-                        />
-                      </div>
-                    );
-                  })() : (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Andamento não encontrado.</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+          <ContractOsDetailModal
+            isOpen={!!selectedPleitoId}
+            onClose={requestCloseSelectedPleitoModal}
+            loading={loadingPleitoDetail}
+            pleito={(pleitoDetailData?.data as ContractPleito | undefined) ?? null}
+            contract={contract}
+            allPleitos={allPleitos}
+            billings={billings}
+            formatReportsBilling={displayReportsBilling}
+            headerActions={
+              pleitoDetailData?.data ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPleitoToEdit({
+                      ...(pleitoDetailData.data as PleitoFormData),
+                      id: (pleitoDetailData.data as { id: string }).id
+                    });
+                    setSelectedPleitoId(null);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/20"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Editar
+                </button>
+              ) : null
+            }
+          />
           {selectedPleitoModalConfirmUi}
         </div>
       </MainLayout>
