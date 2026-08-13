@@ -608,6 +608,11 @@ export function useRoutePermission(route: string) {
     '/ponto/centros-custo': isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
     '/ponto/materiais-construcao': isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
     '/ponto/andamento-da-os': canAccessOsRoutePage,
+    '/ponto/sistema-gestao-os': isAdministrator || can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/cadastros':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+      can(pk('/ponto/sistema-gestao-os')),
     '/ponto/permissoes': true,
     '/ponto/conversas-whatsapp': isAdministrator || isDepartmentPessoal || can(pk('/ponto/conversas-whatsapp')),
     '/ponto/financeiro': isAdministrator || can(pk('/ponto/financeiro')),

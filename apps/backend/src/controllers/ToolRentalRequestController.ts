@@ -160,6 +160,16 @@ export class ToolRentalRequestController {
       });
       res.json({ success: true, data: { count } });
     } catch (error) {
+      // Tabela ainda não migrada no ambiente local — não derruba o polling do layout.
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        (error as { code?: string }).code === 'P2021'
+      ) {
+        res.json({ success: true, data: { count: 0 } });
+        return;
+      }
       next(error);
     }
   }

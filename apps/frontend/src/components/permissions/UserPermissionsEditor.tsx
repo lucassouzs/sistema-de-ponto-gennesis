@@ -253,6 +253,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/contratos',
       '/ponto/contratos/relatorios',
       '/ponto/andamento-da-os',
+      '/ponto/sistema-gestao-os',
       '/ponto/pleitos-gerados',
       '/ponto/aprovacao-fds',
       '/ponto/recebimento-entregas',
@@ -304,6 +305,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/tomadores-servico',
       '/ponto/contas-bancarias',
       '/ponto/codigos-tributarios',
+      '/ponto/sistema-gestao-os/cadastros',
     ].some((p) => h === p)
   ) {
     return 'Cadastros';

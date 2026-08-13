@@ -126,6 +126,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/contratos/socios'), name: 'Contratos Sócios', href: '/ponto/contratos/socios', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/contratos/gastos-operacionais'), name: 'Gastos Operacionais', href: '/ponto/contratos/gastos-operacionais', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/andamento-da-os'), name: 'Ordem de Serviço', href: '/ponto/andamento-da-os', category: 'Engenharia' },
+  { key: pathToModuleKey('/ponto/sistema-gestao-os'), name: 'Gestão de OS', href: '/ponto/sistema-gestao-os', category: 'Engenharia' },
   // Contratos e Licitações
   {
     key: pathToModuleKey('/ponto/espelho-nf'),
@@ -250,6 +251,12 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     key: pathToModuleKey('/ponto/espelho-nf/codigos-tributarios'),
     name: 'Códigos Tributários',
     href: '/ponto/codigos-tributarios',
+    category: 'Cadastros',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/cadastros'),
+    name: 'Sistema de Gestão de OS',
+    href: '/ponto/sistema-gestao-os/cadastros',
     category: 'Cadastros',
   },
   // Registros de Ponto

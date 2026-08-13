@@ -67,6 +67,7 @@ import {
   Fuel,
   Car,
   CalendarRange,
+  Settings2,
   Wrench,
   Workflow,
   ChevronDown,
@@ -579,10 +580,10 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         icon: Users,
         items: [
           {
-            name: 'Funcionários',
+            name: 'Funcionários e Externos',
             href: '/ponto/funcionarios',
             icon: Users,
-            description: 'Cadastrar e gerenciar funcionários',
+            description: 'Cadastrar e gerenciar funcionários e externos',
             permission: isAdministrator || isDepartmentPessoal || permissions.canManageEmployees
           },
           {
@@ -796,6 +797,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: ClipboardList,
             description: 'Acompanhamento e controle das ordens de serviço',
             permission: canAccessOsRoutePage
+          },
+          {
+            name: 'Gestão de OS',
+            href: '/ponto/sistema-gestao-os',
+            icon: Wrench,
+            description: 'Manutenção predial e patrimonial (solicitações e OS)',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os'))
           },
           {
             name: 'Solicitação de Materiais',
@@ -1112,6 +1120,16 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator ||
               can(pk('/ponto/espelho-nf/codigos-tributarios')) ||
               can(pk('/ponto/espelho-nf'))
+          },
+          {
+            name: 'Sistema de Gestão de OS',
+            href: '/ponto/sistema-gestao-os/cadastros',
+            icon: Settings2,
+            description: 'Empresas, locais, ativos (QR), prestadores, categorias e perfis',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+              can(pk('/ponto/sistema-gestao-os'))
           }
         ]
       },

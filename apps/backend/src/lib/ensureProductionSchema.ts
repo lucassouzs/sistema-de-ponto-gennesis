@@ -1,4 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
+import { ensureGestaoOsSchema } from './ensureGestaoOsSchema';
+import { ensureToolRentalRequestsSchema } from './ensureToolRentalRequestsSchema';
 
 async function columnExists(
   prisma: PrismaClient,
@@ -1324,6 +1326,8 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureUserActivityTracking(prisma);
     await ensureAuditLogTracking(prisma);
     await ensureQuoteMapUnitPricePrecision(prisma);
+    await ensureToolRentalRequestsSchema(prisma);
+    await ensureGestaoOsSchema(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {
     console.error('[Schema] Falha ao garantir esquema de produção:', e);
