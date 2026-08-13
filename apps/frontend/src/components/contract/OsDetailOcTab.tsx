@@ -4,21 +4,20 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { Loading } from '@/components/ui/Loading';
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
-import { RmDetailOcTab } from '@/app/ponto/gerenciar-materiais/_components/RmDetailOcTab';
+import {
+  purchaseOrderGrandTotal,
+  RmDetailOcTab,
+} from '@/app/ponto/gerenciar-materiais/_components/RmDetailOcTab';
 
-export function OsDetailOcTab({
-  serviceOrderId,
-  serviceOrderText,
-  enabled = true,
-}: {
-  serviceOrderId?: string | null;
-  serviceOrderText?: string | null;
-  enabled?: boolean;
-}) {
+export function useOsPurchaseOrders(
+  serviceOrderId?: string | null,
+  serviceOrderText?: string | null,
+  enabled = true
+) {
   const trimmedText = serviceOrderText?.trim() || '';
   const canFetch = Boolean(serviceOrderId || trimmedText);
 
-  const { data, isLoading, isError } = useQuery({
+  const query = useQuery({
     queryKey: ['os-detail-purchase-orders', serviceOrderId, trimmedText],
     queryFn: async () => {
       const res = await api.get('/purchase-orders', {
@@ -32,6 +31,33 @@ export function OsDetailOcTab({
     },
     enabled: enabled && canFetch,
   });
+
+  return { ...query, canFetch, trimmedText };
+}
+
+/** Soma totais de OCs ativas (exclui canceladas/reprovadas). */
+export function sumOsPurchaseOrdersTotal(orders: PurchaseOrder[]): number {
+  return orders
+    .filter((o) => o.status !== 'CANCELLED' && o.status !== 'REJECTED')
+    .reduce((sum, o) => sum + purchaseOrderGrandTotal(o), 0);
+}
+
+export function OsDetailOcTab({
+  serviceOrderId,
+  serviceOrderText,
+  enabled = true,
+  budgetTotal,
+}: {
+  serviceOrderId?: string | null;
+  serviceOrderText?: string | null;
+  enabled?: boolean;
+  budgetTotal?: number | null;
+}) {
+  const { data, isLoading, isError, canFetch } = useOsPurchaseOrders(
+    serviceOrderId,
+    serviceOrderText,
+    enabled
+  );
 
   if (!canFetch) {
     return (
@@ -62,6 +88,7 @@ export function OsDetailOcTab({
       orders={data ?? []}
       enabled={enabled}
       emptyMessage="Nenhuma ordem de compra vinculada a esta OS."
+      budgetTotal={budgetTotal}
     />
   );
 }

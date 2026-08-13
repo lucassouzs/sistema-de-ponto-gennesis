@@ -31,6 +31,7 @@ import { syncModalOpenClass } from '@/lib/modalBodyLock';
 import { MainLayoutShellContext } from './MainLayoutShellContext';
 import { isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAccess';
 import { PageEnter } from './PageEnter';
+import { bootAuthenticatedPageReveal } from '@/lib/pageReveal';
 
 export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
 
@@ -110,6 +111,8 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
   const [isCollapsed, setIsCollapsed] = useState(() => resolveInitialSidebarCollapsed(pathname));
   const [layoutSynced, setLayoutSynced] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [pageRevealReady, setPageRevealReady] = useState(false);
+  const [pageFromReload, setPageFromReload] = useState(false);
   const { user, canAccessCollaborationTools, isLoading: permissionsLoading } = usePermissions();
   const displayName = userName || user?.name || '';
   const displayRole = (userRole || user?.role || 'EMPLOYEE') as MainLayoutProps['userRole'];
@@ -118,6 +121,24 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     realtimeReady && canAccessCollaborationTools ? user?.id : undefined;
   const nativeCall = useNativeWebRTCCall({ userId: realtimeUserId });
   useChatSounds({ userId: realtimeUserId, callPhase: nativeCall.phase });
+
+  useEffect(() => {
+    let cancelled = false;
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setPageRevealReady(true);
+    }, 1000);
+
+    void bootAuthenticatedPageReveal().then((result) => {
+      if (cancelled) return;
+      setPageFromReload(result.fromReload);
+      setPageRevealReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safety);
+    };
+  }, []);
   useModalOverlayObserver();
   usePageActivityTracker();
 
@@ -189,7 +210,21 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
                   : 'min-w-0 px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
               }
             >
-              {isFullBleedRoute ? children : <PageEnter>{children}</PageEnter>}
+              {isFullBleedRoute ? (
+                <div
+                  className={
+                    pageRevealReady
+                      ? `page-enter${pageFromReload ? ' page-enter--reload' : ''}`
+                      : 'page-enter page-enter--pending'
+                  }
+                >
+                  {children}
+                </div>
+              ) : (
+                <PageEnter ready={pageRevealReady} fromReload={pageFromReload}>
+                  {children}
+                </PageEnter>
+              )}
             </main>
           </div>
 

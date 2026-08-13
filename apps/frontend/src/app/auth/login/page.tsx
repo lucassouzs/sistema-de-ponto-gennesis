@@ -2,7 +2,7 @@
 
 // Desabilitar prerendering
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Mail, Lock, AlertCircle, Moon, Sun, ArrowRight, MessageCircle, X } from 'lucide-react';
 import { authService } from '@/lib/auth';
@@ -13,6 +13,7 @@ import { Loading } from '@/components/ui/Loading';
 import { useBrandingLogo } from '@/hooks/useBrandingLogo';
 import { persistUnbBranding } from '@/lib/unbBranding';
 import { APP_TITLE } from '@/lib/pageTitle';
+import { authTransitionCover, authTransitionLoginColdEnter, authTransitionRevealIfNeeded, peekAuthTransition } from '@/lib/authTransition';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +29,29 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [enterAnim, setEnterAnim] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setEnterAnim(true);
+    }, 900);
+
+    void (async () => {
+      const fromLogout = peekAuthTransition() === 'to-login';
+      if (fromLogout) {
+        await authTransitionRevealIfNeeded();
+      } else {
+        await authTransitionLoginColdEnter();
+      }
+      if (!cancelled) setEnterAnim(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safety);
+    };
+  }, []);
 
   const supportWhatsAppDigits = '5561981622021';
   const supportWhatsAppUrl = `https://wa.me/${supportWhatsAppDigits}?text=${encodeURIComponent(
@@ -53,6 +77,7 @@ export default function LoginPage() {
         data: loginResponse.user,
       });
       toast.success('Login realizado com sucesso!');
+      await authTransitionCover('to-app');
       router.push('/ponto/home');
     } catch (error: any) {
       // Verificar se é erro de credenciais inválidas
@@ -83,9 +108,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col relative bg-white dark:bg-gray-900">
+    <div
+      className={`min-h-screen flex flex-col relative bg-white dark:bg-gray-900 login-page-shell${
+        enterAnim ? ' login-page-shell--ready' : ''
+      }`}
+    >
       {/* Header */}
-      <header className="w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+      <header className="login-page-enter login-page-enter--header w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-24 relative">
             {/* Botão de trocar tema (esquerda) */}
@@ -107,7 +136,7 @@ export default function LoginPage() {
             </div>
 
             {/* Logo (centro) */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center">
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center login-page-enter login-page-enter--logo">
               <img 
                 src={logoSrc}
                 alt={logoAlt}
@@ -150,16 +179,18 @@ export default function LoginPage() {
       )}
 
       {/* Formulário de Login - Centralizado */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="login-page-enter login-page-enter--body flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
-            Entrar na sua conta
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-8 text-center">
-            Digite suas credenciais para acessar o sistema
-          </p>
+          <div className="login-page-enter login-page-enter--title">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
+              Entrar na sua conta
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-8 text-center">
+              Digite suas credenciais para acessar o sistema
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} method="post" action="#" className="space-y-6">
+        <form onSubmit={handleSubmit} method="post" action="#" className="login-page-enter login-page-enter--form space-y-6">
           <div>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { OsDetailOcTab } from '@/components/contract/OsDetailOcTab';
+import { OsDetailOcTab, sumOsPurchaseOrdersTotal, useOsPurchaseOrders } from '@/components/contract/OsDetailOcTab';
 import { formatOsSePasta } from '@/lib/formatOsSePasta';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
 import {
@@ -277,6 +277,17 @@ export function ContractOsDetailModal({
     [allPleitos, billings, pleito]
   );
 
+  const { data: osPurchaseOrders } = useOsPurchaseOrders(
+    pleito?.serviceOrderId,
+    pleito?.divSe,
+    isOpen && !!pleito
+  );
+
+  const ocTotalVinculado = useMemo(
+    () => sumOsPurchaseOrdersTotal(osPurchaseOrders ?? []),
+    [osPurchaseOrders]
+  );
+
   const pleitoDisplayIds = useMemo(() => buildDisplayIdMap(allPleitos), [allPleitos]);
   const billingDisplayIds = useMemo(() => buildDisplayIdMap(billings), [billings]);
 
@@ -290,6 +301,7 @@ export function ContractOsDetailModal({
   const acumuladoFaturado = linkedBillings.reduce((sum, b) => sum + Number(b.grossValue || 0), 0);
   const statusFaturamentoPct = orcamento > 0 ? (acumuladoFaturado / orcamento) * 100 : null;
   const pendenteFaturamento = Math.max(0, orcamento - acumuladoFaturado);
+  const ocOrcamentoPct = orcamento > 0 ? (ocTotalVinculado / orcamento) * 100 : null;
 
   const reportsValue = formatReportsBilling
     ? formatReportsBilling(pleito?.reportsBilling)
@@ -316,6 +328,10 @@ export function ContractOsDetailModal({
     push('Status orçamento', pleito.budgetStatus);
     push('Status execução', pleito.executionStatus);
     push('Orçamento', pleito.budget ? formatOsCurrency(orcamento) : null);
+    push(
+      '% OCs / Orçamento',
+      ocOrcamentoPct != null ? `${ocOrcamentoPct.toFixed(1)}%` : null
+    );
     push(
       'Orçamento R01',
       pleito.budgetAmount1 != null ? formatOsCurrency(Number(pleito.budgetAmount1)) : null
@@ -479,6 +495,7 @@ export function ContractOsDetailModal({
                   serviceOrderId={pleito.serviceOrderId}
                   serviceOrderText={pleito.divSe}
                   enabled={activeTab === 'ocs'}
+                  budgetTotal={orcamento > 0 ? orcamento : null}
                 />
               ) : null}
 

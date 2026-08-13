@@ -72,7 +72,10 @@ function orderFreightValue(o: Pick<PurchaseOrder, 'freightAmount' | 'amountToPay
   return 0;
 }
 
-function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amountToPay'>): number {
+/** Total da OC (itens + frete, ou amountToPay quando ainda sem linhas). */
+export function purchaseOrderGrandTotal(
+  o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amountToPay'>
+): number {
   const hasLineItems = (o.items?.length ?? 0) > 0;
   if (!hasLineItems) {
     const paid = Number(o.amountToPay);
@@ -85,10 +88,13 @@ function orderGrandTotal(o: Pick<PurchaseOrder, 'items' | 'freightAmount' | 'amo
 
 function OcCard({
   order,
-  paymentLabelMap
+  paymentLabelMap,
+  budgetTotal,
 }: {
   order: PurchaseOrder;
   paymentLabelMap: Record<string, string>;
+  /** Orçamento da OS — quando informado, exibe % desta OC. */
+  budgetTotal?: number | null;
 }) {
   const ocNo =
     order.orderNumber && String(order.orderNumber).trim()
@@ -104,7 +110,9 @@ function OcCard({
   const lines = order.items ?? [];
   const subtotal = itemsSubtotal(lines);
   const freight = orderFreightValue(order);
-  const total = orderGrandTotal(order);
+  const total = purchaseOrderGrandTotal(order);
+  const showBudgetPct = budgetTotal != null && budgetTotal > 0;
+  const budgetPct = showBudgetPct ? (total / budgetTotal) * 100 : null;
 
   return (
     <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
@@ -210,7 +218,11 @@ function OcCard({
             </table>
           </div>
 
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div
+            className={`mt-3 grid gap-2 ${
+              showBudgetPct ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'
+            }`}
+          >
             <div className="rounded-lg border border-gray-200 px-2.5 py-2.5 dark:border-gray-700">
               <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Itens</p>
               <p className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -229,6 +241,16 @@ function OcCard({
                 {formatCurrency(total)}
               </p>
             </div>
+            {showBudgetPct && budgetPct != null ? (
+              <div className="rounded-lg border border-gray-200 px-2.5 py-2.5 dark:border-gray-700">
+                <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                  % orçamento
+                </p>
+                <p className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                  {budgetPct.toFixed(1)}%
+                </p>
+              </div>
+            ) : null}
           </div>
         </>
       ) : (
@@ -246,13 +268,16 @@ type Props = {
   enabled?: boolean;
   /** Mensagem quando não há OCs (padrão: texto da RM). */
   emptyMessage?: string;
+  /** Orçamento da OS para exibir % de cada OC. */
+  budgetTotal?: number | null;
 };
 
 export function RmDetailOcTab({
   materialRequestStatus,
   orders,
   enabled = true,
-  emptyMessage
+  emptyMessage,
+  budgetTotal,
 }: Props) {
   const sorted = useMemo(() => sortMaterialRequestPurchaseOrders(orders), [orders]);
   const ids = useMemo(() => sorted.map((o) => o.id), [sorted]);
@@ -324,7 +349,12 @@ export function RmDetailOcTab({
   return (
     <div className="space-y-4">
       {detailedOrders.map((order) => (
-        <OcCard key={order.id} order={order} paymentLabelMap={paymentLabelMap} />
+        <OcCard
+          key={order.id}
+          order={order}
+          paymentLabelMap={paymentLabelMap}
+          budgetTotal={budgetTotal}
+        />
       ))}
     </div>
   );

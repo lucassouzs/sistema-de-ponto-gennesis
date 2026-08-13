@@ -975,9 +975,18 @@
  * - Fallback: conteúdo inteiro sobe/fade
  * - Com space-y-*: seções em stagger (título → cards → tabela)
  * - Grids: cards com delay em cascata
+ * - Reload (F5): animação um pouco mais marcada
  */
+.page-enter--pending {
+  opacity: 0;
+}
+
 .page-enter:not(:has(> .space-y-4, > .space-y-5, > .space-y-6, > .space-y-8)) {
   animation: page-enter-up 0.45s ease-out both;
+}
+
+.page-enter--reload:not(:has(> .space-y-4, > .space-y-5, > .space-y-6, > .space-y-8)) {
+  animation: page-enter-up 0.55s ease-out both;
 }
 
 .page-enter > .space-y-4 > *,
@@ -985,6 +994,13 @@
 .page-enter > .space-y-6 > *,
 .page-enter > .space-y-8 > * {
   animation: page-enter-up 0.5s ease-out both;
+}
+
+.page-enter--reload > .space-y-4 > *,
+.page-enter--reload > .space-y-5 > *,
+.page-enter--reload > .space-y-6 > *,
+.page-enter--reload > .space-y-8 > * {
+  animation-duration: 0.58s;
 }
 
 .page-enter > .space-y-4 > *:nth-child(1),
@@ -1071,6 +1087,7 @@
   .animate-page-enter-card,
   .animate-page-enter-panel,
   .page-enter,
+  .page-enter--pending,
   .page-enter > .space-y-4 > *,
   .page-enter > .space-y-5 > *,
   .page-enter > .space-y-6 > *,
@@ -1080,6 +1097,8 @@
   .page-enter > .space-y-6 > .grid > *,
   .page-enter > .space-y-8 > .grid > * {
     animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 
@@ -1605,5 +1624,160 @@ button[data-form-field-trigger='true']:is(:focus, :focus-visible) {
   .app-modal-overlay:not([data-modal-anim='controlled']) > div:not(.absolute):not(.fixed) {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Transição login ↔ app (logout / login) */
+@keyframes auth-veil-cover {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes auth-veil-reveal {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes auth-dim-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0.88;
+    transform: scale(0.985);
+    filter: blur(1.5px);
+  }
+}
+
+.auth-transition-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0;
+  background: #ffffff;
+}
+
+html.dark .auth-transition-veil {
+  background: #111827;
+}
+
+.auth-transition-veil--covering {
+  pointer-events: all;
+  animation: auth-veil-cover 0.42s ease-out forwards;
+}
+
+.auth-transition-veil--revealing {
+  pointer-events: none;
+  animation: auth-veil-reveal 0.48s ease-in forwards;
+}
+
+html.auth-transition-dimming body {
+  animation: auth-dim-out 0.42s ease-out both;
+}
+
+/* Entrada da página de login */
+@keyframes login-enter-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes login-enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes login-enter-logo {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.login-page-shell .login-page-enter {
+  opacity: 0;
+}
+
+.login-page-shell--ready .login-page-enter--header {
+  animation: login-enter-down 0.48s ease-out both;
+}
+
+.login-page-shell--ready .login-page-enter--logo {
+  animation: login-enter-logo 0.55s ease-out 0.06s both;
+}
+
+.login-page-shell--ready .login-page-enter--body {
+  animation: login-enter-up 0.5s ease-out 0.1s both;
+}
+
+.login-page-shell--ready .login-page-enter--title {
+  animation: login-enter-up 0.5s ease-out 0.16s both;
+}
+
+.login-page-shell--ready .login-page-enter--form {
+  animation: login-enter-up 0.55s ease-out 0.24s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-transition-veil--covering,
+  .auth-transition-veil--revealing,
+  html.auth-transition-dimming body {
+    animation: none !important;
+  }
+
+  .auth-transition-veil--covering {
+    opacity: 1;
+  }
+
+  .auth-transition-veil--revealing {
+    opacity: 0;
+  }
+
+  html.auth-transition-dimming body {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  .login-page-shell .login-page-enter,
+  .login-page-shell--ready .login-page-enter--header,
+  .login-page-shell--ready .login-page-enter--body,
+  .login-page-shell--ready .login-page-enter--title,
+  .login-page-shell--ready .login-page-enter--form {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+
+  .login-page-shell--ready .login-page-enter--logo {
+    opacity: 1 !important;
+    transform: translate(-50%, 0) !important;
+    animation: none !important;
   }
 }
