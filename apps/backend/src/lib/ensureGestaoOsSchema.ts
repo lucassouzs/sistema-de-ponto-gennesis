@@ -347,4 +347,107 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS "gestao_os_work_order_events_workOrderId_createdAt_idx" ON "gestao_os_work_order_events"("workOrderId", "createdAt");`
   );
+
+  // SLA + assinaturas + checklist na WO
+  for (const col of [
+    ['dueAt', 'TIMESTAMP(3)'],
+    ['checklistResponses', 'JSONB'],
+    ['signatureRequesterUrl', 'TEXT'],
+    ['signatureTechnicianUrl', 'TEXT']
+  ] as const) {
+    if (!(await columnExists(prisma, 'gestao_os_work_orders', col[0]))) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "gestao_os_work_orders" ADD COLUMN "${col[0]}" ${col[1]};`
+      );
+    }
+  }
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_work_orders_dueAt_idx" ON "gestao_os_work_orders"("dueAt");`
+  );
+
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "GestaoOsPlanType" AS ENUM ('PREVENTIVE', 'PMOC', 'SAFETY');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      CREATE TYPE "GestaoOsDocumentKind" AS ENUM ('MANUAL', 'WARRANTY', 'LAUDO', 'ART', 'OTHER');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "gestao_os_checklist_templates" (
+      "id" TEXT PRIMARY KEY,
+      "companyId" TEXT REFERENCES "gestao_os_companies"("id") ON DELETE SET NULL,
+      "name" TEXT NOT NULL,
+      "planType" "GestaoOsPlanType" NOT NULL DEFAULT 'PREVENTIVE',
+      "category" TEXT,
+      "items" JSONB NOT NULL,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "gestao_os_maintenance_plans" (
+      "id" TEXT PRIMARY KEY,
+      "companyId" TEXT NOT NULL REFERENCES "gestao_os_companies"("id") ON DELETE CASCADE,
+      "name" TEXT NOT NULL,
+      "planType" "GestaoOsPlanType" NOT NULL DEFAULT 'PREVENTIVE',
+      "description" TEXT,
+      "category" TEXT,
+      "buildingId" TEXT REFERENCES "gestao_os_buildings"("id") ON DELETE SET NULL,
+      "assetId" TEXT REFERENCES "gestao_os_assets"("id") ON DELETE SET NULL,
+      "checklistId" TEXT REFERENCES "gestao_os_checklist_templates"("id") ON DELETE SET NULL,
+      "intervalDays" INTEGER NOT NULL DEFAULT 30,
+      "nextDueAt" TIMESTAMP(3) NOT NULL,
+      "lastGeneratedAt" TIMESTAMP(3),
+      "assigneeId" TEXT REFERENCES "users"("id") ON DELETE SET NULL,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "gestao_os_plan_runs" (
+      "id" TEXT PRIMARY KEY,
+      "planId" TEXT NOT NULL REFERENCES "gestao_os_maintenance_plans"("id") ON DELETE CASCADE,
+      "workOrderId" TEXT REFERENCES "gestao_os_work_orders"("id") ON DELETE SET NULL,
+      "dueAt" TIMESTAMP(3) NOT NULL,
+      "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "gestao_os_documents" (
+      "id" TEXT PRIMARY KEY,
+      "companyId" TEXT NOT NULL REFERENCES "gestao_os_companies"("id") ON DELETE CASCADE,
+      "buildingId" TEXT REFERENCES "gestao_os_buildings"("id") ON DELETE SET NULL,
+      "assetId" TEXT REFERENCES "gestao_os_assets"("id") ON DELETE SET NULL,
+      "kind" "GestaoOsDocumentKind" NOT NULL DEFAULT 'OTHER',
+      "title" TEXT NOT NULL,
+      "fileUrl" TEXT NOT NULL,
+      "fileName" TEXT,
+      "mimeType" TEXT,
+      "notes" TEXT,
+      "uploadedById" TEXT REFERENCES "users"("id") ON DELETE SET NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_maintenance_plans_companyId_idx" ON "gestao_os_maintenance_plans"("companyId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_maintenance_plans_nextDueAt_idx" ON "gestao_os_maintenance_plans"("nextDueAt");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_documents_companyId_idx" ON "gestao_os_documents"("companyId");`
+  );
 }

@@ -330,6 +330,27 @@ export function usePermissions() {
     !!permissionData?.isAdmin ||
     can(pk('/ponto/controle/oc-devolver-item-rm'));
 
+  /** Controle — Gestão de OS (manutenção predial). */
+  const canGestaoOsAnalisar =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/controle/gestao-os-analisar'));
+  const canGestaoOsExecutar =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/controle/gestao-os-executar'));
+  const canGestaoOsEncerrar =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/controle/gestao-os-encerrar'));
+  const canGestaoOsCadastros =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+    can(pk('/ponto/sistema-gestao-os/locais')) ||
+    can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
+    can(pk('/ponto/sistema-gestao-os/tipos-servico'));
+
   /** Aprovação de RMs: gestor por contrato ou permissão legada Controle. */
   const canApproveMaterialRequests =
     isAdministrator ||
@@ -490,6 +511,10 @@ export function usePermissions() {
     canActOcAttachNf,
     canActOcCorrection,
     canReturnOcItemToRmPermission,
+    canGestaoOsAnalisar,
+    canGestaoOsExecutar,
+    canGestaoOsEncerrar,
+    canGestaoOsCadastros,
     canApproveMaterialRequests,
     canApproveFuel,
     canViewKanbanValues,
@@ -614,9 +639,40 @@ export function useRoutePermission(route: string) {
     '/ponto/centros-custo': isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
     '/ponto/materiais-construcao': isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
     '/ponto/andamento-da-os': canAccessOsRoutePage,
+    '/ponto/meus-chamados':
+      isAdministrator ||
+      can(pk('/ponto/meus-chamados')) ||
+      can(pk('/ponto/sistema-gestao-os')),
     '/ponto/sistema-gestao-os': isAdministrator || can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/planos':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/planos')) ||
+      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/pmoc':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/pmoc')) ||
+      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/relatorios':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/relatorios')) ||
+      can(pk('/ponto/sistema-gestao-os')),
     '/ponto/sistema-gestao-os/cadastros':
       isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/locais':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/locais')) ||
+      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/equipamentos':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
+      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/sistema-gestao-os/tipos-servico':
+      isAdministrator ||
+      can(pk('/ponto/sistema-gestao-os/tipos-servico')) ||
       can(pk('/ponto/sistema-gestao-os/cadastros')) ||
       can(pk('/ponto/sistema-gestao-os')),
     '/ponto/permissoes': true,

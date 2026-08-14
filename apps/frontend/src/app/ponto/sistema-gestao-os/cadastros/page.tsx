@@ -1,13 +1,5 @@
-import dynamic from 'next/dynamic';
-import { Loading } from '@/components/ui/Loading';
-
-const GestaoOsCadastrosPageClient = dynamic(() => import('./GestaoOsCadastrosPageClient'), {
-  ssr: false,
-  loading: () => (
-    <Loading message="Carregando Sistema de Gestão de OS..." fullScreen size="lg" />
-  )
-});
+import { redirect } from 'next/navigation';
 
 export default function GestaoOsCadastrosPage() {
-  return <GestaoOsCadastrosPageClient />;
+  redirect('/ponto/sistema-gestao-os/locais');
 }

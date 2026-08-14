@@ -24,11 +24,19 @@ export type GestaoOsUserRef = {
   email?: string;
 };
 
+export type GestaoOsChecklistResponseItem = {
+  id?: string;
+  label: string;
+  checked?: boolean;
+  required?: boolean;
+};
+
 export type GestaoOsWorkOrder = {
   id: string;
   displayNumber: number;
   /** Número da OS — preenchido na primeira análise. Null = ainda é só chamado. */
   osNumber: number | null;
+  companyId?: string | null;
   status: GestaoOsStatus;
   priority: GestaoOsPriority;
   maintenanceType: GestaoOsMaintenanceType | null;
@@ -49,6 +57,10 @@ export type GestaoOsWorkOrder = {
   completionNote: string | null;
   rating: number | null;
   ratingComment: string | null;
+  dueAt?: string | null;
+  checklistResponses?: GestaoOsChecklistResponseItem[] | null;
+  signatureRequesterUrl?: string | null;
+  signatureTechnicianUrl?: string | null;
   openedAt: string;
   approvedAt: string | null;
   startedAt: string | null;
@@ -63,6 +75,85 @@ export type GestaoOsWorkOrder = {
     createdAt: string;
     actor: GestaoOsUserRef | null;
   }>;
+};
+
+export type GestaoOsPlanType = 'PREVENTIVE' | 'PMOC' | 'SAFETY';
+
+export type GestaoOsMaintenancePlan = {
+  id: string;
+  companyId: string;
+  name: string;
+  planType: GestaoOsPlanType;
+  description: string | null;
+  category: string | null;
+  buildingId: string | null;
+  assetId: string | null;
+  checklistId: string | null;
+  intervalDays: number;
+  nextDueAt: string;
+  lastGeneratedAt?: string | null;
+  assigneeId: string | null;
+  isActive: boolean;
+  building?: { id: string; name: string } | null;
+  asset?: { id: string; name: string; category?: string | null } | null;
+  checklist?: { id: string; name: string; items?: unknown } | null;
+  assignee?: GestaoOsUserRef | null;
+};
+
+export type GestaoOsDocumentKind = 'MANUAL' | 'WARRANTY' | 'LAUDO' | 'ART' | 'OTHER';
+
+export type GestaoOsDocument = {
+  id: string;
+  companyId: string;
+  title: string;
+  fileUrl: string;
+  fileName: string | null;
+  mimeType: string | null;
+  kind: GestaoOsDocumentKind;
+  notes: string | null;
+  buildingId: string | null;
+  assetId: string | null;
+  createdAt?: string;
+  building?: { id: string; name: string } | null;
+  asset?: { id: string; name: string } | null;
+  uploadedBy?: GestaoOsUserRef | null;
+};
+
+export type GestaoOsReportsSummary = {
+  backlog: number;
+  openLike: number;
+  overdue: number;
+  mttrHours: number | null;
+  byStatus: Partial<Record<GestaoOsStatus, number>>;
+  byCategory: Array<{ category: string; count: number }>;
+  byBuilding: Array<{ buildingId: string | null; name: string; count: number }>;
+  byTechnician: Array<{ assigneeId: string | null; name: string; count: number }>;
+};
+
+export type GestaoOsPmocOverview = {
+  dueSoonCount: number;
+  plans: GestaoOsMaintenancePlan[];
+  climateAssets: Array<{
+    id: string;
+    name: string;
+    category: string | null;
+    building: { id: string; name: string };
+    placeName: string;
+  }>;
+};
+
+export const PLAN_TYPE_LABELS: Record<GestaoOsPlanType, string> = {
+  PREVENTIVE: 'Preventiva',
+  PMOC: 'PMOC',
+  SAFETY: 'Segurança'
+};
+
+export const DOCUMENT_KIND_LABELS: Record<GestaoOsDocumentKind, string> = {
+  MANUAL: 'Manual',
+  WARRANTY: 'Garantia',
+  LAUDO: 'Laudo',
+  ART: 'ART',
+  OTHER: 'Outro'
 };
 
 export type GestaoOsLocationTree = Array<{
@@ -188,13 +279,20 @@ export const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
 
 export const SERVICE_CATEGORIES = [
   'Elétrica',
+  'Energia elétrica',
   'Hidráulica',
   'Climatização',
+  'Ar-condicionado',
+  'Iluminação',
+  'Automação',
+  'Elevadores',
+  'Bombas e motores',
   'Civil / Alvenaria',
   'Marcenaria',
   'Limpeza / Conservação',
   'TI / Telefonia',
   'Segurança / Acesso',
+  'Segurança do trabalho',
   'Outros'
 ] as const;
 

@@ -19,6 +19,9 @@ import KanbanBoardsScreen from './src/screens/kanban/KanbanBoardsScreen';
 import KanbanBoardScreen from './src/screens/kanban/KanbanBoardScreen';
 import KanbanCardScreen from './src/screens/kanban/KanbanCardScreen';
 import DpRequestsScreen from './src/screens/DpRequestsScreen';
+import GestaoOsListScreen from './src/screens/GestaoOsListScreen';
+import GestaoOsDetailScreen from './src/screens/GestaoOsDetailScreen';
+import GestaoOsQrScreen from './src/screens/GestaoOsQrScreen';
 import AuthBrandSplash, { SPLASH_BG } from './src/components/AuthBrandSplash';
 
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
@@ -41,6 +44,9 @@ export type RootStackParamList = {
   KanbanBoard: { departmentKey?: string; title?: string };
   KanbanCard: { cardId: string; departmentKey?: string };
   DpRequests: undefined;
+  GestaoOs: undefined;
+  GestaoOsDetail: { id: string };
+  GestaoOsQr: { token: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -136,6 +142,9 @@ function AppNavigator() {
               <Stack.Screen name="KanbanBoard" component={KanbanBoardScreen} />
               <Stack.Screen name="KanbanCard" component={KanbanCardScreen} />
               <Stack.Screen name="DpRequests" component={DpRequestsScreen} />
+              <Stack.Screen name="GestaoOs" component={GestaoOsListScreen} />
+              <Stack.Screen name="GestaoOsDetail" component={GestaoOsDetailScreen} />
+              <Stack.Screen name="GestaoOsQr" component={GestaoOsQrScreen} />
             </>
           ) : (
             <Stack.Screen name="Login">

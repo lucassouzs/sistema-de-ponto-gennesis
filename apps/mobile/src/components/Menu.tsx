@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Calendar,
   LayoutGrid,
+  Wrench,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -80,7 +81,7 @@ function MenuItemRow({
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors, isDark, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
-  const { canSeePncp } = usePermissions();
+  const { canSeePncp, canSeeGestaoOs } = usePermissions();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const queryClient = useQueryClient();
@@ -126,6 +127,9 @@ export default function Menu({ visible, onClose }: MenuProps) {
     },
     ...(canSeePncp
       ? [{ key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') }]
+      : []),
+    ...(canSeeGestaoOs
+      ? [{ key: 'gestao-os', label: 'Central de Chamados', icon: Wrench, onPress: () => go('GestaoOs') }]
       : []),
   ];
 

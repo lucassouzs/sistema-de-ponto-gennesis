@@ -7,6 +7,12 @@ import {
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
+import {
+  assertCanTransition,
+  isGestaoOsManager,
+  type GestaoOsAccessContext,
+  workOrderVisibilityWhere
+} from '../lib/gestaoOsAccess';
 
 function newAssetQrToken(): string {
   return randomBytes(16).toString('hex');
@@ -177,16 +183,55 @@ const DEFAULT_TREE = [
   }
 ] as const;
 
+const DEFAULT_CATEGORIES = [
+  { name: 'Ar-condicionado / Climatização', code: 'HVAC' },
+  { name: 'Iluminação', code: 'ILUM' },
+  { name: 'Hidráulica', code: 'HIDRO' },
+  { name: 'Automação', code: 'AUTO' },
+  { name: 'Energia elétrica', code: 'ELET' },
+  { name: 'Elevadores', code: 'ELEV' },
+  { name: 'Bombas e motores', code: 'BOMB' },
+  { name: 'Civil / Estruturas', code: 'CIVIL' },
+  { name: 'Segurança do trabalho', code: 'SST' },
+  { name: 'TI / Dados', code: 'TI' }
+] as const;
+
 export class GestaoOsService {
-  async ensureDefaultLocations() {
-    const count = await prisma.gestaoOsBuilding.count();
-    if (count > 0) return;
+  async ensureDefaultCategories(companyId?: string | null) {
+    for (const cat of DEFAULT_CATEGORIES) {
+      const existing = await prisma.gestaoOsServiceCategory.findFirst({
+        where: {
+          name: cat.name,
+          ...(companyId ? { companyId } : { companyId: null })
+        }
+      });
+      if (existing) continue;
+      await prisma.gestaoOsServiceCategory.create({
+        data: {
+          name: cat.name,
+          code: cat.code,
+          companyId: companyId || null,
+          description: 'Categoria padrão do módulo de manutenção predial'
+        }
+      });
+    }
+  }
+
+  async ensureDefaultLocations(companyId?: string | null) {
+    const count = await prisma.gestaoOsBuilding.count({
+      where: companyId ? { companyId } : undefined
+    });
+    if (count > 0) {
+      await this.ensureDefaultCategories(companyId);
+      return;
+    }
 
     for (const buildingDef of DEFAULT_TREE) {
       await prisma.gestaoOsBuilding.create({
         data: {
           name: buildingDef.name,
           code: buildingDef.code,
+          companyId: companyId || null,
           sectors: {
             create: buildingDef.sectors.map((sector) => ({
               name: sector.name,
@@ -207,12 +252,16 @@ export class GestaoOsService {
         }
       });
     }
+    await this.ensureDefaultCategories(companyId);
   }
 
-  async getLocationTree() {
-    await this.ensureDefaultLocations();
+  async getLocationTree(companyId?: string | null) {
+    await this.ensureDefaultLocations(companyId);
     return prisma.gestaoOsBuilding.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        ...(companyId ? { companyId } : {})
+      },
       orderBy: { name: 'asc' },
       include: {
         sectors: {
@@ -235,20 +284,26 @@ export class GestaoOsService {
     });
   }
 
-  async list(params: {
-    search?: string;
-    status?: string;
-    priority?: string;
-    requesterId?: string;
-    assigneeId?: string;
-    limit?: number;
-  }) {
-    const where: Prisma.GestaoOsWorkOrderWhereInput = {};
+  async list(
+    params: {
+      search?: string;
+      status?: string;
+      priority?: string;
+      requesterId?: string;
+      assigneeId?: string;
+      buildingId?: string;
+      limit?: number;
+    },
+    access: GestaoOsAccessContext
+  ) {
+    const visibility = workOrderVisibilityWhere(access) as Prisma.GestaoOsWorkOrderWhereInput;
+    const where: Prisma.GestaoOsWorkOrderWhereInput = { ...visibility };
 
     if (params.status) where.status = parseStatus(params.status);
     if (params.priority) where.priority = parsePriority(params.priority);
     if (params.requesterId) where.requesterId = params.requesterId;
     if (params.assigneeId) where.assigneeId = params.assigneeId;
+    if (params.buildingId) where.buildingId = params.buildingId;
 
     const search = params.search?.trim();
     if (search) {
@@ -279,7 +334,7 @@ export class GestaoOsService {
     return attachOsNumbers(rows);
   }
 
-  async getById(id: string) {
+  async getById(id: string, _access?: GestaoOsAccessContext) {
     const row = await prisma.gestaoOsWorkOrder.findUnique({
       where: { id },
       include: workOrderInclude
@@ -289,7 +344,21 @@ export class GestaoOsService {
     return enriched;
   }
 
-  async listTechnicians() {
+  async listTechnicians(companyId?: string | null) {
+    if (companyId) {
+      const members = await prisma.gestaoOsMembership.findMany({
+        where: {
+          companyId,
+          isActive: true,
+          profile: { in: ['TECHNICIAN', 'MANAGER', 'ADMIN'] }
+        },
+        include: { user: { select: { id: true, name: true, email: true, role: true, isActive: true } } },
+        take: 300
+      });
+      return members
+        .filter((m) => m.user.isActive)
+        .map((m) => ({ id: m.user.id, name: m.user.name, email: m.user.email, role: m.user.role }));
+    }
     return prisma.user.findMany({
       where: { isActive: true },
       select: { id: true, name: true, email: true, role: true },
@@ -298,22 +367,32 @@ export class GestaoOsService {
     });
   }
 
-  async create(input: {
-    requesterId: string;
-    category: string;
-    description: string;
-    priority?: unknown;
-    buildingId?: string | null;
-    sectorId?: string | null;
-    placeId?: string | null;
-    assetId?: string | null;
-    attachments?: unknown;
-  }) {
+  async create(
+    input: {
+      requesterId: string;
+      category: string;
+      description: string;
+      priority?: unknown;
+      buildingId?: string | null;
+      sectorId?: string | null;
+      placeId?: string | null;
+      assetId?: string | null;
+      attachments?: unknown;
+      companyId?: string | null;
+      dueAt?: string | null;
+      maintenanceType?: unknown;
+    },
+    access: GestaoOsAccessContext
+  ) {
     const category = String(input.category ?? '').trim();
     const description = String(input.description ?? '').trim();
     if (!category) throw createError('Informe a categoria/tipo de serviço', 400);
     if (!description) throw createError('Informe a descrição do problema', 400);
     if (!input.buildingId) throw createError('Selecione o prédio', 400);
+    if (!input.sectorId) throw createError('Selecione o andar', 400);
+    if (!input.placeId) throw createError('Selecione o local', 400);
+
+    const companyId = input.companyId || access.companyId || null;
 
     const locationLabel = await buildLocationLabel({
       buildingId: input.buildingId,
@@ -323,6 +402,7 @@ export class GestaoOsService {
     });
 
     const attachments = parseAttachments(input.attachments) ?? [];
+    const dueAt = input.dueAt ? new Date(input.dueAt) : null;
 
     return prisma.$transaction(async (tx) => {
       // Numeração do CHAMADO — independente de gestao_os_settings.nextOsNumber (só para OS).
@@ -332,8 +412,10 @@ export class GestaoOsService {
       const created = await tx.gestaoOsWorkOrder.create({
         data: {
           displayNumber,
+          companyId: companyId || null,
           status: GestaoOsStatus.OPEN,
           priority: parsePriority(input.priority),
+          maintenanceType: parseMaintenanceType(input.maintenanceType),
           category,
           description,
           buildingId: input.buildingId || null,
@@ -342,6 +424,7 @@ export class GestaoOsService {
           assetId: input.assetId || null,
           locationLabel,
           requesterId: input.requesterId,
+          dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
           attachments: attachments as Prisma.InputJsonValue,
           events: {
             create: {
@@ -371,11 +454,24 @@ export class GestaoOsService {
       description?: string;
       attachments?: unknown;
       completionNote?: string | null;
-    }
+      dueAt?: string | null;
+      checklistResponses?: unknown;
+      signatureRequesterUrl?: string | null;
+      signatureTechnicianUrl?: string | null;
+    },
+    access: GestaoOsAccessContext
   ) {
-    const current = await this.getById(id);
+    const current = await this.getById(id, access);
     if (current.status === 'CLOSED' || current.status === 'CANCELLED') {
       throw createError('OS encerrada ou cancelada não pode ser editada', 400);
+    }
+    if (
+      !isGestaoOsManager(access) &&
+      !access.canExecutar &&
+      current.assigneeId !== actorId &&
+      current.requesterId !== actorId
+    ) {
+      throw createError('Sem permissão para editar esta OS', 403);
     }
 
     const data: Prisma.GestaoOsWorkOrderUpdateInput = {};
@@ -407,6 +503,23 @@ export class GestaoOsService {
     if (input.completionNote !== undefined) {
       data.completionNote = input.completionNote ? String(input.completionNote).trim() : null;
     }
+    if (input.dueAt !== undefined) {
+      const d = input.dueAt ? new Date(input.dueAt) : null;
+      data.dueAt = d && !Number.isNaN(d.getTime()) ? d : null;
+    }
+    if (input.checklistResponses !== undefined) {
+      data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
+    }
+    if (input.signatureRequesterUrl !== undefined) {
+      data.signatureRequesterUrl = input.signatureRequesterUrl
+        ? String(input.signatureRequesterUrl).trim()
+        : null;
+    }
+    if (input.signatureTechnicianUrl !== undefined) {
+      data.signatureTechnicianUrl = input.signatureTechnicianUrl
+        ? String(input.signatureTechnicianUrl).trim()
+        : null;
+    }
 
     const updated = await prisma.gestaoOsWorkOrder.update({
       where: { id },
@@ -433,9 +546,14 @@ export class GestaoOsService {
       rating?: number | null;
       ratingComment?: string | null;
       attachments?: unknown;
-    }
+      checklistResponses?: unknown;
+      signatureRequesterUrl?: string | null;
+      signatureTechnicianUrl?: string | null;
+      dueAt?: string | null;
+    },
+    access: GestaoOsAccessContext
   ) {
-    const current = await this.getById(id);
+    const current = await this.getById(id, access);
     const nextStatus = parseStatus(input.status);
     const allowed = STATUS_TRANSITIONS[current.status] ?? [];
     if (!allowed.includes(nextStatus)) {
@@ -444,6 +562,12 @@ export class GestaoOsService {
         400
       );
     }
+
+    assertCanTransition(access, current.status, nextStatus, {
+      requesterId: current.requesterId,
+      assigneeId: current.assigneeId,
+      companyId: current.companyId
+    });
 
     if (nextStatus === 'CANCELLED') {
       const reason = String(input.cancelReason ?? '').trim();
@@ -514,6 +638,23 @@ export class GestaoOsService {
         : [];
       data.attachments = [...existing, ...incoming] as Prisma.InputJsonValue;
     }
+    if (input.checklistResponses !== undefined) {
+      data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
+    }
+    if (input.signatureRequesterUrl !== undefined) {
+      data.signatureRequesterUrl = input.signatureRequesterUrl
+        ? String(input.signatureRequesterUrl).trim()
+        : null;
+    }
+    if (input.signatureTechnicianUrl !== undefined) {
+      data.signatureTechnicianUrl = input.signatureTechnicianUrl
+        ? String(input.signatureTechnicianUrl).trim()
+        : null;
+    }
+    if (input.dueAt !== undefined) {
+      const d = input.dueAt ? new Date(input.dueAt) : null;
+      data.dueAt = d && !Number.isNaN(d.getTime()) ? d : null;
+    }
 
     if (nextStatus === 'APPROVED') data.approvedAt = now;
     if (nextStatus === 'IN_PROGRESS' && !current.startedAt) data.startedAt = now;
@@ -583,9 +724,11 @@ export class GestaoOsService {
     return { ...updated, osNumber: osRows[0]?.osNumber ?? null };
   }
 
-  async summary() {
+  async summary(access: GestaoOsAccessContext) {
+    const visibility = workOrderVisibilityWhere(access) as Prisma.GestaoOsWorkOrderWhereInput;
     const groups = await prisma.gestaoOsWorkOrder.groupBy({
       by: ['status'],
+      where: visibility,
       _count: { _all: true }
     });
     const byStatus = Object.fromEntries(
@@ -597,7 +740,19 @@ export class GestaoOsService {
       (byStatus.APPROVED ?? 0) +
       (byStatus.IN_PROGRESS ?? 0) +
       (byStatus.WAITING_PARTS ?? 0);
-    return { byStatus, openLike, total: groups.reduce((s, g) => s + g._count._all, 0) };
+    const overdue = await prisma.gestaoOsWorkOrder.count({
+      where: {
+        ...visibility,
+        dueAt: { lt: new Date() },
+        status: { notIn: ['CLOSED', 'CANCELLED', 'COMPLETED'] }
+      }
+    });
+    return {
+      byStatus,
+      openLike,
+      overdue,
+      total: groups.reduce((s, g) => s + g._count._all, 0)
+    };
   }
 }
 

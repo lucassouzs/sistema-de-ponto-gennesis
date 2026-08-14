@@ -368,7 +368,8 @@ export class UserActivityController {
 
       const enrichedRefs = await enrichTimelineRefs(audits);
 
-      const timeline = [
+      const TIMELINE_MAX = 2000;
+      const timelineAll = [
         ...logins.map((login) => {
           const isLogout = String(login.type || 'login').toLowerCase() === 'logout';
           return {
@@ -407,13 +408,13 @@ export class UserActivityController {
             subtitle: ref || entityLabel(audit.entity),
           };
         }),
-      ]
-        .sort((a, b) => b.at.getTime() - a.at.getTime())
-        .slice(0, 40)
-        .map((item) => ({
-          ...item,
-          at: item.at.toISOString(),
-        }));
+      ].sort((a, b) => b.at.getTime() - a.at.getTime());
+
+      const timelineTotal = timelineAll.length;
+      const timeline = timelineAll.slice(0, TIMELINE_MAX).map((item) => ({
+        ...item,
+        at: item.at.toISOString(),
+      }));
 
       res.json({
         success: true,
@@ -423,6 +424,7 @@ export class UserActivityController {
           byClient,
           byHour,
           timeline,
+          timelineTotal,
           totals: {
             logins: logins.filter((e) => String(e.type || 'login').toLowerCase() === 'login').length,
             visits: visits.length,

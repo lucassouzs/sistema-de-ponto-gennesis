@@ -23,6 +23,7 @@ const LICITACOES_KEY = pathToModuleKey('/ponto/licitacoes');
 const COMBUSTIVEL_KEY = pathToModuleKey('/ponto/solicitar-combustivel');
 const RESERVAS_KEY = pathToModuleKey('/ponto/reserva-veiculos');
 const SOLICITACOES_DP_KEY = pathToModuleKey('/ponto/solicitacoes-dp');
+const GESTAO_OS_KEY = pathToModuleKey('/ponto/sistema-gestao-os');
 
 function moduleReady(isFetched: boolean, isPending: boolean) {
   return isFetched && !isPending;
@@ -84,6 +85,8 @@ export function usePermissions() {
   const canSeeDpRequests =
     isElevated || isDepartmentPessoal || hasModule(SOLICITACOES_DP_KEY);
 
+  const canSeeGestaoOs = isElevated || hasModule(GESTAO_OS_KEY);
+
   return {
     isLoading: isAuthenticated && !!user?.id && !isElevated && (isPending || !isFetched),
     isAdministrator: isElevated,
@@ -92,5 +95,6 @@ export function usePermissions() {
     canSeeReservas,
     canSeePncp,
     canSeeDpRequests,
+    canSeeGestaoOs,
   };
 }

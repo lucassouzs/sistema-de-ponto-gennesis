@@ -127,6 +127,8 @@ model User {
   gestaoOsWorkOrdersAssigned              GestaoOsWorkOrder[]  @relation("GestaoOsAssignee")
   gestaoOsWorkOrderEvents                 GestaoOsWorkOrderEvent[] @relation("GestaoOsEventActor")
   gestaoOsMemberships                     GestaoOsMembership[] @relation("GestaoOsMembershipUser")
+  gestaoOsPlansAssigned                   GestaoOsMaintenancePlan[] @relation("GestaoOsPlanAssignee")
+  gestaoOsDocumentsUploaded               GestaoOsDocument[] @relation("GestaoOsDocumentUploader")
 
   @@map("users")
 }
@@ -3911,6 +3913,9 @@ model GestaoOsCompany {
   categories GestaoOsServiceCategory[]
   members    GestaoOsMembership[]
   workOrders GestaoOsWorkOrder[]
+  plans      GestaoOsMaintenancePlan[]
+  checklists GestaoOsChecklistTemplate[]
+  documents  GestaoOsDocument[]
 
   @@index([name])
   @@index([document])
@@ -4013,6 +4018,8 @@ model GestaoOsBuilding {
   branch     GestaoOsBranch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   sectors    GestaoOsSector[]
   workOrders GestaoOsWorkOrder[]
+  plans      GestaoOsMaintenancePlan[]
+  documents  GestaoOsDocument[]
 
   @@index([companyId])
   @@index([branchId])
@@ -4073,10 +4080,61 @@ model GestaoOsAsset {
 
   place      GestaoOsPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
   workOrders GestaoOsWorkOrder[]
+  plans      GestaoOsMaintenancePlan[]
+  documents  GestaoOsDocument[]
 
   @@index([placeId])
   @@index([name])
   @@map("gestao_os_assets")
+}
+
+/// Grupo de equipamento (catálogo Sispred: CIVIL, ELÉTRICA, etc.).
+model GestaoOsEquipmentGroup {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subgroups GestaoOsEquipmentSubgroup[]
+
+  @@index([name])
+  @@map("gestao_os_equipment_groups")
+}
+
+/// Subgrupo de equipamento, vinculado a um grupo.
+model GestaoOsEquipmentSubgroup {
+  id        String   @id @default(cuid())
+  groupId   String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  group      GestaoOsEquipmentGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  equipments GestaoOsEquipment[]
+
+  @@index([groupId])
+  @@index([name])
+  @@map("gestao_os_equipment_subgroups")
+}
+
+/// Equipamento do catálogo (não é o ativo físico do local).
+model GestaoOsEquipment {
+  id           String   @id @default(cuid())
+  subgroupId   String
+  name         String
+  manufacturer String?
+  model        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  subgroup GestaoOsEquipmentSubgroup @relation(fields: [subgroupId], references: [id], onDelete: Cascade)
+
+  @@index([subgroupId])
+  @@index([name])
+  @@map("gestao_os_equipments")
 }
 
 /// Ordem de serviço / chamado de manutenção predial.
@@ -4127,6 +4185,13 @@ model GestaoOsWorkOrder {
   rating         Int?
   ratingComment  String? @db.Text
 
+  /// Prazo / SLA da OS.
+  dueAt DateTime?
+  /// Respostas de checklist preenchidas na execução [{ id, label, checked, note? }].
+  checklistResponses Json?
+  signatureRequesterUrl  String?
+  signatureTechnicianUrl String?
+
   openedAt     DateTime  @default(now())
   approvedAt   DateTime?
   startedAt    DateTime?
@@ -4137,7 +4202,8 @@ model GestaoOsWorkOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  events GestaoOsWorkOrderEvent[]
+  events   GestaoOsWorkOrderEvent[]
+  planRuns GestaoOsPlanRun[]
 
   @@index([status])
   @@index([priority])
@@ -4147,6 +4213,7 @@ model GestaoOsWorkOrder {
   @@index([buildingId])
   @@index([providerId])
   @@index([openedAt])
+  @@index([dueAt])
   @@map("gestao_os_work_orders")
 }
 
@@ -4164,4 +4231,116 @@ model GestaoOsWorkOrderEvent {
 
   @@index([workOrderId, createdAt])
   @@map("gestao_os_work_order_events")
+}
+
+enum GestaoOsPlanType {
+  PREVENTIVE
+  PMOC
+  SAFETY
+}
+
+/// Template de checklist reutilizável (preventiva / PMOC / SST).
+model GestaoOsChecklistTemplate {
+  id          String          @id @default(cuid())
+  companyId   String?
+  name        String
+  planType    GestaoOsPlanType @default(PREVENTIVE)
+  category    String?
+  /// Itens: [{ id, label, required? }]
+  items       Json
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  company GestaoOsCompany?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  plans   GestaoOsMaintenancePlan[]
+
+  @@index([companyId])
+  @@index([planType])
+  @@map("gestao_os_checklist_templates")
+}
+
+/// Plano de manutenção preventiva / PMOC / segurança.
+model GestaoOsMaintenancePlan {
+  id              String          @id @default(cuid())
+  companyId       String
+  name            String
+  planType        GestaoOsPlanType @default(PREVENTIVE)
+  description     String?         @db.Text
+  category        String?
+  buildingId      String?
+  assetId         String?
+  checklistId     String?
+  /// Intervalo em dias entre gerações (ex.: 30, 90, 180).
+  intervalDays    Int             @default(30)
+  nextDueAt       DateTime
+  lastGeneratedAt DateTime?
+  assigneeId      String?
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  company   GestaoOsCompany            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  building  GestaoOsBuilding?          @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  asset     GestaoOsAsset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  checklist GestaoOsChecklistTemplate? @relation(fields: [checklistId], references: [id], onDelete: SetNull)
+  assignee  User?                      @relation("GestaoOsPlanAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  runs      GestaoOsPlanRun[]
+
+  @@index([companyId])
+  @@index([planType])
+  @@index([nextDueAt])
+  @@index([isActive])
+  @@map("gestao_os_maintenance_plans")
+}
+
+model GestaoOsPlanRun {
+  id          String   @id @default(cuid())
+  planId      String
+  workOrderId String?
+  dueAt       DateTime
+  generatedAt DateTime @default(now())
+
+  plan      GestaoOsMaintenancePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  workOrder GestaoOsWorkOrder?      @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+
+  @@index([planId])
+  @@index([workOrderId])
+  @@map("gestao_os_plan_runs")
+}
+
+enum GestaoOsDocumentKind {
+  MANUAL
+  WARRANTY
+  LAUDO
+  ART
+  OTHER
+}
+
+/// Repositório de documentos por empresa / prédio / ativo.
+model GestaoOsDocument {
+  id          String              @id @default(cuid())
+  companyId   String
+  buildingId  String?
+  assetId     String?
+  kind        GestaoOsDocumentKind @default(OTHER)
+  title       String
+  fileUrl     String
+  fileName    String?
+  mimeType    String?
+  notes       String?             @db.Text
+  uploadedById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  company    GestaoOsCompany  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  building   GestaoOsBuilding? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
+  asset      GestaoOsAsset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  uploadedBy User?             @relation("GestaoOsDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([buildingId])
+  @@index([assetId])
+  @@index([kind])
+  @@map("gestao_os_documents")
 }

@@ -657,8 +657,22 @@
   }
 }
 
+@keyframes sidebar-nav-section-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .sidebar-nav-list--enter .sidebar-nav-item-wrap {
   animation: sidebar-nav-item-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--nav-i, 0) * 40ms);
+}
+
+.sidebar-nav-list--enter .sidebar-nav-section-title {
+  animation: sidebar-nav-section-in 0.28s ease-out backwards;
   animation-delay: calc(var(--nav-i, 0) * 40ms);
 }
 
@@ -697,7 +711,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar-nav-list--enter .sidebar-nav-item-wrap {
+  .sidebar-nav-list--enter .sidebar-nav-item-wrap,
+  .sidebar-nav-list--enter .sidebar-nav-section-title {
     animation: none;
   }
 

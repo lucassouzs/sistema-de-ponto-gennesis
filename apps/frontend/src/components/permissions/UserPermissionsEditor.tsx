@@ -306,6 +306,9 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/contas-bancarias',
       '/ponto/codigos-tributarios',
       '/ponto/sistema-gestao-os/cadastros',
+      '/ponto/sistema-gestao-os/locais',
+      '/ponto/sistema-gestao-os/equipamentos',
+      '/ponto/sistema-gestao-os/tipos-servico',
     ].some((p) => h === p)
   ) {
     return 'Cadastros';

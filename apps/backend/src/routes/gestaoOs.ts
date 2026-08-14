@@ -5,6 +5,14 @@ import { createError } from '../middleware/errorHandler';
 import { savePersistentUpload } from '../lib/persistentUpload';
 import { gestaoOsController } from '../controllers/GestaoOsController';
 import { gestaoOsCadastrosController } from '../controllers/GestaoOsCadastrosController';
+import { gestaoOsPlansService } from '../services/GestaoOsPlansService';
+import { gestaoOsReportsService } from '../services/GestaoOsReportsService';
+import { gestaoOsDocumentsService } from '../services/GestaoOsDocumentsService';
+import {
+  assertCanViewAllWorkOrders,
+  pickCompanyIdFromRequest,
+  resolveGestaoOsAccess
+} from '../lib/gestaoOsAccess';
 
 const router = Router();
 const upload = multer({
@@ -14,9 +22,144 @@ const upload = multer({
 
 router.use(authenticate);
 
+async function withAccess(req: AuthRequest) {
+  if (!req.user) throw createError('Usuário não autenticado', 401);
+  return resolveGestaoOsAccess({
+    userId: req.user.id,
+    isAdmin: !!req.user.isAdmin,
+    companyId: pickCompanyIdFromRequest(req)
+  });
+}
+
+/** Visão operacional (Central / planos / relatórios) — não basta Meus Chamados. */
+async function withOpsAccess(req: AuthRequest) {
+  const access = await withAccess(req);
+  assertCanViewAllWorkOrders(access);
+  return access;
+}
+
+router.get('/me', (req, res, next) => gestaoOsController.myAccess(req, res, next));
 router.get('/summary', (req, res, next) => gestaoOsController.summary(req, res, next));
 router.get('/locations', (req, res, next) => gestaoOsController.locationTree(req, res, next));
 router.get('/technicians', (req, res, next) => gestaoOsController.technicians(req, res, next));
+
+router.get('/reports/summary', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsReportsService.summary(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/plans', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const planType = typeof req.query.planType === 'string' ? req.query.planType : undefined;
+    const data = await gestaoOsPlansService.listPlans(access, { planType });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post('/plans', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.createPlan(access, req.body ?? {});
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.patch('/plans/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.updatePlan(access, req.params.id, req.body ?? {});
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.delete('/plans/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.deletePlan(access, req.params.id);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post('/plans/generate-due', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.generateDuePlans(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.get('/pmoc', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.pmocOverview(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.get('/checklists', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const planType = typeof req.query.planType === 'string' ? req.query.planType : undefined;
+    const data = await gestaoOsPlansService.listTemplates(access, planType);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post('/checklists', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsPlansService.createTemplate(access, req.body ?? {});
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/documents', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsDocumentsService.list(access, {
+      buildingId: typeof req.query.buildingId === 'string' ? req.query.buildingId : undefined,
+      assetId: typeof req.query.assetId === 'string' ? req.query.assetId : undefined,
+      kind: typeof req.query.kind === 'string' ? req.query.kind : undefined
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.post('/documents', async (req: AuthRequest, res, next) => {
+  try {
+    if (!req.user) throw createError('Usuário não autenticado', 401);
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsDocumentsService.create(access, req.body ?? {}, req.user.id);
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+router.delete('/documents/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const data = await gestaoOsDocumentsService.remove(access, req.params.id);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // ── Cadastros (antes de /:id) ───────────────────────────────────────
 router.get('/cadastros/companies', (req, res, next) =>
@@ -44,11 +187,17 @@ router.post('/cadastros/buildings', (req, res, next) =>
 router.patch('/cadastros/buildings/:id', (req, res, next) =>
   gestaoOsCadastrosController.updateBuilding(req, res, next)
 );
+router.delete('/cadastros/buildings/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteBuilding(req, res, next)
+);
 router.post('/cadastros/sectors', (req, res, next) =>
   gestaoOsCadastrosController.createSector(req, res, next)
 );
 router.patch('/cadastros/sectors/:id', (req, res, next) =>
   gestaoOsCadastrosController.updateSector(req, res, next)
+);
+router.delete('/cadastros/sectors/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteSector(req, res, next)
 );
 router.post('/cadastros/places', (req, res, next) =>
   gestaoOsCadastrosController.createPlace(req, res, next)
@@ -56,17 +205,54 @@ router.post('/cadastros/places', (req, res, next) =>
 router.patch('/cadastros/places/:id', (req, res, next) =>
   gestaoOsCadastrosController.updatePlace(req, res, next)
 );
+router.delete('/cadastros/places/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deletePlace(req, res, next)
+);
 router.post('/cadastros/assets', (req, res, next) =>
   gestaoOsCadastrosController.createAsset(req, res, next)
 );
 router.patch('/cadastros/assets/:id', (req, res, next) =>
   gestaoOsCadastrosController.updateAsset(req, res, next)
 );
+router.delete('/cadastros/assets/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteAsset(req, res, next)
+);
 router.get('/cadastros/assets/:id/qr', (req, res, next) =>
   gestaoOsCadastrosController.assetQr(req, res, next)
 );
 router.get('/cadastros/qr/resolve', (req, res, next) =>
   gestaoOsCadastrosController.resolveQr(req, res, next)
+);
+
+router.get('/cadastros/equipments', (req, res, next) =>
+  gestaoOsCadastrosController.equipmentCatalog(req, res, next)
+);
+router.post('/cadastros/equipment-groups', (req, res, next) =>
+  gestaoOsCadastrosController.createEquipmentGroup(req, res, next)
+);
+router.patch('/cadastros/equipment-groups/:id', (req, res, next) =>
+  gestaoOsCadastrosController.updateEquipmentGroup(req, res, next)
+);
+router.delete('/cadastros/equipment-groups/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteEquipmentGroup(req, res, next)
+);
+router.post('/cadastros/equipment-subgroups', (req, res, next) =>
+  gestaoOsCadastrosController.createEquipmentSubgroup(req, res, next)
+);
+router.patch('/cadastros/equipment-subgroups/:id', (req, res, next) =>
+  gestaoOsCadastrosController.updateEquipmentSubgroup(req, res, next)
+);
+router.delete('/cadastros/equipment-subgroups/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteEquipmentSubgroup(req, res, next)
+);
+router.post('/cadastros/equipments', (req, res, next) =>
+  gestaoOsCadastrosController.createEquipment(req, res, next)
+);
+router.patch('/cadastros/equipments/:id', (req, res, next) =>
+  gestaoOsCadastrosController.updateEquipment(req, res, next)
+);
+router.delete('/cadastros/equipments/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteEquipment(req, res, next)
 );
 
 router.get('/cadastros/providers', (req, res, next) =>
@@ -87,6 +273,9 @@ router.post('/cadastros/categories', (req, res, next) =>
 );
 router.patch('/cadastros/categories/:id', (req, res, next) =>
   gestaoOsCadastrosController.updateCategory(req, res, next)
+);
+router.delete('/cadastros/categories/:id', (req, res, next) =>
+  gestaoOsCadastrosController.deleteCategory(req, res, next)
 );
 
 router.get('/cadastros/memberships', (req, res, next) =>

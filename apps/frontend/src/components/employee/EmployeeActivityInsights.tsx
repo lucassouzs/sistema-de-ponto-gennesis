@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -56,6 +56,7 @@ type InsightsResponse = {
     title: string;
     subtitle?: string | null;
   }>;
+  timelineTotal?: number;
   totals: { logins: number; visits: number; actions?: number };
 };
 
@@ -96,6 +97,16 @@ function formatDayHeading(dayKey: string): string {
 function capitalizeFirst(value: string): string {
   if (!value) return value;
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** `OC-2026-0007` → `OC 7` · `REQ-2026-010` → `RM 10` */
+function formatTimelineRef(value: string): string {
+  const trimmed = value.trim();
+  const oc = trimmed.match(/^OC-\d{4}-(\d+)$/i);
+  if (oc) return `OC ${parseInt(oc[1], 10)}`;
+  const rm = trimmed.match(/^REQ-\d{4}-(\d+)$/i);
+  if (rm) return `RM ${parseInt(rm[1], 10)}`;
+  return trimmed;
 }
 
 function SectionHeader({
@@ -166,6 +177,7 @@ function timelineVisual(type: TimelineItemType): {
   }
 }
 
+const TIMELINE_PAGE_SIZE = 40;
 const barColor = '#dc2626';
 
 const PIE_COLORS_LIGHT = ['#e11d48', '#0d9488', '#2563eb'];
@@ -199,6 +211,7 @@ export function EmployeeActivityInsights({
   belowCharts?: React.ReactNode;
 }) {
   const { isDark } = useTheme();
+  const [timelineVisible, setTimelineVisible] = useState(TIMELINE_PAGE_SIZE);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['user-activity-insights', userId, from, to],
@@ -214,6 +227,10 @@ export function EmployeeActivityInsights({
     enabled: Boolean(userId),
     staleTime: 15_000,
   });
+
+  useEffect(() => {
+    setTimelineVisible(TIMELINE_PAGE_SIZE);
+  }, [userId, from, to]);
 
   const chartTick = isDark ? '#9ca3af' : '#6b7280';
   const chartMuted = isDark ? '#6b7280' : '#9ca3af';
@@ -303,6 +320,13 @@ export function EmployeeActivityInsights({
     [data?.byHour]
   );
 
+  const visibleTimeline = useMemo(
+    () => (data?.timeline || []).slice(0, timelineVisible),
+    [data?.timeline, timelineVisible]
+  );
+
+  const timelineRemaining = Math.max(0, (data?.timeline.length ?? 0) - visibleTimeline.length);
+
   const timelineByDay = useMemo(() => {
     const groups: Array<{
       dayKey: string;
@@ -311,7 +335,7 @@ export function EmployeeActivityInsights({
     }> = [];
     const indexByDay = new Map<string, number>();
 
-    for (const item of data?.timeline || []) {
+    for (const item of visibleTimeline) {
       const dayKey = toLocalDayKey(item.at);
       const existing = indexByDay.get(dayKey);
       if (existing == null) {
@@ -327,7 +351,7 @@ export function EmployeeActivityInsights({
     }
 
     return groups;
-  }, [data?.timeline]);
+  }, [visibleTimeline]);
 
   return (
     <div className="space-y-6">
@@ -637,7 +661,11 @@ export function EmployeeActivityInsights({
               <SectionHeader
                 icon={Activity}
                 title="Linha do tempo"
-                subtitle="Logins, páginas e ações em ordem"
+                subtitle={
+                  data.timeline.length === 0
+                    ? 'Logins, páginas e ações em ordem'
+                    : `Mostrando ${visibleTimeline.length} de ${data.timelineTotal ?? data.timeline.length}`
+                }
               />
             </CardHeader>
             <CardContent className={cadastroListClasses.cardContent}>
@@ -651,7 +679,7 @@ export function EmployeeActivityInsights({
                 <div>
                   {timelineByDay.map((group) => (
                     <div key={group.dayKey} className="mb-3 last:mb-0">
-                      <p className="sticky top-0 z-[2] mb-2 bg-white/95 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500 backdrop-blur-sm dark:bg-gray-800/95 dark:text-gray-400">
+                      <p className="mb-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                         {group.label}
                       </p>
                       <ul className="space-y-0">
@@ -695,8 +723,11 @@ export function EmployeeActivityInsights({
                                   </time>
                                 </div>
                                 {item.subtitle ? (
-                                  <p className="truncate text-xs text-gray-500 dark:text-gray-400">
-                                    {item.subtitle}
+                                  <p
+                                    className="truncate text-xs text-gray-500 dark:text-gray-400"
+                                    title={item.subtitle}
+                                  >
+                                    {formatTimelineRef(item.subtitle)}
                                   </p>
                                 ) : null}
                               </div>
@@ -706,6 +737,17 @@ export function EmployeeActivityInsights({
                       </ul>
                     </div>
                   ))}
+                  {timelineRemaining > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTimelineVisible((count) => count + TIMELINE_PAGE_SIZE)
+                      }
+                      className="mt-3 w-full rounded-xl border border-gray-200/80 bg-white/70 py-2.5 text-sm font-medium text-gray-600 transition-colors hover:bg-white hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                    >
+                      Ver mais ({timelineRemaining})
+                    </button>
+                  ) : null}
                 </div>
               )}
             </CardContent>

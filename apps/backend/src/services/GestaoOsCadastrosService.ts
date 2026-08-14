@@ -2,6 +2,7 @@ import { GestaoOsProfile, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
+import { gestaoOsService } from './GestaoOsService';
 
 async function qrCodeToDataUrl(
   text: string,
@@ -43,7 +44,7 @@ function frontendBaseUrl(): string {
 }
 
 function assetQrPayloadUrl(qrToken: string): string {
-  return `${frontendBaseUrl()}/ponto/sistema-gestao-os?qr=${encodeURIComponent(qrToken)}`;
+  return `${frontendBaseUrl()}/ponto/meus-chamados?qr=${encodeURIComponent(qrToken)}`;
 }
 
 const DEFAULT_CATEGORIES = [
@@ -61,8 +62,13 @@ const DEFAULT_CATEGORIES = [
 export class GestaoOsCadastrosService {
   // ─── Empresas / Filiais ───────────────────────────────────────────
 
-  async listCompanies() {
+  async listCompanies(opts?: { userId?: string; isAdmin?: boolean }) {
+    const where =
+      opts?.isAdmin || !opts?.userId
+        ? {}
+        : { members: { some: { userId: opts.userId, isActive: true } } };
     return prisma.gestaoOsCompany.findMany({
+      where,
       orderBy: { name: 'asc' },
       include: {
         branches: { orderBy: { name: 'asc' } },
@@ -71,23 +77,39 @@ export class GestaoOsCadastrosService {
     });
   }
 
-  async createCompany(input: {
-    name?: string;
-    tradeName?: string | null;
-    document?: string | null;
-    code?: string | null;
-  }) {
+  async createCompany(
+    input: {
+      name?: string;
+      tradeName?: string | null;
+      document?: string | null;
+      code?: string | null;
+    },
+    creatorUserId?: string
+  ) {
     const name = String(input.name ?? '').trim();
     if (!name) throw createError('Informe o nome da empresa', 400);
-    return prisma.gestaoOsCompany.create({
+    const company = await prisma.gestaoOsCompany.create({
       data: {
         name,
         tradeName: input.tradeName?.trim() || null,
         document: input.document?.trim() || null,
-        code: input.code?.trim() || null
+        code: input.code?.trim() || null,
+        ...(creatorUserId
+          ? {
+              members: {
+                create: {
+                  userId: creatorUserId,
+                  profile: 'ADMIN'
+                }
+              }
+            }
+          : {})
       },
-      include: { branches: true }
+      include: { branches: true, members: true }
     });
+    // Seed categorias e locais padrão da empresa
+    await gestaoOsService.ensureDefaultLocations(company.id);
+    return company;
   }
 
   async updateCompany(
@@ -330,6 +352,159 @@ export class GestaoOsCadastrosService {
     });
   }
 
+  async deleteBuilding(id: string) {
+    const existing = await prisma.gestaoOsBuilding.findUnique({ where: { id } });
+    if (!existing) throw createError('Prédio não encontrado', 404);
+    await prisma.gestaoOsBuilding.delete({ where: { id } });
+    return { id };
+  }
+
+  async deleteSector(id: string) {
+    const existing = await prisma.gestaoOsSector.findUnique({ where: { id } });
+    if (!existing) throw createError('Andar/setor não encontrado', 404);
+    await prisma.gestaoOsSector.delete({ where: { id } });
+    return { id };
+  }
+
+  async deletePlace(id: string) {
+    const existing = await prisma.gestaoOsPlace.findUnique({ where: { id } });
+    if (!existing) throw createError('Sala/local não encontrado', 404);
+    await prisma.gestaoOsPlace.delete({ where: { id } });
+    return { id };
+  }
+
+  async deleteAsset(id: string) {
+    const existing = await prisma.gestaoOsAsset.findUnique({ where: { id } });
+    if (!existing) throw createError('Ativo não encontrado', 404);
+    await prisma.gestaoOsAsset.delete({ where: { id } });
+    return { id };
+  }
+
+  // ─── Catálogo de equipamentos (grupo › subgrupo › equipamento) ───
+
+  async getEquipmentCatalog() {
+    return prisma.gestaoOsEquipmentGroup.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        subgroups: {
+          orderBy: { name: 'asc' },
+          include: {
+            equipments: { orderBy: { name: 'asc' } }
+          }
+        }
+      }
+    });
+  }
+
+  async createEquipmentGroup(input: { name?: string }) {
+    const name = String(input.name ?? '').trim();
+    if (!name) throw createError('Informe o nome do grupo', 400);
+    return prisma.gestaoOsEquipmentGroup.create({ data: { name } });
+  }
+
+  async updateEquipmentGroup(id: string, input: { name?: string; isActive?: boolean }) {
+    const existing = await prisma.gestaoOsEquipmentGroup.findUnique({ where: { id } });
+    if (!existing) throw createError('Grupo não encontrado', 404);
+    return prisma.gestaoOsEquipmentGroup.update({
+      where: { id },
+      data: {
+        ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
+        ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
+      }
+    });
+  }
+
+  async deleteEquipmentGroup(id: string) {
+    const existing = await prisma.gestaoOsEquipmentGroup.findUnique({ where: { id } });
+    if (!existing) throw createError('Grupo não encontrado', 404);
+    await prisma.gestaoOsEquipmentGroup.delete({ where: { id } });
+    return { id };
+  }
+
+  async createEquipmentSubgroup(input: { groupId?: string; name?: string }) {
+    const groupId = String(input.groupId ?? '').trim();
+    const name = String(input.name ?? '').trim();
+    if (!groupId) throw createError('Selecione o grupo', 400);
+    if (!name) throw createError('Informe o nome do subgrupo', 400);
+    const group = await prisma.gestaoOsEquipmentGroup.findUnique({ where: { id: groupId } });
+    if (!group) throw createError('Grupo não encontrado', 404);
+    return prisma.gestaoOsEquipmentSubgroup.create({ data: { groupId, name } });
+  }
+
+  async updateEquipmentSubgroup(id: string, input: { name?: string; isActive?: boolean }) {
+    const existing = await prisma.gestaoOsEquipmentSubgroup.findUnique({ where: { id } });
+    if (!existing) throw createError('Subgrupo não encontrado', 404);
+    return prisma.gestaoOsEquipmentSubgroup.update({
+      where: { id },
+      data: {
+        ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
+        ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
+      }
+    });
+  }
+
+  async deleteEquipmentSubgroup(id: string) {
+    const existing = await prisma.gestaoOsEquipmentSubgroup.findUnique({ where: { id } });
+    if (!existing) throw createError('Subgrupo não encontrado', 404);
+    await prisma.gestaoOsEquipmentSubgroup.delete({ where: { id } });
+    return { id };
+  }
+
+  async createEquipment(input: {
+    subgroupId?: string;
+    name?: string;
+    manufacturer?: string | null;
+    model?: string | null;
+  }) {
+    const subgroupId = String(input.subgroupId ?? '').trim();
+    const name = String(input.name ?? '').trim();
+    if (!subgroupId) throw createError('Selecione o subgrupo', 400);
+    if (!name) throw createError('Informe o nome do equipamento', 400);
+    const subgroup = await prisma.gestaoOsEquipmentSubgroup.findUnique({
+      where: { id: subgroupId }
+    });
+    if (!subgroup) throw createError('Subgrupo não encontrado', 404);
+    return prisma.gestaoOsEquipment.create({
+      data: {
+        subgroupId,
+        name,
+        manufacturer: input.manufacturer?.trim() || null,
+        model: input.model?.trim() || null
+      }
+    });
+  }
+
+  async updateEquipment(
+    id: string,
+    input: {
+      name?: string;
+      manufacturer?: string | null;
+      model?: string | null;
+      isActive?: boolean;
+    }
+  ) {
+    const existing = await prisma.gestaoOsEquipment.findUnique({ where: { id } });
+    if (!existing) throw createError('Equipamento não encontrado', 404);
+    return prisma.gestaoOsEquipment.update({
+      where: { id },
+      data: {
+        ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
+        ...(input.manufacturer !== undefined
+          ? { manufacturer: input.manufacturer?.trim() || null }
+          : {}),
+        ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
+        ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
+      }
+    });
+  }
+
+  async deleteEquipment(id: string) {
+    const existing = await prisma.gestaoOsEquipment.findUnique({ where: { id } });
+    if (!existing) throw createError('Equipamento não encontrado', 404);
+    await prisma.gestaoOsEquipment.delete({ where: { id } });
+    return { id };
+  }
+
   async getAssetByQrToken(qrToken: string) {
     const token = String(qrToken ?? '').trim();
     if (!token) throw createError('Token do QR inválido', 400);
@@ -546,6 +721,13 @@ export class GestaoOsCadastrosService {
         ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
       }
     });
+  }
+
+  async deleteCategory(id: string) {
+    const existing = await prisma.gestaoOsServiceCategory.findUnique({ where: { id } });
+    if (!existing) throw createError('Categoria não encontrada', 404);
+    await prisma.gestaoOsServiceCategory.delete({ where: { id } });
+    return { id };
   }
 
   // ─── Configurações (numeração) ────────────────────────────────────

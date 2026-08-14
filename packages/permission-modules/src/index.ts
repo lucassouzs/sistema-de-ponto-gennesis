@@ -72,6 +72,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações DP/ADM/TST', href: '/ponto/solicitacoes-dp', category: 'Principal' },
   { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Reserva de Veículos', href: '/ponto/reserva-veiculos', category: 'Principal' },
   { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Solicitar Combustível', href: '/ponto/solicitar-combustivel', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/meus-chamados'), name: 'Meus Chamados', href: '/ponto/meus-chamados', category: 'Principal' },
   { key: pathToModuleKey('/ponto/entrega-logistica'), name: 'Entrega da Logística', href: '/ponto/entrega-logistica', category: 'Principal' },
   /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */
   { key: pathToModuleKey('/ponto/flow'), name: 'Flow', href: '/ponto/flow', category: 'Principal' },
@@ -126,7 +127,25 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/contratos/socios'), name: 'Contratos Sócios', href: '/ponto/contratos/socios', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/contratos/gastos-operacionais'), name: 'Gastos Operacionais', href: '/ponto/contratos/gastos-operacionais', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/andamento-da-os'), name: 'Ordem de Serviço', href: '/ponto/andamento-da-os', category: 'Engenharia' },
-  { key: pathToModuleKey('/ponto/sistema-gestao-os'), name: 'Gestão de OS', href: '/ponto/sistema-gestao-os', category: 'Engenharia' },
+  { key: pathToModuleKey('/ponto/sistema-gestao-os'), name: 'Central de Chamados', href: '/ponto/sistema-gestao-os', category: 'Engenharia' },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/planos'),
+    name: 'Planos de Manutenção',
+    href: '/ponto/sistema-gestao-os/planos',
+    category: 'Engenharia',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/pmoc'),
+    name: 'PMOC',
+    href: '/ponto/sistema-gestao-os/pmoc',
+    category: 'Engenharia',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/relatorios'),
+    name: 'Relatórios de Chamados',
+    href: '/ponto/sistema-gestao-os/relatorios',
+    category: 'Engenharia',
+  },
   // Contratos e Licitações
   {
     key: pathToModuleKey('/ponto/espelho-nf'),
@@ -255,8 +274,26 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   },
   {
     key: pathToModuleKey('/ponto/sistema-gestao-os/cadastros'),
-    name: 'Sistema de Gestão de OS',
+    name: 'Sistema de Gestão de OS (legado)',
     href: '/ponto/sistema-gestao-os/cadastros',
+    category: 'Cadastros',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/locais'),
+    name: 'Locais e Ativos',
+    href: '/ponto/sistema-gestao-os/locais',
+    category: 'Cadastros',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/equipamentos'),
+    name: 'Equipamentos',
+    href: '/ponto/sistema-gestao-os/equipamentos',
+    category: 'Cadastros',
+  },
+  {
+    key: pathToModuleKey('/ponto/sistema-gestao-os/tipos-servico'),
+    name: 'Tipos de Serviço',
+    href: '/ponto/sistema-gestao-os/tipos-servico',
     category: 'Cadastros',
   },
   // Registros de Ponto
@@ -400,6 +437,27 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     href: '/ponto/controle/oc-devolver-item-rm',
     category: 'Controle',
     group: 'Ordem de Compra',
+  },
+  {
+    key: pathToModuleKey('/ponto/controle/gestao-os-analisar'),
+    name: 'Analisar / aprovar OS',
+    href: '/ponto/controle/gestao-os-analisar',
+    category: 'Controle',
+    group: 'Gestão de OS',
+  },
+  {
+    key: pathToModuleKey('/ponto/controle/gestao-os-executar'),
+    name: 'Executar OS',
+    href: '/ponto/controle/gestao-os-executar',
+    category: 'Controle',
+    group: 'Gestão de OS',
+  },
+  {
+    key: pathToModuleKey('/ponto/controle/gestao-os-encerrar'),
+    name: 'Encerrar / avaliar OS',
+    href: '/ponto/controle/gestao-os-encerrar',
+    category: 'Controle',
+    group: 'Gestão de OS',
   },
 ] as const;
 

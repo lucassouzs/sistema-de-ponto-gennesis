@@ -67,8 +67,9 @@ import {
   Fuel,
   Car,
   CalendarRange,
-  Settings2,
+  MapPin,
   Wrench,
+  Boxes,
   Workflow,
   ChevronDown,
   type LucideIcon,
@@ -421,18 +422,63 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     icon: LucideIcon;
     /** Subpáginas (ex.: Controle CREA). */
     children?: SidebarNavLeaf[];
+    /** Título de agrupamento na lista do módulo (ex.: Central de Chamados). */
+    section?: string;
   };
 
-  const sortNavItemsByName = <T extends { name: string; children?: SidebarNavLeaf[] }>(
+  const byNavName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+
+  const sortNavItemsByName = <
+    T extends { name: string; children?: SidebarNavLeaf[]; section?: string }
+  >(
     items: T[]
-  ): T[] =>
-    [...items]
-      .map((item) =>
-        item.children?.length
-          ? { ...item, children: sortNavItemsByName(item.children) }
-          : item
-      )
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+  ): T[] => {
+    const prepared = [...items].map((item) =>
+      item.children?.length
+        ? { ...item, children: sortNavItemsByName(item.children) }
+        : item
+    );
+    const hasSections = prepared.some((item) => item.section);
+    if (!hasSections) {
+      return prepared.sort(byNavName);
+    }
+
+    const unsectioned: T[] = [];
+    const sectionOrder: string[] = [];
+    const buckets = new Map<string, T[]>();
+    for (const item of prepared) {
+      const section = item.section?.trim();
+      if (!section) {
+        unsectioned.push(item);
+        continue;
+      }
+      if (!buckets.has(section)) {
+        sectionOrder.push(section);
+        buckets.set(section, []);
+      }
+      buckets.get(section)!.push(item);
+    }
+
+    return [
+      ...unsectioned.sort(byNavName),
+      ...sectionOrder.flatMap((section) => (buckets.get(section) ?? []).sort(byNavName))
+    ];
+  };
+
+  const groupNavItemsBySection = (items: SidebarNavItem[]) => {
+    const groups: Array<{ title: string | null; items: SidebarNavItem[] }> = [];
+    for (const item of items) {
+      const title = item.section?.trim() || null;
+      const last = groups[groups.length - 1];
+      if (last && last.title === title) {
+        last.items.push(item);
+      } else {
+        groups.push({ title, items: [item] });
+      }
+    }
+    return groups;
+  };
 
   const navItemIsVisible = (item: SidebarNavItem): boolean => {
     if (item.children?.length) {
@@ -564,6 +610,16 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Solicitar abastecimento de veículos',
             permission:
               isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitar-combustivel'))
+          },
+          {
+            name: 'Meus Chamados',
+            href: '/ponto/meus-chamados',
+            icon: Wrench,
+            description: 'Abrir e acompanhar seus chamados de manutenção',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/meus-chamados')) ||
+              can(pk('/ponto/sistema-gestao-os'))
           },
           {
             name: 'Entrega da Logística',
@@ -785,60 +841,92 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         icon: DraftingCompass,
         items: [
           {
+            name: 'Central de Chamados',
+            href: '/ponto/sistema-gestao-os',
+            icon: Wrench,
+            description: 'Visão geral e gestão de todos os chamados de manutenção',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Planos de Manutenção',
+            href: '/ponto/sistema-gestao-os/planos',
+            icon: CalendarRange,
+            description: 'Planos preventivos, PMOC e segurança',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/planos')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'PMOC',
+            href: '/ponto/sistema-gestao-os/pmoc',
+            icon: ClipboardCheck,
+            description: 'Visão PMOC e ativos de climatização',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/pmoc')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Relatórios de Chamados',
+            href: '/ponto/sistema-gestao-os/relatorios',
+            icon: BarChart3,
+            description: 'Indicadores e exportação da Central de Chamados',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/relatorios')),
+            section: 'Central de Chamados'
+          },
+          {
             name: 'Contratos',
             href: '/ponto/contratos',
             icon: FileText,
             description: 'Cadastro de contratos da engenharia',
-            permission: isAdministrator || can(pk('/ponto/contratos'))
+            permission: isAdministrator || can(pk('/ponto/contratos')),
+            section: 'Obras'
           },
           {
             name: 'Ordem de Serviço',
             href: '/ponto/andamento-da-os',
             icon: ClipboardList,
             description: 'Acompanhamento e controle das ordens de serviço',
-            permission: canAccessOsRoutePage
-          },
-          {
-            name: 'Gestão de OS',
-            href: '/ponto/sistema-gestao-os',
-            icon: Wrench,
-            description: 'Manutenção predial e patrimonial (solicitações e OS)',
-            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os'))
+            permission: canAccessOsRoutePage,
+            section: 'Obras'
           },
           {
             name: 'Solicitação de Materiais',
             href: '/ponto/solicitar-materiais',
             icon: ShoppingCart,
             description: 'Solicitar materiais para compra (SC)',
-            permission: isAdministrator || can(pk('/ponto/solicitar-materiais'))
+            permission: isAdministrator || can(pk('/ponto/solicitar-materiais')),
+            section: 'Obras'
           },
           {
             name: 'Pleitos Gerados',
             href: '/ponto/pleitos-gerados',
             icon: FileCheck,
             description: 'Visualizar todos os pleitos com valor pleiteado',
-            permission: isAdministrator || can(pk('/ponto/pleitos-gerados'))
+            permission: isAdministrator || can(pk('/ponto/pleitos-gerados')),
+            section: 'Obras'
           },
           {
             name: 'Fichas de Demanda',
             href: '/ponto/aprovacao-fds',
             icon: ClipboardCheck,
             description: 'Cadastro e gestão das fichas de demanda',
-            permission: isAdministrator || can(pk('/ponto/aprovacao-fds'))
+            permission: isAdministrator || can(pk('/ponto/aprovacao-fds')),
+            section: 'Obras'
           },
           {
             name: 'Recebimento de Entregas',
             href: '/ponto/recebimento-entregas',
             icon: PackageCheck,
             description: 'Confirmar recebimento de material na obra',
-            permission: canAccessRecebimentoEntregasRoutePage
+            permission: canAccessRecebimentoEntregasRoutePage,
+            section: 'Obras'
           },
           {
             name: 'Solicitação de Ferramentas',
             href: '/ponto/solicitar-ferramentas',
             icon: Wrench,
             description: 'Solicitar locação, renovação, devolução ou compra de equipamentos',
-            permission: isAdministrator || can(pk('/ponto/solicitar-ferramentas'))
+            permission: isAdministrator || can(pk('/ponto/solicitar-ferramentas')),
+            section: 'Obras'
           }
         ]
       },
@@ -1030,32 +1118,72 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         icon: Database,
         items: [
           {
-            name: 'Centros de Custo',
-            href: '/ponto/centros-custo',
-            icon: Building2,
-            description: 'Gerenciar centros de custo',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo'))
+            name: 'Locais e Ativos',
+            href: '/ponto/sistema-gestao-os/locais',
+            icon: MapPin,
+            description: 'Prédios, setores, salas e ativos com QR',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/locais')) ||
+              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+              can(pk('/ponto/sistema-gestao-os')),
+            section: 'Central de Chamados'
           },
           {
-            name: 'Materiais e Serviços',
-            href: '/ponto/materiais-construcao',
-            icon: Package,
-            description: 'Gerenciar cadastro de materiais e serviços',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao'))
+            name: 'Equipamentos',
+            href: '/ponto/sistema-gestao-os/equipamentos',
+            icon: Boxes,
+            description: 'Grupos, subgrupos e equipamentos',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
+              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+              can(pk('/ponto/sistema-gestao-os')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Tipos de Serviço',
+            href: '/ponto/sistema-gestao-os/tipos-servico',
+            icon: Wrench,
+            description: 'Categorias de serviço para chamados e OS',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/tipos-servico')) ||
+              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
+              can(pk('/ponto/sistema-gestao-os')),
+            section: 'Central de Chamados'
           },
           {
             name: 'Fornecedores',
             href: '/ponto/fornecedores',
             icon: Building2,
             description: 'Cadastro de fornecedores',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores'))
+            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores')),
+            section: 'Compras'
+          },
+          {
+            name: 'Materiais e Serviços',
+            href: '/ponto/materiais-construcao',
+            icon: Package,
+            description: 'Gerenciar cadastro de materiais e serviços',
+            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
+            section: 'Compras'
+          },
+          {
+            name: 'Condições de Pagamento',
+            href: '/ponto/condicoes-pagamento',
+            icon: CreditCard,
+            description: 'Condições para ordens de compra',
+            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/condicoes-pagamento')),
+            section: 'Compras'
           },
           {
             name: 'Frota',
             href: '/ponto/veiculos',
             icon: Car,
             description: 'Cadastro de veículos da frota',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/veiculos'))
+            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/veiculos')),
+            section: 'Frota'
           },
           {
             name: 'Postos de Combustível',
@@ -1065,21 +1193,24 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission:
               isAdministrator ||
               isDepartmentCompras ||
-              can(pk('/ponto/regioes-postos-combustivel'))
+              can(pk('/ponto/regioes-postos-combustivel')),
+            section: 'Frota'
           },
           {
-            name: 'Condições de Pagamento',
-            href: '/ponto/condicoes-pagamento',
-            icon: CreditCard,
-            description: 'Condições para ordens de compra',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/condicoes-pagamento'))
+            name: 'Centros de Custo',
+            href: '/ponto/centros-custo',
+            icon: Building2,
+            description: 'Gerenciar centros de custo',
+            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
+            section: 'Financeiro'
           },
           {
             name: 'Natureza Orçamentária',
             href: '/ponto/natureza-orcamentaria',
             icon: BookPlus,
             description: 'Cadastrar naturezas orçamentárias',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/natureza-orcamentaria'))
+            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/natureza-orcamentaria')),
+            section: 'Financeiro'
           },
           {
             name: 'Prestadores de Serviço',
@@ -1089,7 +1220,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission:
               isAdministrator ||
               can(pk('/ponto/espelho-nf/prestadores-servico')) ||
-              can(pk('/ponto/espelho-nf'))
+              can(pk('/ponto/espelho-nf')),
+            section: 'Nota Fiscal'
           },
           {
             name: 'Tomadores de Serviço',
@@ -1099,7 +1231,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission:
               isAdministrator ||
               can(pk('/ponto/espelho-nf/tomadores-servico')) ||
-              can(pk('/ponto/espelho-nf'))
+              can(pk('/ponto/espelho-nf')),
+            section: 'Nota Fiscal'
           },
           {
             name: 'Contas Bancárias',
@@ -1109,7 +1242,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission:
               isAdministrator ||
               can(pk('/ponto/espelho-nf/contas-bancarias')) ||
-              can(pk('/ponto/espelho-nf'))
+              can(pk('/ponto/espelho-nf')),
+            section: 'Nota Fiscal'
           },
           {
             name: 'Códigos Tributários',
@@ -1119,17 +1253,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission:
               isAdministrator ||
               can(pk('/ponto/espelho-nf/codigos-tributarios')) ||
-              can(pk('/ponto/espelho-nf'))
-          },
-          {
-            name: 'Sistema de Gestão de OS',
-            href: '/ponto/sistema-gestao-os/cadastros',
-            icon: Settings2,
-            description: 'Empresas, locais, ativos (QR), prestadores, categorias e perfis',
-            permission:
-              isAdministrator ||
-              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-              can(pk('/ponto/sistema-gestao-os'))
+              can(pk('/ponto/espelho-nf')),
+            section: 'Nota Fiscal'
           }
         ]
       },
@@ -1354,6 +1479,38 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
           <NotificationCountBadge count={badgeCount} />
         </Link>
+      </div>
+    );
+  };
+
+  const renderNavItemList = (items: SidebarNavItem[], forceExpanded: boolean) => {
+    const visible = items.filter(navItemIsVisible);
+    const groups = groupNavItemsBySection(visible);
+    const useHeaders = groups.some((group) => group.title);
+    if (!useHeaders) {
+      return visible.map((item, index) => renderSidebarNavItem(item, forceExpanded, index));
+    }
+    let navI = 0;
+    return (
+      <div className="space-y-5">
+        {groups.map((group, groupIndex) => {
+          const titleIndex = group.title ? navI++ : 0;
+          return (
+            <div key={group.title ?? `geral-${groupIndex}`} className="space-y-3">
+              {group.title ? (
+                <p
+                  className="sidebar-nav-section-title whitespace-nowrap px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500"
+                  style={{ ['--nav-i' as string]: titleIndex } as React.CSSProperties}
+                >
+                  {group.title}
+                </p>
+              ) : null}
+              {group.items.map((item) =>
+                renderSidebarNavItem(item, forceExpanded, navI++)
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -1757,8 +1914,10 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         <div
           className={`flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 ${
             sidebarHydrated ? `transition-[width,opacity] ${SIDEBAR_TRANSITION_CLASS}` : 'transition-none'
-          } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-0 pointer-events-none'}`}
+          } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-100 pointer-events-none'}`}
         >
+          {/* Largura fixa: o painel só revela o conteúdo, sem o texto refluir no meio da abertura. */}
+          <div className="flex h-full min-h-0 w-72 shrink-0 flex-col">
           {/* Header do módulo — mesma altura da TopNavbar (h-16) pra linha bater */}
           <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-4 dark:border-gray-800">
             <div className="flex w-full items-center justify-between gap-2">
@@ -1799,23 +1958,18 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                     <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       {category.name}
                     </p>
-                    <div className="space-y-3">
-                      {filteredItems.map((item, index) =>
-                        renderSidebarNavItem(item, true, index)
-                      )}
-                    </div>
+                    {renderNavItemList(filteredItems, true)}
                   </div>
                 );
               })
             ) : (
-              selectedModule?.items
-                .filter((item) => navItemIsVisible(item as SidebarNavItem))
-                .map((item, index) =>
-                  renderSidebarNavItem(item as SidebarNavItem, false, index)
-                )
+              renderNavItemList(
+                (selectedModule?.items ?? []) as SidebarNavItem[],
+                false
+              )
             ) : null}
           </nav>
-
+          </div>
         </div>
       </div>
     </>

@@ -8,7 +8,10 @@ export class GestaoOsCadastrosController {
   async listCompanies(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
-      const data = await gestaoOsCadastrosService.listCompanies();
+      const data = await gestaoOsCadastrosService.listCompanies({
+        userId: req.user.id,
+        isAdmin: !!req.user.isAdmin
+      });
       res.json({ success: true, data });
     } catch (error) {
       next(error);
@@ -18,7 +21,7 @@ export class GestaoOsCadastrosController {
   async createCompany(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
-      const data = await gestaoOsCadastrosService.createCompany(req.body ?? {});
+      const data = await gestaoOsCadastrosService.createCompany(req.body ?? {}, req.user.id);
       res.status(201).json({ success: true, data });
     } catch (error) {
       next(error);
@@ -141,6 +144,162 @@ export class GestaoOsCadastrosController {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
       const data = await gestaoOsCadastrosService.updateAsset(req.params.id, req.body ?? {});
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteBuilding(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteBuilding(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteSector(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteSector(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deletePlace(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deletePlace(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteAsset(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteAsset(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async equipmentCatalog(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.getEquipmentCatalog();
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createEquipmentGroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.createEquipmentGroup(req.body ?? {});
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateEquipmentGroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.updateEquipmentGroup(
+        req.params.id,
+        req.body ?? {}
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteEquipmentGroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteEquipmentGroup(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createEquipmentSubgroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.createEquipmentSubgroup(req.body ?? {});
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateEquipmentSubgroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.updateEquipmentSubgroup(
+        req.params.id,
+        req.body ?? {}
+      );
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteEquipmentSubgroup(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteEquipmentSubgroup(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createEquipment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.createEquipment(req.body ?? {});
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateEquipment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.updateEquipment(req.params.id, req.body ?? {});
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteEquipment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteEquipment(req.params.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteCategory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.deleteCategory(req.params.id);
       res.json({ success: true, data });
     } catch (error) {
       next(error);

@@ -3,22 +3,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  ClipboardList,
-  Eye,
-  Filter,
-  Paperclip,
-  Search,
-  Wrench,
-  X
-} from 'lucide-react';
+import { ClipboardList, Eye, Paperclip, Search, Wrench, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { TabCountBadge } from '@/components/ui/TabCountBadge';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -34,7 +25,6 @@ import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
-import { SignaturePad } from '@/components/gestao-os/SignaturePad';
 import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
 import api from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
@@ -42,19 +32,15 @@ import { FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
   GestaoOsAttachment,
   GestaoOsLocationTree,
-  GestaoOsMaintenanceType,
   GestaoOsPriority,
   GestaoOsServiceCategory,
   GestaoOsStatus,
   GestaoOsWorkOrder,
-  MAINTENANCE_TYPE_LABELS,
   PRIORITY_LABELS,
   SERVICE_CATEGORIES,
   STATUS_LABELS,
-  STATUS_TRANSITIONS,
   formatGestaoOsLabel
-} from './gestaoOsTypes';
-import { useGestaoOsCompany } from './useGestaoOsCompany';
+} from '../sistema-gestao-os/gestaoOsTypes';
 
 function isOverdue(row: Pick<GestaoOsWorkOrder, 'dueAt' | 'status'>) {
   if (!row.dueAt) return false;
@@ -62,46 +48,6 @@ function isOverdue(row: Pick<GestaoOsWorkOrder, 'dueAt' | 'status'>) {
   const due = new Date(row.dueAt).getTime();
   return !Number.isNaN(due) && due < Date.now();
 }
-
-function allowedTransitionsByPermission(opts: {
-  from: GestaoOsStatus;
-  next: GestaoOsStatus[];
-  isAdmin: boolean;
-  canAnalisar: boolean;
-  canExecutar: boolean;
-  canEncerrar: boolean;
-}): GestaoOsStatus[] {
-  const { from, next, isAdmin, canAnalisar, canExecutar, canEncerrar } = opts;
-  if (isAdmin) return next;
-
-  return next.filter((to) => {
-    if (to === 'CANCELLED') return canAnalisar || from === 'OPEN';
-    if (from === 'OPEN' && to === 'UNDER_REVIEW') return canAnalisar;
-    if (from === 'UNDER_REVIEW' && to === 'APPROVED') return canAnalisar;
-    if (
-      (from === 'APPROVED' && to === 'IN_PROGRESS') ||
-      (from === 'IN_PROGRESS' && (to === 'WAITING_PARTS' || to === 'COMPLETED')) ||
-      (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED'))
-    ) {
-      return canExecutar || canAnalisar;
-    }
-    if (from === 'COMPLETED' && to === 'CLOSED') return canEncerrar || canAnalisar;
-    return canAnalisar;
-  });
-}
-
-type Technician = { id: string; name: string; email?: string };
-
-const PHASE_TABS: ReadonlyArray<{ id: GestaoOsStatus; label: string }> = [
-  { id: 'OPEN', label: 'Aberta' },
-  { id: 'UNDER_REVIEW', label: 'Em Análise' },
-  { id: 'APPROVED', label: 'Aprovada' },
-  { id: 'IN_PROGRESS', label: 'Em Execução' },
-  { id: 'WAITING_PARTS', label: 'Aguardando Peça/Terceiro' },
-  { id: 'COMPLETED', label: 'Concluída' },
-  { id: 'CLOSED', label: 'Encerrada/Avaliada' },
-  { id: 'CANCELLED', label: 'Cancelada' }
-];
 
 const STATUS_BADGE: Record<GestaoOsStatus, string> = {
   OPEN: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
@@ -142,23 +88,12 @@ function RequiredMark() {
   return <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>;
 }
 
-export default function SistemaGestaoOsPageClient() {
+export default function MeusChamadosPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const {
-    isAdmin,
-    canAnalisar,
-    canExecutar,
-    canEncerrar,
-    isLoading: loadingCompany
-  } = useGestaoOsCompany();
 
   const [search, setSearch] = useState('');
-  const [activePhase, setActivePhase] = useState<GestaoOsStatus>('OPEN');
-  const [priorityFilter, setPriorityFilter] = useState<GestaoOsPriority | ''>('');
-  const [buildingFilter, setBuildingFilter] = useState('');
-  const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
@@ -172,17 +107,9 @@ export default function SistemaGestaoOsPageClient() {
   const [attachments, setAttachments] = useState<GestaoOsAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [qrHandled, setQrHandled] = useState(false);
-  const [openedAtLabel, setOpenedAtLabel] = useState(() => formatDateTime(new Date().toISOString()));
-
-  const [transitionStatus, setTransitionStatus] = useState<GestaoOsStatus | ''>('');
-  const [transitionNote, setTransitionNote] = useState('');
-  const [cancelReason, setCancelReason] = useState('');
-  const [maintenanceType, setMaintenanceType] = useState<GestaoOsMaintenanceType | ''>('');
-  const [assigneeId, setAssigneeId] = useState('');
-  const [rating, setRating] = useState('5');
-  const [ratingComment, setRatingComment] = useState('');
-  const [signatureRequesterUrl, setSignatureRequesterUrl] = useState<string | null>(null);
-  const [uploadingSignature, setUploadingSignature] = useState(false);
+  const [openedAtLabel, setOpenedAtLabel] = useState(() =>
+    formatDateTime(new Date().toISOString())
+  );
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -199,47 +126,23 @@ export default function SistemaGestaoOsPageClient() {
   });
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE', id: '' };
-  const companyParams = useMemo(() => ({}), []);
-  const canCreate = false;
 
   const {
     data: rows = [],
     isLoading: loadingRows
   } = useQuery({
-    queryKey: ['gestao-os-list', search, activePhase, priorityFilter, buildingFilter],
-    enabled: !loadingCompany,
+    queryKey: ['gestao-os-mine', search],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder[] }>('/gestao-os', {
         params: {
+          mine: 1,
           search: search || undefined,
-          status: activePhase,
-          priority: priorityFilter || undefined,
-          buildingId: buildingFilter || undefined
+          limit: 200
         }
       });
       return res.data?.data ?? [];
     }
   });
-
-  const { data: summary } = useQuery({
-    queryKey: ['gestao-os-summary'],
-    enabled: !loadingCompany,
-    queryFn: async () => {
-      const res = await api.get('/gestao-os/summary');
-      return res.data?.data as {
-        byStatus: Partial<Record<GestaoOsStatus, number>>;
-        openLike: number;
-        total: number;
-      };
-    }
-  });
-
-  const phaseCounts = useMemo(() => {
-    const byStatus = summary?.byStatus ?? {};
-    return Object.fromEntries(
-      PHASE_TABS.map((tab) => [tab.id, byStatus[tab.id] ?? 0])
-    ) as Record<GestaoOsStatus, number>;
-  }, [summary]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -248,7 +151,6 @@ export default function SistemaGestaoOsPageClient() {
 
   const { data: locationTree = [] } = useQuery({
     queryKey: ['gestao-os-locations'],
-    enabled: !loadingCompany,
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsLocationTree }>(
         '/gestao-os/locations'
@@ -259,11 +161,9 @@ export default function SistemaGestaoOsPageClient() {
 
   const { data: serviceCategories = [] } = useQuery({
     queryKey: ['gestao-os-categories'],
-    enabled: !loadingCompany,
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsServiceCategory[] }>(
-        '/gestao-os/cadastros/categories',
-        { params: companyParams }
+        '/gestao-os/cadastros/categories'
       );
       return res.data?.data ?? [];
     }
@@ -279,53 +179,92 @@ export default function SistemaGestaoOsPageClient() {
     if (qrHandled) return;
     const qr = searchParams?.get('qr');
     if (!qr) return;
-    setQrHandled(true);
-    router.replace(`/ponto/meus-chamados?qr=${encodeURIComponent(qr)}`);
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/gestao-os/cadastros/qr/resolve', { params: { token: qr } });
+        const asset = res.data?.data as {
+          id: string;
+          name: string;
+          category: string | null;
+          buildingId: string;
+          sectorId: string;
+          placeId: string;
+        };
+        if (cancelled || !asset) return;
+        setBuildingId(asset.buildingId || '');
+        setSectorId(asset.sectorId || '');
+        setPlaceId(asset.placeId || '');
+        setAssetId(asset.id);
+        if (asset.category) setCategory(asset.category);
+        setDescription((prev) => prev || `Manutenção no ativo: ${asset.name}`);
+        setCreateOpen(true);
+        toast.success(`Ativo identificado via QR: ${asset.name}`);
+        router.replace('/ponto/meus-chamados');
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'QR Code inválido ou ativo inativo');
+      } finally {
+        if (!cancelled) setQrHandled(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, qrHandled, router]);
-
-  const { data: technicians = [] } = useQuery({
-    queryKey: ['gestao-os-technicians'],
-    enabled: !loadingCompany,
-    queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: Technician[] }>('/gestao-os/technicians', {
-        params: companyParams
-      });
-      return res.data?.data ?? [];
-    }
-  });
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ['gestao-os-detail', detailId],
     enabled: Boolean(detailId),
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder }>(
-        `/gestao-os/${detailId}`,
-        { params: companyParams }
+        `/gestao-os/${detailId}`
       );
       return res.data?.data;
     }
   });
 
-  const sectors = useMemo(() => {
-    return locationTree.find((b) => b.id === buildingId)?.sectors ?? [];
-  }, [locationTree, buildingId]);
+  const buildings = locationTree;
+  const sectors = useMemo(
+    () => buildings.find((b) => b.id === buildingId)?.sectors ?? [],
+    [buildings, buildingId]
+  );
+  const places = useMemo(
+    () => sectors.find((s) => s.id === sectorId)?.places ?? [],
+    [sectors, sectorId]
+  );
+  const assets = useMemo(
+    () => places.find((p) => p.id === placeId)?.assets ?? [],
+    [places, placeId]
+  );
 
-  const places = useMemo(() => {
-    return sectors.find((s) => s.id === sectorId)?.places ?? [];
-  }, [sectors, sectorId]);
-
-  const assets = useMemo(() => {
-    return places.find((p) => p.id === placeId)?.assets ?? [];
-  }, [places, placeId]);
-
-  const hasActiveFilters = Boolean(priorityFilter || buildingFilter);
-
-  const clearFilters = () => {
-    setPriorityFilter('');
-    setBuildingFilter('');
-  };
-
-  const priorityFilterOptions = useMemo(
+  const buildingFormOptions = useMemo(
+    () => labeledToSelectOptions(buildings.map((b) => ({ value: b.id, label: b.name }))),
+    [buildings]
+  );
+  const sectorFormOptions = useMemo(
+    () => labeledToSelectOptions(sectors.map((s) => ({ value: s.id, label: s.name }))),
+    [sectors]
+  );
+  const placeFormOptions = useMemo(
+    () => labeledToSelectOptions(places.map((p) => ({ value: p.id, label: p.name }))),
+    [places]
+  );
+  const assetFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        assets.map((a) => ({
+          value: a.id,
+          label: a.category ? `${a.name} (${a.category})` : a.name,
+          searchText: `${a.name} ${a.category ?? ''}`
+        }))
+      ),
+    [assets]
+  );
+  const categoryFormOptions = useMemo(
+    () => labeledToSelectOptions(categoryOptions.map((name) => ({ value: name, label: name }))),
+    [categoryOptions]
+  );
+  const priorityFormOptions = useMemo(
     () =>
       labeledToSelectOptions(
         (Object.keys(PRIORITY_LABELS) as GestaoOsPriority[]).map((key) => ({
@@ -336,70 +275,7 @@ export default function SistemaGestaoOsPageClient() {
     []
   );
 
-  const buildingFilterOptions = useMemo(
-    () =>
-      labeledToSelectOptions(
-        locationTree.map((b) => ({
-          value: b.id,
-          label: b.name,
-          searchText: `${b.name} ${b.code ?? ''}`
-        }))
-      ),
-    [locationTree]
-  );
-
-  const buildingFormOptions = buildingFilterOptions;
-
-  const sectorFormOptions = useMemo(
-    () =>
-      labeledToSelectOptions(
-        sectors.map((s) => ({
-          value: s.id,
-          label: s.name,
-          searchText: `${s.name} ${s.code ?? ''}`
-        }))
-      ),
-    [sectors]
-  );
-
-  const placeFormOptions = useMemo(
-    () =>
-      labeledToSelectOptions(
-        places.map((p) => ({
-          value: p.id,
-          label: p.name,
-          searchText: `${p.name} ${p.code ?? ''}`
-        }))
-      ),
-    [places]
-  );
-
-  const assetFormOptions = useMemo(
-    () =>
-      labeledToSelectOptions(
-        assets.map((a) => ({
-          value: a.id,
-          label: a.category ? `${a.name} (${a.category})` : a.name,
-          searchText: `${a.name} ${a.category ?? ''} ${a.code ?? ''}`
-        }))
-      ),
-    [assets]
-  );
-
-  const categoryFormOptions = useMemo(
-    () => labeledToSelectOptions(categoryOptions.map((name) => ({ value: name, label: name }))),
-    [categoryOptions]
-  );
-
-  const priorityFormOptions = priorityFilterOptions;
-
-  const openDetail = (row: GestaoOsWorkOrder) => {
-    setDetailId(row.id);
-    setTransitionStatus('');
-    setMaintenanceType(row.maintenanceType || '');
-    setAssigneeId(row.assigneeId || '');
-    setSignatureRequesterUrl(null);
-  };
+  const openDetail = (row: GestaoOsWorkOrder) => setDetailId(row.id);
 
   const {
     rowActionMenu,
@@ -433,7 +309,7 @@ export default function SistemaGestaoOsPageClient() {
       setPlaceId('');
       setAssetId('');
       setPriority('MEDIUM');
-      setActivePhase('OPEN');
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-mine'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
       setDetailId(created.id);
@@ -442,63 +318,6 @@ export default function SistemaGestaoOsPageClient() {
       toast.error(err?.response?.data?.message ?? 'Não foi possível abrir o chamado');
     }
   });
-
-  const transitionMutation = useMutation({
-    mutationFn: async () => {
-      if (!detailId || !transitionStatus) throw new Error('Selecione o próximo status');
-      const res = await api.post(`/gestao-os/${detailId}/transition`, {
-        status: transitionStatus,
-        note: transitionNote || undefined,
-        cancelReason: transitionStatus === 'CANCELLED' ? cancelReason : undefined,
-        maintenanceType: maintenanceType || undefined,
-        assigneeId: assigneeId || undefined,
-        rating: transitionStatus === 'CLOSED' ? Number(rating) : undefined,
-        ratingComment: transitionStatus === 'CLOSED' ? ratingComment || undefined : undefined,
-        signatureRequesterUrl:
-          transitionStatus === 'CLOSED' ? signatureRequesterUrl || undefined : undefined
-      });
-      return res.data?.data as GestaoOsWorkOrder;
-    },
-    onSuccess: (updated) => {
-      if (updated?.osNumber != null && updated.status === 'UNDER_REVIEW') {
-        toast.success(`OS #${updated.osNumber} criada a partir do chamado`);
-      } else {
-        toast.success('Status atualizado');
-      }
-      setTransitionStatus('');
-      setTransitionNote('');
-      setCancelReason('');
-      setSignatureRequesterUrl(null);
-      if (updated?.status) setActivePhase(updated.status);
-      void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
-      void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
-      void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', detailId] });
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message ?? 'Não foi possível atualizar o status');
-    }
-  });
-
-  const saveSignatureDataUrl = async (dataUrl: string) => {
-    setUploadingSignature(true);
-    try {
-      const blob = await (await fetch(dataUrl)).blob();
-      const form = new FormData();
-      form.append('file', blob, `assinatura-${Date.now()}.png`);
-      const res = await api.post('/gestao-os/upload-attachment', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        params: companyParams
-      });
-      const url = res.data?.data?.url as string | undefined;
-      if (!url) throw new Error('URL da assinatura não retornada');
-      setSignatureRequesterUrl(url);
-      toast.success('Assinatura anexada');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message ?? 'Falha ao salvar assinatura');
-    } finally {
-      setUploadingSignature(false);
-    }
-  };
 
   const uploadFiles = async (files: FileList | File[] | null) => {
     const list = !files ? [] : Array.from(files);
@@ -530,58 +349,21 @@ export default function SistemaGestaoOsPageClient() {
     }
   };
 
-  const nextStatuses = detail
-    ? allowedTransitionsByPermission({
-        from: detail.status,
-        next: STATUS_TRANSITIONS[detail.status],
-        isAdmin,
-        canAnalisar,
-        canExecutar,
-        canEncerrar
-      })
-    : [];
-
-  if (loadingUser || loadingCompany) {
+  if (loadingUser) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
   }
 
   return (
-    <ProtectedRoute route="/ponto/sistema-gestao-os">
+    <ProtectedRoute route="/ponto/meus-chamados">
       <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Central de Chamados
+              Meus Chamados
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Visão geral operacional: acompanhe todos os chamados por fase, filtre e avance o
-              fluxo. Para abrir um chamado, use Meus Chamados.
+              Abra solicitações de manutenção e acompanhe o andamento dos seus chamados.
             </p>
-          </div>
-
-          <div className="scroll-mt-4 border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2">
-              {PHASE_TABS.map((tab) => {
-                const active = activePhase === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActivePhase(tab.id)}
-                    className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                      active
-                        ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      {tab.label}
-                      <TabCountBadge count={phaseCounts[tab.id] ?? 0} active={active} tone="red" />
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
           </div>
 
           <Card className={cadastroListClasses.card}>
@@ -593,12 +375,10 @@ export default function SistemaGestaoOsPageClient() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {STATUS_LABELS[activePhase]}
+                      Seus chamados
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {summary?.total != null
-                        ? `${summary.total} registros · ${rows.length} nesta fase`
-                        : `${rows.length} nesta fase`}
+                      {rows.length} registro{rows.length === 1 ? '' : 's'}
                     </p>
                   </div>
                 </div>
@@ -625,44 +405,26 @@ export default function SistemaGestaoOsPageClient() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsFiltersModalOpen(true)}
-                    className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                      hasActiveFilters
-                        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
-                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-                    }`}
-                    aria-label="Abrir filtros"
-                    title={hasActiveFilters ? 'Filtros ativos' : 'Filtros'}
+                    onClick={() => setCreateOpen(true)}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <Filter className="h-4 w-4" />
-                    {hasActiveFilters ? (
-                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
-                    ) : null}
+                    <ClipboardList className="h-4 w-4" />
+                    Novo chamado
                   </button>
-                  {canCreate ? (
-                    <button
-                      type="button"
-                      onClick={() => setCreateOpen(true)}
-                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                    >
-                      <ClipboardList className="h-4 w-4" />
-                      Novo chamado
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </CardHeader>
             <CardContent className={cadastroListClasses.cardContent}>
               {loadingRows ? (
-                <CadastroListLoading message="Carregando chamados..." />
+                <CadastroListLoading message="Carregando seus chamados..." />
               ) : rows.length === 0 ? (
                 <CadastroListEmpty
                   icon={ClipboardList}
-                  title="Nenhum chamado nesta fase"
+                  title="Nenhum chamado seu"
                   hint={
-                    search.trim() || hasActiveFilters
-                      ? 'Tente ajustar a busca ou os filtros'
-                      : 'Escolha outra fase ou abra um chamado em Meus Chamados'
+                    search.trim()
+                      ? 'Tente ajustar a busca'
+                      : 'Clique em Novo chamado para abrir uma solicitação'
                   }
                 />
               ) : (
@@ -679,10 +441,10 @@ export default function SistemaGestaoOsPageClient() {
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
                           <th className={`${cadastroListClasses.th} w-28 whitespace-nowrap`}>Nº</th>
+                          <th className={`${cadastroListClasses.thCenter} w-36`}>Status</th>
                           <th className={`${cadastroListClasses.thCenter} w-28`}>Prioridade</th>
                           <th className={cadastroListClasses.th}>Categoria</th>
                           <th className={cadastroListClasses.th}>Local / Ativo</th>
-                          <th className={cadastroListClasses.th}>Solicitante</th>
                           <th className={`${cadastroListClasses.thCenter} w-36`}>Abertura</th>
                           <th className={cadastroListClasses.thRight}>Ação</th>
                         </tr>
@@ -714,6 +476,13 @@ export default function SistemaGestaoOsPageClient() {
                                 ) : null}
                               </div>
                             </td>
+                            <td className={cadastroListClasses.tdCenter}>
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[row.status]}`}
+                              >
+                                {STATUS_LABELS[row.status]}
+                              </span>
+                            </td>
                             <td
                               className={`${cadastroListClasses.tdCenter} ${PRIORITY_BADGE[row.priority]}`}
                             >
@@ -724,14 +493,12 @@ export default function SistemaGestaoOsPageClient() {
                                 {row.category}
                               </span>
                             </td>
-                            <td className={cadastroListClasses.tdTruncate} title={row.locationLabel || undefined}>
+                            <td
+                              className={cadastroListClasses.tdTruncate}
+                              title={row.locationLabel || undefined}
+                            >
                               <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
                                 {row.locationLabel || '—'}
-                              </span>
-                            </td>
-                            <td className={cadastroListClasses.tdTruncate}>
-                              <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
-                                {row.requester?.name || '—'}
                               </span>
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
@@ -770,58 +537,6 @@ export default function SistemaGestaoOsPageClient() {
             </CardContent>
           </Card>
         </div>
-
-        <Modal
-          isOpen={isFiltersModalOpen}
-          onClose={() => setIsFiltersModalOpen(false)}
-          title="Filtros"
-          size="md"
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Prioridade
-              </label>
-              <StringSingleSelectDropdown
-                value={priorityFilter}
-                onChange={(v) => setPriorityFilter((v as GestaoOsPriority | '') || '')}
-                options={priorityFilterOptions}
-                placeholder="Todas"
-                emptyOptionLabel="Todas"
-                allowEmpty
-              />
-            </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Prédio
-              </label>
-              <StringSingleSelectDropdown
-                value={buildingFilter}
-                onChange={setBuildingFilter}
-                options={buildingFilterOptions}
-                placeholder="Todos"
-                emptyOptionLabel="Todos"
-                allowEmpty
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                Limpar
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsFiltersModalOpen(false)}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-              >
-                Aplicar
-              </button>
-            </div>
-          </div>
-        </Modal>
 
         <Modal
           isOpen={createOpen}
@@ -1023,36 +738,29 @@ export default function SistemaGestaoOsPageClient() {
           isOpen={Boolean(detailId)}
           onClose={() => setDetailId(null)}
           title={detail ? formatGestaoOsLabel(detail) : 'Detalhe do chamado'}
-          size="xl"
+          size="lg"
         >
           {loadingDetail || !detail ? (
             <div className="py-10 text-center text-sm text-gray-500">Carregando...</div>
           ) : (
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[detail.status]}`}>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[detail.status]}`}
+                >
                   {STATUS_LABELS[detail.status]}
                 </span>
                 <span className={`text-sm ${PRIORITY_BADGE[detail.priority]}`}>
                   Prioridade: {PRIORITY_LABELS[detail.priority]}
                 </span>
-                {detail.maintenanceType ? (
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    Tipo: {MAINTENANCE_TYPE_LABELS[detail.maintenanceType]}
-                  </span>
-                ) : null}
                 {isOverdue(detail) ? (
                   <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
                     Atrasada · venc. {formatDateTime(detail.dueAt)}
                   </span>
-                ) : detail.dueAt ? (
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    Prazo: {formatDateTime(detail.dueAt)}
-                  </span>
                 ) : null}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 text-sm">
+              <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-xs uppercase text-gray-500">Chamado</p>
                   <p className="font-medium text-gray-900 dark:text-gray-100">
@@ -1074,12 +782,6 @@ export default function SistemaGestaoOsPageClient() {
                 <div>
                   <p className="text-xs uppercase text-gray-500">Categoria</p>
                   <p className="font-medium text-gray-900 dark:text-gray-100">{detail.category}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Solicitante</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {detail.requester?.name || '—'}
-                  </p>
                 </div>
                 <div>
                   <p className="text-xs uppercase text-gray-500">Data de abertura</p>
@@ -1122,55 +824,6 @@ export default function SistemaGestaoOsPageClient() {
                 </div>
               ) : null}
 
-              {Array.isArray(detail.checklistResponses) && detail.checklistResponses.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs uppercase text-gray-500">Checklist</p>
-                  <ul className="space-y-1.5">
-                    {detail.checklistResponses.map((item, idx) => (
-                      <li key={item.id || `${item.label}-${idx}`} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!item.checked}
-                          readOnly
-                          className="h-4 w-4 rounded border-gray-300 text-red-600"
-                        />
-                        <span className="text-gray-800 dark:text-gray-200">
-                          {item.label}
-                          {item.required ? (
-                            <span className="ml-1 text-xs text-rose-600">*</span>
-                          ) : null}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {(detail.signatureRequesterUrl || detail.signatureTechnicianUrl) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {detail.signatureRequesterUrl ? (
-                    <div>
-                      <p className="mb-1 text-xs uppercase text-gray-500">Assinatura solicitante</p>
-                      <img
-                        src={resolveApiMediaUrl(detail.signatureRequesterUrl) ?? undefined}
-                        alt="Assinatura do solicitante"
-                        className="max-h-28 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                      />
-                    </div>
-                  ) : null}
-                  {detail.signatureTechnicianUrl ? (
-                    <div>
-                      <p className="mb-1 text-xs uppercase text-gray-500">Assinatura técnico</p>
-                      <img
-                        src={resolveApiMediaUrl(detail.signatureTechnicianUrl) ?? undefined}
-                        alt="Assinatura do técnico"
-                        className="max-h-28 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
               {detail.events && detail.events.length > 0 ? (
                 <div>
                   <p className="mb-2 text-xs uppercase text-gray-500">Histórico</p>
@@ -1192,176 +845,6 @@ export default function SistemaGestaoOsPageClient() {
                   </ol>
                 </div>
               ) : null}
-
-              {nextStatuses.length > 0 ? (
-                <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900 dark:bg-red-950/20">
-                  <p className="mb-3 text-sm font-semibold text-red-900 dark:text-red-100">
-                    Avançar fluxo
-                  </p>
-                  {detail.status === 'OPEN' ? (
-                    <p className="mb-3 text-xs text-red-800/80 dark:text-red-200/80">
-                      Na primeira análise (Em Análise), o sistema cria a OS e atribui o número da
-                      ordem de serviço.
-                    </p>
-                  ) : null}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="mb-1 block">Próximo status</span>
-                      <select
-                        className={fieldClassName()}
-                        value={transitionStatus}
-                        onChange={(e) => setTransitionStatus(e.target.value as GestaoOsStatus | '')}
-                      >
-                        <option value="">Selecione...</option>
-                        {nextStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {STATUS_LABELS[status]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {(transitionStatus === 'APPROVED' ||
-                      transitionStatus === 'UNDER_REVIEW' ||
-                      detail.status === 'UNDER_REVIEW') && (
-                      <>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Tipo de manutenção</span>
-                          <select
-                            className={fieldClassName()}
-                            value={maintenanceType}
-                            onChange={(e) =>
-                              setMaintenanceType(e.target.value as GestaoOsMaintenanceType | '')
-                            }
-                          >
-                            <option value="">Selecione...</option>
-                            {(Object.keys(MAINTENANCE_TYPE_LABELS) as GestaoOsMaintenanceType[]).map(
-                              (key) => (
-                                <option key={key} value={key}>
-                                  {MAINTENANCE_TYPE_LABELS[key]}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </label>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Técnico responsável</span>
-                          <select
-                            className={fieldClassName()}
-                            value={assigneeId}
-                            onChange={(e) => setAssigneeId(e.target.value)}
-                          >
-                            <option value="">Não atribuído</option>
-                            {technicians.map((tech) => (
-                              <option key={tech.id} value={tech.id}>
-                                {tech.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    )}
-
-                    {transitionStatus === 'CANCELLED' ? (
-                      <label className="block text-sm sm:col-span-2">
-                        <span className="mb-1 block">Justificativa do cancelamento *</span>
-                        <textarea
-                          className={fieldClassName()}
-                          rows={3}
-                          value={cancelReason}
-                          onChange={(e) => setCancelReason(e.target.value)}
-                        />
-                      </label>
-                    ) : null}
-
-                    {transitionStatus === 'CLOSED' ? (
-                      <>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Avaliação (1–5)</span>
-                          <select
-                            className={fieldClassName()}
-                            value={rating}
-                            onChange={(e) => setRating(e.target.value)}
-                          >
-                            {[1, 2, 3, 4, 5].map((n) => (
-                              <option key={n} value={n}>
-                                {n}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Comentário da avaliação</span>
-                          <input
-                            className={fieldClassName()}
-                            value={ratingComment}
-                            onChange={(e) => setRatingComment(e.target.value)}
-                          />
-                        </label>
-                        <div className="sm:col-span-2">
-                          <p className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Assinatura do solicitante
-                          </p>
-                          {signatureRequesterUrl ? (
-                            <div className="flex flex-wrap items-center gap-3">
-                              <img
-                                src={resolveApiMediaUrl(signatureRequesterUrl) ?? undefined}
-                                alt="Prévia da assinatura"
-                                className="max-h-24 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                              />
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-rose-600 hover:underline"
-                                onClick={() => setSignatureRequesterUrl(null)}
-                              >
-                                Refazer
-                              </button>
-                            </div>
-                          ) : (
-                            <SignaturePad
-                              onSave={(dataUrl) => void saveSignatureDataUrl(dataUrl)}
-                            />
-                          )}
-                          {uploadingSignature ? (
-                            <p className="mt-1 text-xs text-gray-500">Enviando assinatura...</p>
-                          ) : null}
-                        </div>
-                      </>
-                    ) : null}
-
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="mb-1 block">Observação / relato</span>
-                      <textarea
-                        className={fieldClassName()}
-                        rows={2}
-                        value={transitionNote}
-                        onChange={(e) => setTransitionNote(e.target.value)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={
-                        !transitionStatus ||
-                        transitionMutation.isPending ||
-                        (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
-                        (transitionStatus === 'APPROVED' && !maintenanceType)
-                      }
-                      onClick={() => transitionMutation.mutate()}
-                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {transitionMutation.isPending ? 'Atualizando...' : 'Confirmar transição'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem novas
-                  transições.
-                </p>
-              )}
             </div>
           )}
         </Modal>
