@@ -254,7 +254,7 @@ export function TopNavbar({
     <>
       <header
         data-app-topnav
-        className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 pt-[env(safe-area-inset-top)] dark:border-gray-800 dark:bg-gray-900 sm:h-16 sm:gap-3 sm:px-4 lg:gap-4 lg:px-6"
+        className="z-30 flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 pr-2.5 dark:border-gray-800 dark:bg-gray-900 sm:h-16 sm:gap-3 sm:pl-4 sm:pr-3 lg:gap-4 lg:pl-6"
       >
         {/* Mobile menu */}
         <button

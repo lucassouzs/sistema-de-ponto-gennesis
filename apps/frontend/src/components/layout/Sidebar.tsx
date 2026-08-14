@@ -1729,12 +1729,12 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       <div
         ref={sidebarRef}
         data-app-sidebar
-        className={`fixed inset-y-0 left-0 z-[70] flex h-[100dvh] max-h-[100dvh] max-w-[100vw] transform overflow-hidden transition-all ${SIDEBAR_TRANSITION_CLASS} ${
+        className={`fixed inset-y-0 left-0 z-[70] flex h-[100dvh] max-h-[100dvh] overflow-y-clip overflow-x-visible transition-all ${SIDEBAR_TRANSITION_CLASS} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
         {/* Tier 1 — Rail de módulos */}
-        <div className="flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-x-visible overflow-y-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
           <div className="relative z-0 isolate flex flex-shrink-0 flex-col items-center p-5 pb-3 [@media(max-height:820px)]:p-2.5 [@media(max-height:820px)]:pb-1.5">
             <Link
               href="/ponto/home"
@@ -1909,7 +1909,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           {/* Largura fixa: o painel só revela o conteúdo, sem o texto refluir no meio da abertura. */}
           <div className="flex h-full min-h-0 w-72 shrink-0 flex-col">
           {/* Header do módulo — mesma altura da TopNavbar (h-16) pra linha bater */}
-          <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-4 dark:border-gray-800">
+          <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-5 dark:border-gray-800">
             <div className="flex w-full items-center justify-between gap-2">
               <h2 className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-gray-100">
                 {searchTerm.trim() ? 'Busca' : selectedModule?.name ?? 'Menu'}
@@ -1935,7 +1935,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
           {/* Lista de páginas */}
           <nav
-            className={`sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-4${
+            className={`sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4${
               navEnterClass ? ' sidebar-nav-list--enter' : ''
             }`}
           >

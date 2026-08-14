@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ImagePlus, Loader2, Paperclip, X } from 'lucide-react';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
-import type { GestaoOsAttachment } from '@/app/ponto/sistema-gestao-os/gestaoOsTypes';
+import { DOCUMENT_KIND_LABELS, type GestaoOsAttachment } from '@/app/ponto/sistema-gestao-os/gestaoOsTypes';
 
 const ACCEPT = 'image/*,.pdf';
 
@@ -19,12 +19,16 @@ export function GestaoOsAttachmentsField({
   disabled = false,
   onFilesSelect,
   onRemove,
+  label = 'Clique ou arraste as fotos',
+  hint = 'PNG, JPG ou PDF',
 }: {
   files: GestaoOsAttachment[];
   uploading?: boolean;
   disabled?: boolean;
   onFilesSelect: (files: File[]) => void;
   onRemove: (url: string) => void;
+  label?: string;
+  hint?: string;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const blocked = disabled || uploading;
@@ -60,9 +64,9 @@ export function GestaoOsAttachmentsField({
           <ImagePlus className="h-7 w-7 text-gray-400 dark:text-gray-500" strokeWidth={1.4} />
         )}
         <span className="text-sm font-medium text-gray-800 dark:text-gray-100">
-          {uploading ? 'Enviando...' : 'Clique ou arraste as fotos'}
+          {uploading ? 'Enviando...' : label}
         </span>
-        <span className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG ou PDF</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{hint}</span>
         <input
           type="file"
           accept={ACCEPT}
@@ -96,7 +100,9 @@ export function GestaoOsAttachmentsField({
                   className="truncate px-2 py-1.5 text-xs text-gray-700 dark:text-gray-300"
                   title={file.name}
                 >
-                  {file.name}
+                  {file.kind && DOCUMENT_KIND_LABELS[file.kind]
+                    ? `${DOCUMENT_KIND_LABELS[file.kind]} · ${file.name}`
+                    : file.name}
                 </p>
                 <button
                   type="button"

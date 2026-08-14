@@ -12,10 +12,13 @@ export type GestaoOsPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type GestaoOsMaintenanceType = 'CORRECTIVE' | 'PREVENTIVE' | 'PREDICTIVE';
 export type GestaoOsProfile = 'REQUESTER' | 'MANAGER' | 'TECHNICIAN' | 'ADMIN';
 
+export type GestaoOsDocumentKind = 'MANUAL' | 'WARRANTY' | 'LAUDO' | 'ART' | 'OTHER';
+
 export type GestaoOsAttachment = {
   url: string;
   name: string;
   mimeType?: string;
+  kind?: GestaoOsDocumentKind;
 };
 
 export type GestaoOsUserRef = {
@@ -99,8 +102,6 @@ export type GestaoOsMaintenancePlan = {
   checklist?: { id: string; name: string; items?: unknown } | null;
   assignee?: GestaoOsUserRef | null;
 };
-
-export type GestaoOsDocumentKind = 'MANUAL' | 'WARRANTY' | 'LAUDO' | 'ART' | 'OTHER';
 
 export type GestaoOsDocument = {
   id: string;

@@ -4121,14 +4121,21 @@ model GestaoOsEquipmentSubgroup {
 
 /// Equipamento do catálogo (não é o ativo físico do local).
 model GestaoOsEquipment {
-  id           String   @id @default(cuid())
-  subgroupId   String
-  name         String
-  manufacturer String?
-  model        String?
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(cuid())
+  subgroupId        String
+  name              String
+  manufacturer      String?
+  model             String?
+  /// SLA padrão em horas. Null = nenhum.
+  defaultSlaHours   Int?
+  /// Expectativa de vida útil em anos.
+  expectedLifeYears Int?
+  notes             String?  @db.Text
+  /// Anexos: [{ url, name, mimeType?, kind? }] — kind: MANUAL | WARRANTY | LAUDO | OTHER
+  attachments       Json?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   subgroup GestaoOsEquipmentSubgroup @relation(fields: [subgroupId], references: [id], onDelete: Cascade)
 

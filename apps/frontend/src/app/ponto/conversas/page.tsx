@@ -2542,7 +2542,7 @@ function ConversasContent() {
 
   return (
     <>
-    <div className="h-[100dvh] w-full overflow-hidden">
+    <div className="h-full w-full overflow-hidden">
       <div
         ref={layoutRef}
         className={clsx(

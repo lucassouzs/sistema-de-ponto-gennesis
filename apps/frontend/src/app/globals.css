@@ -69,7 +69,6 @@
     @apply bg-background text-foreground font-sans;
     min-height: 100vh;
     min-height: 100dvh;
-    overflow-x: clip;
   }
   
   html.dark body {
@@ -81,6 +80,7 @@
     min-height: 100%;
     min-height: 100dvh;
     overflow-x: clip;
+    overflow-y: auto;
   }
 }
 
@@ -316,8 +316,6 @@
   
   .scrollbar-hide {
     -ms-overflow-style: none !important;
-    scrollbar-width: none !important;
-    scrollbar-color: transparent transparent !important;
   }
   
   .scrollbar-hide::-webkit-scrollbar {
@@ -325,61 +323,6 @@
     width: 0 !important;
     height: 0 !important;
   }
-  
-/* Scrollbar ultra-fina, sem fundo, sem setas e totalmente quadrada */
-* {
-  scrollbar-width: thin !important;
-  scrollbar-color: #9ca3af transparent !important;
-}
-
-/* WebKit (Chrome, Edge, Safari) */
-*::-webkit-scrollbar {
-  width: 2px !important; /* mais fina ainda */
-  height: 2px !important; /* para barras horizontais */
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent !important; /* sem fundo */
-}
-
-*::-webkit-scrollbar-thumb {
-  background: #9ca3af !important;
-  border-radius: 0 !important; /* quadrada */
-  transition: background-color 0.2s ease;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: #7b7c7e !important;
-}
-
-/* Remover setas completamente */
-*::-webkit-scrollbar-button {
-  display: none !important;
-}
-
-/* Segurança extra: remover todas as variações de botões */
-*::-webkit-scrollbar-button:start:decrement,
-*::-webkit-scrollbar-button:end:increment,
-*::-webkit-scrollbar-button:vertical:start:decrement,
-*::-webkit-scrollbar-button:vertical:end:increment,
-*::-webkit-scrollbar-button:horizontal:start:decrement,
-*::-webkit-scrollbar-button:horizontal:end:increment {
-  display: none !important;
-}
-
-/* Depois das regras globais de scrollbar — esconde de verdade. */
-.scrollbar-hide {
-  -ms-overflow-style: none !important;
-  scrollbar-width: none !important;
-  scrollbar-color: transparent transparent !important;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  background: transparent !important;
-}
 
   /* Fix definitivo para linha branca nas modais */
   .fixed.inset-0 {
@@ -389,11 +332,6 @@
     bottom: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-  
-  /* Evita “pulo” da página quando a barra vertical aparece/some */
-  html {
-    scrollbar-gutter: stable;
   }
 
   /* Bloqueia scroll da página com modal aberto (sem position:fixed no body — quebra portais/dropdowns fixed) */
@@ -423,6 +361,202 @@
   #dropdown-portal-root > * {
     pointer-events: auto;
   }
+}
+
+/* Chrome/Edge no Windows: NÃO usar scrollbar-width nem scrollbar-color.
+   Essas propriedades ativam a barra nativa (grossa, com setinhas e hover branco). */
+:root {
+  --app-scrollbar-size: 6px;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: var(--app-scrollbar-size) !important;
+  height: var(--app-scrollbar-size) !important;
+  max-width: var(--app-scrollbar-size) !important;
+  max-height: var(--app-scrollbar-size) !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar:vertical,
+*::-webkit-scrollbar:vertical {
+  width: var(--app-scrollbar-size) !important;
+  max-width: var(--app-scrollbar-size) !important;
+}
+
+::-webkit-scrollbar:horizontal,
+*::-webkit-scrollbar:horizontal {
+  height: var(--app-scrollbar-size) !important;
+  max-height: var(--app-scrollbar-size) !important;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track-piece,
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.28) !important;
+  border-radius: 999px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
+  background: rgb(148 163 184 / 0.36) !important;
+}
+
+html.dark::-webkit-scrollbar-thumb,
+html.dark *::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14) !important;
+}
+
+html.dark::-webkit-scrollbar-thumb:hover,
+html.dark::-webkit-scrollbar-thumb:active,
+html.dark *::-webkit-scrollbar-thumb:hover,
+html.dark *::-webkit-scrollbar-thumb:active {
+  background: rgb(255 255 255 / 0.18) !important;
+}
+
+::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:double-button,
+*::-webkit-scrollbar-button:start:decrement,
+*::-webkit-scrollbar-button:end:increment,
+*::-webkit-scrollbar-button:vertical,
+*::-webkit-scrollbar-button:horizontal,
+*::-webkit-scrollbar-button:vertical:start:decrement,
+*::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:vertical:start:increment,
+*::-webkit-scrollbar-button:vertical:end:decrement,
+*::-webkit-scrollbar-button:horizontal:start:decrement,
+*::-webkit-scrollbar-button:horizontal:end:increment,
+*::-webkit-scrollbar-button:horizontal:start:increment,
+*::-webkit-scrollbar-button:horizontal:end:decrement {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+@-moz-document url-prefix() {
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgb(148 163 184 / 0.28) transparent !important;
+  }
+
+  html.dark,
+  html.dark * {
+    scrollbar-color: rgb(255 255 255 / 0.14) transparent !important;
+  }
+
+  .scrollbar-hide,
+  html.dark .scrollbar-hide {
+    scrollbar-width: none !important;
+    scrollbar-color: transparent transparent !important;
+  }
+
+  .sidebar-nav-list {
+    scrollbar-width: none !important;
+    scrollbar-color: transparent transparent !important;
+  }
+
+  .sidebar-nav-list:hover,
+  .sidebar-nav-list:focus-within {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgb(148 163 184 / 0.28) transparent !important;
+  }
+
+  html.dark .sidebar-nav-list:hover,
+  html.dark .sidebar-nav-list:focus-within {
+    scrollbar-color: rgb(255 255 255 / 0.14) transparent !important;
+  }
+}
+
+.scrollbar-hide,
+html.dark .scrollbar-hide,
+.scrollbar-hide:hover,
+.scrollbar-hide:focus-within,
+html.dark .scrollbar-hide:hover,
+html.dark .scrollbar-hide:focus-within {
+  -ms-overflow-style: none !important;
+}
+
+.scrollbar-hide::-webkit-scrollbar,
+.scrollbar-hide:hover::-webkit-scrollbar,
+.scrollbar-hide:focus-within::-webkit-scrollbar,
+html.dark .scrollbar-hide::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Sidebar: barra só aparece com o mouse em cima (não usa scrollbar-width no Chrome). */
+.sidebar-nav-list {
+  overflow-y: hidden !important;
+}
+
+.sidebar-nav-list:hover,
+.sidebar-nav-list:focus-within {
+  overflow-y: auto !important;
+}
+
+.sidebar-nav-list::-webkit-scrollbar {
+  width: var(--app-scrollbar-size) !important;
+  height: var(--app-scrollbar-size) !important;
+  max-width: var(--app-scrollbar-size) !important;
+  max-height: var(--app-scrollbar-size) !important;
+}
+
+.sidebar-nav-list::-webkit-scrollbar-thumb {
+  background: transparent !important;
+}
+
+.sidebar-nav-list:hover::-webkit-scrollbar-thumb,
+.sidebar-nav-list:focus-within::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.28) !important;
+}
+
+html.dark .sidebar-nav-list:hover::-webkit-scrollbar-thumb,
+html.dark .sidebar-nav-list:focus-within::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 0.14) !important;
+}
+
+.sidebar-nav-list:hover::-webkit-scrollbar-thumb:hover,
+.sidebar-nav-list:focus-within::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.36) !important;
+}
+
+html.dark .sidebar-nav-list:hover::-webkit-scrollbar-thumb:hover,
+html.dark .sidebar-nav-list:focus-within::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 0.18) !important;
+}
+
+.app-thin-scroll::-webkit-scrollbar,
+.app-thin-scroll::-webkit-scrollbar:horizontal,
+.app-thin-scroll::-webkit-scrollbar:vertical,
+.app-page-scroll::-webkit-scrollbar,
+.app-page-scroll::-webkit-scrollbar:horizontal,
+.app-page-scroll::-webkit-scrollbar:vertical,
+.table-scroll::-webkit-scrollbar,
+.table-scroll::-webkit-scrollbar:horizontal,
+html::-webkit-scrollbar,
+html::-webkit-scrollbar:vertical,
+body::-webkit-scrollbar,
+body::-webkit-scrollbar:vertical {
+  width: var(--app-scrollbar-size) !important;
+  height: var(--app-scrollbar-size) !important;
+  max-width: var(--app-scrollbar-size) !important;
+  max-height: var(--app-scrollbar-size) !important;
 }
 
 /* Inverter ícone de calendário em inputs de data no dark mode */

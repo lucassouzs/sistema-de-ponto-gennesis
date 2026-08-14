@@ -450,4 +450,19 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS "gestao_os_documents_companyId_idx" ON "gestao_os_documents"("companyId");`
   );
+
+  if (await columnExists(prisma, 'gestao_os_equipments', 'id')) {
+    for (const col of [
+      ['defaultSlaHours', 'INTEGER'],
+      ['expectedLifeYears', 'INTEGER'],
+      ['notes', 'TEXT'],
+      ['attachments', 'JSONB']
+    ] as const) {
+      if (!(await columnExists(prisma, 'gestao_os_equipments', col[0]))) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "gestao_os_equipments" ADD COLUMN "${col[0]}" ${col[1]};`
+        );
+      }
+    }
+  }
 }

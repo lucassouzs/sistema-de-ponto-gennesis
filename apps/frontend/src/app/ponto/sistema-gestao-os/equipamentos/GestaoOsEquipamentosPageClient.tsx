@@ -24,10 +24,17 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
-import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
+import {
+  DOCUMENT_KIND_LABELS,
+  type GestaoOsAttachment,
+  type GestaoOsDocumentKind
+} from '@/app/ponto/sistema-gestao-os/gestaoOsTypes';
+import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 
 type EquipmentTab = 'equipamentos' | 'grupos' | 'subgrupos';
 
@@ -37,11 +44,80 @@ const TABS: ReadonlyArray<{ id: EquipmentTab; label: string }> = [
   { id: 'grupos', label: 'Grupos' }
 ];
 
+const EMPTY_EQUIPMENT_FORM = {
+  groupId: '',
+  subgroupId: '',
+  name: '',
+  manufacturer: '',
+  model: '',
+  defaultSlaHours: '',
+  expectedLifeYears: '',
+  notes: '',
+  attachments: [] as GestaoOsAttachment[]
+};
+
+const SLA_OPTIONS = labeledToSelectOptions([
+  { value: '1', label: '1 hora' },
+  { value: '2', label: '2 horas' },
+  { value: '4', label: '4 horas' },
+  { value: '8', label: '8 horas' },
+  { value: '24', label: '24 horas' },
+  { value: '48', label: '48 horas' },
+  { value: '72', label: '72 horas' },
+  { value: '120', label: '5 dias' },
+  { value: '168', label: '7 dias' },
+  { value: '360', label: '15 dias' },
+  { value: '720', label: '30 dias' }
+]);
+
+const EQUIPMENT_DOC_KIND_OPTIONS = labeledToSelectOptions([
+  { value: 'MANUAL', label: DOCUMENT_KIND_LABELS.MANUAL },
+  { value: 'WARRANTY', label: DOCUMENT_KIND_LABELS.WARRANTY },
+  { value: 'LAUDO', label: DOCUMENT_KIND_LABELS.LAUDO },
+  { value: 'OTHER', label: DOCUMENT_KIND_LABELS.OTHER }
+]);
+
+const SLA_LABEL_BY_HOURS: Record<string, string> = Object.fromEntries(
+  SLA_OPTIONS.map((opt) => [opt.value, opt.label])
+);
+
+function formatSlaHours(hours: number | null | undefined) {
+  if (hours == null) return 'Nenhum';
+  return SLA_LABEL_BY_HOURS[String(hours)] || `${hours} h`;
+}
+
+function parseEquipmentAttachments(value: unknown): GestaoOsAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    const url = String(row.url ?? '').trim();
+    if (!url) return [];
+    const kindRaw = String(row.kind ?? '').toUpperCase();
+    const kind: GestaoOsDocumentKind | undefined =
+      kindRaw === 'MANUAL' || kindRaw === 'WARRANTY' || kindRaw === 'LAUDO' || kindRaw === 'OTHER'
+        ? kindRaw
+        : undefined;
+    return [
+      {
+        url,
+        name: String(row.name ?? 'anexo').trim() || 'anexo',
+        mimeType: row.mimeType ? String(row.mimeType) : undefined,
+        kind
+      }
+    ];
+  });
+}
+
 type CatalogEquipment = {
   id: string;
   name: string;
   manufacturer: string | null;
   model: string | null;
+  defaultSlaHours: number | null;
+  expectedLifeYears: number | null;
+  notes: string | null;
+  attachments: GestaoOsAttachment[] | null;
   isActive: boolean;
 };
 
@@ -73,6 +149,10 @@ type EquipmentRow = {
   name: string;
   manufacturer: string | null;
   model: string | null;
+  defaultSlaHours: number | null;
+  expectedLifeYears: number | null;
+  notes: string | null;
+  attachments: GestaoOsAttachment[];
   isActive: boolean;
   subgroupId: string;
   subgroupName: string;
@@ -100,6 +180,10 @@ function flattenCatalog(tree: CatalogGroup[]) {
           name: equipment.name,
           manufacturer: equipment.manufacturer,
           model: equipment.model,
+          defaultSlaHours: equipment.defaultSlaHours ?? null,
+          expectedLifeYears: equipment.expectedLifeYears ?? null,
+          notes: equipment.notes ?? null,
+          attachments: parseEquipmentAttachments(equipment.attachments),
           isActive: equipment.isActive,
           subgroupId: subgroup.id,
           subgroupName: subgroup.name,
@@ -133,13 +217,9 @@ export default function GestaoOsEquipamentosPageClient() {
 
   const [groupForm, setGroupForm] = useState({ name: '' });
   const [subgroupForm, setSubgroupForm] = useState({ groupId: '', name: '' });
-  const [equipmentForm, setEquipmentForm] = useState({
-    groupId: '',
-    subgroupId: '',
-    name: '',
-    manufacturer: '',
-    model: ''
-  });
+  const [equipmentForm, setEquipmentForm] = useState(EMPTY_EQUIPMENT_FORM);
+  const [attachmentKind, setAttachmentKind] = useState<GestaoOsDocumentKind>('MANUAL');
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -244,7 +324,8 @@ export default function GestaoOsEquipamentosPageClient() {
   const resetForms = () => {
     setGroupForm({ name: '' });
     setSubgroupForm({ groupId: '', name: '' });
-    setEquipmentForm({ groupId: '', subgroupId: '', name: '', manufacturer: '', model: '' });
+    setEquipmentForm(EMPTY_EQUIPMENT_FORM);
+    setAttachmentKind('MANUAL');
   };
 
   const openCreate = () => {
@@ -272,8 +353,13 @@ export default function GestaoOsEquipamentosPageClient() {
       subgroupId: row.subgroupId,
       name: row.name,
       manufacturer: row.manufacturer || '',
-      model: row.model || ''
+      model: row.model || '',
+      defaultSlaHours: row.defaultSlaHours != null ? String(row.defaultSlaHours) : '',
+      expectedLifeYears: row.expectedLifeYears != null ? String(row.expectedLifeYears) : '',
+      notes: row.notes || '',
+      attachments: row.attachments ?? []
     });
+    setAttachmentKind('MANUAL');
     setShowForm(true);
   };
 
@@ -345,7 +431,11 @@ export default function GestaoOsEquipamentosPageClient() {
         subgroupId: equipmentForm.subgroupId,
         name: equipmentForm.name,
         manufacturer: equipmentForm.manufacturer || null,
-        model: equipmentForm.model || null
+        model: equipmentForm.model || null,
+        defaultSlaHours: equipmentForm.defaultSlaHours || null,
+        expectedLifeYears: equipmentForm.expectedLifeYears || null,
+        notes: equipmentForm.notes || null,
+        attachments: equipmentForm.attachments
       });
     },
     onSuccess: () => {
@@ -364,7 +454,11 @@ export default function GestaoOsEquipamentosPageClient() {
       await api.patch(`/gestao-os/cadastros/equipments/${id}`, {
         name: equipmentForm.name,
         manufacturer: equipmentForm.manufacturer || null,
-        model: equipmentForm.model || null
+        model: equipmentForm.model || null,
+        defaultSlaHours: equipmentForm.defaultSlaHours || null,
+        expectedLifeYears: equipmentForm.expectedLifeYears || null,
+        notes: equipmentForm.notes || null,
+        attachments: equipmentForm.attachments
       });
     },
     onSuccess: () => {
@@ -397,6 +491,36 @@ export default function GestaoOsEquipamentosPageClient() {
       toast.error(e.response?.data?.message || 'Erro ao excluir.');
     }
   });
+
+  const uploadEquipmentFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setUploadingAttachments(true);
+    try {
+      const uploaded: GestaoOsAttachment[] = [];
+      for (const file of files) {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await api.post('/gestao-os/upload-attachment', form, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const data = res.data?.data;
+        if (data?.url) {
+          uploaded.push({
+            url: data.url,
+            name: data.name || file.name,
+            mimeType: data.mimeType || file.type,
+            kind: attachmentKind
+          });
+        }
+      }
+      setEquipmentForm((s) => ({ ...s, attachments: [...s.attachments, ...uploaded] }));
+      toast.success(`${uploaded.length} anexo(s) enviado(s)`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Falha no upload');
+    } finally {
+      setUploadingAttachments(false);
+    }
+  };
 
   const save = () => {
     if (tab === 'grupos') {
@@ -902,6 +1026,84 @@ export default function GestaoOsEquipamentosPageClient() {
                         className={FORM_FIELD_INPUT_CLS}
                       />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        SLA Padrão
+                      </label>
+                      <StringSingleSelectDropdown
+                        value={equipmentForm.defaultSlaHours}
+                        onChange={(v) =>
+                          setEquipmentForm((s) => ({ ...s, defaultSlaHours: v }))
+                        }
+                        options={SLA_OPTIONS}
+                        placeholder="Nenhum"
+                        emptyOptionLabel="Nenhum"
+                        allowEmpty
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Expectativa vida útil
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={equipmentForm.expectedLifeYears}
+                          onChange={(e) =>
+                            setEquipmentForm((s) => ({
+                              ...s,
+                              expectedLifeYears: e.target.value
+                            }))
+                          }
+                          placeholder=""
+                          className={FORM_FIELD_INPUT_CLS}
+                        />
+                        <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+                          anos
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Observações
+                      </label>
+                      <textarea
+                        value={equipmentForm.notes}
+                        onChange={(e) =>
+                          setEquipmentForm((s) => ({ ...s, notes: e.target.value }))
+                        }
+                        rows={3}
+                        className={FORM_FIELD_TEXTAREA_CLS}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Anexos
+                      </label>
+                      <StringSingleSelectDropdown
+                        value={attachmentKind}
+                        onChange={(v) => setAttachmentKind((v || 'MANUAL') as GestaoOsDocumentKind)}
+                        options={EQUIPMENT_DOC_KIND_OPTIONS}
+                        placeholder="Tipo do documento"
+                        allowEmpty={false}
+                        disableSearch
+                      />
+                      <GestaoOsAttachmentsField
+                        files={equipmentForm.attachments}
+                        uploading={uploadingAttachments}
+                        onFilesSelect={uploadEquipmentFiles}
+                        onRemove={(url) =>
+                          setEquipmentForm((s) => ({
+                            ...s,
+                            attachments: s.attachments.filter((file) => file.url !== url)
+                          }))
+                        }
+                        label="Clique ou arraste os arquivos"
+                        hint="PDF, PNG ou JPG — manual, garantia, laudo, etc."
+                      />
+                    </div>
                   </>
                 ) : null}
 
@@ -915,7 +1117,7 @@ export default function GestaoOsEquipamentosPageClient() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSaving}
+                    disabled={isSaving || uploadingAttachments}
                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
                   >
                     {isSaving ? 'Salvando...' : 'Salvar'}
@@ -998,6 +1200,66 @@ export default function GestaoOsEquipamentosPageClient() {
                       <p className="text-sm text-gray-900 dark:text-gray-100">
                         {viewing.row.model || '—'}
                       </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        SLA Padrão
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {formatSlaHours(viewing.row.defaultSlaHours)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Expectativa vida útil
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.expectedLifeYears != null
+                          ? `${viewing.row.expectedLifeYears} anos`
+                          : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Observações
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.notes || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Anexos
+                      </p>
+                      {viewing.row.attachments.length > 0 ? (
+                        <ul className="space-y-1.5">
+                          {viewing.row.attachments.map((file) => {
+                            const href = resolveApiMediaUrl(file.url);
+                            return (
+                              <li key={file.url}>
+                                {href ? (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm text-red-600 hover:underline dark:text-red-400"
+                                  >
+                                    {file.kind && DOCUMENT_KIND_LABELS[file.kind]
+                                      ? `${DOCUMENT_KIND_LABELS[file.kind]} · ${file.name}`
+                                      : file.name}
+                                  </a>
+                                ) : (
+                                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                                    {file.name}
+                                  </span>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-gray-100">—</p>
+                      )}
                     </div>
                   </>
                 ) : null}

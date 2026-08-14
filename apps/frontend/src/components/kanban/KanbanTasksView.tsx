@@ -497,7 +497,7 @@ export function KanbanTasksView({
         <div className="min-h-0 flex-1 overflow-hidden rounded-2xl bg-[#F3F4F6] dark:bg-gray-950/60">
           <div
             ref={listsScrollRef}
-            className="flex h-full min-h-0 items-stretch gap-4 overflow-x-auto px-4 py-4 [scrollbar-gutter:stable]"
+            className="app-thin-scroll flex h-full min-h-0 items-stretch gap-4 overflow-x-auto px-4 py-4"
           >
             {lists.map((list) => (
               <ListBlock

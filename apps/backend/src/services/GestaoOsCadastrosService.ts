@@ -23,6 +23,36 @@ async function qrCodeToDataUrl(
   }
 }
 
+function parseOptionalNonNegativeInt(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n);
+}
+
+const EQUIPMENT_DOC_KINDS = new Set(['MANUAL', 'WARRANTY', 'LAUDO', 'OTHER']);
+
+function parseEquipmentAttachments(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) throw createError('Anexos inválidos', 400);
+  const parsed: Array<{ url: string; name: string; mimeType?: string; kind?: string }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const url = String(row.url ?? '').trim();
+    const name = String(row.name ?? row.originalName ?? 'anexo').trim() || 'anexo';
+    if (!url) continue;
+    const kindRaw = String(row.kind ?? '').toUpperCase();
+    parsed.push({
+      url,
+      name,
+      ...(row.mimeType ? { mimeType: String(row.mimeType) } : {}),
+      ...(EQUIPMENT_DOC_KINDS.has(kindRaw) ? { kind: kindRaw } : {})
+    });
+  }
+  return parsed as Prisma.InputJsonValue;
+}
+
 function newQrToken(): string {
   return randomBytes(16).toString('hex');
 }
@@ -455,6 +485,10 @@ export class GestaoOsCadastrosService {
     name?: string;
     manufacturer?: string | null;
     model?: string | null;
+    defaultSlaHours?: number | string | null;
+    expectedLifeYears?: number | string | null;
+    notes?: string | null;
+    attachments?: unknown;
   }) {
     const subgroupId = String(input.subgroupId ?? '').trim();
     const name = String(input.name ?? '').trim();
@@ -464,12 +498,17 @@ export class GestaoOsCadastrosService {
       where: { id: subgroupId }
     });
     if (!subgroup) throw createError('Subgrupo não encontrado', 404);
+    const attachments = parseEquipmentAttachments(input.attachments);
     return prisma.gestaoOsEquipment.create({
       data: {
         subgroupId,
         name,
         manufacturer: input.manufacturer?.trim() || null,
-        model: input.model?.trim() || null
+        model: input.model?.trim() || null,
+        defaultSlaHours: parseOptionalNonNegativeInt(input.defaultSlaHours),
+        expectedLifeYears: parseOptionalNonNegativeInt(input.expectedLifeYears),
+        notes: input.notes?.trim() || null,
+        ...(attachments !== undefined ? { attachments } : {})
       }
     });
   }
@@ -481,10 +520,15 @@ export class GestaoOsCadastrosService {
       manufacturer?: string | null;
       model?: string | null;
       isActive?: boolean;
+      defaultSlaHours?: number | string | null;
+      expectedLifeYears?: number | string | null;
+      notes?: string | null;
+      attachments?: unknown;
     }
   ) {
     const existing = await prisma.gestaoOsEquipment.findUnique({ where: { id } });
     if (!existing) throw createError('Equipamento não encontrado', 404);
+    const attachments = parseEquipmentAttachments(input.attachments);
     return prisma.gestaoOsEquipment.update({
       where: { id },
       data: {
@@ -493,7 +537,15 @@ export class GestaoOsCadastrosService {
           ? { manufacturer: input.manufacturer?.trim() || null }
           : {}),
         ...(input.model !== undefined ? { model: input.model?.trim() || null } : {}),
-        ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
+        ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {}),
+        ...(input.defaultSlaHours !== undefined
+          ? { defaultSlaHours: parseOptionalNonNegativeInt(input.defaultSlaHours) }
+          : {}),
+        ...(input.expectedLifeYears !== undefined
+          ? { expectedLifeYears: parseOptionalNonNegativeInt(input.expectedLifeYears) }
+          : {}),
+        ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+        ...(attachments !== undefined ? { attachments } : {})
       }
     });
   }

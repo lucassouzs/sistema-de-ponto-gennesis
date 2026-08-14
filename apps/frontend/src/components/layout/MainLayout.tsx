@@ -180,8 +180,8 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
         <div
           className={
             isKanbanRoute
-              ? 'min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-white dark:bg-gray-900'
-              : 'min-h-[100dvh] max-w-[100vw] overflow-x-clip bg-gray-50 dark:bg-gray-900'
+              ? 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-white dark:bg-gray-900'
+              : 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-gray-50 dark:bg-gray-900'
           }
         >
           <Sidebar
@@ -194,7 +194,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
 
           {/* Main Content — mesma duração/easing do painel tier 2 da sidebar */}
           <div
-            className={`min-w-0 max-w-full ${
+            className={`flex h-full min-h-0 min-w-0 max-w-full flex-col ${
               layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
             } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
           >
@@ -206,16 +206,16 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
             <main
               className={
                 isFullBleedRoute
-                  ? 'min-w-0 p-0'
-                  : 'min-w-0 px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
+                  ? 'app-page-scroll app-thin-scroll min-h-0 min-w-0 flex-1 overflow-hidden p-0'
+                  : 'app-page-scroll app-thin-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
               }
             >
               {isFullBleedRoute ? (
                 <div
                   className={
                     pageRevealReady
-                      ? `page-enter${pageFromReload ? ' page-enter--reload' : ''}`
-                      : 'page-enter page-enter--pending'
+                      ? `page-enter h-full min-h-0${pageFromReload ? ' page-enter--reload' : ''}`
+                      : 'page-enter page-enter--pending h-full min-h-0'
                   }
                 >
                   {children}

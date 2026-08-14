@@ -2409,7 +2409,7 @@ function KanbanBoardPicker({
       </button>
       {open && (
         <div className="absolute left-0 top-full z-50 mt-1 min-w-[16rem] w-max max-w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
-          <div className="max-h-72 overflow-y-auto overscroll-contain p-1.5 [scrollbar-width:thin]">
+          <div className="max-h-72 overflow-y-auto overscroll-contain p-1.5">
             {boards.length === 0 ? (
               <p className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400">
                 Nenhum quadro disponível.
@@ -4185,10 +4185,10 @@ function KanbanPage() {
         <div
           ref={boardScrollRef}
           className={clsx(
-            'overflow-x-auto bg-transparent px-4',
+            'app-thin-scroll overflow-x-auto bg-transparent px-4',
             isChecklistBoard
-              ? 'min-h-0 flex-1 overflow-y-hidden pb-5 [scrollbar-gutter:stable] [scrollbar-width:thin]'
-              : 'scrollbar-hide pb-4',
+              ? 'min-h-0 flex-1 overflow-y-hidden pb-5'
+              : 'pb-4',
           )}
         >
           <div
