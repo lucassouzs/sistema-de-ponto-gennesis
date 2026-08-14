@@ -261,9 +261,15 @@ export class GestaoOsPlansService {
         {
           userId: requesterId,
           isAdmin: true,
+          canAnalisar: true,
+          canExecutar: true,
+          canEncerrar: true,
+          canCadastros: true,
+          canMeusChamados: true,
+          canViewAll: true,
           memberships: [],
           companyId: plan.companyId,
-          profile: 'ADMIN'
+          profile: null
         }
       );
 
