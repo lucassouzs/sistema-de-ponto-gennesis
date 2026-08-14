@@ -1045,22 +1045,22 @@ export default function GestaoOsEquipamentosPageClient() {
                       <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Expectativa vida útil
                       </label>
-                      <div className="flex items-center gap-2">
+                      <div className="relative">
                         <input
-                          type="number"
-                          min={0}
-                          step={1}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           value={equipmentForm.expectedLifeYears}
                           onChange={(e) =>
                             setEquipmentForm((s) => ({
                               ...s,
-                              expectedLifeYears: e.target.value
+                              expectedLifeYears: e.target.value.replace(/\D/g, '')
                             }))
                           }
                           placeholder=""
-                          className={FORM_FIELD_INPUT_CLS}
+                          className={`${FORM_FIELD_INPUT_CLS} pr-14`}
                         />
-                        <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
                           anos
                         </span>
                       </div>

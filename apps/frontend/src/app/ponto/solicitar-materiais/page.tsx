@@ -15,8 +15,6 @@ import {
   Filter,
   Eye,
   RotateCcw,
-  ChevronUp,
-  ChevronDown,
   ClipboardList,
   Clock,
   CheckCircle,
@@ -601,12 +599,6 @@ function validateNewMaterialRequestForm(
   return null;
 }
 
-const rmNumberInputClass =
-  'min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-gray-900 tabular-nums outline-none dark:text-gray-100';
-
-const rmNumberInputClassSm =
-  'min-w-0 flex-1 bg-transparent px-2 py-1.5 text-sm text-gray-900 tabular-nums outline-none dark:text-gray-100';
-
 function formatQuantityInputBr(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value) || value <= 0) return '';
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false });
@@ -640,8 +632,7 @@ function RmQuantityInput({
   value,
   onChange,
   unit,
-  required = false,
-  size = 'md'
+  required = false
 }: {
   value: number;
   onChange: (value: number) => void;
@@ -655,17 +646,6 @@ function RmQuantityInput({
     setText(formatQuantityInputBr(value));
   }, [value]);
 
-  const shellClass =
-    size === 'sm'
-      ? 'flex overflow-hidden rounded border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800'
-      : 'flex overflow-hidden rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800';
-  const stepBtnClass =
-    'flex flex-1 items-center justify-center text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 dark:hover:text-gray-200';
-  const unitClass =
-    size === 'sm'
-      ? 'flex shrink-0 items-center border-l border-gray-300 px-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-600 dark:text-gray-400'
-      : 'flex shrink-0 items-center border-l border-gray-300 px-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-600 dark:text-gray-400';
-
   const commitValue = (parsed: number | null) => {
     if (parsed != null && parsed > 0) {
       onChange(parsed);
@@ -676,26 +656,10 @@ function RmQuantityInput({
     setText('');
   };
 
-  const bump = (delta: number) => {
-    const current = parseQuantityInputBr(text);
-    const base =
-      current != null && current > 0
-        ? current
-        : Number.isFinite(value) && value > 0
-          ? value
-          : 0;
-    const next = Math.round((base + delta) * 100) / 100;
-    if (next <= 0) {
-      onChange(0);
-      setText('');
-      return;
-    }
-    onChange(next);
-    setText(formatQuantityInputBr(next));
-  };
+  const unitLabel = unit?.trim() || '—';
 
   return (
-    <div className={shellClass}>
+    <div className="relative">
       <input
         type="text"
         inputMode="decimal"
@@ -704,29 +668,11 @@ function RmQuantityInput({
         placeholder="0"
         onChange={(e) => setText(maskQuantityInputBr(e.target.value))}
         onBlur={() => commitValue(parseQuantityInputBr(text))}
-        className={size === 'sm' ? rmNumberInputClassSm : rmNumberInputClass}
+        className={`${FORM_FIELD_INPUT_CLS} pr-14 tabular-nums`}
       />
-      <span className={unitClass}>{unit?.trim() || '—'}</span>
-      <div className="flex w-8 shrink-0 flex-col border-l border-gray-300 dark:border-gray-600">
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="Aumentar quantidade"
-          onClick={() => bump(1)}
-          className={`${stepBtnClass} border-b border-gray-300 dark:border-gray-600`}
-        >
-          <ChevronUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-label="Diminuir quantidade"
-          onClick={() => bump(-1)}
-          className={stepBtnClass}
-        >
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={2.5} />
-        </button>
-      </div>
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+        {unitLabel}
+      </span>
     </div>
   );
 }
