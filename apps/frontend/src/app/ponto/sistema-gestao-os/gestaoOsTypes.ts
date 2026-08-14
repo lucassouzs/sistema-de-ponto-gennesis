@@ -159,15 +159,19 @@ export const DOCUMENT_KIND_LABELS: Record<GestaoOsDocumentKind, string> = {
 export type GestaoOsLocationTree = Array<{
   id: string;
   name: string;
+  code?: string | null;
   sectors: Array<{
     id: string;
     name: string;
+    code?: string | null;
     places: Array<{
       id: string;
       name: string;
+      code?: string | null;
       assets: Array<{
         id: string;
         name: string;
+        code?: string | null;
         category: string | null;
         qrToken?: string;
       }>;
