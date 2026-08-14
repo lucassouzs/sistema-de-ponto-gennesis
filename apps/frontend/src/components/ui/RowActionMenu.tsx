@@ -67,7 +67,7 @@ export function RowActionMenuCell({
 type RowActionMenuPortalProps = {
   menu: RowActionMenuState;
   onClose: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   editDisabled?: boolean;
   deleteDisabled?: boolean;
@@ -109,14 +109,14 @@ export function RowActionMenuPortal({
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {!hideDefaultActions ? (
+        {!hideDefaultActions && onEdit ? (
           <button
             type="button"
             role="menuitem"
             disabled={editDisabled}
             onClick={(e) => {
               e.stopPropagation();
-              if (editDisabled) return;
+              if (editDisabled || !onEdit) return;
               onClose();
               onEdit();
             }}
