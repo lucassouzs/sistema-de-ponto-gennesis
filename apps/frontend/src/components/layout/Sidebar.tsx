@@ -960,35 +960,25 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               can(pk('/ponto/licitacoes')),
           },
           {
-            name: 'Controle CREA',
+            name: 'Responsáveis Técnicos',
             href: '/ponto/responsaveis-tecnicos',
             icon: BadgeCheck,
-            description: 'Responsáveis técnicos, anuidade e pagamentos ART',
-            permission:
-              isAdministrator ||
-              can(pk('/ponto/responsaveis-tecnicos')) ||
-              can(pk('/ponto/controle-anuidade')) ||
-              can(pk('/ponto/controle-pagamentos-art')),
-            children: [
-              {
-                name: 'Responsáveis Técnicos',
-                href: '/ponto/responsaveis-tecnicos',
-                description: 'Cadastro de responsáveis técnicos (CREA)',
-                permission: isAdministrator || can(pk('/ponto/responsaveis-tecnicos')),
-              },
-              {
-                name: 'Anuidades',
-                href: '/ponto/controle-anuidade',
-                description: 'Controle de pagamentos de anuidade CREA',
-                permission: isAdministrator || can(pk('/ponto/controle-anuidade')),
-              },
-              {
-                name: "ART's / Protocolos",
-                href: '/ponto/controle-pagamentos-art',
-                description: 'Controle de pagamentos de ART e protocolos',
-                permission: isAdministrator || can(pk('/ponto/controle-pagamentos-art')),
-              },
-            ],
+            description: 'Cadastro de responsáveis técnicos (CREA)',
+            permission: isAdministrator || can(pk('/ponto/responsaveis-tecnicos')),
+          },
+          {
+            name: 'Anuidades',
+            href: '/ponto/controle-anuidade',
+            icon: CalendarDays,
+            description: 'Controle de pagamentos de anuidade CREA',
+            permission: isAdministrator || can(pk('/ponto/controle-anuidade')),
+          },
+          {
+            name: "ART's / Protocolos",
+            href: '/ponto/controle-pagamentos-art',
+            icon: FileCheck,
+            description: 'Controle de pagamentos de ART e protocolos',
+            permission: isAdministrator || can(pk('/ponto/controle-pagamentos-art')),
           },
           {
             name: 'Medições',
