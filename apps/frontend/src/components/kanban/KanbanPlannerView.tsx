@@ -71,6 +71,7 @@ import { KanbanMemberPickerModal, type KanbanPickerUser } from './KanbanMemberPi
 import { KanbanMemberChip } from './KanbanMemberChip';
 import { KanbanUserAvatar } from './KanbanUserAvatar';
 import { kanbanAvatarColorForKey } from './kanbanAvatar';
+import { PlannerAgendaShareModal } from './PlannerAgendaShareModal';
 
 const HOUR_START = 0;
 const HOUR_END = 23;

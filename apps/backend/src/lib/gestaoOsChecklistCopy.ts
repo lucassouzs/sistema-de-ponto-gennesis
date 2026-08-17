@@ -187,7 +187,7 @@ export async function attachWarrantyToLocationTree<
   T extends {
     sectors?: Array<{
       places?: Array<{
-        assets?: Array<{ id: string; warrantyEndsAt?: string | null }>;
+        assets?: Array<{ id: string; warrantyEndsAt?: Date | string | null }>;
       }>;
     }>;
   }
@@ -213,5 +213,5 @@ export async function attachWarrantyToLocationTree<
         }))
       }))
     }))
-  }));
+  })) as T[];
 }
