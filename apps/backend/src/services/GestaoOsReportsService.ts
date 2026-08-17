@@ -13,6 +13,7 @@ export class GestaoOsReportsService {
       'OPEN',
       'UNDER_REVIEW',
       'APPROVED',
+      'SAFETY_CHECK',
       'IN_PROGRESS',
       'WAITING_PARTS'
     ];

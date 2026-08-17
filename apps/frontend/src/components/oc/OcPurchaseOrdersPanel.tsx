@@ -1152,8 +1152,11 @@ function groupOcDocumentBlocks(
   return blocks;
 }
 
-async function openQuoteMapSnapshotPdf(mapId: string) {
-  const response = await api.get(`/quote-maps/${mapId}/snapshot-pdf`, { responseType: 'blob' });
+async function openQuoteMapSnapshotPdf(mapId: string, purchaseOrderId?: string) {
+  const response = await api.get(`/quote-maps/${mapId}/snapshot-pdf`, {
+    responseType: 'blob',
+    params: purchaseOrderId ? { purchaseOrderId } : undefined,
+  });
   const blobUrl = window.URL.createObjectURL(response.data);
   window.open(blobUrl, '_blank', 'noopener,noreferrer');
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
@@ -1162,9 +1165,13 @@ async function openQuoteMapSnapshotPdf(mapId: string) {
 async function downloadQuoteMapSnapshotPdf(
   mapId: string,
   orderNumber?: string | number | null,
-  supplierName?: string | null
+  supplierName?: string | null,
+  purchaseOrderId?: string
 ) {
-  const response = await api.get(`/quote-maps/${mapId}/snapshot-pdf`, { responseType: 'blob' });
+  const response = await api.get(`/quote-maps/${mapId}/snapshot-pdf`, {
+    responseType: 'blob',
+    params: purchaseOrderId ? { purchaseOrderId } : undefined,
+  });
   const blobUrl = window.URL.createObjectURL(response.data);
   const anchor = document.createElement('a');
   anchor.href = blobUrl;
@@ -6290,7 +6297,7 @@ export function OcPurchaseOrdersPanel({
                             subtitle={`Criado em ${formatDate(quoteMap.createdAt)}`}
                             onView={async () => {
                               try {
-                                await openQuoteMapSnapshotPdf(quoteMap.id);
+                                await openQuoteMapSnapshotPdf(quoteMap.id, selectedOrder.id);
                               } catch {
                                 toast.error('Não foi possível abrir o mapa de cotação.');
                               }
@@ -6300,7 +6307,8 @@ export function OcPurchaseOrdersPanel({
                                 await downloadQuoteMapSnapshotPdf(
                                   quoteMap.id,
                                   selectedOrder.orderNumber,
-                                  selectedOrder.supplier?.name
+                                  selectedOrder.supplier?.name,
+                                  selectedOrder.id
                                 );
                               } catch {
                                 toast.error('Não foi possível baixar o mapa de cotação.');

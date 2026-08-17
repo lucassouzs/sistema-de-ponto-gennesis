@@ -119,9 +119,17 @@ router.get('/:id/snapshot-pdf', async (req: AuthRequest, res: Response, next: Ne
     const { id } = req.params;
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
 
-    const absPath = await service.getOrCreateSnapshotPdfPath(id);
+    const purchaseOrderId =
+      typeof req.query.purchaseOrderId === 'string' && req.query.purchaseOrderId.trim()
+        ? req.query.purchaseOrderId.trim()
+        : undefined;
+
+    const absPath = await service.getOrCreateSnapshotPdfPath(id, purchaseOrderId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="mapa-cotacao-${id}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="mapa-cotacao-${purchaseOrderId || id}.pdf"`
+    );
     res.sendFile(absPath);
   } catch (error) {
     next(error);

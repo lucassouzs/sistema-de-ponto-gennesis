@@ -506,7 +506,7 @@ export function SingleSelectSearchDropdown({
                     <OptionLabelContent opt={opt} noTruncate={disableSearch} />
                   </span>
                   {active ? (
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 self-start text-red-600 dark:text-red-400" aria-hidden />
+                    <Check className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
                   ) : null}
                 </button>
               );

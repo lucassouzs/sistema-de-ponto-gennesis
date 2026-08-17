@@ -59,8 +59,27 @@ export type GestaoOsWorkOrderMobile = {
   assigneeId: string | null;
   completionNote: string | null;
   checklistResponses: Array<{ id: string; label: string; checked: boolean }> | null;
+  safetyChecklistResponses: Array<{
+    id: string;
+    label: string;
+    checked: boolean;
+    required?: boolean;
+  }> | null;
+  safetyPhotoUrl: string | null;
   signatureTechnicianUrl: string | null;
 };
+
+export const GESTAO_OS_SAFETY_CHECKLIST_ITEMS = [
+  { id: 'sst-helmet', label: 'Capacete de segurança', checked: false, required: true },
+  { id: 'sst-goggles', label: 'Óculos de proteção', checked: false, required: true },
+  { id: 'sst-ear', label: 'Protetor auricular (quando aplicável)', checked: false, required: true },
+  { id: 'sst-gloves', label: 'Luvas adequadas à atividade', checked: false, required: true },
+  { id: 'sst-boots', label: 'Calçado de segurança', checked: false, required: true },
+  { id: 'sst-uniform', label: 'Uniforme / vestimenta adequada', checked: false, required: true },
+  { id: 'sst-area', label: 'Área isolada / sinalizada quando necessário', checked: false, required: true },
+  { id: 'sst-tools', label: 'Ferramentas e equipamentos em condições de uso', checked: false, required: true },
+  { id: 'sst-fit', label: 'Estou apto e ciente dos riscos da atividade', checked: false, required: true }
+];
 
 export async function fetchGestaoOsMe() {
   const { qs, headers } = await withCompany();
@@ -90,6 +109,21 @@ export async function transitionWorkOrder(
     companyId: companyId || undefined
   });
   return parseJson(res);
+}
+
+export async function uploadGestaoOsAttachment(file: {
+  uri: string;
+  name: string;
+  type: string;
+}) {
+  const form = new FormData();
+  form.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.type
+  } as unknown as Blob);
+  const res = await api.post('/api/gestao-os/upload-attachment', form);
+  return parseJson(res) as Promise<{ url: string; name?: string; mimeType?: string }>;
 }
 
 export async function resolveAssetQr(token: string) {

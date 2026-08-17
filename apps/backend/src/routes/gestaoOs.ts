@@ -331,6 +331,11 @@ router.post('/upload-attachment', (req: AuthRequest, res: Response, next: NextFu
 });
 
 router.post('/', (req, res, next) => gestaoOsController.create(req, res, next));
+router.get('/:id/comments', (req, res, next) => gestaoOsController.listComments(req, res, next));
+router.post('/:id/comments', (req, res, next) => gestaoOsController.createComment(req, res, next));
+router.delete('/comments/:commentId', (req, res, next) =>
+  gestaoOsController.deleteComment(req, res, next)
+);
 router.get('/:id', (req, res, next) => gestaoOsController.getById(req, res, next));
 router.patch('/:id', (req, res, next) => gestaoOsController.update(req, res, next));
 router.post('/:id/transition', (req, res, next) => gestaoOsController.transition(req, res, next));

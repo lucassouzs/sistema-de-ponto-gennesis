@@ -29,6 +29,7 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
+import { gestaoOsTechnicianSelectOptions } from '@/components/gestao-os/GestaoOsModalUi';
 import {
   GestaoOsLocationTree,
   GestaoOsMaintenancePlan,
@@ -37,7 +38,12 @@ import {
 } from '../gestaoOsTypes';
 import { useGestaoOsCompany } from '../useGestaoOsCompany';
 
-type Technician = { id: string; name: string };
+type Technician = {
+  id: string;
+  name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
+};
 type CatalogEquipment = { id: string; name: string; isActive?: boolean };
 type CatalogSubgroup = {
   id: string;
@@ -276,7 +282,7 @@ export default function GestaoOsPlanosPageClient() {
     []
   );
   const technicianOptions = useMemo(
-    () => labeledToSelectOptions(technicians.map((t) => ({ value: t.id, label: t.name }))),
+    () => gestaoOsTechnicianSelectOptions(technicians),
     [technicians]
   );
 

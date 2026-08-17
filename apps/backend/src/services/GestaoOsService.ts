@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
 import {
   assertCanTransition,
+  assertCanViewWorkOrder,
   isGestaoOsManager,
   type GestaoOsAccessContext,
   workOrderVisibilityWhere
@@ -24,10 +25,23 @@ export type GestaoOsAttachment = {
   mimeType?: string;
 };
 
+const STATUS_FEED_LABELS: Record<GestaoOsStatus, string> = {
+  OPEN: 'Aberta',
+  UNDER_REVIEW: 'Em Análise',
+  APPROVED: 'Aprovada',
+  SAFETY_CHECK: 'Segurança do Trabalho',
+  IN_PROGRESS: 'Em Execução',
+  WAITING_PARTS: 'Aguardando Peça/Terceiro',
+  COMPLETED: 'Concluída',
+  CLOSED: 'Encerrada/Avaliada',
+  CANCELLED: 'Cancelada'
+};
+
 const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
   OPEN: ['UNDER_REVIEW', 'CANCELLED'],
   UNDER_REVIEW: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['IN_PROGRESS', 'CANCELLED'],
+  APPROVED: ['SAFETY_CHECK', 'CANCELLED'],
+  SAFETY_CHECK: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED', 'CANCELLED'],
   WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
   COMPLETED: ['CLOSED', 'CANCELLED'],
@@ -35,9 +49,49 @@ const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
   CANCELLED: []
 };
 
+type GestaoOsSafetyChecklistItem = {
+  id: string;
+  label: string;
+  checked: boolean;
+  required: boolean;
+};
+
+const DEFAULT_SAFETY_CHECKLIST: GestaoOsSafetyChecklistItem[] = [
+  { id: 'sst-helmet', label: 'Capacete de segurança', checked: false, required: true },
+  { id: 'sst-goggles', label: 'Óculos de proteção', checked: false, required: true },
+  { id: 'sst-ear', label: 'Protetor auricular (quando aplicável)', checked: false, required: true },
+  { id: 'sst-gloves', label: 'Luvas adequadas à atividade', checked: false, required: true },
+  { id: 'sst-boots', label: 'Calçado de segurança', checked: false, required: true },
+  { id: 'sst-uniform', label: 'Uniforme / vestimenta adequada', checked: false, required: true },
+  { id: 'sst-area', label: 'Área isolada / sinalizada quando necessário', checked: false, required: true },
+  { id: 'sst-tools', label: 'Ferramentas e equipamentos em condições de uso', checked: false, required: true },
+  { id: 'sst-fit', label: 'Estou apto e ciente dos riscos da atividade', checked: false, required: true }
+];
+
+function mergeSafetyChecklist(value: unknown): GestaoOsSafetyChecklistItem[] {
+  const byId = new Map<string, { checked?: unknown }>();
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      const id = String(row.id ?? '').trim();
+      if (!id) continue;
+      byId.set(id, row);
+    }
+  }
+  return DEFAULT_SAFETY_CHECKLIST.map((item) => ({
+    ...item,
+    checked: Boolean(byId.get(item.id)?.checked)
+  }));
+}
+
+function isSafetyChecklistComplete(items: GestaoOsSafetyChecklistItem[]): boolean {
+  return items.length > 0 && items.every((item) => item.required === false || item.checked);
+}
+
 const workOrderInclude = {
-  requester: { select: { id: true, name: true, email: true } },
-  assignee: { select: { id: true, name: true, email: true } },
+  requester: { select: { id: true, name: true, email: true, cpf: true, profilePhotoUrl: true } },
+  assignee: { select: { id: true, name: true, email: true, cpf: true, profilePhotoUrl: true } },
   building: { select: { id: true, name: true } },
   sector: { select: { id: true, name: true } },
   place: { select: { id: true, name: true } },
@@ -86,6 +140,32 @@ function parseAttachments(value: unknown): GestaoOsAttachment[] | undefined {
     });
   }
   return parsed;
+}
+
+async function allocateNextOsNumber(
+  db: Prisma.TransactionClient | typeof prisma
+): Promise<number> {
+  await db.$executeRawUnsafe(`
+    INSERT INTO "gestao_os_settings" ("id", "nextOsNumber", "updatedAt")
+    VALUES ('default', 1, CURRENT_TIMESTAMP)
+    ON CONFLICT ("id") DO NOTHING;
+  `);
+  const settingsRows = await db.$queryRaw<{ nextOsNumber: number }[]>`
+    SELECT "nextOsNumber" FROM "gestao_os_settings" WHERE "id" = 'default' LIMIT 1
+  `;
+  const configuredNext = Number(settingsRows[0]?.nextOsNumber ?? 1);
+  const osAgg = await db.$queryRaw<{ max: number | null }[]>`
+    SELECT MAX("osNumber")::int AS max FROM "gestao_os_work_orders"
+  `;
+  const maxOs = Number(osAgg[0]?.max ?? 0);
+  const next = Math.max(maxOs + 1, configuredNext);
+  await db.$executeRaw`
+    UPDATE "gestao_os_settings"
+    SET "nextOsNumber" = ${next + 1},
+        "updatedAt" = CURRENT_TIMESTAMP
+    WHERE "id" = 'default'
+  `;
+  return next;
 }
 
 async function attachOsNumbers<T extends { id: string }>(
@@ -345,6 +425,47 @@ export class GestaoOsService {
   }
 
   async listTechnicians(companyId?: string | null) {
+    const userSelect = {
+      id: true,
+      name: true,
+      email: true,
+      cpf: true,
+      profilePhotoUrl: true,
+      isActive: true,
+      employee: { select: { position: true } }
+    } as const;
+
+    const toTechnician = (user: {
+      id: string;
+      name: string;
+      email: string;
+      cpf: string;
+      profilePhotoUrl: string | null;
+      employee: { position: string } | null;
+    }) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      cpf: user.cpf,
+      profilePhotoUrl: user.profilePhotoUrl,
+      position: user.employee?.position ?? null
+    });
+
+    const isAssignableTechnician = (user: {
+      name: string;
+      email: string;
+      employee: { position: string } | null;
+    }) => {
+      const name = user.name.trim().toLowerCase();
+      const email = user.email.trim().toLowerCase();
+      const position = (user.employee?.position || '').trim().toLowerCase();
+      if (name === 'administrador' || position === 'administrador') return false;
+      if (name === 'gennecy' || email.startsWith('gennecy-bot@') || email.includes('gennecy-bot')) {
+        return false;
+      }
+      return true;
+    };
+
     if (companyId) {
       const members = await prisma.gestaoOsMembership.findMany({
         where: {
@@ -352,19 +473,24 @@ export class GestaoOsService {
           isActive: true,
           profile: { in: ['TECHNICIAN', 'MANAGER', 'ADMIN'] }
         },
-        include: { user: { select: { id: true, name: true, email: true, role: true, isActive: true } } },
+        include: { user: { select: userSelect } },
         take: 300
       });
       return members
-        .filter((m) => m.user.isActive)
-        .map((m) => ({ id: m.user.id, name: m.user.name, email: m.user.email, role: m.user.role }));
+        .filter((m) => m.user.isActive && m.user.employee && isAssignableTechnician(m.user))
+        .map((m) => toTechnician(m.user));
     }
-    return prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, email: true, role: true },
+
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        employee: { isNot: null }
+      },
+      select: userSelect,
       orderBy: { name: 'asc' },
       take: 300
     });
+    return users.filter(isAssignableTechnician).map(toTechnician);
   }
 
   async create(
@@ -456,6 +582,8 @@ export class GestaoOsService {
       completionNote?: string | null;
       dueAt?: string | null;
       checklistResponses?: unknown;
+      safetyChecklistResponses?: unknown;
+      safetyPhotoUrl?: string | null;
       signatureRequesterUrl?: string | null;
       signatureTechnicianUrl?: string | null;
     },
@@ -510,6 +638,14 @@ export class GestaoOsService {
     if (input.checklistResponses !== undefined) {
       data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
     }
+    if (input.safetyChecklistResponses !== undefined) {
+      data.safetyChecklistResponses = mergeSafetyChecklist(
+        input.safetyChecklistResponses
+      ) as Prisma.InputJsonValue;
+    }
+    if (input.safetyPhotoUrl !== undefined) {
+      data.safetyPhotoUrl = input.safetyPhotoUrl ? String(input.safetyPhotoUrl).trim() : null;
+    }
     if (input.signatureRequesterUrl !== undefined) {
       data.signatureRequesterUrl = input.signatureRequesterUrl
         ? String(input.signatureRequesterUrl).trim()
@@ -550,6 +686,8 @@ export class GestaoOsService {
       signatureRequesterUrl?: string | null;
       signatureTechnicianUrl?: string | null;
       dueAt?: string | null;
+      safetyChecklistResponses?: unknown;
+      safetyPhotoUrl?: string | null;
     },
     access: GestaoOsAccessContext
   ) {
@@ -580,6 +718,31 @@ export class GestaoOsService {
       }
     }
 
+    if (current.status === 'SAFETY_CHECK' && nextStatus === 'IN_PROGRESS') {
+      const safetyItems = mergeSafetyChecklist(
+        input.safetyChecklistResponses !== undefined
+          ? input.safetyChecklistResponses
+          : current.safetyChecklistResponses
+      );
+      const photo = String(
+        input.safetyPhotoUrl !== undefined
+          ? input.safetyPhotoUrl ?? ''
+          : current.safetyPhotoUrl ?? ''
+      ).trim();
+      if (!isSafetyChecklistComplete(safetyItems)) {
+        throw createError(
+          'Preencha o checklist de segurança do trabalho antes de iniciar a execução',
+          400
+        );
+      }
+      if (!photo) {
+        throw createError(
+          'Envie uma foto usando os equipamentos de proteção antes de iniciar a execução',
+          400
+        );
+      }
+    }
+
     if (nextStatus === 'CLOSED') {
       const rating = input.rating != null ? Number(input.rating) : current.rating;
       if (rating != null && (!Number.isFinite(rating) || rating < 1 || rating > 5)) {
@@ -599,20 +762,7 @@ export class GestaoOsService {
         SELECT "osNumber" FROM "gestao_os_work_orders" WHERE "id" = ${id} LIMIT 1
       `;
       if (existingOs[0]?.osNumber == null) {
-        await prisma.$executeRawUnsafe(`
-          INSERT INTO "gestao_os_settings" ("id", "nextOsNumber", "updatedAt")
-          VALUES ('default', 1, CURRENT_TIMESTAMP)
-          ON CONFLICT ("id") DO NOTHING;
-        `);
-        const settingsRows = await prisma.$queryRaw<{ nextOsNumber: number }[]>`
-          SELECT "nextOsNumber" FROM "gestao_os_settings" WHERE "id" = 'default' LIMIT 1
-        `;
-        const configuredNext = Number(settingsRows[0]?.nextOsNumber ?? 1);
-        const osAgg = await prisma.$queryRaw<{ max: number | null }[]>`
-          SELECT MAX("osNumber")::int AS max FROM "gestao_os_work_orders"
-        `;
-        const maxOs = Number(osAgg[0]?.max ?? 0);
-        createdOsNumber = Math.max(maxOs + 1, configuredNext);
+        createdOsNumber = await allocateNextOsNumber(prisma);
       }
     }
 
@@ -640,6 +790,29 @@ export class GestaoOsService {
     }
     if (input.checklistResponses !== undefined) {
       data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
+    }
+    if (input.safetyChecklistResponses !== undefined || nextStatus === 'SAFETY_CHECK') {
+      data.safetyChecklistResponses = mergeSafetyChecklist(
+        input.safetyChecklistResponses !== undefined
+          ? input.safetyChecklistResponses
+          : current.safetyChecklistResponses
+      ) as Prisma.InputJsonValue;
+    }
+    if (input.safetyPhotoUrl !== undefined) {
+      data.safetyPhotoUrl = input.safetyPhotoUrl ? String(input.safetyPhotoUrl).trim() : null;
+    }
+    if (current.status === 'SAFETY_CHECK' && nextStatus === 'IN_PROGRESS') {
+      data.safetyChecklistResponses = mergeSafetyChecklist(
+        input.safetyChecklistResponses !== undefined
+          ? input.safetyChecklistResponses
+          : current.safetyChecklistResponses
+      ) as Prisma.InputJsonValue;
+      const photo = String(
+        input.safetyPhotoUrl !== undefined
+          ? input.safetyPhotoUrl ?? ''
+          : current.safetyPhotoUrl ?? ''
+      ).trim();
+      data.safetyPhotoUrl = photo || null;
     }
     if (input.signatureRequesterUrl !== undefined) {
       data.signatureRequesterUrl = input.signatureRequesterUrl
@@ -689,12 +862,6 @@ export class GestaoOsService {
         SET "osNumber" = ${createdOsNumber}
         WHERE "id" = ${id}
       `;
-      await prisma.$executeRaw`
-        UPDATE "gestao_os_settings"
-        SET "nextOsNumber" = ${createdOsNumber + 1},
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "id" = 'default'
-      `;
     }
 
     const updated = await prisma.gestaoOsWorkOrder.update({
@@ -738,6 +905,7 @@ export class GestaoOsService {
       (byStatus.OPEN ?? 0) +
       (byStatus.UNDER_REVIEW ?? 0) +
       (byStatus.APPROVED ?? 0) +
+      (byStatus.SAFETY_CHECK ?? 0) +
       (byStatus.IN_PROGRESS ?? 0) +
       (byStatus.WAITING_PARTS ?? 0);
     const overdue = await prisma.gestaoOsWorkOrder.count({
@@ -753,6 +921,127 @@ export class GestaoOsService {
       overdue,
       total: groups.reduce((s, g) => s + g._count._all, 0)
     };
+  }
+
+  async listComments(workOrderId: string, access: GestaoOsAccessContext) {
+    const row = await prisma.gestaoOsWorkOrder.findUnique({
+      where: { id: workOrderId },
+      select: {
+        id: true,
+        requesterId: true,
+        assigneeId: true,
+        events: {
+          orderBy: { createdAt: 'asc' as const },
+          include: { actor: { select: { id: true, name: true, profilePhotoUrl: true } } }
+        },
+        comments: {
+          orderBy: { createdAt: 'asc' as const },
+          include: { author: { select: { id: true, name: true, profilePhotoUrl: true } } }
+        }
+      }
+    });
+    if (!row) throw createError('Chamado não encontrado', 404);
+    assertCanViewWorkOrder(access, row);
+
+    type Author = { id: string; name: string; profilePhotoUrl?: string | null };
+    type FeedItem = {
+      id: string;
+      kind: 'comment' | 'system';
+      content: string;
+      createdAt: string;
+      author: Author | null;
+    };
+
+    const feed: FeedItem[] = [];
+
+    for (const event of row.events) {
+      const who = event.actor?.name || 'Sistema';
+      const to = STATUS_FEED_LABELS[event.toStatus];
+      const from = event.fromStatus ? STATUS_FEED_LABELS[event.fromStatus] : null;
+      const line = from
+        ? `${who} alterou de ${from} para ${to}`
+        : `${who} abriu o chamado`;
+      feed.push({
+        id: `sys-event-${event.id}`,
+        kind: 'system',
+        content: event.note?.trim() && event.note.trim() !== 'Chamado aberto'
+          ? `${line}. ${event.note.trim()}`
+          : line,
+        createdAt: event.createdAt.toISOString(),
+        author: event.actor
+          ? {
+              id: event.actor.id,
+              name: event.actor.name,
+              profilePhotoUrl: event.actor.profilePhotoUrl
+            }
+          : null
+      });
+    }
+
+    for (const comment of row.comments) {
+      feed.push({
+        id: comment.id,
+        kind: 'comment',
+        content: comment.content,
+        createdAt: comment.createdAt.toISOString(),
+        author: {
+          id: comment.author.id,
+          name: comment.author.name,
+          profilePhotoUrl: comment.author.profilePhotoUrl
+        }
+      });
+    }
+
+    feed.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return feed;
+  }
+
+  async createComment(workOrderId: string, userId: string, content: string, access: GestaoOsAccessContext) {
+    const text = content.trim();
+    if (!text) throw createError('Escreva um comentário', 400);
+    if (text.length > 4000) throw createError('Comentário muito longo (máx. 4000 caracteres)', 400);
+
+    const row = await prisma.gestaoOsWorkOrder.findUnique({
+      where: { id: workOrderId },
+      select: { id: true, requesterId: true, assigneeId: true }
+    });
+    if (!row) throw createError('Chamado não encontrado', 404);
+    assertCanViewWorkOrder(access, row);
+
+    const comment = await prisma.gestaoOsWorkOrderComment.create({
+      data: {
+        workOrderId,
+        userId,
+        content: text
+      },
+      include: {
+        author: { select: { id: true, name: true, profilePhotoUrl: true } }
+      }
+    });
+
+    return {
+      id: comment.id,
+      kind: 'comment' as const,
+      content: comment.content,
+      createdAt: comment.createdAt.toISOString(),
+      author: {
+        id: comment.author.id,
+        name: comment.author.name,
+        profilePhotoUrl: comment.author.profilePhotoUrl
+      }
+    };
+  }
+
+  async deleteComment(commentId: string, userId: string, isAdmin: boolean) {
+    const comment = await prisma.gestaoOsWorkOrderComment.findUnique({
+      where: { id: commentId },
+      select: { id: true, userId: true }
+    });
+    if (!comment) throw createError('Comentário não encontrado', 404);
+    if (!isAdmin && comment.userId !== userId) {
+      throw createError('Sem permissão para excluir este comentário', 403);
+    }
+    await prisma.gestaoOsWorkOrderComment.delete({ where: { id: commentId } });
   }
 }
 

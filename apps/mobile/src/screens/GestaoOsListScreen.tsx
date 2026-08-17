@@ -27,6 +27,7 @@ const STATUS_LABEL: Record<string, string> = {
   OPEN: 'Aberta',
   UNDER_REVIEW: 'Em análise',
   APPROVED: 'Aprovada',
+  SAFETY_CHECK: 'Segurança do trabalho',
   IN_PROGRESS: 'Em execução',
   WAITING_PARTS: 'Aguardando peça',
   COMPLETED: 'Concluída',

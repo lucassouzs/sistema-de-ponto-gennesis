@@ -126,6 +126,7 @@ model User {
   gestaoOsWorkOrdersRequested             GestaoOsWorkOrder[]  @relation("GestaoOsRequester")
   gestaoOsWorkOrdersAssigned              GestaoOsWorkOrder[]  @relation("GestaoOsAssignee")
   gestaoOsWorkOrderEvents                 GestaoOsWorkOrderEvent[] @relation("GestaoOsEventActor")
+  gestaoOsWorkOrderComments               GestaoOsWorkOrderComment[] @relation("GestaoOsCommentAuthor")
   gestaoOsMemberships                     GestaoOsMembership[] @relation("GestaoOsMembershipUser")
   gestaoOsPlansAssigned                   GestaoOsMaintenancePlan[] @relation("GestaoOsPlanAssignee")
   gestaoOsDocumentsUploaded               GestaoOsDocument[] @relation("GestaoOsDocumentUploader")
@@ -3869,6 +3870,7 @@ enum GestaoOsStatus {
   OPEN
   UNDER_REVIEW
   APPROVED
+  SAFETY_CHECK
   IN_PROGRESS
   WAITING_PARTS
   COMPLETED
@@ -4196,6 +4198,10 @@ model GestaoOsWorkOrder {
   dueAt DateTime?
   /// Respostas de checklist preenchidas na execução [{ id, label, checked, note? }].
   checklistResponses Json?
+  /// Checklist de segurança do trabalho (EPIs) antes da execução.
+  safetyChecklistResponses Json?
+  /// Foto da pessoa usando os EPIs, exigida na etapa Segurança do Trabalho.
+  safetyPhotoUrl String?
   signatureRequesterUrl  String?
   signatureTechnicianUrl String?
 
@@ -4210,6 +4216,7 @@ model GestaoOsWorkOrder {
   updatedAt DateTime @updatedAt
 
   events   GestaoOsWorkOrderEvent[]
+  comments GestaoOsWorkOrderComment[]
   planRuns GestaoOsPlanRun[]
 
   @@index([status])
@@ -4238,6 +4245,22 @@ model GestaoOsWorkOrderEvent {
 
   @@index([workOrderId, createdAt])
   @@map("gestao_os_work_order_events")
+}
+
+model GestaoOsWorkOrderComment {
+  id          String   @id @default(cuid())
+  workOrderId String
+  userId      String
+  content     String   @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workOrder GestaoOsWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  author    User              @relation("GestaoOsCommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@index([userId])
+  @@map("gestao_os_work_order_comments")
 }
 
 enum GestaoOsPlanType {

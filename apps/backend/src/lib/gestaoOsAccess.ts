@@ -153,7 +153,8 @@ export function assertCanTransition(
   }
 
   if (
-    (from === 'APPROVED' && to === 'IN_PROGRESS') ||
+    (from === 'APPROVED' && to === 'SAFETY_CHECK') ||
+    (from === 'SAFETY_CHECK' && to === 'IN_PROGRESS') ||
     (from === 'IN_PROGRESS' && (to === 'WAITING_PARTS' || to === 'COMPLETED')) ||
     (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED'))
   ) {

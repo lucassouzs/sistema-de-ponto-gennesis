@@ -35,12 +35,19 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   await prisma.$executeRawUnsafe(`
     DO $$ BEGIN
       CREATE TYPE "GestaoOsStatus" AS ENUM (
-        'OPEN', 'UNDER_REVIEW', 'APPROVED', 'IN_PROGRESS',
+        'OPEN', 'UNDER_REVIEW', 'APPROVED', 'SAFETY_CHECK', 'IN_PROGRESS',
         'WAITING_PARTS', 'COMPLETED', 'CLOSED', 'CANCELLED'
       );
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
   `);
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TYPE "GestaoOsStatus" ADD VALUE IF NOT EXISTS 'SAFETY_CHECK'`
+    );
+  } catch {
+    /* valor já existe ou o tipo acabou de ser criado com SAFETY_CHECK */
+  }
   await prisma.$executeRawUnsafe(`
     DO $$ BEGIN
       CREATE TYPE "GestaoOsProfile" AS ENUM ('REQUESTER', 'MANAGER', 'TECHNICIAN', 'ADMIN');
@@ -352,6 +359,8 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   for (const col of [
     ['dueAt', 'TIMESTAMP(3)'],
     ['checklistResponses', 'JSONB'],
+    ['safetyChecklistResponses', 'JSONB'],
+    ['safetyPhotoUrl', 'TEXT'],
     ['signatureRequesterUrl', 'TEXT'],
     ['signatureTechnicianUrl', 'TEXT']
   ] as const) {
@@ -451,6 +460,23 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
     `CREATE INDEX IF NOT EXISTS "gestao_os_documents_companyId_idx" ON "gestao_os_documents"("companyId");`
   );
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "gestao_os_work_order_comments" (
+      "id" TEXT PRIMARY KEY,
+      "workOrderId" TEXT NOT NULL REFERENCES "gestao_os_work_orders"("id") ON DELETE CASCADE,
+      "userId" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+      "content" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_work_order_comments_workOrderId_idx" ON "gestao_os_work_order_comments"("workOrderId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "gestao_os_work_order_comments_userId_idx" ON "gestao_os_work_order_comments"("userId");`
+  );
+
   if (await columnExists(prisma, 'gestao_os_equipments', 'id')) {
     for (const col of [
       ['defaultSlaHours', 'INTEGER'],
@@ -464,5 +490,13 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
         );
       }
     }
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "gestao_os_work_orders" ALTER COLUMN "status" SET DEFAULT 'OPEN';`
+    );
+  } catch {
+    /* tabela/enum ainda não prontos */
   }
 }

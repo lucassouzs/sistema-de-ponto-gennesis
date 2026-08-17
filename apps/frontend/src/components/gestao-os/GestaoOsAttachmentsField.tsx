@@ -21,6 +21,8 @@ export function GestaoOsAttachmentsField({
   onRemove,
   label = 'Clique ou arraste as fotos',
   hint = 'PNG, JPG ou PDF',
+  accept = ACCEPT,
+  multiple = true,
 }: {
   files: GestaoOsAttachment[];
   uploading?: boolean;
@@ -29,6 +31,8 @@ export function GestaoOsAttachmentsField({
   onRemove: (url: string) => void;
   label?: string;
   hint?: string;
+  accept?: string;
+  multiple?: boolean;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const blocked = disabled || uploading;
@@ -55,7 +59,7 @@ export function GestaoOsAttachmentsField({
         className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
           dragOver
             ? 'border-red-500 bg-red-50 dark:bg-red-950/40'
-            : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800/70 dark:hover:border-gray-500 dark:hover:bg-gray-800'
+            : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-gray-500 dark:hover:bg-gray-700/80'
         } ${blocked ? 'pointer-events-none opacity-60' : ''}`}
       >
         {uploading ? (
@@ -69,8 +73,8 @@ export function GestaoOsAttachmentsField({
         <span className="text-xs text-gray-500 dark:text-gray-400">{hint}</span>
         <input
           type="file"
-          accept={ACCEPT}
-          multiple
+          accept={accept}
+          multiple={multiple}
           className="hidden"
           disabled={blocked}
           onChange={(event) => {

@@ -100,7 +100,10 @@ export class QuoteMapService {
     return resolvePdfLogoPathFromPublic(useUnb);
   }
 
-  private async saveQuoteMapSnapshotPdf(quoteMapId: string): Promise<string> {
+  private async saveQuoteMapSnapshotPdf(
+    quoteMapId: string,
+    options?: { purchaseOrderId?: string }
+  ): Promise<string> {
     const map = await this.db.quoteMap.findUnique({
       where: { id: quoteMapId },
       include: {
@@ -152,7 +155,17 @@ export class QuoteMapService {
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
-    const publicUrl = `/uploads/quote-maps/${map.id}/snapshot.pdf`;
+    const purchaseOrderId = options?.purchaseOrderId?.trim() || '';
+    const allPurchaseOrders = Array.isArray(map.purchaseOrders) ? map.purchaseOrders : [];
+    const purchaseOrders = purchaseOrderId
+      ? allPurchaseOrders.filter((po: { id: string }) => po.id === purchaseOrderId)
+      : allPurchaseOrders;
+    if (purchaseOrderId && purchaseOrders.length === 0) {
+      throw new Error('OC não encontrada neste mapa de cotação');
+    }
+
+    const snapshotFileName = purchaseOrderId ? `snapshot-${purchaseOrderId}.pdf` : 'snapshot.pdf';
+    const publicUrl = `/uploads/quote-maps/${map.id}/${snapshotFileName}`;
     const mr = map.materialRequest;
     const contextLabels = [mr?.costCenter?.name, mr?.costCenter?.code, mr?.serviceOrder];
     const useUnb = shouldUseUnbBranding(...contextLabels);
@@ -184,8 +197,8 @@ export class QuoteMapService {
 
     const sections: SnapshotSection[] = [];
 
-    if (Array.isArray(map.purchaseOrders) && map.purchaseOrders.length > 0) {
-      for (const po of map.purchaseOrders) {
+    if (purchaseOrders.length > 0) {
+      for (const po of purchaseOrders) {
         sections.push({
           orderNumber: po.orderNumber,
           orderDate: po.orderDate,
@@ -789,7 +802,7 @@ export class QuoteMapService {
 
     await savePersistentBuffer({
       folder: `quote-maps/${map.id}`,
-      fileName: 'snapshot.pdf',
+      fileName: snapshotFileName,
       buffer: pdfBuffer,
       mimeType: 'application/pdf',
       keepLocalCopy: true,
@@ -798,20 +811,23 @@ export class QuoteMapService {
     return publicUrl;
   }
 
-  private snapshotPdfAbsolutePath(quoteMapId: string): string {
-    return path.join(backendUploadsRoot, 'quote-maps', quoteMapId, 'snapshot.pdf');
+  private snapshotPdfAbsolutePath(quoteMapId: string, purchaseOrderId?: string): string {
+    const fileName = purchaseOrderId?.trim()
+      ? `snapshot-${purchaseOrderId.trim()}.pdf`
+      : 'snapshot.pdf';
+    return path.join(backendUploadsRoot, 'quote-maps', quoteMapId, fileName);
   }
 
-  async getOrCreateSnapshotPdfPath(quoteMapId: string): Promise<string> {
+  async getOrCreateSnapshotPdfPath(quoteMapId: string, purchaseOrderId?: string): Promise<string> {
     const map = await this.db.quoteMap.findUnique({
       where: { id: quoteMapId },
       select: { id: true }
     });
     if (!map) throw new Error('Mapa de cotação não encontrado');
 
-    const absPath = this.snapshotPdfAbsolutePath(quoteMapId);
+    const absPath = this.snapshotPdfAbsolutePath(quoteMapId, purchaseOrderId);
     // Regera para garantir layout mais atual do snapshot.
-    await this.saveQuoteMapSnapshotPdf(quoteMapId);
+    await this.saveQuoteMapSnapshotPdf(quoteMapId, { purchaseOrderId });
     return absPath;
   }
 

@@ -7,7 +7,6 @@ import {
   ClipboardList,
   Eye,
   Filter,
-  Paperclip,
   Search,
   Wrench,
   X
@@ -36,11 +35,25 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { SignaturePad } from '@/components/gestao-os/SignaturePad';
 import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
+import { GestaoOsCommentsSection } from '@/components/gestao-os/GestaoOsCommentsSection';
+import {
+  GESTAO_OS_FORM_LABEL_CLS,
+  GestaoOsChamadoResumo,
+  GestaoOsChecklistField,
+  GestaoOsDetailModalChrome,
+  GestaoOsDocumentsTab,
+  GestaoOsEmptyTab,
+  GestaoOsHistoryList,
+  GestaoOsModalFooter,
+  GestaoOsRequiredMark,
+  gestaoOsTechnicianSelectOptions
+} from '@/components/gestao-os/GestaoOsModalUi';
 import api from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
-import { FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
   GestaoOsAttachment,
+  GestaoOsChecklistResponseItem,
   GestaoOsLocationTree,
   GestaoOsMaintenanceType,
   GestaoOsPriority,
@@ -52,16 +65,12 @@ import {
   SERVICE_CATEGORIES,
   STATUS_LABELS,
   STATUS_TRANSITIONS,
-  formatGestaoOsLabel
+  cloneGestaoOsSafetyChecklist,
+  formatGestaoOsLabel,
+  formatGestaoOsNumber,
+  isGestaoOsSafetyChecklistComplete
 } from './gestaoOsTypes';
 import { useGestaoOsCompany } from './useGestaoOsCompany';
-
-function isOverdue(row: Pick<GestaoOsWorkOrder, 'dueAt' | 'status'>) {
-  if (!row.dueAt) return false;
-  if (row.status === 'CLOSED' || row.status === 'CANCELLED') return false;
-  const due = new Date(row.dueAt).getTime();
-  return !Number.isNaN(due) && due < Date.now();
-}
 
 function allowedTransitionsByPermission(opts: {
   from: GestaoOsStatus;
@@ -79,7 +88,8 @@ function allowedTransitionsByPermission(opts: {
     if (from === 'OPEN' && to === 'UNDER_REVIEW') return canAnalisar;
     if (from === 'UNDER_REVIEW' && to === 'APPROVED') return canAnalisar;
     if (
-      (from === 'APPROVED' && to === 'IN_PROGRESS') ||
+      (from === 'APPROVED' && to === 'SAFETY_CHECK') ||
+      (from === 'SAFETY_CHECK' && to === 'IN_PROGRESS') ||
       (from === 'IN_PROGRESS' && (to === 'WAITING_PARTS' || to === 'COMPLETED')) ||
       (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED'))
     ) {
@@ -90,29 +100,42 @@ function allowedTransitionsByPermission(opts: {
   });
 }
 
-type Technician = { id: string; name: string; email?: string };
+type Technician = {
+  id: string;
+  name: string;
+  email?: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
+};
+
+type GestaoOsChamadoDetailTab =
+  | 'resumo'
+  | 'fluxo'
+  | 'checklist'
+  | 'documentos'
+  | 'historico'
+  | 'comentarios';
+
+const CHAMADO_DETAIL_TABS: ReadonlyArray<{ id: GestaoOsChamadoDetailTab; label: string }> = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'fluxo', label: 'Fluxo' },
+  { id: 'checklist', label: 'Checklist' },
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'historico', label: 'Histórico' },
+  { id: 'comentarios', label: 'Comentários' }
+];
 
 const PHASE_TABS: ReadonlyArray<{ id: GestaoOsStatus; label: string }> = [
   { id: 'OPEN', label: 'Aberta' },
   { id: 'UNDER_REVIEW', label: 'Em Análise' },
   { id: 'APPROVED', label: 'Aprovada' },
+  { id: 'SAFETY_CHECK', label: 'Segurança do Trabalho' },
   { id: 'IN_PROGRESS', label: 'Em Execução' },
   { id: 'WAITING_PARTS', label: 'Aguardando Peça/Terceiro' },
   { id: 'COMPLETED', label: 'Concluída' },
   { id: 'CLOSED', label: 'Encerrada/Avaliada' },
   { id: 'CANCELLED', label: 'Cancelada' }
 ];
-
-const STATUS_BADGE: Record<GestaoOsStatus, string> = {
-  OPEN: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
-  UNDER_REVIEW: 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200',
-  APPROVED: 'bg-blue-100 text-blue-900 dark:bg-blue-950/40 dark:text-blue-200',
-  IN_PROGRESS: 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200',
-  WAITING_PARTS: 'bg-orange-100 text-orange-900 dark:bg-orange-950/40 dark:text-orange-200',
-  COMPLETED: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200',
-  CLOSED: 'bg-teal-100 text-teal-900 dark:bg-teal-950/40 dark:text-teal-200',
-  CANCELLED: 'bg-rose-100 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200'
-};
 
 const PRIORITY_BADGE: Record<GestaoOsPriority, string> = {
   LOW: 'text-slate-600 dark:text-slate-300',
@@ -134,14 +157,6 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function fieldClassName() {
-  return 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
-}
-
-function RequiredMark() {
-  return <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>;
-}
-
 export default function SistemaGestaoOsPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -161,6 +176,7 @@ export default function SistemaGestaoOsPageClient() {
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<GestaoOsChamadoDetailTab>('resumo');
 
   const [category, setCategory] = useState<string>(SERVICE_CATEGORIES[0]);
   const [description, setDescription] = useState('');
@@ -183,6 +199,12 @@ export default function SistemaGestaoOsPageClient() {
   const [ratingComment, setRatingComment] = useState('');
   const [signatureRequesterUrl, setSignatureRequesterUrl] = useState<string | null>(null);
   const [uploadingSignature, setUploadingSignature] = useState(false);
+  const [checklistDraft, setChecklistDraft] = useState<GestaoOsChecklistResponseItem[]>([]);
+  const [safetyChecklistDraft, setSafetyChecklistDraft] = useState<GestaoOsChecklistResponseItem[]>(
+    []
+  );
+  const [safetyPhotoUrl, setSafetyPhotoUrl] = useState<string | null>(null);
+  const [uploadingSafetyPhoto, setUploadingSafetyPhoto] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -306,6 +328,26 @@ export default function SistemaGestaoOsPageClient() {
     }
   });
 
+  useEffect(() => {
+    if (!detail) return;
+    setChecklistDraft(
+      Array.isArray(detail.checklistResponses)
+        ? detail.checklistResponses.map((item) => ({ ...item }))
+        : []
+    );
+    const hasSafety =
+      detail.status === 'SAFETY_CHECK' ||
+      (Array.isArray(detail.safetyChecklistResponses) &&
+        detail.safetyChecklistResponses.length > 0);
+    setSafetyChecklistDraft(hasSafety ? cloneGestaoOsSafetyChecklist(detail.safetyChecklistResponses) : []);
+    setSafetyPhotoUrl(detail.safetyPhotoUrl ?? null);
+    if (detail.status === 'SAFETY_CHECK') setTransitionStatus('IN_PROGRESS');
+    else if (detail.status === 'APPROVED') setTransitionStatus('SAFETY_CHECK');
+    else setTransitionStatus('');
+    // Recarrega ao abrir outro chamado ou mudar de fase (ex.: Aprovada → SST).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.id, detail?.status]);
+
   const sectors = useMemo(() => {
     return locationTree.find((b) => b.id === buildingId)?.sectors ?? [];
   }, [locationTree, buildingId]);
@@ -395,10 +437,16 @@ export default function SistemaGestaoOsPageClient() {
 
   const openDetail = (row: GestaoOsWorkOrder) => {
     setDetailId(row.id);
+    setDetailTab('resumo');
     setTransitionStatus('');
     setMaintenanceType(row.maintenanceType || '');
     setAssigneeId(row.assigneeId || '');
     setSignatureRequesterUrl(null);
+    setChecklistDraft(
+      Array.isArray(row.checklistResponses)
+        ? row.checklistResponses.map((item) => ({ ...item }))
+        : []
+    );
   };
 
   const {
@@ -436,6 +484,7 @@ export default function SistemaGestaoOsPageClient() {
       setActivePhase('OPEN');
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
+      setDetailTab('resumo');
       setDetailId(created.id);
     },
     onError: (err: any) => {
@@ -455,7 +504,10 @@ export default function SistemaGestaoOsPageClient() {
         rating: transitionStatus === 'CLOSED' ? Number(rating) : undefined,
         ratingComment: transitionStatus === 'CLOSED' ? ratingComment || undefined : undefined,
         signatureRequesterUrl:
-          transitionStatus === 'CLOSED' ? signatureRequesterUrl || undefined : undefined
+          transitionStatus === 'CLOSED' ? signatureRequesterUrl || undefined : undefined,
+        checklistResponses: checklistDraft.length ? checklistDraft : undefined,
+        safetyChecklistResponses: safetyChecklistDraft.length ? safetyChecklistDraft : undefined,
+        safetyPhotoUrl: safetyPhotoUrl || undefined
       });
       return res.data?.data as GestaoOsWorkOrder;
     },
@@ -470,6 +522,8 @@ export default function SistemaGestaoOsPageClient() {
       setCancelReason('');
       setSignatureRequesterUrl(null);
       if (updated?.status) setActivePhase(updated.status);
+      setDetailId(null);
+      setDetailTab('resumo');
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', detailId] });
@@ -530,6 +584,32 @@ export default function SistemaGestaoOsPageClient() {
     }
   };
 
+  const uploadSafetyPhoto = async (files: FileList | File[] | null) => {
+    const list = !files ? [] : Array.from(files);
+    const file = list.find((item) => item.type.startsWith('image/')) ?? list[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+      toast.error('Envie uma foto (PNG ou JPG)');
+      return;
+    }
+    setUploadingSafetyPhoto(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('/gestao-os/upload-attachment', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const url = res.data?.data?.url as string | undefined;
+      if (!url) throw new Error('URL da foto não retornada');
+      setSafetyPhotoUrl(url);
+      toast.success('Foto de EPIs enviada');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Falha no upload da foto');
+    } finally {
+      setUploadingSafetyPhoto(false);
+    }
+  };
+
   const nextStatuses = detail
     ? allowedTransitionsByPermission({
         from: detail.status,
@@ -540,6 +620,51 @@ export default function SistemaGestaoOsPageClient() {
         canEncerrar
       })
     : [];
+
+  const nextStatusOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        nextStatuses.map((status) => ({ value: status, label: STATUS_LABELS[status] }))
+      ),
+    [nextStatuses]
+  );
+
+  const maintenanceTypeOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(MAINTENANCE_TYPE_LABELS) as GestaoOsMaintenanceType[]).map((key) => ({
+          value: key,
+          label: MAINTENANCE_TYPE_LABELS[key]
+        }))
+      ),
+    []
+  );
+
+  const technicianOptions = useMemo(
+    () => gestaoOsTechnicianSelectOptions(technicians),
+    [technicians]
+  );
+
+  const ratingOptions = useMemo(
+    () => labeledToSelectOptions([1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))),
+    []
+  );
+
+  const checklistEditable = Boolean(
+    detail &&
+      checklistDraft.length > 0 &&
+      (isAdmin || canExecutar) &&
+      detail.status !== 'CLOSED' &&
+      detail.status !== 'CANCELLED'
+  );
+
+  const safetyEditable = Boolean(
+    detail &&
+      (isAdmin || canExecutar || canAnalisar) &&
+      detail.status === 'SAFETY_CHECK'
+  );
+
+  const safetyReady = isGestaoOsSafetyChecklistComplete(safetyChecklistDraft) && Boolean(safetyPhotoUrl);
 
   if (loadingUser || loadingCompany) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
@@ -559,29 +684,29 @@ export default function SistemaGestaoOsPageClient() {
             </p>
           </div>
 
-          <div className="scroll-mt-4 border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2">
-              {PHASE_TABS.map((tab) => {
-                const active = activePhase === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActivePhase(tab.id)}
-                    className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                      active
-                        ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    <span className="inline-flex items-center gap-2">
+          <div className="scroll-mt-4">
+            <div className="bg-transparent px-2">
+              <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
+                {PHASE_TABS.map((tab) => {
+                  const active = activePhase === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActivePhase(tab.id)}
+                      className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
+                        active
+                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
+                      }`}
+                    >
                       {tab.label}
                       <TabCountBadge count={phaseCounts[tab.id] ?? 0} active={active} tone="red" />
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
           <Card className={cadastroListClasses.card}>
@@ -675,15 +800,24 @@ export default function SistemaGestaoOsPageClient() {
                     itemLabelPlural="chamados"
                   />
                   <div className={cadastroListClasses.tableScroll}>
-                    <table className={cadastroListClasses.table}>
+                    <table className={`${cadastroListClasses.table} min-w-[56rem]`}>
+                      <colgroup>
+                        <col className="w-[4.5rem]" />
+                        <col />
+                        <col className="w-28" />
+                        <col className="w-32" />
+                        <col className="w-36" />
+                        <col className="w-36" />
+                        <col className="w-[4%]" />
+                      </colgroup>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className={`${cadastroListClasses.th} w-28 whitespace-nowrap`}>Nº</th>
-                          <th className={`${cadastroListClasses.thCenter} w-28`}>Prioridade</th>
-                          <th className={cadastroListClasses.th}>Categoria</th>
+                          <th className={cadastroListClasses.th}>ID</th>
                           <th className={cadastroListClasses.th}>Local / Ativo</th>
+                          <th className={cadastroListClasses.thCenter}>Prioridade</th>
+                          <th className={cadastroListClasses.thCenter}>Categoria</th>
                           <th className={cadastroListClasses.th}>Solicitante</th>
-                          <th className={`${cadastroListClasses.thCenter} w-36`}>Abertura</th>
+                          <th className={`${cadastroListClasses.thCenter} whitespace-nowrap`}>Abertura</th>
                           <th className={cadastroListClasses.thRight}>Ação</th>
                         </tr>
                       </thead>
@@ -702,31 +836,22 @@ export default function SistemaGestaoOsPageClient() {
                               }
                             }}
                           >
-                            <td className={`${cadastroListClasses.tdTruncate} !pl-2 sm:!pl-3`}>
-                              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                <ListRowNavigableLabel className="font-semibold">
-                                  {formatGestaoOsLabel(row)}
-                                </ListRowNavigableLabel>
-                                {isOverdue(row) ? (
-                                  <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
-                                    Atrasada
-                                  </span>
-                                ) : null}
-                              </div>
+                            <td className={cadastroListClasses.tdMono}>
+                              {formatGestaoOsNumber(row)}
+                            </td>
+                            <td className={cadastroListClasses.td}>
+                              <ListRowNavigableLabel className="whitespace-normal break-words text-sm text-gray-600 dark:text-gray-400">
+                                {row.locationLabel || '—'}
+                              </ListRowNavigableLabel>
                             </td>
                             <td
                               className={`${cadastroListClasses.tdCenter} ${PRIORITY_BADGE[row.priority]}`}
                             >
                               {PRIORITY_LABELS[row.priority]}
                             </td>
-                            <td className={cadastroListClasses.tdTruncate}>
+                            <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
                               <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
                                 {row.category}
-                              </span>
-                            </td>
-                            <td className={cadastroListClasses.tdTruncate} title={row.locationLabel || undefined}>
-                              <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
-                                {row.locationLabel || '—'}
                               </span>
                             </td>
                             <td className={cadastroListClasses.tdTruncate}>
@@ -829,35 +954,31 @@ export default function SistemaGestaoOsPageClient() {
           title="Novo chamado"
           size="lg"
         >
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
-                  Nome do solicitante
-                </span>
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Nome do solicitante</label>
                 <input
-                  className={`${fieldClassName()} cursor-default bg-gray-50 dark:bg-gray-900/60`}
+                  className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-900/60`}
                   value={user.name || '—'}
                   readOnly
                   tabIndex={-1}
                 />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
-                  Data de abertura
-                </span>
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Data de abertura</label>
                 <input
-                  className={`${fieldClassName()} cursor-default bg-gray-50 dark:bg-gray-900/60`}
+                  className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-900/60`}
                   value={openedAtLabel}
                   readOnly
                   tabIndex={-1}
                 />
-              </label>
-              <label className="block text-sm sm:col-span-2">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Prédio
-                  <RequiredMark />
-                </span>
+                  <GestaoOsRequiredMark />
+                </label>
                 <StringSingleSelectDropdown
                   value={buildingId}
                   onChange={(v) => {
@@ -871,12 +992,12 @@ export default function SistemaGestaoOsPageClient() {
                   emptyOptionLabel="Selecione..."
                   allowEmpty
                 />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Andar
-                  <RequiredMark />
-                </span>
+                  <GestaoOsRequiredMark />
+                </label>
                 <StringSingleSelectDropdown
                   value={sectorId}
                   onChange={(v) => {
@@ -896,12 +1017,12 @@ export default function SistemaGestaoOsPageClient() {
                   allowEmpty
                   disabled={!buildingId || sectors.length === 0}
                 />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Local
-                  <RequiredMark />
-                </span>
+                  <GestaoOsRequiredMark />
+                </label>
                 <StringSingleSelectDropdown
                   value={placeId}
                   onChange={(v) => {
@@ -920,11 +1041,9 @@ export default function SistemaGestaoOsPageClient() {
                   allowEmpty
                   disabled={!sectorId || places.length === 0}
                 />
-              </label>
-              <label className="block text-sm sm:col-span-2">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
-                  Ativo
-                </span>
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Ativo</label>
                 <StringSingleSelectDropdown
                   value={assetId}
                   onChange={setAssetId}
@@ -936,12 +1055,12 @@ export default function SistemaGestaoOsPageClient() {
                   allowEmpty
                   disabled={!placeId}
                 />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Categoria
-                  <RequiredMark />
-                </span>
+                  <GestaoOsRequiredMark />
+                </label>
                 <StringSingleSelectDropdown
                   value={category}
                   onChange={setCategory}
@@ -949,12 +1068,12 @@ export default function SistemaGestaoOsPageClient() {
                   placeholder="Selecione..."
                   allowEmpty={false}
                 />
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Prioridade
-                  <RequiredMark />
-                </span>
+                  <GestaoOsRequiredMark />
+                </label>
                 <StringSingleSelectDropdown
                   value={priority}
                   onChange={(v) => setPriority((v as GestaoOsPriority) || 'MEDIUM')}
@@ -962,42 +1081,38 @@ export default function SistemaGestaoOsPageClient() {
                   placeholder="Selecione..."
                   allowEmpty={false}
                 />
-              </label>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Descrição
+                  <GestaoOsRequiredMark />
+                </label>
+                <textarea
+                  className={FORM_FIELD_TEXTAREA_CLS}
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Ex.: lâmpada queimada no corredor, vazamento sob a pia, ar-condicionado sem refrigerar..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Anexos</label>
+                <GestaoOsAttachmentsField
+                  files={attachments}
+                  uploading={uploading}
+                  onFilesSelect={(selected) => void uploadFiles(selected)}
+                  onRemove={(url) =>
+                    setAttachments((prev) => prev.filter((item) => item.url !== url))
+                  }
+                />
+              </div>
             </div>
 
-            <label className="block text-sm">
-              <span className="mb-1 block font-medium text-gray-700 dark:text-gray-300">
-                Descrição
-                <RequiredMark />
-              </span>
-              <textarea
-                className={FORM_FIELD_TEXTAREA_CLS}
-                rows={4}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Ex.: lâmpada queimada no corredor, vazamento sob a pia, ar-condicionado sem refrigerar..."
-              />
-            </label>
-
-            <div>
-              <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Anexos
-              </span>
-              <GestaoOsAttachmentsField
-                files={attachments}
-                uploading={uploading}
-                onFilesSelect={(selected) => void uploadFiles(selected)}
-                onRemove={(url) =>
-                  setAttachments((prev) => prev.filter((item) => item.url !== url))
-                }
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
+            <GestaoOsModalFooter>
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
               >
                 Cancelar
               </button>
@@ -1011,359 +1126,367 @@ export default function SistemaGestaoOsPageClient() {
                   !description.trim()
                 }
                 onClick={() => createMutation.mutate()}
-                className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
               >
                 {createMutation.isPending ? 'Salvando...' : 'Abrir chamado'}
               </button>
-            </div>
+            </GestaoOsModalFooter>
           </div>
         </Modal>
 
         <Modal
           isOpen={Boolean(detailId)}
-          onClose={() => setDetailId(null)}
-          title={detail ? formatGestaoOsLabel(detail) : 'Detalhe do chamado'}
+          onClose={() => {
+            setDetailId(null);
+            setDetailTab('resumo');
+          }}
+          showCloseButton={false}
+          scrollContent={false}
+          contentClassName="!p-0"
           size="xl"
+          panelClassName={
+            detailTab === 'comentarios'
+              ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
+              : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
+          }
         >
-          {loadingDetail || !detail ? (
-            <div className="py-10 text-center text-sm text-gray-500">Carregando...</div>
-          ) : (
-            <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_BADGE[detail.status]}`}>
-                  {STATUS_LABELS[detail.status]}
-                </span>
-                <span className={`text-sm ${PRIORITY_BADGE[detail.priority]}`}>
-                  Prioridade: {PRIORITY_LABELS[detail.priority]}
-                </span>
-                {detail.maintenanceType ? (
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    Tipo: {MAINTENANCE_TYPE_LABELS[detail.maintenanceType]}
-                  </span>
+          <GestaoOsDetailModalChrome
+            title={detail ? formatGestaoOsLabel(detail) : 'Detalhe do chamado'}
+            tabs={[...CHAMADO_DETAIL_TABS]}
+            activeTab={detailTab}
+            onTabChange={(id) => setDetailTab(id as GestaoOsChamadoDetailTab)}
+            fillBody={detailTab === 'comentarios'}
+            onClose={() => {
+              setDetailId(null);
+              setDetailTab('resumo');
+            }}
+          >
+            {loadingDetail || !detail ? (
+              <div className="py-10 text-center text-sm text-gray-500">Carregando...</div>
+            ) : (
+              <div
+                className={
+                  detailTab === 'comentarios'
+                    ? 'flex h-full min-h-0 flex-col text-sm'
+                    : 'space-y-5 text-sm'
+                }
+              >
+                {detailTab === 'resumo' ? (
+                  <GestaoOsChamadoResumo detail={detail} formatDateTime={formatDateTime} />
                 ) : null}
-                {isOverdue(detail) ? (
-                  <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-800 dark:bg-rose-950/50 dark:text-rose-200">
-                    Atrasada · venc. {formatDateTime(detail.dueAt)}
-                  </span>
-                ) : detail.dueAt ? (
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    Prazo: {formatDateTime(detail.dueAt)}
-                  </span>
-                ) : null}
-              </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Chamado</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    #{detail.displayNumber}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">OS</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {detail.osNumber != null ? `#${detail.osNumber}` : 'Ainda não gerada'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Local / Ativo</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {detail.locationLabel || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Categoria</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">{detail.category}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Solicitante</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {detail.requester?.name || '—'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Data de abertura</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {formatDateTime(detail.openedAt)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase text-gray-500">Responsável</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {detail.assignee?.name || 'Não atribuído'}
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs uppercase text-gray-500">Descrição</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">
-                  {detail.description}
-                </p>
-              </div>
-
-              {Array.isArray(detail.attachments) && detail.attachments.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs uppercase text-gray-500">Anexos</p>
-                  <div className="flex flex-wrap gap-2">
-                    {detail.attachments.map((file) => (
-                      <a
-                        key={file.url}
-                        href={resolveApiMediaUrl(file.url) ?? '#'}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs text-red-700 dark:border-gray-700 dark:text-red-300"
-                      >
-                        <Paperclip className="h-3 w-3" />
-                        {file.name}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {Array.isArray(detail.checklistResponses) && detail.checklistResponses.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs uppercase text-gray-500">Checklist</p>
-                  <ul className="space-y-1.5">
-                    {detail.checklistResponses.map((item, idx) => (
-                      <li key={item.id || `${item.label}-${idx}`} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={!!item.checked}
-                          readOnly
-                          className="h-4 w-4 rounded border-gray-300 text-red-600"
-                        />
-                        <span className="text-gray-800 dark:text-gray-200">
-                          {item.label}
-                          {item.required ? (
-                            <span className="ml-1 text-xs text-rose-600">*</span>
-                          ) : null}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              {(detail.signatureRequesterUrl || detail.signatureTechnicianUrl) && (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {detail.signatureRequesterUrl ? (
-                    <div>
-                      <p className="mb-1 text-xs uppercase text-gray-500">Assinatura solicitante</p>
-                      <img
-                        src={resolveApiMediaUrl(detail.signatureRequesterUrl) ?? undefined}
-                        alt="Assinatura do solicitante"
-                        className="max-h-28 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                      />
-                    </div>
-                  ) : null}
-                  {detail.signatureTechnicianUrl ? (
-                    <div>
-                      <p className="mb-1 text-xs uppercase text-gray-500">Assinatura técnico</p>
-                      <img
-                        src={resolveApiMediaUrl(detail.signatureTechnicianUrl) ?? undefined}
-                        alt="Assinatura do técnico"
-                        className="max-h-28 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              )}
-
-              {detail.events && detail.events.length > 0 ? (
-                <div>
-                  <p className="mb-2 text-xs uppercase text-gray-500">Histórico</p>
-                  <ol className="space-y-2 border-l border-gray-200 pl-4 dark:border-gray-700">
-                    {detail.events.map((event) => (
-                      <li key={event.id} className="text-sm">
-                        <p className="font-medium text-gray-900 dark:text-gray-100">
-                          {event.fromStatus ? `${STATUS_LABELS[event.fromStatus]} → ` : ''}
-                          {STATUS_LABELS[event.toStatus]}
+                {detailTab === 'fluxo' ? (
+                  nextStatuses.length > 0 ? (
+                    <div className="space-y-4">
+                      {detail.status === 'OPEN' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Na primeira análise (Em Análise), o sistema cria a OS e atribui o número
+                          da ordem de serviço.
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {event.actor?.name || 'Sistema'} · {formatDateTime(event.createdAt)}
+                      ) : null}
+                      {detail.status === 'APPROVED' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Antes de iniciar a execução, a pessoa que for fazer o serviço precisa
+                          preencher o checklist de segurança do trabalho e enviar uma foto usando os
+                          EPIs.
                         </p>
-                        {event.note ? (
-                          <p className="text-xs text-gray-600 dark:text-gray-400">{event.note}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              ) : null}
-
-              {nextStatuses.length > 0 ? (
-                <div className="rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900 dark:bg-red-950/20">
-                  <p className="mb-3 text-sm font-semibold text-red-900 dark:text-red-100">
-                    Avançar fluxo
-                  </p>
-                  {detail.status === 'OPEN' ? (
-                    <p className="mb-3 text-xs text-red-800/80 dark:text-red-200/80">
-                      Na primeira análise (Em Análise), o sistema cria a OS e atribui o número da
-                      ordem de serviço.
-                    </p>
-                  ) : null}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="mb-1 block">Próximo status</span>
-                      <select
-                        className={fieldClassName()}
-                        value={transitionStatus}
-                        onChange={(e) => setTransitionStatus(e.target.value as GestaoOsStatus | '')}
-                      >
-                        <option value="">Selecione...</option>
-                        {nextStatuses.map((status) => (
-                          <option key={status} value={status}>
-                            {STATUS_LABELS[status]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    {(transitionStatus === 'APPROVED' ||
-                      transitionStatus === 'UNDER_REVIEW' ||
-                      detail.status === 'UNDER_REVIEW') && (
-                      <>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Tipo de manutenção</span>
-                          <select
-                            className={fieldClassName()}
-                            value={maintenanceType}
-                            onChange={(e) =>
-                              setMaintenanceType(e.target.value as GestaoOsMaintenanceType | '')
-                            }
+                      ) : null}
+                      {detail.status === 'SAFETY_CHECK' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Preencha o checklist de segurança do trabalho e envie a foto com os EPIs
+                          na aba{' '}
+                          <button
+                            type="button"
+                            onClick={() => setDetailTab('checklist')}
+                            className="font-semibold text-red-600 hover:underline dark:text-red-400"
                           >
-                            <option value="">Selecione...</option>
-                            {(Object.keys(MAINTENANCE_TYPE_LABELS) as GestaoOsMaintenanceType[]).map(
-                              (key) => (
-                                <option key={key} value={key}>
-                                  {MAINTENANCE_TYPE_LABELS[key]}
-                                </option>
-                              )
-                            )}
-                          </select>
-                        </label>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Técnico responsável</span>
-                          <select
-                            className={fieldClassName()}
-                            value={assigneeId}
-                            onChange={(e) => setAssigneeId(e.target.value)}
-                          >
-                            <option value="">Não atribuído</option>
-                            {technicians.map((tech) => (
-                              <option key={tech.id} value={tech.id}>
-                                {tech.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    )}
-
-                    {transitionStatus === 'CANCELLED' ? (
-                      <label className="block text-sm sm:col-span-2">
-                        <span className="mb-1 block">Justificativa do cancelamento *</span>
-                        <textarea
-                          className={fieldClassName()}
-                          rows={3}
-                          value={cancelReason}
-                          onChange={(e) => setCancelReason(e.target.value)}
-                        />
-                      </label>
-                    ) : null}
-
-                    {transitionStatus === 'CLOSED' ? (
-                      <>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Avaliação (1–5)</span>
-                          <select
-                            className={fieldClassName()}
-                            value={rating}
-                            onChange={(e) => setRating(e.target.value)}
-                          >
-                            {[1, 2, 3, 4, 5].map((n) => (
-                              <option key={n} value={n}>
-                                {n}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="block text-sm">
-                          <span className="mb-1 block">Comentário da avaliação</span>
-                          <input
-                            className={fieldClassName()}
-                            value={ratingComment}
-                            onChange={(e) => setRatingComment(e.target.value)}
-                          />
-                        </label>
+                            Checklist
+                          </button>{' '}
+                          antes de avançar para execução.
+                        </p>
+                      ) : null}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                          <p className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Assinatura do solicitante
-                          </p>
-                          {signatureRequesterUrl ? (
-                            <div className="flex flex-wrap items-center gap-3">
-                              <img
-                                src={resolveApiMediaUrl(signatureRequesterUrl) ?? undefined}
-                                alt="Prévia da assinatura"
-                                className="max-h-24 rounded border border-gray-200 bg-white object-contain dark:border-gray-700"
-                              />
-                              <button
-                                type="button"
-                                className="text-xs font-medium text-rose-600 hover:underline"
-                                onClick={() => setSignatureRequesterUrl(null)}
-                              >
-                                Refazer
-                              </button>
-                            </div>
-                          ) : (
-                            <SignaturePad
-                              onSave={(dataUrl) => void saveSignatureDataUrl(dataUrl)}
-                            />
-                          )}
-                          {uploadingSignature ? (
-                            <p className="mt-1 text-xs text-gray-500">Enviando assinatura...</p>
-                          ) : null}
+                          <label className={GESTAO_OS_FORM_LABEL_CLS}>Próximo status</label>
+                          <StringSingleSelectDropdown
+                            value={transitionStatus}
+                            onChange={(v) => setTransitionStatus((v as GestaoOsStatus) || '')}
+                            options={nextStatusOptions}
+                            placeholder="Selecione..."
+                            emptyOptionLabel="Selecione..."
+                            allowEmpty
+                          />
                         </div>
-                      </>
-                    ) : null}
 
-                    <label className="block text-sm sm:col-span-2">
-                      <span className="mb-1 block">Observação / relato</span>
-                      <textarea
-                        className={fieldClassName()}
-                        rows={2}
-                        value={transitionNote}
-                        onChange={(e) => setTransitionNote(e.target.value)}
-                      />
-                    </label>
-                  </div>
+                        {(transitionStatus === 'APPROVED' ||
+                          transitionStatus === 'UNDER_REVIEW' ||
+                          detail.status === 'UNDER_REVIEW') && (
+                          <>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Tipo de manutenção</label>
+                              <StringSingleSelectDropdown
+                                value={maintenanceType}
+                                onChange={(v) =>
+                                  setMaintenanceType((v as GestaoOsMaintenanceType) || '')
+                                }
+                                options={maintenanceTypeOptions}
+                                placeholder="Selecione..."
+                                emptyOptionLabel="Selecione..."
+                                allowEmpty
+                              />
+                            </div>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Técnico responsável</label>
+                              <StringSingleSelectDropdown
+                                value={assigneeId}
+                                onChange={setAssigneeId}
+                                options={technicianOptions}
+                                placeholder="Não atribuído"
+                                emptyOptionLabel="Não atribuído"
+                                allowEmpty
+                              />
+                            </div>
+                          </>
+                        )}
 
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      disabled={
-                        !transitionStatus ||
-                        transitionMutation.isPending ||
-                        (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
-                        (transitionStatus === 'APPROVED' && !maintenanceType)
-                      }
-                      onClick={() => transitionMutation.mutate()}
-                      className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                    >
-                      {transitionMutation.isPending ? 'Atualizando...' : 'Confirmar transição'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">
-                  Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem novas
-                  transições.
-                </p>
-              )}
-            </div>
-          )}
+                        {transitionStatus === 'CANCELLED' ? (
+                          <div className="sm:col-span-2">
+                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                              Justificativa do cancelamento
+                              <GestaoOsRequiredMark />
+                            </label>
+                            <textarea
+                              className={FORM_FIELD_TEXTAREA_CLS}
+                              rows={3}
+                              value={cancelReason}
+                              onChange={(e) => setCancelReason(e.target.value)}
+                            />
+                          </div>
+                        ) : null}
+
+                        {transitionStatus === 'CLOSED' ? (
+                          <>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Avaliação (1–5)</label>
+                              <StringSingleSelectDropdown
+                                value={rating}
+                                onChange={setRating}
+                                options={ratingOptions}
+                                placeholder="Selecione..."
+                                allowEmpty={false}
+                              />
+                            </div>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Comentário da avaliação
+                              </label>
+                              <input
+                                className={FORM_FIELD_INPUT_CLS}
+                                value={ratingComment}
+                                onChange={(e) => setRatingComment(e.target.value)}
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Assinatura do solicitante
+                              </label>
+                              {signatureRequesterUrl ? (
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <img
+                                    src={resolveApiMediaUrl(signatureRequesterUrl) ?? undefined}
+                                    alt="Prévia da assinatura"
+                                    className="max-h-24 rounded-lg border border-gray-200 bg-white object-contain dark:border-gray-700"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="text-xs font-medium text-rose-600 hover:underline"
+                                    onClick={() => setSignatureRequesterUrl(null)}
+                                  >
+                                    Refazer
+                                  </button>
+                                </div>
+                              ) : (
+                                <SignaturePad
+                                  onSave={(dataUrl) => void saveSignatureDataUrl(dataUrl)}
+                                />
+                              )}
+                              {uploadingSignature ? (
+                                <p className="mt-1 text-xs text-gray-500">
+                                  Enviando assinatura...
+                                </p>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : null}
+
+                        <div className="sm:col-span-2">
+                          <label className={GESTAO_OS_FORM_LABEL_CLS}>Observação / relato</label>
+                          <textarea
+                            className={FORM_FIELD_TEXTAREA_CLS}
+                            rows={3}
+                            value={transitionNote}
+                            onChange={(e) => setTransitionNote(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-2">
+                        <button
+                          type="button"
+                          disabled={
+                            !transitionStatus ||
+                            transitionMutation.isPending ||
+                            (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
+                            (transitionStatus === 'APPROVED' && !maintenanceType) ||
+                            (transitionStatus === 'IN_PROGRESS' &&
+                              detail.status === 'SAFETY_CHECK' &&
+                              !safetyReady)
+                          }
+                          onClick={() => transitionMutation.mutate()}
+                          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                        >
+                          {transitionMutation.isPending ? 'Atualizando...' : 'Confirmar transição'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <GestaoOsEmptyTab>
+                      Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem novas
+                      transições.
+                    </GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'checklist' ? (
+                  safetyChecklistDraft.length > 0 || checklistDraft.length > 0 ? (
+                    <div className="space-y-6">
+                      {safetyChecklistDraft.length > 0 ? (
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                              Segurança do Trabalho
+                            </p>
+                            {safetyEditable ? (
+                              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                Marque os equipamentos e condições e envie a foto com os EPIs. Itens
+                                com * são obrigatórios.
+                              </p>
+                            ) : null}
+                          </div>
+                          <GestaoOsChecklistField
+                            items={safetyChecklistDraft}
+                            readOnly={!safetyEditable}
+                            onToggle={
+                              safetyEditable
+                                ? (index, checked) =>
+                                    setSafetyChecklistDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index ? { ...item, checked } : item
+                                      )
+                                    )
+                                : undefined
+                            }
+                          />
+                          <div>
+                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                              Foto com os EPIs
+                              {safetyEditable ? <GestaoOsRequiredMark /> : null}
+                            </label>
+                            {safetyEditable ? (
+                              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                                Envie uma foto sua usando os equipamentos de proteção corretos.
+                              </p>
+                            ) : null}
+                            {safetyEditable ? (
+                              <GestaoOsAttachmentsField
+                                files={
+                                  safetyPhotoUrl
+                                    ? [
+                                        {
+                                          url: safetyPhotoUrl,
+                                          name: 'Foto de EPIs',
+                                          mimeType: 'image/jpeg'
+                                        }
+                                      ]
+                                    : []
+                                }
+                                uploading={uploadingSafetyPhoto}
+                                onFilesSelect={(selected) => void uploadSafetyPhoto(selected)}
+                                onRemove={() => setSafetyPhotoUrl(null)}
+                                label="Clique ou arraste a foto"
+                                hint="PNG ou JPG"
+                                accept="image/*"
+                                multiple={false}
+                              />
+                            ) : safetyPhotoUrl ? (
+                              <img
+                                src={resolveApiMediaUrl(safetyPhotoUrl) ?? undefined}
+                                alt="Foto de EPIs"
+                                className="max-h-48 rounded-lg border border-gray-200 object-cover dark:border-gray-700"
+                              />
+                            ) : (
+                              <p className="text-xs text-gray-500">Nenhuma foto enviada.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                      {checklistDraft.length > 0 ? (
+                        <div className="space-y-3">
+                          {safetyChecklistDraft.length > 0 ? (
+                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                              Checklist da execução
+                            </p>
+                          ) : null}
+                          {checklistEditable ? (
+                            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                              Marque os itens conforme a execução. Itens com * são obrigatórios.
+                            </p>
+                          ) : null}
+                          <GestaoOsChecklistField
+                            items={checklistDraft}
+                            readOnly={!checklistEditable}
+                            onToggle={
+                              checklistEditable
+                                ? (index, checked) =>
+                                    setChecklistDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === index ? { ...item, checked } : item
+                                      )
+                                    )
+                                : undefined
+                            }
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum checklist neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'documentos' ? <GestaoOsDocumentsTab detail={detail} /> : null}
+
+                {detailTab === 'historico' ? (
+                  detail.events && detail.events.length > 0 ? (
+                    <GestaoOsHistoryList
+                      events={detail.events}
+                      status={detail.status}
+                      formatDateTime={formatDateTime}
+                    />
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum histórico neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'comentarios' ? (
+                  <GestaoOsCommentsSection
+                    workOrderId={detail.id}
+                    currentUserId={user.id}
+                  />
+                ) : null}
+              </div>
+            )}
+          </GestaoOsDetailModalChrome>
         </Modal>
       </MainLayout>
     </ProtectedRoute>

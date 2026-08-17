@@ -195,6 +195,8 @@ export class GestaoOsController {
           completionNote: body.completionNote,
           dueAt: body.dueAt,
           checklistResponses: body.checklistResponses,
+          safetyChecklistResponses: body.safetyChecklistResponses,
+          safetyPhotoUrl: body.safetyPhotoUrl,
           signatureRequesterUrl: body.signatureRequesterUrl,
           signatureTechnicianUrl: body.signatureTechnicianUrl
         },
@@ -232,11 +234,56 @@ export class GestaoOsController {
           checklistResponses: body.checklistResponses,
           signatureRequesterUrl: body.signatureRequesterUrl,
           signatureTechnicianUrl: body.signatureTechnicianUrl,
-          dueAt: body.dueAt
+          dueAt: body.dueAt,
+          safetyChecklistResponses: body.safetyChecklistResponses,
+          safetyPhotoUrl: body.safetyPhotoUrl
         },
         access
       );
       res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async listComments(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const access = await resolveGestaoOsAccess({
+        userId: req.user.id,
+        isAdmin: !!req.user.isAdmin
+      });
+      const data = await gestaoOsService.listComments(req.params.id, access);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async createComment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const access = await resolveGestaoOsAccess({
+        userId: req.user.id,
+        isAdmin: !!req.user.isAdmin
+      });
+      const content = typeof req.body?.content === 'string' ? req.body.content : '';
+      const data = await gestaoOsService.createComment(req.params.id, req.user.id, content, access);
+      res.status(201).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteComment(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      await gestaoOsService.deleteComment(
+        req.params.commentId,
+        req.user.id,
+        !!req.user.isAdmin
+      );
+      res.json({ success: true, message: 'Comentário excluído' });
     } catch (error) {
       next(error);
     }

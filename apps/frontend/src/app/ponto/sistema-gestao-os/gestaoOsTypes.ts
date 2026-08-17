@@ -2,6 +2,7 @@ export type GestaoOsStatus =
   | 'OPEN'
   | 'UNDER_REVIEW'
   | 'APPROVED'
+  | 'SAFETY_CHECK'
   | 'IN_PROGRESS'
   | 'WAITING_PARTS'
   | 'COMPLETED'
@@ -25,6 +26,8 @@ export type GestaoOsUserRef = {
   id: string;
   name: string;
   email?: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
 };
 
 export type GestaoOsChecklistResponseItem = {
@@ -62,6 +65,8 @@ export type GestaoOsWorkOrder = {
   ratingComment: string | null;
   dueAt?: string | null;
   checklistResponses?: GestaoOsChecklistResponseItem[] | null;
+  safetyChecklistResponses?: GestaoOsChecklistResponseItem[] | null;
+  safetyPhotoUrl?: string | null;
   signatureRequesterUrl?: string | null;
   signatureTechnicianUrl?: string | null;
   openedAt: string;
@@ -244,12 +249,30 @@ export const STATUS_LABELS: Record<GestaoOsStatus, string> = {
   OPEN: 'Aberta',
   UNDER_REVIEW: 'Em Análise',
   APPROVED: 'Aprovada',
+  SAFETY_CHECK: 'Segurança do Trabalho',
   IN_PROGRESS: 'Em Execução',
   WAITING_PARTS: 'Aguardando Peça/Terceiro',
   COMPLETED: 'Concluída',
   CLOSED: 'Encerrada/Avaliada',
   CANCELLED: 'Cancelada'
 };
+
+/** Cores do badge de status — mesmo padrão das listas (RM, combustível, aprovações). */
+export const STATUS_BADGE: Record<GestaoOsStatus, string> = {
+  OPEN: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200',
+  UNDER_REVIEW: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+  APPROVED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  SAFETY_CHECK: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200',
+  IN_PROGRESS: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
+  WAITING_PARTS: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200',
+  COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+  CLOSED: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
+};
+
+export function gestaoOsStatusBadgeClass(status: GestaoOsStatus): string {
+  return `inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[status]}`;
+}
 
 export const PRIORITY_LABELS: Record<GestaoOsPriority, string> = {
   LOW: 'Baixa',
@@ -274,13 +297,45 @@ export const PROFILE_LABELS: Record<GestaoOsProfile, string> = {
 export const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
   OPEN: ['UNDER_REVIEW', 'CANCELLED'],
   UNDER_REVIEW: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['IN_PROGRESS', 'CANCELLED'],
+  APPROVED: ['SAFETY_CHECK', 'CANCELLED'],
+  SAFETY_CHECK: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED', 'CANCELLED'],
   WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
   COMPLETED: ['CLOSED', 'CANCELLED'],
   CLOSED: [],
   CANCELLED: []
 };
+
+export const GESTAO_OS_SAFETY_CHECKLIST_ITEMS: GestaoOsChecklistResponseItem[] = [
+  { id: 'sst-helmet', label: 'Capacete de segurança', required: true, checked: false },
+  { id: 'sst-goggles', label: 'Óculos de proteção', required: true, checked: false },
+  { id: 'sst-ear', label: 'Protetor auricular (quando aplicável)', required: true, checked: false },
+  { id: 'sst-gloves', label: 'Luvas adequadas à atividade', required: true, checked: false },
+  { id: 'sst-boots', label: 'Calçado de segurança', required: true, checked: false },
+  { id: 'sst-uniform', label: 'Uniforme / vestimenta adequada', required: true, checked: false },
+  { id: 'sst-area', label: 'Área isolada / sinalizada quando necessário', required: true, checked: false },
+  { id: 'sst-tools', label: 'Ferramentas e equipamentos em condições de uso', required: true, checked: false },
+  { id: 'sst-fit', label: 'Estou apto e ciente dos riscos da atividade', required: true, checked: false }
+];
+
+export function cloneGestaoOsSafetyChecklist(
+  items?: GestaoOsChecklistResponseItem[] | null
+): GestaoOsChecklistResponseItem[] {
+  const source =
+    Array.isArray(items) && items.length > 0 ? items : GESTAO_OS_SAFETY_CHECKLIST_ITEMS;
+  const byId = new Map(source.map((item) => [item.id, item]));
+  return GESTAO_OS_SAFETY_CHECKLIST_ITEMS.map((item) => ({
+    ...item,
+    checked: Boolean(byId.get(item.id)?.checked)
+  }));
+}
+
+export function isGestaoOsSafetyChecklistComplete(
+  items: GestaoOsChecklistResponseItem[] | null | undefined
+): boolean {
+  if (!items?.length) return false;
+  return items.every((item) => item.required === false || !!item.checked);
+}
 
 export const SERVICE_CATEGORIES = [
   'Elétrica',
@@ -308,4 +363,13 @@ export function formatGestaoOsLabel(row: {
 }): string {
   if (row.osNumber != null && row.osNumber > 0) return `OS #${row.osNumber}`;
   return `Chamado #${row.displayNumber}`;
+}
+
+/** Só o número — para coluna ID das listas. */
+export function formatGestaoOsNumber(row: {
+  displayNumber: number;
+  osNumber?: number | null;
+}): string {
+  if (row.osNumber != null && row.osNumber > 0) return String(row.osNumber);
+  return String(row.displayNumber);
 }

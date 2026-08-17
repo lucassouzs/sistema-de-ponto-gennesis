@@ -41,6 +41,13 @@ function unlockPageScroll() {
 
 const MODAL_ANIM_MS = 220;
 
+const ModalRequestCloseContext = React.createContext<(() => void) | null>(null);
+
+/** Fecha o modal atual (com confirmação, se `confirmBeforeClose` estiver ativo). */
+export function useModalRequestClose() {
+  return React.useContext(ModalRequestCloseContext);
+}
+
 export interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -67,6 +74,8 @@ export interface ModalProps {
   scrollContent?: boolean;
   /** Classes extras no wrapper interno do conteúdo (ex.: ajustar padding). */
   contentClassName?: string;
+  /** Classes extras no painel do modal (ex.: altura fixa na aba de comentários). */
+  panelClassName?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -85,6 +94,7 @@ export const Modal: React.FC<ModalProps> = ({
   elevated = false,
   scrollContent = true,
   contentClassName,
+  panelClassName,
 }) => {
   const rootRef = useRef<HTMLDivElement>(null);
   const { present, visible } = useOpenTransition(isOpen, MODAL_ANIM_MS);
@@ -156,13 +166,14 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   const modalContent = (
+    <ModalRequestCloseContext.Provider value={requestClose}>
     <div
       ref={rootRef}
       data-modal-anim="controlled"
       data-state={visible ? 'open' : 'closed'}
       className={clsx(
         MODAL_OVERLAY_CLASS,
-        'fixed inset-0 overflow-hidden overscroll-none touch-none',
+        'fixed inset-0 overflow-hidden overscroll-none',
         elevated ? 'z-[2100]' : 'z-[2000]',
         !isOpen && 'pointer-events-none',
       )}
@@ -186,9 +197,9 @@ export const Modal: React.FC<ModalProps> = ({
           role="dialog"
           aria-modal="true"
           className={clsx(
-            'app-modal-panel relative z-10 bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-lg shadow-xl w-full flex flex-col',
-            'max-h-[min(92dvh,calc(100vh-1.5rem))] sm:max-h-[calc(100dvh-2rem)] overflow-hidden',
+            'app-modal-panel relative z-10 flex w-full min-h-0 max-h-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl dark:bg-gray-800 sm:rounded-lg',
             sizeClasses[size],
+            panelClassName,
             visible ? 'app-modal-panel--open' : 'app-modal-panel--closed',
           )}
         >
@@ -227,9 +238,9 @@ export const Modal: React.FC<ModalProps> = ({
           {/* Content */}
           <div
             className={clsx(
-              'flex-1 min-h-0',
+              'min-h-0 flex-1',
               scrollContent
-                ? 'overflow-y-auto overscroll-contain'
+                ? 'app-thin-scroll overflow-y-auto overscroll-contain touch-pan-y'
                 : 'flex min-h-0 flex-col overflow-hidden',
               contentOverflowVisible && scrollContent && 'overflow-x-visible',
             )}
@@ -257,6 +268,7 @@ export const Modal: React.FC<ModalProps> = ({
         message={confirmCloseMessage}
       />
     </div>
+    </ModalRequestCloseContext.Provider>
   );
 
   return createPortal(modalContent, document.body);
