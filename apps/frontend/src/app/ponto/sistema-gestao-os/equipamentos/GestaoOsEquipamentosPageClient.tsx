@@ -22,7 +22,7 @@ import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
@@ -594,11 +594,11 @@ export default function GestaoOsEquipamentosPageClient() {
             </p>
           </div>
 
-          <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
+          <AppUnderlineTabList aria-label="Seções de equipamentos">
             {TABS.map((item) => {
               const active = tab === item.id;
               return (
-                <AppTabButton
+                <AppUnderlineTabButton
                   key={item.id}
                   active={active}
                   onClick={() => {
@@ -606,13 +606,13 @@ export default function GestaoOsEquipamentosPageClient() {
                     setSearchTerm('');
                     closeRowActionMenu();
                   }}
-                  className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+                  className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
                 >
                   {item.label}
-                </AppTabButton>
+                </AppUnderlineTabButton>
               );
             })}
-          </nav>
+          </AppUnderlineTabList>
 
           <Card className={cadastroListClasses.card}>
             <CardHeader className={cadastroListClasses.cardHeader}>

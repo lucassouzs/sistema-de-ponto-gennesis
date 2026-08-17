@@ -10,7 +10,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { PointCorrectionCard } from '@/components/ponto/PointCorrectionCard';
 import { PointCorrectionList } from '@/components/ponto/PointCorrectionList';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
 export default function SolicitacoesPage() {
@@ -67,24 +67,24 @@ export default function SolicitacoesPage() {
           </div>
 
           {/* Navegação no topo */}
-          <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
-            <AppTabButton
+          <AppUnderlineTabList aria-label="Seções de alterações de ponto" centered={false}>
+            <AppUnderlineTabButton
               active={activeTab === 'list'}
               onClick={() => setActiveTab('list')}
-              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
             >
               <List className="w-4 h-4" />
               Minhas alterações
-            </AppTabButton>
-            <AppTabButton
+            </AppUnderlineTabButton>
+            <AppUnderlineTabButton
               active={activeTab === 'new'}
               onClick={() => setActiveTab('new')}
-              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
             >
               <Plus className="w-4 h-4" />
               Nova alteração
-            </AppTabButton>
-          </nav>
+            </AppUnderlineTabButton>
+          </AppUnderlineTabList>
 
           {/* Conteúdo principal */}
           <Card>

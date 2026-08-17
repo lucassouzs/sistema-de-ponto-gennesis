@@ -13,7 +13,7 @@ import {
   User
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
@@ -156,7 +156,7 @@ export const PointCorrectionList: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Tabs de Status */}
-      <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+      <AppUnderlineTabList aria-label="Status das solicitações" centered={false}>
         {(
           [
             { id: 'PENDING' as const, label: `Pendentes (${statusCounts.PENDING})` },
@@ -166,16 +166,16 @@ export const PointCorrectionList: React.FC = () => {
             { id: 'all' as const, label: `Todas (${statusCounts.all})` },
           ] as const
         ).map((tab) => (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.id}
             active={activeStatusTab === tab.id}
             onClick={() => setActiveStatusTab(tab.id)}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         ))}
-      </nav>
+      </AppUnderlineTabList>
 
       <div className="space-y-3">
         {filteredRequests.length === 0 ? (

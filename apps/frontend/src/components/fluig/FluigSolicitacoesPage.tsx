@@ -34,7 +34,7 @@ import {
   ListRowNavigableLabel,
 } from '@/components/ui/listTableUi';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
-import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import {
   buildFluigWorkflowProcessViewUrl,
@@ -1379,7 +1379,7 @@ export function FluigSolicitacoesPage({
         {/* Abas G3 / G4 / G5 (centralizadas, padrão OCs) */}
         {showProcessCard && (
           <nav
-            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
+            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-visible py-3 sm:gap-x-2"
             role="tablist"
             aria-label="Processos Fluig"
           >
@@ -1615,27 +1615,30 @@ export function FluigSolicitacoesPage({
               };
               return (
                 <div className="space-y-5">
-                    <div className="flex justify-center">
-                      <AppSegmentedControl
+                    <div className="flex justify-center overflow-visible px-1 py-1">
+                      <nav
+                        className="flex max-w-full flex-wrap justify-center gap-x-1 gap-y-2 overflow-visible py-1 sm:gap-x-2"
+                        role="tablist"
                         aria-label="Etapas do processo"
-                        className="max-w-full justify-center overflow-x-auto"
                       >
                         {filteredStatusList.map(([etapa, rows], idx) => {
                           const active = idx === selectedEtapaIndex;
                           return (
-                            <AppSegmentedButton
+                            <AppTabButton
                               key={`${datasetId}-${etapa}`}
                               active={active}
                               onClick={() => setSelectedEtapaIndex(idx)}
-                              className="gap-1.5 whitespace-nowrap"
+                              className="flex items-center gap-1.5 whitespace-nowrap px-2 py-2 text-xs font-medium sm:px-3 sm:text-sm"
                               title={`${etapa} — ${rows.length} registro(s)`}
                             >
                               {etapa}
-                              <TabCountBadge count={rows.length} active={active} tone="red" />
-                            </AppSegmentedButton>
+                              <span className="app-tab__badge">
+                                <TabCountBadge count={rows.length} active={active} tone="red" />
+                              </span>
+                            </AppTabButton>
                           );
                         })}
-                      </AppSegmentedControl>
+                      </nav>
                     </div>
 
                   <Card className={`${cadastroListClasses.card} overflow-hidden`}>

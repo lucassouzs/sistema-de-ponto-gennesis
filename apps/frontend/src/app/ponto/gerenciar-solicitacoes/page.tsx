@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/Input';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { DEPARTMENTS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
@@ -624,7 +624,7 @@ export default function GerenciarSolicitacoesPage() {
           <CardContent>
             <div className="space-y-4">
               {/* Tabs de Status */}
-              <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+              <AppUnderlineTabList aria-label="Status das solicitações" centered={false}>
                 {(
                   [
                     { id: 'PENDING' as const, label: `Pendentes (${statusCounts.PENDING})` },
@@ -634,16 +634,16 @@ export default function GerenciarSolicitacoesPage() {
                     { id: 'all' as const, label: `Todas (${statusCounts.all})` },
                   ] as const
                 ).map((tab) => (
-                  <AppTabButton
+                  <AppUnderlineTabButton
                     key={tab.id}
                     active={activeStatusTab === tab.id}
                     onClick={() => setActiveStatusTab(tab.id)}
-                    className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+                    className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
                   >
                     {tab.label}
-                  </AppTabButton>
+                  </AppUnderlineTabButton>
                 ))}
-              </nav>
+              </AppUnderlineTabList>
 
               {/* Lista de solicitações */}
               <div className="space-y-3">

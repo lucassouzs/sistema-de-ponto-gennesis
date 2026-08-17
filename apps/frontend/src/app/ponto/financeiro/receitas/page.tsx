@@ -31,7 +31,7 @@ import {
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
@@ -324,58 +324,31 @@ function TabNav<T extends string>({
   onChange,
   ariaLabel,
   centered = false,
-  variant = 'tabs',
 }: {
   tabs: Array<{ key: T; label: string }>;
   active: T;
   onChange: (key: T) => void;
   ariaLabel: string;
   centered?: boolean;
+  /** @deprecated Ignorado — abas de conteúdo usam underline. */
   variant?: 'tabs' | 'segment';
 }) {
-  if (variant === 'segment') {
-    return (
-      <div className={centered ? 'flex justify-center' : ''}>
-        <AppSegmentedControl aria-label={ariaLabel}>
-          {tabs.map((tab) => (
-            <AppSegmentedButton
-              key={tab.key}
-              active={active === tab.key}
-              onClick={() => onChange(tab.key)}
-              className="whitespace-nowrap"
-            >
-              {tab.label}
-            </AppSegmentedButton>
-          ))}
-        </AppSegmentedControl>
-      </div>
-    );
-  }
-
   return (
-    <nav
-      className={
-        centered
-          ? 'flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2'
-          : 'flex flex-wrap gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2'
-      }
-      role="tablist"
-      aria-label={ariaLabel}
-    >
+    <AppUnderlineTabList aria-label={ariaLabel} centered={centered}>
       {tabs.map((tab) => {
         const isActive = active === tab.key;
         return (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.key}
             active={isActive}
             onClick={() => onChange(tab.key)}
-            className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+            className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         );
       })}
-    </nav>
+    </AppUnderlineTabList>
   );
 }
 

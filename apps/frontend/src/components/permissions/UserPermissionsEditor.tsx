@@ -34,7 +34,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
@@ -438,11 +438,11 @@ export function UserPermissionsTabBar({
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-center gap-1">
+      <AppUnderlineTabList aria-label="Abas de permissões" centered={false}>
         {items.map((t) => {
           const isActive = !t.disabled && activeTab === t.id;
           return (
-            <AppTabButton
+            <AppUnderlineTabButton
               key={t.id}
               active={isActive}
               onClick={() => {
@@ -451,13 +451,13 @@ export function UserPermissionsTabBar({
               disabled={t.disabled}
               aria-disabled={t.disabled}
               title={t.disabled ? 'Ative o módulo Contratos na aba Acesso' : undefined}
-              className="px-3 py-2 text-sm font-medium"
+              className="px-3 py-2 text-sm"
             >
               {t.label}
-            </AppTabButton>
+            </AppUnderlineTabButton>
           );
         })}
-      </div>
+      </AppUnderlineTabList>
     </div>
   );
 }

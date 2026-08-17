@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
 import { exportLicitacaoAnalisePdf } from '@/lib/exportLicitacaoAnalisePdf';
@@ -1306,11 +1306,7 @@ export default function LicitacoesPage() {
             </div>
           </header>
 
-          <nav
-            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
-            role="tablist"
-            aria-label="Seções do módulo"
-          >
+          <AppUnderlineTabList aria-label="Seções do módulo">
             {(
               [
                 { id: 'orcamento' as const, label: 'Orçamento' },
@@ -1322,20 +1318,20 @@ export default function LicitacoesPage() {
             ).map((tab) => {
               const active = viewMode === tab.id;
               return (
-                <AppTabButton
+                <AppUnderlineTabButton
                   key={tab.id}
                   active={active}
                   onClick={() => {
                     if (tab.id === 'arquivadas') setSelectedId(null);
                     setViewMode(tab.id);
                   }}
-                  className="inline-flex items-center whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+                  className="inline-flex items-center whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
                 >
                   {tab.label}
-                </AppTabButton>
+                </AppUnderlineTabButton>
               );
             })}
-          </nav>
+          </AppUnderlineTabList>
 
           {viewMode === 'banco-cats' ? (
             <div
@@ -1372,47 +1368,45 @@ export default function LicitacoesPage() {
           ) : null}
 
           {viewMode === 'regioes' ? (
-            <div className="flex justify-center">
-              <AppSegmentedControl aria-label="Regiões" className="justify-center">
-                {(loadingRegiaoTabs && regiaoTabs.length === 0
-                  ? [
-                      { key: 'centro-oeste', label: 'Região Centro-Oeste' },
-                      { key: 'sudeste', label: 'Região Sudeste' },
-                      { key: 'nordeste', label: 'Região Nordeste' },
-                      { key: 'sul', label: 'Região Sul' },
-                      { key: 'norte', label: 'Região Norte' },
-                    ]
-                  : regiaoTabs
-                ).map((tab) => {
-                  const active = tab.key === planilhaRegiaoKey;
-                  const count =
-                    typeof (tab as LicitacaoRegiaoTab).count === 'number'
-                      ? (tab as LicitacaoRegiaoTab).count
-                      : null;
-                  return (
-                    <AppSegmentedButton
-                      key={tab.key}
-                      active={active}
-                      onClick={() => setPlanilhaRegiaoKey(tab.key)}
-                      className="gap-1.5 whitespace-nowrap"
-                    >
-                      <span>{tab.label.replace(/^Região\s+/i, '')}</span>
-                      {count != null ? (
-                        <span
-                          className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
-                            active
-                              ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                              : 'bg-gray-200/80 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                          }`}
-                        >
-                          {count}
-                        </span>
-                      ) : null}
-                    </AppSegmentedButton>
-                  );
-                })}
-              </AppSegmentedControl>
-            </div>
+            <AppUnderlineTabList aria-label="Regiões">
+              {(loadingRegiaoTabs && regiaoTabs.length === 0
+                ? [
+                    { key: 'centro-oeste', label: 'Região Centro-Oeste' },
+                    { key: 'sudeste', label: 'Região Sudeste' },
+                    { key: 'nordeste', label: 'Região Nordeste' },
+                    { key: 'sul', label: 'Região Sul' },
+                    { key: 'norte', label: 'Região Norte' },
+                  ]
+                : regiaoTabs
+              ).map((tab) => {
+                const active = tab.key === planilhaRegiaoKey;
+                const count =
+                  typeof (tab as LicitacaoRegiaoTab).count === 'number'
+                    ? (tab as LicitacaoRegiaoTab).count
+                    : null;
+                return (
+                  <AppUnderlineTabButton
+                    key={tab.key}
+                    active={active}
+                    onClick={() => setPlanilhaRegiaoKey(tab.key)}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
+                  >
+                    <span>{tab.label.replace(/^Região\s+/i, '')}</span>
+                    {count != null ? (
+                      <span
+                        className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+                          active
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                            : 'bg-gray-200/80 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    ) : null}
+                  </AppUnderlineTabButton>
+                );
+              })}
+            </AppUnderlineTabList>
           ) : null}
 
           {viewMode === 'regioes' ? (

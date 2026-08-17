@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { fixMojibakeFileName } from '@/lib/fixMojibakeFileName';
 import toast from 'react-hot-toast';
@@ -2739,14 +2739,14 @@ function SolicitarMateriaisPage() {
                     {SOLICITACAO_DETAIL_TABS.map((tab) => {
                       const active = detailTab === tab.id;
                       return (
-                        <AppTabButton
+                        <AppModalTabButton
                           key={tab.id}
                           active={active}
                           onClick={() => setDetailTab(tab.id)}
-                          className="shrink-0 px-3 py-2.5 text-sm font-medium"
+                          className="shrink-0 px-3 py-2.5 text-sm"
                         >
                           {tab.label}
-                        </AppTabButton>
+                        </AppModalTabButton>
                       );
                     })}
                   </div>

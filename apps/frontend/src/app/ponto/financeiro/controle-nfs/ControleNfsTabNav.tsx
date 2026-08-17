@@ -1,7 +1,7 @@
 'use client';
 
 import type { ControleNfsTab } from './controleNfsTypes';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 
 export function ControleNfsTabNav({
   tabs,
@@ -13,23 +13,20 @@ export function ControleNfsTabNav({
   onTabChange: (tabKey: string) => void;
 }) {
   return (
-    <nav
-      className="flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3"
-      aria-label="Abas do controle de notas fiscais"
-    >
+    <AppUnderlineTabList aria-label="Abas do controle de notas fiscais">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.key}
             active={isActive}
             onClick={() => onTabChange(tab.key)}
-            className="whitespace-nowrap px-4 py-3 text-sm font-medium"
+            className="whitespace-nowrap px-4 py-3 text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         );
       })}
-    </nav>
+    </AppUnderlineTabList>
   );
 }

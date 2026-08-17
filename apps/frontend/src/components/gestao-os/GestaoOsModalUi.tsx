@@ -3,7 +3,7 @@
 import React from 'react';
 import { Paperclip, X } from 'lucide-react';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { useModalRequestClose } from '@/components/ui/Modal';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
@@ -556,14 +556,14 @@ export function GestaoOsDetailModalChrome({
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
             return (
-              <AppTabButton
+              <AppModalTabButton
                 key={tab.id}
                 active={active}
                 onClick={() => onTabChange(tab.id)}
-                className="shrink-0 px-3 py-2.5 text-sm font-medium"
+                className="shrink-0 px-3 py-2.5 text-sm"
               >
                 {tab.label}
-              </AppTabButton>
+              </AppModalTabButton>
             );
           })}
         </div>

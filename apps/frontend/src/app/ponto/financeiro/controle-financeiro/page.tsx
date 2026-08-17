@@ -31,7 +31,7 @@ import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { FinancialControlEntryModal } from '@/components/financeiro/FinancialControlEntryModal';
@@ -78,25 +78,21 @@ function ConsorcioTabNav({
   onChange: (key: FinancialControlConsorcio) => void;
 }) {
   return (
-    <nav
-      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
-      role="tablist"
-      aria-label="Consórcios do controle financeiro"
-    >
+    <AppUnderlineTabList aria-label="Consórcios do controle financeiro">
       {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((tab) => {
         const isActive = active === tab.value;
         return (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.value}
             active={isActive}
             onClick={() => onChange(tab.value)}
-            className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+            className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         );
       })}
-    </nav>
+    </AppUnderlineTabList>
   );
 }
 

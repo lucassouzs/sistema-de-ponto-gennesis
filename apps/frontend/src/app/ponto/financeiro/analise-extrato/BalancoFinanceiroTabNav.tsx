@@ -1,6 +1,6 @@
 'use client';
 
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 
 export type BalancoFinanceiroTabId = 'extrato' | 'demonstrativo';
 
@@ -17,23 +17,20 @@ export function BalancoFinanceiroTabNav({
   onTabChange: (tab: BalancoFinanceiroTabId) => void;
 }) {
   return (
-    <nav
-      className="flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3"
-      aria-label="Abas do balanço financeiro"
-    >
+    <AppUnderlineTabList aria-label="Abas do balanço financeiro">
       {TABS.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.id}
             active={isActive}
             onClick={() => onTabChange(tab.id)}
-            className="whitespace-nowrap px-4 py-3 text-sm font-medium"
+            className="whitespace-nowrap px-4 py-3 text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         );
       })}
-    </nav>
+    </AppUnderlineTabList>
   );
 }

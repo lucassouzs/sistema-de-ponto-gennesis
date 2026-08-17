@@ -9,7 +9,7 @@ import type { LucideIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import { fixMojibakeFileName } from '@/lib/fixMojibakeFileName';
@@ -928,14 +928,14 @@ export default function GerenciarMateriaisPage() {
                   {RM_DETAIL_MODAL_TABS.map((tab) => {
                     const active = rmDetailTab === tab.id;
                     return (
-                      <AppTabButton
+                      <AppModalTabButton
                         key={tab.id}
                         active={active}
                         onClick={() => setRmDetailTab(tab.id)}
-                        className="shrink-0 px-3 py-2.5 text-sm font-medium"
+                        className="shrink-0 px-3 py-2.5 text-sm"
                       >
                         {tab.label}
-                      </AppTabButton>
+                      </AppModalTabButton>
                     );
                   })}
                 </div>

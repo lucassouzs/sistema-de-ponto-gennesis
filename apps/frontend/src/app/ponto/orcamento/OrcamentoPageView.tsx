@@ -43,7 +43,7 @@ import { useCostCenters } from '@/hooks/useCostCenters';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
@@ -10770,21 +10770,23 @@ export function OrcamentoPageView({
             </div>
 
             {/* Abas */}
-            <div className="flex gap-1 shrink-0 px-6 py-1">
-              <AppTabButton
+            <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 shrink-0 px-6">
+              <AppModalTabButton
+                accent="violet"
                 active={orcafascioModalTab === 'composicoes'}
                 onClick={() => setOrcafascioModalTab('composicoes')}
-                className="px-4 py-2.5 text-sm font-medium"
+                className="-mb-px px-4 py-2.5 text-sm"
               >
                 Composições
-              </AppTabButton>
-              <AppTabButton
+              </AppModalTabButton>
+              <AppModalTabButton
+                accent="violet"
                 active={orcafascioModalTab === 'orcamentos'}
                 onClick={() => setOrcafascioModalTab('orcamentos')}
-                className="px-4 py-2.5 text-sm font-medium"
+                className="-mb-px px-4 py-2.5 text-sm"
               >
                 Orçamentos
-              </AppTabButton>
+              </AppModalTabButton>
             </div>
 
             {/* ── Aba Orçamentos (API Orçafascio) ────────────────────────────── */}
@@ -11450,22 +11452,24 @@ export function OrcamentoPageView({
                       </div>
 
                       {/* Sub-abas: conteúdo da composição */}
-                      <div className="flex gap-1 shrink-0 px-2 py-1">
-                        <AppTabButton
+                      <div className="flex border-b border-gray-100 dark:border-gray-800 shrink-0 px-2">
+                        <AppModalTabButton
+                          accent="violet"
                           active={orcafascioComposicaoDetalheTab === 'itens'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('itens')}
-                          className="px-3 py-2 text-xs font-medium"
+                          className="-mb-px px-3 py-2 text-xs"
                         >
                           Itens
-                        </AppTabButton>
-                        <AppTabButton
+                        </AppModalTabButton>
+                        <AppModalTabButton
+                          accent="violet"
                           active={orcafascioComposicaoDetalheTab === 'analitico'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('analitico')}
-                          className="px-3 py-2 text-xs font-medium"
+                          className="-mb-px px-3 py-2 text-xs"
                           title="Mesmos insumos e serviços da composição em formato de tabela (visão analítica)"
                         >
                           Analítico
-                        </AppTabButton>
+                        </AppModalTabButton>
                       </div>
 
                       <div className="flex-1 min-h-0 overflow-y-auto">

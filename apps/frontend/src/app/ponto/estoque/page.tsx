@@ -27,7 +27,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList, AppModalTabButton } from '@/components/ui/AppTabButton';
 import { ButtonSeg } from '../solicitacoes-dp/DpSolicitacaoTypeFields';
 import api from '@/lib/api';
 import {
@@ -38,6 +38,7 @@ import { normalizeCostCentersResponse } from '@/lib/costCenters';
 import { getListTableRowClassName, listTableRowClasses, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import {
   buildLinkedOcStockDocuments,
@@ -589,6 +590,147 @@ const extractOcNumberFromNotes = (notes?: string | null) => {
   return ocMatch?.[1]?.trim() || '';
 };
 
+type ParsedMovementAttachment = {
+  label: string;
+  url: string;
+  detail?: string;
+};
+
+function parseStockMovementNotes(notes?: string | null): {
+  splitType: '' | 'TOTAL' | 'PARCIAL';
+  freeText: string;
+  attachments: ParsedMovementAttachment[];
+} {
+  if (!notes?.trim()) {
+    return { splitType: '', freeText: '', attachments: [] };
+  }
+
+  const splitRaw = notes.match(/Tipo:\s*(TOTAL|PARCIAL)/i)?.[1]?.toUpperCase();
+  const splitType = splitRaw === 'TOTAL' || splitRaw === 'PARCIAL' ? splitRaw : '';
+  const attachments: ParsedMovementAttachment[] = [];
+
+  const ficha = notes.match(/Ficha de Retirada:\s*([^|]+)\s*\|\s*URL:\s*([^\s|]+)/i);
+  if (ficha?.[2]) {
+    attachments.push({
+      label: 'Ficha de retirada',
+      url: ficha[2].trim(),
+      detail: ficha[1]?.trim() || undefined
+    });
+  }
+
+  const nf = notes.match(
+    /NF:\s*([^|]+)\s*\|\s*Número:\s*([^|]+)\s*\|\s*URL:\s*([^\s|]+)/i
+  );
+  if (nf?.[3]) {
+    attachments.push({
+      label: `NF ${nf[2]?.trim() || ''}`.trim(),
+      url: nf[3].trim(),
+      detail: nf[1]?.trim() || undefined
+    });
+  }
+
+  const boletoRe =
+    /(\d+\))\s*([^|\n]+)\s*\|\s*Valor:\s*([^|\n]+)\s*\|\s*Vencimento:\s*([^|\n]+)\s*\|\s*URL:\s*([^\s|\n]+)/gi;
+  let boletoMatch: RegExpExecArray | null;
+  while ((boletoMatch = boletoRe.exec(notes)) !== null) {
+    attachments.push({
+      label: `Boleto ${boletoMatch[1]}`,
+      url: boletoMatch[5].trim(),
+      detail: `${boletoMatch[2].trim()} · ${boletoMatch[3].trim()} · venc. ${boletoMatch[4].trim()}`
+    });
+  }
+
+  if (attachments.length === 0) {
+    const fallbackUrl = extractFirstUrl(notes);
+    if (fallbackUrl) {
+      attachments.push({ label: 'Anexo', url: fallbackUrl });
+    }
+  }
+
+  const freeText = notes
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      if (/^Nº OC:/i.test(line)) return false;
+      if (/^Boletos:/i.test(line)) return false;
+      if (/^\d+\)/.test(line) && /URL:/i.test(line)) return false;
+      if (
+        /Nº OC:|Tipo:|Ficha de Retirada:|NF:/i.test(line) &&
+        (line.includes('|') || /URL:/i.test(line))
+      ) {
+        return false;
+      }
+      return true;
+    })
+    .join('\n')
+    .trim();
+
+  return { splitType, freeText, attachments };
+}
+
+type HistoryDetailTab = 'resumo' | 'observacoes' | 'documentos';
+
+const HISTORY_DETAIL_TABS: ReadonlyArray<{ id: HistoryDetailTab; label: string }> = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'observacoes', label: 'Observações' },
+  { id: 'documentos', label: 'Documentos' }
+];
+
+function MovementDetailSection({
+  title,
+  description,
+  children,
+  className = ''
+}: {
+  title?: string;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`space-y-3 ${className}`}>
+      {title ? (
+        <div className="border-b border-gray-200 pb-3 dark:border-gray-700">
+          <h3 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            {title}
+          </h3>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {description}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+function MovementDetailDocumentItem({
+  label,
+  subtitle,
+  url
+}: {
+  label: string;
+  subtitle?: string;
+  url: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</p>
+        {subtitle ? (
+          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <OcAttachmentActions url={url} fileName={label} variant="buttons" />
+      </div>
+    </div>
+  );
+}
+
 function MovementSegButton({
   active,
   onClick,
@@ -640,6 +782,7 @@ export default function EstoquePage() {
   const [balanceCurrentPage, setBalanceCurrentPage] = useState(1);
   const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
   const [historyDetail, setHistoryDetail] = useState<StockMovement | null>(null);
+  const [historyDetailTab, setHistoryDetailTab] = useState<HistoryDetailTab>('resumo');
   const [balanceView, setBalanceView] = useState<'material' | 'contract'>('contract');
   const [selectedContractKey, setSelectedContractKey] = useState<string | null>(null);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
@@ -1333,6 +1476,7 @@ export default function EstoquePage() {
 
   useEffect(() => {
     if (!historyDetail) return;
+    setHistoryDetailTab('resumo');
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setHistoryDetail(null);
     };
@@ -1927,54 +2071,48 @@ export default function EstoquePage() {
             </p>
           </div>
 
-          <nav
-            className="flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2"
-            role="tablist"
-            aria-label="Seções de estoque"
-          >
-            <AppTabButton
+          <AppUnderlineTabList aria-label="Seções de estoque">
+            <AppUnderlineTabButton
               active={activeTab === 'balance'}
               onClick={() => setActiveTab('balance')}
-              className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+              className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
             >
               Lista de Estoque
-            </AppTabButton>
-            <AppTabButton
+            </AppUnderlineTabButton>
+            <AppUnderlineTabButton
               active={activeTab === 'movements'}
               onClick={() => setActiveTab('movements')}
-              className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+              className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
             >
               Histórico
-            </AppTabButton>
-          </nav>
+            </AppUnderlineTabButton>
+          </AppUnderlineTabList>
 
           {activeTab === 'balance' ? (
-            <div className="flex justify-center">
-              <AppSegmentedControl aria-label="Agrupar lista de estoque" className="justify-center">
-                <AppSegmentedButton
-                  active={balanceView === 'contract'}
-                  onClick={() => {
-                    setBalanceView('contract');
-                    setSelectedContractKey(null);
-                    setSelectedMaterialId(null);
-                  }}
-                  className="whitespace-nowrap"
-                >
-                  Por contrato
-                </AppSegmentedButton>
-                <AppSegmentedButton
-                  active={balanceView === 'material'}
-                  onClick={() => {
-                    setBalanceView('material');
-                    setSelectedContractKey(null);
-                    setSelectedMaterialId(null);
-                  }}
-                  className="whitespace-nowrap"
-                >
-                  Por material
-                </AppSegmentedButton>
-              </AppSegmentedControl>
-            </div>
+            <AppUnderlineTabList aria-label="Agrupar lista de estoque">
+              <AppUnderlineTabButton
+                active={balanceView === 'contract'}
+                onClick={() => {
+                  setBalanceView('contract');
+                  setSelectedContractKey(null);
+                  setSelectedMaterialId(null);
+                }}
+                className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
+              >
+                Por contrato
+              </AppUnderlineTabButton>
+              <AppUnderlineTabButton
+                active={balanceView === 'material'}
+                onClick={() => {
+                  setBalanceView('material');
+                  setSelectedContractKey(null);
+                  setSelectedMaterialId(null);
+                }}
+                className="whitespace-nowrap px-2 py-2.5 text-xs sm:px-3 sm:text-sm"
+              >
+                Por material
+              </AppUnderlineTabButton>
+            </AppUnderlineTabList>
           ) : null}
 
           {activeTab === 'balance' && (
@@ -2645,82 +2783,229 @@ export default function EstoquePage() {
             </Card>
           )}
 
-          {historyDetail && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          {historyDetail ? (
+            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
               <div
-                className="absolute inset-0 bg-black/40"
+                className="absolute inset-0 bg-black/50"
                 onClick={() => setHistoryDetail(null)}
                 aria-hidden
               />
-              <div className="relative z-10 w-full max-w-lg max-h-[min(90vh,32rem)] overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-                <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-4 py-3">
-                  <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 pr-2">
-                    Detalhe da movimentação
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setHistoryDetail(null)}
-                    className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-4 space-y-3 text-sm text-gray-800 dark:text-gray-200">
-                  <p>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block">Material</span>
-                    <span className="font-medium">{historyDetail.material.name}</span>
-                  </p>
-                  <p>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block">OC</span>
-                    <span>
-                      {formatOcShortNumber(extractOcNumberFromNotes(historyDetail.notes) || '') || '—'}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block">Movimento</span>
-                    <span>{historyDetail.type === 'IN' ? 'Entrada' : 'Saída'} — {historyDetail.quantity}{' '}
-                      {historyDetail.material.unit}</span>
-                  </p>
-                  {historyDetail.costCenter && (
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Contrato</span>
-                      <span>{historyDetail.costCenter.name || historyDetail.costCenter.code}</span>
-                    </p>
-                  )}
-                  <p>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 block">Saldo atual (contrato)</span>
-                    <span>
-                      {(() => {
-                        const key = `${historyDetail.material.id}:${historyDetail.costCenter?.id || 'no-cost-center'}`;
-                        const currentBalance = balanceByMaterialAndCostCenter.get(key);
-                        if (currentBalance === undefined) return `0 ${historyDetail.material.unit}`;
-                        return `${currentBalance.toLocaleString('pt-BR')} ${historyDetail.material.unit}`;
-                      })()}
-                    </span>
-                  </p>
-                  {historyDetail.notes && (
-                    <p>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 block">Observações</span>
-                      <span className="whitespace-pre-line">{historyDetail.notes}</span>
-                    </p>
-                  )}
-                  {historyDetail.notes && extractFirstUrl(historyDetail.notes) && (
-                    <a
-                      href={absoluteUploadUrl(extractFirstUrl(historyDetail.notes))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 dark:text-blue-400 hover:underline inline-block"
-                    >
-                      Abrir anexo
-                    </a>
-                  )}
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {new Date(historyDetail.createdAt).toLocaleString('pt-BR')} — {historyDetail.user.name}
-                  </p>
-                </div>
+              <div
+                className="relative my-auto flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="history-detail-title"
+              >
+                {(() => {
+                  const parsedNotes = parseStockMovementNotes(historyDetail.notes);
+                  const ocLabel =
+                    formatOcShortNumber(extractOcNumberFromNotes(historyDetail.notes) || '') ||
+                    '—';
+                  const balanceKey = `${historyDetail.material.id}:${historyDetail.costCenter?.id || 'no-cost-center'}`;
+                  const currentBalance = balanceByMaterialAndCostCenter.get(balanceKey);
+                  const balanceLabel =
+                    currentBalance === undefined
+                      ? `0 ${historyDetail.material.unit}`
+                      : `${currentBalance.toLocaleString('pt-BR')} ${historyDetail.material.unit}`;
+                  const isEntry = historyDetail.type === 'IN';
+                  const qtyLabel = `${historyDetail.quantity.toLocaleString('pt-BR')} ${historyDetail.material.unit}`;
+
+                  const infoRows: Array<{
+                    label: string;
+                    value: React.ReactNode;
+                    stacked?: boolean;
+                  }> = [
+                    { label: 'OC', value: ocLabel },
+                    {
+                      label: 'Movimento',
+                      value: (
+                        <span
+                          className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                            isEntry
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                              : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                          }`}
+                        >
+                          {isEntry ? (
+                            <ArrowDownCircle className="h-3.5 w-3.5 shrink-0" />
+                          ) : (
+                            <ArrowUpCircle className="h-3.5 w-3.5 shrink-0" />
+                          )}
+                          {isEntry ? 'Entrada' : 'Saída'}
+                        </span>
+                      )
+                    },
+                    {
+                      label: 'Contrato',
+                      value:
+                        historyDetail.costCenter?.name ||
+                        historyDetail.costCenter?.code ||
+                        '—'
+                    },
+                    {
+                      label: 'Registrado em',
+                      value: new Date(historyDetail.createdAt).toLocaleString('pt-BR')
+                    },
+                    {
+                      label: 'Responsável',
+                      value: historyDetail.user.name
+                    }
+                  ];
+
+                  if (parsedNotes.splitType) {
+                    infoRows.splice(2, 0, {
+                      label: 'Tipo',
+                      value: parsedNotes.splitType === 'TOTAL' ? 'Total' : 'Parcial'
+                    });
+                  }
+
+                  return (
+                    <>
+                      <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-2 pt-4">
+                        <div className="min-w-0">
+                          <h2
+                            id="history-detail-title"
+                            className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100"
+                          >
+                            Detalhe da movimentação
+                          </h2>
+                          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                            {historyDetail.material.name}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryDetail(null)}
+                          className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+                          aria-label="Fechar"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+
+                      <div
+                        className="shrink-0 border-b border-gray-200 px-5 dark:border-gray-700"
+                        role="tablist"
+                        aria-label="Seções da movimentação"
+                      >
+                        <div className="table-scroll -mb-px flex gap-1">
+                          {HISTORY_DETAIL_TABS.map((tab) => (
+                            <AppModalTabButton
+                              key={tab.id}
+                              active={historyDetailTab === tab.id}
+                              onClick={() => setHistoryDetailTab(tab.id)}
+                              className="shrink-0 px-3 py-2.5 text-sm"
+                            >
+                              {tab.label}
+                            </AppModalTabButton>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto px-5 py-4">
+                        <div className="space-y-5 text-sm">
+                          {historyDetailTab === 'resumo' ? (
+                            <div className="space-y-4">
+                              <div className="overflow-hidden">
+                                <div className="border-b border-gray-200 pb-4 pt-1 dark:border-gray-700">
+                                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                    Material
+                                  </p>
+                                  <p className="mt-1 text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+                                    {historyDetail.material.name}
+                                  </p>
+                                </div>
+
+                                <dl className="divide-y divide-gray-200 dark:divide-gray-700">
+                                  {infoRows.map((row) => (
+                                    <div
+                                      key={row.label}
+                                      className={
+                                        row.stacked
+                                          ? 'flex flex-col gap-1.5 py-3'
+                                          : 'flex flex-col gap-0.5 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6'
+                                      }
+                                    >
+                                      <dt className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                        {row.label}
+                                      </dt>
+                                      <dd
+                                        className={
+                                          row.stacked
+                                            ? 'min-w-0 text-left text-sm text-gray-900 dark:text-gray-100'
+                                            : 'min-w-0 text-sm text-gray-900 dark:text-gray-100 sm:text-right'
+                                        }
+                                      >
+                                        {row.value}
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+
+                                <div className="grid grid-cols-2 gap-3 pt-4">
+                                  <div className="rounded-xl border border-gray-200 px-3 py-3.5 dark:border-gray-700">
+                                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                      Quantidade
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                      {qtyLabel}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-xl border border-gray-200 px-3 py-3.5 dark:border-gray-700">
+                                    <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                      Saldo atual
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                      {balanceLabel}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {historyDetailTab === 'observacoes' ? (
+                            <MovementDetailSection title="Observações">
+                              {parsedNotes.freeText ? (
+                                <p className="whitespace-pre-wrap break-words leading-relaxed text-gray-900 dark:text-gray-100">
+                                  {parsedNotes.freeText}
+                                </p>
+                              ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Nenhuma observação registrada nesta movimentação.
+                                </p>
+                              )}
+                            </MovementDetailSection>
+                          ) : null}
+
+                          {historyDetailTab === 'documentos' ? (
+                            <MovementDetailSection title="Documentos">
+                              {parsedNotes.attachments.length > 0 ? (
+                                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                                  {parsedNotes.attachments.map((file) => (
+                                    <MovementDetailDocumentItem
+                                      key={`${file.label}-${file.url}`}
+                                      label={file.label}
+                                      subtitle={file.detail}
+                                      url={file.url}
+                                    />
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  Nenhum documento anexado a esta movimentação.
+                                </p>
+                              )}
+                            </MovementDetailSection>
+                          ) : null}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
-          )}
+          ) : null}
 
           {isMovementModalOpen && (
             <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">

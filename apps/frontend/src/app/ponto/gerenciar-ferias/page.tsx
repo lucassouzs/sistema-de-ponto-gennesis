@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { 
@@ -295,29 +295,29 @@ export default function FeriasPage() {
         </div>
 
         {/* Tabs */}
-        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
-          <AppTabButton
+        <AppUnderlineTabList aria-label="Abas de férias" centered={false}>
+          <AppUnderlineTabButton
             active={selectedTab === 'pending'}
             onClick={() => setSelectedTab('pending')}
-            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="whitespace-nowrap px-3 py-2 text-sm"
           >
             Pendentes ({pendingVacationsList.length})
-          </AppTabButton>
-          <AppTabButton
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
             active={selectedTab === 'all'}
             onClick={() => setSelectedTab('all')}
-            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="whitespace-nowrap px-3 py-2 text-sm"
           >
             Todas ({allVacationsList.length})
-          </AppTabButton>
-          <AppTabButton
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
             active={selectedTab === 'compliance'}
             onClick={() => setSelectedTab('compliance')}
-            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="whitespace-nowrap px-3 py-2 text-sm"
           >
             Conformidade
-          </AppTabButton>
-        </nav>
+          </AppUnderlineTabButton>
+        </AppUnderlineTabList>
 
         {/* Conteúdo das Tabs */}
         {selectedTab === 'pending' && (

@@ -5,7 +5,7 @@ import { X, Plus, List, FileText } from 'lucide-react';
 import { PointCorrectionCard } from './PointCorrectionCard';
 import { PointCorrectionList } from './PointCorrectionList';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 
 interface PointCorrectionsModalProps {
   isOpen: boolean;
@@ -55,24 +55,28 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
         </div>
 
         {/* Abas */}
-        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto px-6 py-1">
-          <AppTabButton
-            active={activeTab === 'list'}
-            onClick={() => setActiveTab('list')}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
-          >
-            <List className="w-4 h-4" />
-            Minhas Solicitações
-          </AppTabButton>
-          <AppTabButton
-            active={activeTab === 'new'}
-            onClick={() => setActiveTab('new')}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Nova Solicitação
-          </AppTabButton>
-        </nav>
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 px-6">
+            <AppModalTabButton
+              accent="blue"
+              active={activeTab === 'list'}
+              onClick={() => setActiveTab('list')}
+              className="flex items-center gap-2 whitespace-nowrap px-1 py-3 text-sm"
+            >
+              <List className="w-4 h-4" />
+              Minhas Solicitações
+            </AppModalTabButton>
+            <AppModalTabButton
+              accent="blue"
+              active={activeTab === 'new'}
+              onClick={() => setActiveTab('new')}
+              className="flex items-center gap-2 whitespace-nowrap px-1 py-3 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Nova Solicitação
+            </AppModalTabButton>
+          </nav>
+        </div>
 
         {/* Conteúdo */}
         <div className="overflow-y-auto max-h-[calc(90vh-140px)]">

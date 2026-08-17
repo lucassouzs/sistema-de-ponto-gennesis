@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
@@ -1299,18 +1299,18 @@ export function EmployeeDetailView({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1">
+      <AppUnderlineTabList aria-label="Abas do colaborador" centered={false}>
         {tabItems.map((tab) => (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.id}
             active={detailsTab === tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className="px-3 py-2 text-sm font-medium"
+            className="px-3 py-2 text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         ))}
-      </div>
+      </AppUnderlineTabList>
 
       <div className="space-y-6">
                 {detailsTab === 'info' && (

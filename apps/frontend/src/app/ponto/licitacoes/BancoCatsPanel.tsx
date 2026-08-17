@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -1007,16 +1007,20 @@ export function BancoCatsPanel() {
           {matchingActive && activeServicoQuadrante ? (
             <div className="space-y-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <AppSegmentedControl aria-label="Serviços consultados" className="max-w-full justify-start overflow-x-auto">
+                <AppUnderlineTabList
+                  aria-label="Serviços consultados"
+                  centered={false}
+                  className="min-w-0 flex-1"
+                >
                   {servicoQuadrantes.map((tab) => {
                     const active = tab.id === activeServicoQuadrante.id;
                     return (
-                      <AppSegmentedButton
+                      <AppUnderlineTabButton
                         key={tab.id}
                         active={active}
                         title={tab.query}
                         onClick={() => setActiveServicoTabId(tab.id)}
-                        className="max-w-[16rem] gap-1.5 sm:max-w-[20rem]"
+                        className="inline-flex max-w-[16rem] items-center gap-1.5 px-2 py-2 text-xs sm:max-w-[20rem] sm:px-3 sm:text-sm"
                       >
                         <span className="min-w-0 truncate">
                           {tab.query.trim() || `Serviço ${tab.index}`}
@@ -1030,10 +1034,10 @@ export function BancoCatsPanel() {
                         >
                           ({tab.matches.length})
                         </span>
-                      </AppSegmentedButton>
+                      </AppUnderlineTabButton>
                     );
                   })}
-                </AppSegmentedControl>
+                </AppUnderlineTabList>
                 {(() => {
                   const selecao = somaPorQuadrante.get(activeServicoQuadrante.id) ?? {
                     count: 0,

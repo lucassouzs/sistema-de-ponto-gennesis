@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { AppTabButton } from '@/components/ui/AppTabButton';
 import type { DpTimelineStep } from '@/lib/dpRequestTimeline';
 
 export type DpRequestHistoryModalTab = 'detalhes' | 'timeline';
@@ -10,6 +9,13 @@ export type DpRequestHistoryMetaField = {
   label: string;
   value: React.ReactNode;
 };
+
+const tabBtnCls = (active: boolean) =>
+  `min-w-[7.5rem] rounded-md px-5 py-2 text-sm font-medium transition-all ${
+    active
+      ? 'bg-red-600 text-white shadow-sm dark:bg-red-600 dark:text-white'
+      : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+  }`;
 
 export function DpRequestHistoryModalTabs({
   activeTab,
@@ -21,24 +27,28 @@ export function DpRequestHistoryModalTabs({
   return (
     <div className="flex justify-center px-1">
       <div
-        className="inline-flex flex-wrap justify-center gap-1"
+        className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-1 dark:border-gray-600 dark:bg-gray-800/90"
         role="tablist"
         aria-label="Abas da solicitação"
       >
-        <AppTabButton
-          active={activeTab === 'detalhes'}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'detalhes'}
           onClick={() => onTabChange('detalhes')}
-          className="min-w-[7.5rem] px-5 py-2 text-sm font-medium"
+          className={tabBtnCls(activeTab === 'detalhes')}
         >
           Detalhes
-        </AppTabButton>
-        <AppTabButton
-          active={activeTab === 'timeline'}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'timeline'}
           onClick={() => onTabChange('timeline')}
-          className="min-w-[7.5rem] px-5 py-2 text-sm font-medium"
+          className={tabBtnCls(activeTab === 'timeline')}
         >
           Timeline
-        </AppTabButton>
+        </button>
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ export function OsFluxTabsNav({
   return (
     <div id="secao-fluxo-os-tabs" className="scroll-mt-4">
       <div className="bg-transparent px-2">
-        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
+        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-visible py-3 sm:gap-x-2">
           {OS_FLUX_TABS.map((tab) => {
             const active = activeTab === tab.id;
             return (

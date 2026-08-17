@@ -9,7 +9,7 @@ import { List, Plus, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Loading } from '@/components/ui/Loading';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
 export default function AtestadosPage() {
@@ -62,24 +62,24 @@ export default function AtestadosPage() {
         </div>
 
         {/* Navegação no topo */}
-        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
-          <AppTabButton
+        <AppUnderlineTabList aria-label="Seções de ausências" centered={false}>
+          <AppUnderlineTabButton
             active={activeTab === 'list'}
             onClick={() => setActiveTab('list')}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
           >
             <List className="w-4 h-4" />
             Meus Registros
-          </AppTabButton>
-          <AppTabButton
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
             active={activeTab === 'send'}
             onClick={() => setActiveTab('send')}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
           >
             <Plus className="w-4 h-4" />
             Registrar Ausência
-          </AppTabButton>
-        </nav>
+          </AppUnderlineTabButton>
+        </AppUnderlineTabList>
 
         {/* Conteúdo principal */}
         <Card>

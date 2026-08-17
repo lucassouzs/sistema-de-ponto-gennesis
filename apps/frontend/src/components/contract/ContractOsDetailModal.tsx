@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { OsDetailOcTab, sumOsPurchaseOrdersTotal, useOsPurchaseOrders } from '@/components/contract/OsDetailOcTab';
 import { formatOsSePasta } from '@/lib/formatOsSePasta';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
@@ -414,14 +414,14 @@ export function ContractOsDetailModal({
             {OS_DETAIL_MODAL_TABS.map((tab) => {
               const active = activeTab === tab.id;
               return (
-                <AppTabButton
+                <AppModalTabButton
                   key={tab.id}
                   active={active}
                   onClick={() => setActiveTab(tab.id)}
-                  className="shrink-0 px-3 py-2.5 text-sm font-medium"
+                  className="shrink-0 px-3 py-2.5 text-sm"
                 >
                   {tab.label}
-                </AppTabButton>
+                </AppModalTabButton>
               );
             })}
           </div>

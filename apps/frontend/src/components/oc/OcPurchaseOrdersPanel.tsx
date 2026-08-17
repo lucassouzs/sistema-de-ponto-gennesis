@@ -31,7 +31,7 @@ import { buildFormFromPurchaseOrder, hasFinancialEntryForOcInstallment } from '@
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import {
   getListTableRowClassName,
@@ -5245,14 +5245,14 @@ export function OcPurchaseOrdersPanel({
                   {OC_DETAIL_MODAL_TABS.map((tab) => {
                     const active = ocDetailTab === tab.id;
                     return (
-                      <AppTabButton
+                      <AppModalTabButton
                         key={tab.id}
                         active={active}
                         onClick={() => setOcDetailTab(tab.id)}
-                        className="shrink-0 px-3 py-2.5 text-sm font-medium"
+                        className="shrink-0 px-3 py-2.5 text-sm"
                       >
                         {tab.label}
-                      </AppTabButton>
+                      </AppModalTabButton>
                     );
                   })}
                 </div>

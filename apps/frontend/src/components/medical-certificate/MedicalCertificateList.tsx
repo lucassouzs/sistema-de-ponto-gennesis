@@ -17,7 +17,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { AppTabButton } from '@/components/ui/AppTabButton';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -365,7 +365,7 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
   return (
     <div className="space-y-4">
       {/* Tabs de Status */}
-      <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+      <AppUnderlineTabList aria-label="Status dos atestados" centered={false}>
         {(
           [
             { id: 'PENDING' as const, label: `Pendentes (${statusCounts.PENDING})` },
@@ -375,16 +375,16 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
             { id: 'all' as const, label: `Todas (${statusCounts.all})` },
           ] as const
         ).map((tab) => (
-          <AppTabButton
+          <AppUnderlineTabButton
             key={tab.id}
             active={activeStatusTab === tab.id}
             onClick={() => setActiveStatusTab(tab.id)}
-            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
           >
             {tab.label}
-          </AppTabButton>
+          </AppUnderlineTabButton>
         ))}
-      </nav>
+      </AppUnderlineTabList>
 
       {/* Lista de Atestados */}
       <div className="space-y-3">

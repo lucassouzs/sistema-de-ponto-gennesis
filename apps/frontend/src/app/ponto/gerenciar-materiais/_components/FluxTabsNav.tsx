@@ -54,7 +54,7 @@ export function FluxTabsNav({
         </p>
       )}
       <div className="bg-transparent px-2">
-        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
+        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-visible py-3 sm:gap-x-2">
           {(
             [
               { id: 'rm_PENDING' as const, label: 'Pendentes', count: rmPending },
