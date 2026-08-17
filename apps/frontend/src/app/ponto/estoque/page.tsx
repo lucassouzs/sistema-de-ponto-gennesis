@@ -20,7 +20,8 @@ import {
   Download,
   MoreVertical,
   Search,
-  X
+  X,
+  Printer
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -44,6 +45,7 @@ import {
   orderBoletoDocumentsFingerprint
 } from '@/lib/ocStockDocuments';
 import { isOcBoletoPaymentType } from '@/components/oc/ocUploadBoleto';
+import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import {
   formatMoneyDisplay,
   parseOrderTotalAmount,
@@ -327,6 +329,14 @@ function parseOcMovementQuantityInput(value: string): number | null {
 function formatOcMovementQuantityInput(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '';
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 2, useGrouping: false });
+}
+
+function escapeHtmlForPrint(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function clampOcMovementQuantityInput(raw: string, maxQuantity: number): string {
@@ -779,7 +789,9 @@ export default function EstoquePage() {
   const { data: purchaseOrdersData, isLoading: loadingPurchaseOrders } = useQuery({
     queryKey: ['purchase-orders-oc-options'],
     queryFn: async () => {
-      const res = await api.get('/purchase-orders', { params: { limit: 500 } });
+      const res = await api.get('/purchase-orders', {
+        params: { limit: 500, summary: '1' }
+      });
       return res.data;
     },
     enabled: isMovementModalOpen
@@ -1827,6 +1839,134 @@ export default function EstoquePage() {
     } finally {
       setIsUploadingWithdrawalSheet(false);
     }
+  };
+
+  const printWithdrawalSheet = () => {
+    const selectedItems = ocMovementItems.filter((item) => item.checked);
+    if (!formData.ocNumber.trim()) {
+      toast.error('Selecione a OC para gerar a ficha');
+      return;
+    }
+    if (selectedItems.length === 0) {
+      toast.error('Marque os materiais da retirada para gerar a ficha');
+      return;
+    }
+
+    const contract =
+      costCenters.find((cc) => cc.id === formData.costCenterId)?.name ||
+      selectedPurchaseOrder?.materialRequest?.costCenter?.name ||
+      '—';
+    const ocNumber = formData.ocNumber.trim();
+    const ocDisplayNumber = formatOcListDisplayId(ocNumber);
+    const splitLabel =
+      formData.movementSplit === 'TOTAL'
+        ? 'Total'
+        : formData.movementSplit === 'PARCIAL'
+          ? 'Parcial'
+          : '—';
+    const now = new Date();
+    const issuedAt = now.toLocaleString('pt-BR');
+    const notes = formData.notes.trim();
+
+    const rowsHtml = selectedItems
+      .map((item, index) => {
+        const qty = parseOcMovementQuantityInput(item.quantity);
+        const qtyLabel =
+          qty == null ? item.quantity || '—' : formatOcMovementQuantityInput(qty);
+        return `<tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtmlForPrint(item.materialName || '—')}</td>
+          <td>${escapeHtmlForPrint(item.unit || '—')}</td>
+          <td>${escapeHtmlForPrint(qtyLabel)}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Ficha de Retirada — OC ${escapeHtmlForPrint(ocDisplayNumber)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; text-align: center; }
+    .sub { text-align: center; font-size: 12px; color: #444; margin-bottom: 20px; }
+    .meta { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+    .meta td { padding: 6px 8px; border: 1px solid #ccc; }
+    .meta td.label { width: 140px; font-weight: 700; background: #f4f4f4; }
+    table.items { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.items th, table.items td { border: 1px solid #ccc; padding: 7px 8px; }
+    table.items th { background: #f4f4f4; text-align: left; }
+    table.items td:first-child, table.items th:first-child { width: 40px; text-align: center; }
+    table.items td:nth-child(3), table.items td:nth-child(4),
+    table.items th:nth-child(3), table.items th:nth-child(4) { text-align: center; width: 90px; }
+    .notes { margin-top: 16px; font-size: 13px; }
+    .signs { display: flex; gap: 32px; margin-top: 48px; }
+    .sign { flex: 1; text-align: center; font-size: 12px; }
+    .sign .line { border-top: 1px solid #111; margin: 48px 12px 8px; }
+    .hint { margin-top: 28px; font-size: 11px; color: #555; }
+    @media print { body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <h1>Ficha de Retirada de Material</h1>
+  <p class="sub">Documento para assinatura de quem retira o material</p>
+  <table class="meta">
+    <tr><td class="label">Contrato</td><td>${escapeHtmlForPrint(contract)}</td></tr>
+    <tr><td class="label">Nº OC</td><td>${escapeHtmlForPrint(ocDisplayNumber)}</td></tr>
+    <tr><td class="label">Tipo</td><td>Saída — ${escapeHtmlForPrint(splitLabel)}</td></tr>
+    <tr><td class="label">Data</td><td>${escapeHtmlForPrint(issuedAt)}</td></tr>
+  </table>
+  <table class="items">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Material</th>
+        <th>Unidade</th>
+        <th>Quantidade</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  ${
+    notes
+      ? `<div class="notes"><strong>Observações:</strong><br/>${escapeHtmlForPrint(notes).replace(/\n/g, '<br/>')}</div>`
+      : ''
+  }
+  <div class="signs">
+    <div class="sign">
+      <div class="line"></div>
+      Retirado por (nome e assinatura)
+    </div>
+    <div class="sign">
+      <div class="line"></div>
+      Entregue por (estoque)
+    </div>
+  </div>
+  <p class="hint">Após assinar, escaneie esta ficha e anexe de volta em Nova Movimentação &gt; Ficha de Retirada.</p>
+  <script>
+    window.onload = function () {
+      window.focus();
+      window.print();
+    };
+  </script>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    // Sem noopener: o Chrome abre about:blank, devolve null e a ficha não é escrita.
+    const popup = window.open(url, 'ficha-retirada', 'width=900,height=700');
+    if (!popup) {
+      URL.revokeObjectURL(url);
+      toast.error('Permita pop-ups para imprimir a ficha');
+      return;
+    }
+    popup.opener = null;
+    const revoke = () => URL.revokeObjectURL(url);
+    popup.addEventListener('load', revoke, { once: true });
+    window.setTimeout(revoke, 60_000);
   };
 
   const handleAddPaymentSlip = () => {
@@ -3093,6 +3233,14 @@ export default function EstoquePage() {
                     Ficha de Retirada *
                   </label>
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={printWithdrawalSheet}
+                      className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <Printer className="h-4 w-4 shrink-0" />
+                      Imprimir ficha
+                    </button>
                     <label className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 text-sm">
                       {isUploadingWithdrawalSheet ? 'Enviando...' : 'Escolher arquivo'}
                       <input
@@ -3128,7 +3276,8 @@ export default function EstoquePage() {
                     )}
                   </div>
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Obrigatório para saída. Formatos aceitos: PDF, PNG, JPG e WEBP (até 15MB).
+                    Gere a ficha com a OC e os materiais, imprima para assinar, depois escaneie e
+                    anexe. Obrigatório para saída. Formatos: PDF, PNG, JPG e WEBP (até 15MB).
                   </p>
                 </div>
               )}
