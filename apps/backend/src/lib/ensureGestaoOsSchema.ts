@@ -408,6 +408,21 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
     );
   `);
 
+  if (!(await columnExists(prisma, 'gestao_os_service_categories', 'checklistId'))) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "gestao_os_service_categories" ADD COLUMN "checklistId" TEXT REFERENCES "gestao_os_checklist_templates"("id") ON DELETE SET NULL;`
+    );
+  }
+
+  if (!(await columnExists(prisma, 'gestao_os_assets', 'warrantyEndsAt'))) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE "gestao_os_assets" ADD COLUMN "warrantyEndsAt" TIMESTAMP(3);`
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "gestao_os_assets_warrantyEndsAt_idx" ON "gestao_os_assets"("warrantyEndsAt");`
+    );
+  }
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "gestao_os_maintenance_plans" (
       "id" TEXT PRIMARY KEY,
@@ -516,6 +531,31 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
         );
       }
     }
+  }
+
+  if (await columnExists(prisma, 'gestao_os_work_orders', 'id')) {
+    for (const col of [
+      ['slaHoursApplied', 'INTEGER'],
+      ['slaWarnedAt', 'TIMESTAMP(3)'],
+      ['parts', 'JSONB'],
+      ['relatedWorkOrderId', 'TEXT'],
+      ['startPhotoUrl', 'TEXT'],
+      ['endPhotoUrl', 'TEXT'],
+      ['executionMs', 'INTEGER NOT NULL DEFAULT 0'],
+      ['lastExecutionResumeAt', 'TIMESTAMP(3)']
+    ] as const) {
+      if (!(await columnExists(prisma, 'gestao_os_work_orders', col[0]))) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "gestao_os_work_orders" ADD COLUMN "${col[0]}" ${col[1]};`
+        );
+      }
+    }
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "gestao_os_work_orders_relatedWorkOrderId_idx" ON "gestao_os_work_orders"("relatedWorkOrderId");`
+    );
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "gestao_os_work_orders_assetId_idx" ON "gestao_os_work_orders"("assetId");`
+    );
   }
 
   try {

@@ -32,6 +32,7 @@ import { useLogout } from '@/hooks/useLogout';
 import { usePermissions } from '@/hooks/usePermissions';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import { fetchPlannerEvents, type PlannerEvent } from '@/lib/plannerEvents';
+import { fetchGestaoOsAgenda } from '@/lib/gestaoOsAgenda';
 import {
   fetchPlannerTaskLists,
   toDateInputValue as toPlannerDateInputValue,
@@ -170,6 +171,7 @@ type AgendaEventItem = {
   timeRange: string | null;
   accent: string;
   ongoing: boolean;
+  href?: string | null;
 };
 
 type TarefaPreview = {
@@ -208,6 +210,7 @@ function buildTodayEvents(events: PlannerEvent[], nowMs: number): AgendaEventIte
       timeRange: hasRange ? `${formatClock(start)} – ${formatClock(end)}` : null,
       accent: ev.color || '#3B82F6',
       ongoing: start.getTime() <= nowMs && endMs >= nowMs,
+      href: ev.href || null,
     });
   }
 
@@ -293,7 +296,7 @@ export default function HomePage() {
     return { from, to: addDays(from, 1) };
   }, [now]);
 
-  const { data: todayEvents = [], isLoading: loadingEvents } = useQuery({
+  const { data: todayEvents = [], isLoading: loadingPlannerEvents } = useQuery({
     queryKey: ['planner-events', 'home-today', todayRange.from.toISOString()],
     queryFn: async () => {
       const { events } = await fetchPlannerEvents(todayRange.from, todayRange.to);
@@ -303,6 +306,30 @@ export default function HomePage() {
     enabled: canAccessCollaborationTools,
   });
 
+  const { data: gestaoOsToday = [], isLoading: loadingOsAgenda } = useQuery({
+    queryKey: ['gestao-os-agenda', 'home-today', todayRange.from.toISOString()],
+    queryFn: () => fetchGestaoOsAgenda(todayRange.from, todayRange.to),
+    staleTime: 60_000,
+    enabled: canAccessCollaborationTools,
+  });
+
+  const loadingEvents = loadingPlannerEvents || loadingOsAgenda;
+
+  const mergedTodayEvents = useMemo<PlannerEvent[]>(() => {
+    const linked: PlannerEvent[] = gestaoOsToday.map((item) => ({
+      id: item.id,
+      userId: '',
+      title: item.title,
+      description: item.description || '',
+      startAt: item.startAt,
+      endAt: item.endAt,
+      color: item.color,
+      href: item.href,
+      source: item.kind === 'plan' ? 'gestao-os-plan' : 'gestao-os',
+    }));
+    return [...todayEvents, ...linked];
+  }, [todayEvents, gestaoOsToday]);
+
   const { data: taskLists = [], isLoading: loadingTasks } = useQuery({
     queryKey: ['planner-task-lists'],
     queryFn: fetchPlannerTaskLists,
@@ -311,9 +338,9 @@ export default function HomePage() {
   });
 
   const todayAgendaItems = useMemo(() => {
-    const items = buildTodayEvents(todayEvents, now.getTime());
+    const items = buildTodayEvents(mergedTodayEvents, now.getTime());
     return items.filter((item) => item.expiresAt >= now.getTime());
-  }, [todayEvents, now]);
+  }, [mergedTodayEvents, now]);
 
   const tarefaRows = useMemo(() => {
     const open = taskLists.flatMap((list) => list.tasks || []).filter((t) => !t.completed);
@@ -702,7 +729,7 @@ export default function HomePage() {
                       {visibleAgenda.map((item) => (
                         <Link
                           key={item.id}
-                          href="/ponto/agenda"
+                          href={item.href || '/ponto/agenda'}
                           className="group -mx-1 flex items-center gap-3 rounded-md px-1 py-2.5 transition-colors first:pt-1.5 last:pb-1.5 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                         >
                           <span

@@ -7,6 +7,10 @@ import {
   type GestaoOsAccessContext
 } from '../lib/gestaoOsAccess';
 import { gestaoOsService } from './GestaoOsService';
+import {
+  parseChecklistLabels,
+  upsertChecklistTemplate
+} from '../lib/gestaoOsChecklistCopy';
 
 function parsePlanType(value: unknown): GestaoOsPlanType {
   const raw = String(value ?? 'PREVENTIVE').toUpperCase();
@@ -78,6 +82,34 @@ function parseChecklistItems(value: unknown): Array<{ id: string; label: string;
       };
     })
     .filter(Boolean) as Array<{ id: string; label: string; required?: boolean }>;
+}
+
+async function resolvePlanChecklistId(
+  access: GestaoOsAccessContext,
+  body: Record<string, unknown>,
+  planName: string,
+  planType: GestaoOsPlanType,
+  existingId?: string | null
+): Promise<string | null | undefined> {
+  const labels = parseChecklistLabels(body.checklistItems ?? body.checklistText);
+  if (labels.length) {
+    return upsertChecklistTemplate({
+      companyId: access.companyId,
+      name: `Plano: ${planName}`,
+      planType,
+      labels,
+      existingId: existingId || (body.checklistId ? String(body.checklistId) : null)
+    });
+  }
+  if (body.checklistItems !== undefined || body.checklistText !== undefined) {
+    const keepId = String(body.checklistId ?? '').trim();
+    return keepId || null;
+  }
+  if (body.checklistId !== undefined) {
+    const id = String(body.checklistId ?? '').trim();
+    return id || null;
+  }
+  return undefined;
 }
 
 export class GestaoOsPlansService {
@@ -184,6 +216,14 @@ export class GestaoOsPlansService {
     const scheduledTime = parseScheduledTime(body.scheduledTime);
     const dueAt = applyScheduledTime(nextDueAt, scheduledTime);
     const rotateTechnicians = technicianIds.length >= 2 && body.rotateTechnicians === true;
+    const checklistId =
+      (await resolvePlanChecklistId(
+        access,
+        body,
+        name,
+        parsePlanType(body.planType),
+        null
+      )) ?? (body.checklistId ? String(body.checklistId) : null);
 
     return prisma.gestaoOsMaintenancePlan.create({
       data: {
@@ -194,7 +234,7 @@ export class GestaoOsPlansService {
         category: body.category ? String(body.category).trim() : null,
         buildingId: body.buildingId ? String(body.buildingId) : null,
         assetId: body.assetId ? String(body.assetId) : null,
-        checklistId: body.checklistId ? String(body.checklistId) : null,
+        checklistId: checklistId || null,
         intervalDays,
         nextDueAt: dueAt,
         assigneeId: technicianIds[0] ?? null,
@@ -233,9 +273,16 @@ export class GestaoOsPlansService {
     if (body.assetId !== undefined) {
       data.asset = body.assetId ? { connect: { id: String(body.assetId) } } : { disconnect: true };
     }
-    if (body.checklistId !== undefined) {
-      data.checklist = body.checklistId
-        ? { connect: { id: String(body.checklistId) } }
+    const checklistId = await resolvePlanChecklistId(
+      access,
+      body,
+      body.name != null ? String(body.name).trim() : current.name,
+      body.planType != null ? parsePlanType(body.planType) : current.planType,
+      current.checklistId
+    );
+    if (checklistId !== undefined) {
+      data.checklist = checklistId
+        ? { connect: { id: checklistId } }
         : { disconnect: true };
     }
     if (body.intervalDays != null) data.intervalDays = Math.max(1, Number(body.intervalDays) || 30);

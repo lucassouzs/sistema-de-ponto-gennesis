@@ -67,6 +67,19 @@ export type GestaoOsWorkOrderMobile = {
   }> | null;
   safetyPhotoUrl: string | null;
   signatureTechnicianUrl: string | null;
+  startPhotoUrl: string | null;
+  endPhotoUrl: string | null;
+  parts: Array<{
+    id: string;
+    name: string;
+    supplier: string | null;
+    quantity: number;
+    unitCost: number | null;
+    expectedAt: string | null;
+    notes: string | null;
+  }> | null;
+  slaOverdue?: boolean;
+  slaWarning?: boolean;
 };
 
 export const GESTAO_OS_SAFETY_CHECKLIST_ITEMS = [
@@ -85,6 +98,41 @@ export async function fetchGestaoOsMe() {
   const { qs, headers } = await withCompany();
   const res = await api.get(`/api/gestao-os/me${qs}`, { headers });
   return parseJson(res);
+}
+
+export type GestaoOsAgendaKind = 'work_order' | 'plan';
+
+export type GestaoOsAgendaItem = {
+  id: string;
+  kind: GestaoOsAgendaKind;
+  title: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  color: string;
+  href: string;
+  overdue?: boolean;
+  workOrderId?: string;
+  planId?: string;
+};
+
+export async function fetchGestaoOsAgenda(
+  from: Date,
+  to: Date
+): Promise<GestaoOsAgendaItem[]> {
+  const { qs, headers } = await withCompany({
+    from: from.toISOString(),
+    to: to.toISOString()
+  });
+  try {
+    const res = await api.get(`/api/gestao-os/agenda${qs}`, { headers });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) return [];
+    const data = json?.data ?? json;
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchAssignedWorkOrders() {

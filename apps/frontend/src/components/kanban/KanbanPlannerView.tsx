@@ -26,6 +26,7 @@ import {
   MapPin,
   Briefcase,
   Eye,
+  Wrench,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
@@ -59,7 +60,7 @@ import {
   updatePlannerTask,
   type PlannerTask,
 } from '@/lib/plannerTasks';
-import { PlannerAgendaShareModal } from './PlannerAgendaShareModal';
+import { fetchGestaoOsAgenda } from '@/lib/gestaoOsAgenda';
 import {
   AgendaModeSwitcher,
   type AgendaSurfaceMode,
@@ -102,6 +103,7 @@ const PLANNER_ICON_OPTIONS: {
   { id: 'users', label: 'Equipe', Icon: Users },
   { id: 'map-pin', label: 'Local', Icon: MapPin },
   { id: 'briefcase', label: 'Trabalho', Icon: Briefcase },
+  { id: 'wrench', label: 'Manutenção', Icon: Wrench },
 ];
 
 function PlannerEventIconView({
@@ -826,6 +828,33 @@ export function KanbanPlannerView({
     enabled: !!activeOwnerId,
   });
   const events = eventsResult?.events ?? [];
+
+  const { data: gestaoOsAgenda = [] } = useQuery({
+    queryKey: [
+      'gestao-os-agenda',
+      activeOwnerId,
+      rangeFrom.toISOString(),
+      rangeTo.toISOString()
+    ],
+    queryFn: () => fetchGestaoOsAgenda(rangeFrom, rangeTo, activeOwnerId || undefined),
+    enabled: !!activeOwnerId
+  });
+
+  const calendarEvents = useMemo<PlannerEvent[]>(() => {
+    const linked: PlannerEvent[] = gestaoOsAgenda.map((item) => ({
+      id: item.id,
+      userId: activeOwnerId || '',
+      title: item.title,
+      description: item.description || '',
+      startAt: item.startAt,
+      endAt: item.endAt,
+      color: item.color,
+      icon: item.kind === 'plan' ? 'check' : 'wrench',
+      href: item.href,
+      source: item.kind === 'plan' ? 'gestao-os-plan' : 'gestao-os'
+    }));
+    return [...events, ...linked];
+  }, [events, gestaoOsAgenda, activeOwnerId]);
   // Dono da agenda aberta = usuário logado → sempre pode editar
   const viewingOwnAgenda = !!meUser?.id && activeOwnerId === meUser.id;
   const canWriteEffective =
@@ -1057,6 +1086,10 @@ export function KanbanPlannerView({
   };
 
   const openEdit = (event: PlannerEvent) => {
+    if (event.href) {
+      router.push(event.href);
+      return;
+    }
     setPendingAtaFile(null);
     setMemberPickerOpen(false);
     setForm({
@@ -1229,6 +1262,11 @@ export function KanbanPlannerView({
             <span className="text-base font-medium tracking-tight text-gray-900 dark:text-gray-100 sm:text-lg">
               {periodLabel}
             </span>
+            {gestaoOsAgenda.length > 0 ? (
+              <span className="hidden text-xs text-gray-500 sm:inline dark:text-gray-400">
+                Inclui prazos de OS e planos de manutenção
+              </span>
+            ) : null}
             {agendas.length > 1 && (
               <label className="ml-0.5 inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <span className="sr-only sm:not-sr-only">Agenda</span>
@@ -1468,7 +1506,7 @@ export function KanbanPlannerView({
               >
                 <div />
                 {days.map((day) => {
-                  const dayEvents = events.filter((ev) => isSameDay(new Date(ev.startAt), day));
+                  const dayEvents = calendarEvents.filter((ev) => isSameDay(new Date(ev.startAt), day));
                   const dayTasks = viewingOwnAgenda
                     ? tasksByDay.get(day.toISOString()) || []
                     : [];
@@ -1497,7 +1535,7 @@ export function KanbanPlannerView({
                             top={top}
                             height={height}
                             onEdit={openEdit}
-                            canDelete={canWriteEffective}
+                            canDelete={canWriteEffective && !ev.href}
                             onDelete={(event) => {
                               if (confirm('Excluir este evento?')) {
                                 deleteMutation.mutate(event.id);
@@ -1581,7 +1619,7 @@ export function KanbanPlannerView({
             {monthCells.map((day) => {
               const inMonth = isSameMonth(day, anchor);
               const isToday = isSameDay(day, today);
-              const dayEvents = events.filter((ev) => isSameDay(new Date(ev.startAt), day));
+              const dayEvents = calendarEvents.filter((ev) => isSameDay(new Date(ev.startAt), day));
               const dayTasks = viewingOwnAgenda
                 ? tasksByDay.get(day.toISOString()) || []
                 : [];
@@ -1711,7 +1749,7 @@ export function KanbanPlannerView({
                       const isToday = isSameDay(day, today);
                       const hasEvents =
                         inMonth &&
-                        events.some((ev) => isSameDay(new Date(ev.startAt), day));
+                        calendarEvents.some((ev) => isSameDay(new Date(ev.startAt), day));
                       return (
                         <span
                           key={day.toISOString()}

@@ -4,6 +4,8 @@ import {
   type GestaoOsAccessContext,
   workOrderVisibilityWhere
 } from '../lib/gestaoOsAccess';
+import { liveExecutionMs } from '../lib/gestaoOsExecution';
+import { loadWorkOrderExtras } from './GestaoOsOpsService';
 
 export class GestaoOsReportsService {
   async summary(access: GestaoOsAccessContext) {
@@ -36,10 +38,9 @@ export class GestaoOsReportsService {
         where: {
           ...visibility,
           status: { in: ['COMPLETED', 'CLOSED'] },
-          startedAt: { not: null },
-          completedAt: { not: null }
+          OR: [{ startedAt: { not: null } }, { completedAt: { not: null } }]
         },
-        select: { startedAt: true, completedAt: true },
+        select: { id: true, startedAt: true, completedAt: true, status: true },
         take: 2000
       }),
       prisma.gestaoOsWorkOrder.groupBy({
@@ -67,11 +68,23 @@ export class GestaoOsReportsService {
 
     let mttrHours: number | null = null;
     if (completed.length) {
-      const totalMs = completed.reduce((sum, row) => {
-        if (!row.startedAt || !row.completedAt) return sum;
-        return sum + (row.completedAt.getTime() - row.startedAt.getTime());
-      }, 0);
-      mttrHours = Math.round((totalMs / completed.length / (1000 * 60 * 60)) * 10) / 10;
+      const extras = await loadWorkOrderExtras(completed.map((r) => r.id));
+      const durations = completed
+        .map((row) => {
+          const ex = extras.get(row.id);
+          return liveExecutionMs({
+            status: row.status,
+            executionMs: ex?.executionMs,
+            lastExecutionResumeAt: ex?.lastExecutionResumeAt,
+            startedAt: row.startedAt,
+            completedAt: row.completedAt
+          });
+        })
+        .filter((ms) => ms > 0);
+      if (durations.length) {
+        const totalMs = durations.reduce((sum, ms) => sum + ms, 0);
+        mttrHours = Math.round((totalMs / durations.length / (1000 * 60 * 60)) * 10) / 10;
+      }
     }
 
     const buildingIds = byBuilding.map((b) => b.buildingId!).filter(Boolean);

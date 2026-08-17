@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   RefreshControl,
   TextInput,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Wrench } from 'lucide-react-native';
+import { Camera as CameraIcon, Wrench, X } from 'lucide-react-native';
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
 import {
@@ -36,10 +38,44 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: 'Cancelada'
 };
 
+function extractQrToken(raw: string): string {
+  const value = (raw || '').trim();
+  const qrMatch = value.match(/[?&]qr=([^&]+)/i);
+  if (qrMatch) return decodeURIComponent(qrMatch[1]);
+  const tokenMatch = value.match(/[?&]token=([^&]+)/i);
+  if (tokenMatch) return decodeURIComponent(tokenMatch[1]);
+  return value;
+}
+
 export default function GestaoOsListScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [qrToken, setQrToken] = useState('');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const scanLockRef = useRef(false);
+
+  const openScanner = async () => {
+    if (!permission?.granted) {
+      const res = await requestPermission();
+      if (!res.granted) {
+        Alert.alert('Permissão da câmera', 'Precisamos da câmera para ler o QR do ativo.');
+        return;
+      }
+    }
+    scanLockRef.current = false;
+    setScannerOpen(true);
+  };
+
+  const onScanned = (result: BarcodeScanningResult) => {
+    if (scanLockRef.current) return;
+    const token = extractQrToken(result?.data ?? '');
+    if (!token) return;
+    scanLockRef.current = true;
+    setScannerOpen(false);
+    setQrToken(token);
+    navigation.navigate('GestaoOsQr', { token });
+  };
 
   const meQuery = useQuery({
     queryKey: ['gestao-os-me-mobile'],
@@ -99,19 +135,28 @@ export default function GestaoOsListScreen() {
 
         <View style={[styles.qrBox, { borderColor: colors.border, backgroundColor: colors.card }]}>
           <Text style={[styles.qrLabel, { color: colors.textSecondary }]}>
-            Abrir chamado via token do QR do ativo
+            Abrir chamado via QR do ativo
           </Text>
+          <TouchableOpacity
+            style={[styles.cameraBtn, { borderColor: colors.primary }]}
+            onPress={() => void openScanner()}
+          >
+            <CameraIcon size={18} color={colors.primary} />
+            <Text style={[styles.cameraBtnText, { color: colors.primary }]}>
+              Usar câmera para ler o QR
+            </Text>
+          </TouchableOpacity>
           <TextInput
             value={qrToken}
             onChangeText={setQrToken}
-            placeholder="Cole o token do QR"
+            placeholder="Ou cole o token do QR"
             placeholderTextColor={colors.textSecondary}
             style={[styles.input, { color: colors.text, borderColor: colors.border }]}
           />
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
             onPress={() => {
-              const token = qrToken.trim();
+              const token = extractQrToken(qrToken);
               if (!token) {
                 Alert.alert('Informe o token do QR');
                 return;
@@ -122,6 +167,28 @@ export default function GestaoOsListScreen() {
             <Text style={styles.primaryBtnText}>Resolver QR</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal visible={scannerOpen} animationType="slide" onRequestClose={() => setScannerOpen(false)}>
+          <View style={styles.scannerContainer}>
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+              onBarcodeScanned={onScanned}
+            />
+            <View style={styles.scannerOverlay}>
+              <View style={styles.scannerFrame} />
+              <Text style={styles.scannerHint}>Aponte para o QR Code do ativo</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.scannerClose}
+              onPress={() => setScannerOpen(false)}
+            >
+              <X size={22} color="#fff" />
+              <Text style={styles.scannerCloseText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Minhas OS</Text>
         <FlatList
@@ -198,12 +265,51 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 8
   },
+  cameraBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 8
+  },
+  cameraBtnText: { fontWeight: '700' },
   primaryBtn: {
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: 'center'
   },
   primaryBtnText: { color: '#fff', fontWeight: '700' },
+  scannerContainer: { flex: 1, backgroundColor: '#000' },
+  scannerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  scannerFrame: {
+    width: 240,
+    height: 240,
+    borderWidth: 3,
+    borderColor: '#fff',
+    borderRadius: 16,
+    backgroundColor: 'transparent'
+  },
+  scannerHint: { color: '#fff', marginTop: 16, fontSize: 14, fontWeight: '600' },
+  scannerClose: {
+    position: 'absolute',
+    bottom: 48,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 999
+  },
+  scannerCloseText: { color: '#fff', fontWeight: '700' },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
   card: {
     borderWidth: 1,

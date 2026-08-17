@@ -10,10 +10,26 @@ import { createError } from '../middleware/errorHandler';
 import {
   assertCanTransition,
   assertCanViewWorkOrder,
+  GESTAO_OS_ANALISAR_KEY,
   isGestaoOsManager,
   type GestaoOsAccessContext,
   workOrderVisibilityWhere
 } from '../lib/gestaoOsAccess';
+import { PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
+import { resolveSlaDueAt } from '../lib/gestaoOsSla';
+import { notifyGestaoOsEvent } from '../lib/gestaoOsNotify';
+import { parseParts, parsePartsLoose } from '../lib/gestaoOsParts';
+import { applyExecutionClock } from '../lib/gestaoOsExecution';
+import {
+  isChecklistEmpty,
+  resolveCategoryChecklistResponses,
+  attachWarrantyToLocationTree
+} from '../lib/gestaoOsChecklistCopy';
+import {
+  enrichWorkOrderWithExtras,
+  gestaoOsOpsService,
+  loadWorkOrderExtras
+} from './GestaoOsOpsService';
 
 function newAssetQrToken(): string {
   return randomBytes(16).toString('hex');
@@ -187,6 +203,109 @@ async function attachOsNumbers<T extends { id: string }>(
   }));
 }
 
+async function persistWorkOrderExtras(
+  id: string,
+  extras: {
+    slaHoursApplied?: number | null;
+    slaWarnedAt?: Date | null;
+    parts?: unknown;
+    relatedWorkOrderId?: string | null;
+    startPhotoUrl?: string | null;
+    endPhotoUrl?: string | null;
+    executionMs?: number | null;
+    lastExecutionResumeAt?: Date | null;
+  }
+) {
+  const sets: string[] = [];
+  if (extras.slaHoursApplied !== undefined) {
+    sets.push(
+      `"slaHoursApplied" = ${
+        extras.slaHoursApplied == null ? 'NULL' : Number(extras.slaHoursApplied)
+      }`
+    );
+  }
+  if (extras.slaWarnedAt !== undefined) {
+    sets.push(
+      extras.slaWarnedAt
+        ? `"slaWarnedAt" = '${extras.slaWarnedAt.toISOString()}'::timestamp`
+        : `"slaWarnedAt" = NULL`
+    );
+  }
+  if (extras.parts !== undefined) {
+    const json = JSON.stringify(extras.parts ?? []).replace(/'/g, "''");
+    sets.push(`"parts" = '${json}'::jsonb`);
+  }
+  if (extras.relatedWorkOrderId !== undefined) {
+    sets.push(
+      extras.relatedWorkOrderId
+        ? `"relatedWorkOrderId" = '${String(extras.relatedWorkOrderId).replace(/'/g, "''")}'`
+        : `"relatedWorkOrderId" = NULL`
+    );
+  }
+  if (extras.startPhotoUrl !== undefined) {
+    sets.push(
+      extras.startPhotoUrl
+        ? `"startPhotoUrl" = '${String(extras.startPhotoUrl).replace(/'/g, "''")}'`
+        : `"startPhotoUrl" = NULL`
+    );
+  }
+  if (extras.endPhotoUrl !== undefined) {
+    sets.push(
+      extras.endPhotoUrl
+        ? `"endPhotoUrl" = '${String(extras.endPhotoUrl).replace(/'/g, "''")}'`
+        : `"endPhotoUrl" = NULL`
+    );
+  }
+  if (extras.executionMs !== undefined) {
+    sets.push(`"executionMs" = ${Math.max(0, Math.round(Number(extras.executionMs) || 0))}`);
+  }
+  if (extras.lastExecutionResumeAt !== undefined) {
+    sets.push(
+      extras.lastExecutionResumeAt
+        ? `"lastExecutionResumeAt" = '${extras.lastExecutionResumeAt.toISOString()}'::timestamp`
+        : `"lastExecutionResumeAt" = NULL`
+    );
+  }
+  if (!sets.length) return;
+  await prisma.$executeRawUnsafe(
+    `UPDATE "gestao_os_work_orders" SET ${sets.join(', ')} WHERE "id" = '${id.replace(/'/g, "''")}'`
+  );
+}
+
+async function enrichWorkOrders<
+  T extends { id: string; status: GestaoOsStatus; dueAt?: Date | string | null }
+>(rows: T[]) {
+  const withOs = await attachOsNumbers(rows);
+  const extras = await loadWorkOrderExtras(withOs.map((r) => r.id));
+  return withOs.map((row) => enrichWorkOrderWithExtras(row, extras.get(row.id)));
+}
+
+function notifyPayloadFromWo(wo: {
+  displayNumber: number;
+  osNumber?: number | null;
+  status: GestaoOsStatus;
+  locationLabel?: string | null;
+  category?: string | null;
+  priority?: GestaoOsPriority;
+  dueAt?: Date | string | null;
+}) {
+  const due =
+    wo.dueAt == null
+      ? null
+      : wo.dueAt instanceof Date
+        ? wo.dueAt
+        : new Date(wo.dueAt);
+  return {
+    displayNumber: wo.displayNumber,
+    osNumber: wo.osNumber ?? null,
+    statusLabel: STATUS_FEED_LABELS[wo.status] || wo.status,
+    locationLabel: wo.locationLabel,
+    category: wo.category,
+    priorityLabel: wo.priority || null,
+    dueAtLabel: due && !Number.isNaN(due.getTime()) ? due.toLocaleString('pt-BR') : null
+  };
+}
+
 async function buildLocationLabel(input: {
   buildingId?: string | null;
   sectorId?: string | null;
@@ -339,7 +458,7 @@ export class GestaoOsService {
 
   async getLocationTree(companyId?: string | null) {
     await this.ensureDefaultLocations(companyId);
-    return prisma.gestaoOsBuilding.findMany({
+    const tree = await prisma.gestaoOsBuilding.findMany({
       where: {
         isActive: true,
         ...(companyId ? { companyId } : {})
@@ -364,6 +483,7 @@ export class GestaoOsService {
         }
       }
     });
+    return attachWarrantyToLocationTree(tree);
   }
 
   async list(
@@ -374,6 +494,7 @@ export class GestaoOsService {
       requesterId?: string;
       assigneeId?: string;
       buildingId?: string;
+      overdue?: boolean;
       limit?: number;
     },
     access: GestaoOsAccessContext
@@ -381,7 +502,22 @@ export class GestaoOsService {
     const visibility = workOrderVisibilityWhere(access) as Prisma.GestaoOsWorkOrderWhereInput;
     const where: Prisma.GestaoOsWorkOrderWhereInput = { ...visibility };
 
-    if (params.status) where.status = parseStatus(params.status);
+    if (params.overdue) {
+      where.dueAt = { lt: new Date() };
+      where.status = {
+        in: [
+          'OPEN',
+          'UNDER_REVIEW',
+          'APPROVED',
+          'SAFETY_CHECK',
+          'IN_PROGRESS',
+          'WAITING_PARTS',
+          'REWORK'
+        ]
+      };
+    } else if (params.status) {
+      where.status = parseStatus(params.status);
+    }
     if (params.priority) where.priority = parsePriority(params.priority);
     if (params.requesterId) where.requesterId = params.requesterId;
     if (params.assigneeId) where.assigneeId = params.assigneeId;
@@ -413,7 +549,7 @@ export class GestaoOsService {
       orderBy: [{ openedAt: 'desc' }, { displayNumber: 'desc' }],
       take: params.limit && params.limit > 0 ? Math.min(params.limit, 500) : 200
     });
-    return attachOsNumbers(rows);
+    return enrichWorkOrders(rows);
   }
 
   async getById(id: string, _access?: GestaoOsAccessContext) {
@@ -422,8 +558,19 @@ export class GestaoOsService {
       include: workOrderInclude
     });
     if (!row) throw createError('Chamado não encontrado', 404);
-    const [enriched] = await attachOsNumbers([row]);
-    return enriched;
+    const [enriched] = await enrichWorkOrders([row]);
+    let recurrence90dCount = 0;
+    if (row.assetId) {
+      const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      recurrence90dCount = await prisma.gestaoOsWorkOrder.count({
+        where: {
+          assetId: row.assetId,
+          openedAt: { gte: since },
+          status: { not: 'CANCELLED' }
+        }
+      });
+    }
+    return { ...enriched, recurrence90dCount };
   }
 
   async listTechnicians(companyId?: string | null) {
@@ -509,6 +656,8 @@ export class GestaoOsService {
       companyId?: string | null;
       dueAt?: string | null;
       maintenanceType?: unknown;
+      relatedWorkOrderId?: string | null;
+      autoAssign?: boolean;
     },
     access: GestaoOsAccessContext
   ) {
@@ -521,6 +670,7 @@ export class GestaoOsService {
     if (!input.placeId) throw createError('Selecione o local', 400);
 
     const companyId = input.companyId || access.companyId || null;
+    const priority = parsePriority(input.priority);
 
     const locationLabel = await buildLocationLabel({
       buildingId: input.buildingId,
@@ -530,19 +680,53 @@ export class GestaoOsService {
     });
 
     const attachments = parseAttachments(input.attachments) ?? [];
-    const dueAt = input.dueAt ? new Date(input.dueAt) : null;
+    const sla = await resolveSlaDueAt({
+      priority,
+      assetId: input.assetId,
+      explicitDueAt: input.dueAt
+    });
+    const checklistResponses = await resolveCategoryChecklistResponses(category, companyId);
 
-    return prisma.$transaction(async (tx) => {
-      // Numeração do CHAMADO — independente de gestao_os_settings.nextOsNumber (só para OS).
+    let relatedWorkOrderId: string | null = null;
+    if (input.relatedWorkOrderId) {
+      const related = await prisma.gestaoOsWorkOrder.findUnique({
+        where: { id: String(input.relatedWorkOrderId) },
+        select: { id: true }
+      });
+      if (!related) throw createError('Chamado relacionado não encontrado', 400);
+      relatedWorkOrderId = related.id;
+    } else if (input.assetId) {
+      // Sugestão automática de reincidência: último chamado aberto/fechado do mesmo ativo.
+      const prev = await prisma.gestaoOsWorkOrder.findFirst({
+        where: {
+          assetId: input.assetId,
+          status: { in: ['COMPLETED', 'CLOSED', 'IN_PROGRESS', 'WAITING_PARTS', 'REWORK'] }
+        },
+        orderBy: { openedAt: 'desc' },
+        select: { id: true }
+      });
+      relatedWorkOrderId = prev?.id ?? null;
+    }
+
+    let assigneeId: string | null = null;
+    if (input.autoAssign) {
+      const suggested = await gestaoOsOpsService.suggestAssignee(access, {
+        buildingId: input.buildingId,
+        category
+      });
+      assigneeId = suggested?.id ?? null;
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
       const agg = await tx.gestaoOsWorkOrder.aggregate({ _max: { displayNumber: true } });
       const displayNumber = (agg._max.displayNumber ?? 0) + 1;
 
-      const created = await tx.gestaoOsWorkOrder.create({
+      return tx.gestaoOsWorkOrder.create({
         data: {
           displayNumber,
           companyId: companyId || null,
           status: GestaoOsStatus.OPEN,
-          priority: parsePriority(input.priority),
+          priority,
           maintenanceType: parseMaintenanceType(input.maintenanceType),
           category,
           description,
@@ -552,22 +736,64 @@ export class GestaoOsService {
           assetId: input.assetId || null,
           locationLabel,
           requesterId: input.requesterId,
-          dueAt: dueAt && !Number.isNaN(dueAt.getTime()) ? dueAt : null,
+          assigneeId,
+          dueAt: sla.dueAt,
           attachments: attachments as Prisma.InputJsonValue,
+          ...(checklistResponses.length
+            ? { checklistResponses: checklistResponses as Prisma.InputJsonValue }
+            : {}),
           events: {
             create: {
               toStatus: GestaoOsStatus.OPEN,
-              note: 'Chamado aberto',
+              note: `Chamado aberto · SLA ${sla.slaHoursApplied}h (${sla.source})`,
               actorId: input.requesterId
             }
           }
         },
         include: workOrderInclude
       });
-
-      // Abertura cria só o chamado — número da OS vem na 1ª análise (nextOsNumber).
-      return { ...created, osNumber: null as number | null };
     });
+
+    await persistWorkOrderExtras(created.id, {
+      slaHoursApplied: sla.slaHoursApplied,
+      relatedWorkOrderId
+    });
+
+    const enriched = await this.getById(created.id, access);
+
+    const requester = await prisma.user.findUnique({
+      where: { id: input.requesterId },
+      select: { email: true, name: true }
+    });
+    const analysts = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        userPermissions: {
+          some: {
+            module: GESTAO_OS_ANALISAR_KEY,
+            action: PERMISSION_ACCESS_ACTION,
+            allowed: true
+          }
+        }
+      },
+      select: { email: true, name: true },
+      take: 40
+    });
+    notifyGestaoOsEvent('opened', notifyPayloadFromWo(enriched), [
+      ...(requester ? [requester] : []),
+      ...analysts
+    ]);
+    if (assigneeId) {
+      const assignee = await prisma.user.findUnique({
+        where: { id: assigneeId },
+        select: { email: true, name: true }
+      });
+      if (assignee) {
+        notifyGestaoOsEvent('assigned', notifyPayloadFromWo(enriched), [assignee]);
+      }
+    }
+
+    return enriched;
   }
 
   async update(
@@ -588,6 +814,11 @@ export class GestaoOsService {
       safetyPhotoUrl?: string | null;
       signatureRequesterUrl?: string | null;
       signatureTechnicianUrl?: string | null;
+      parts?: unknown;
+      relatedWorkOrderId?: string | null;
+      startPhotoUrl?: string | null;
+      endPhotoUrl?: string | null;
+      autoAssign?: boolean;
     },
     access: GestaoOsAccessContext
   ) {
@@ -609,9 +840,20 @@ export class GestaoOsService {
     if (input.maintenanceType !== undefined) {
       data.maintenanceType = parseMaintenanceType(input.maintenanceType);
     }
-    if (input.assigneeId !== undefined) {
-      data.assignee = input.assigneeId
-        ? { connect: { id: String(input.assigneeId) } }
+    let nextAssigneeId: string | null | undefined = undefined;
+    if (input.autoAssign) {
+      const suggested = await gestaoOsOpsService.suggestAssignee(access, {
+        buildingId: current.buildingId,
+        category: input.category ?? current.category
+      });
+      nextAssigneeId = suggested?.id ?? null;
+      data.assignee = nextAssigneeId
+        ? { connect: { id: nextAssigneeId } }
+        : { disconnect: true };
+    } else if (input.assigneeId !== undefined) {
+      nextAssigneeId = input.assigneeId ? String(input.assigneeId) : null;
+      data.assignee = nextAssigneeId
+        ? { connect: { id: nextAssigneeId } }
         : { disconnect: true };
     }
     if (input.providerName !== undefined) {
@@ -659,14 +901,50 @@ export class GestaoOsService {
         : null;
     }
 
-    const updated = await prisma.gestaoOsWorkOrder.update({
+    await prisma.gestaoOsWorkOrder.update({
       where: { id },
       data,
       include: workOrderInclude
     });
 
+    const extras: Parameters<typeof persistWorkOrderExtras>[1] = {};
+    if (input.parts !== undefined) extras.parts = parseParts(input.parts);
+    if (input.relatedWorkOrderId !== undefined) {
+      extras.relatedWorkOrderId = input.relatedWorkOrderId
+        ? String(input.relatedWorkOrderId)
+        : null;
+    }
+    if (input.startPhotoUrl !== undefined) {
+      extras.startPhotoUrl = input.startPhotoUrl ? String(input.startPhotoUrl).trim() : null;
+    }
+    if (input.endPhotoUrl !== undefined) {
+      extras.endPhotoUrl = input.endPhotoUrl ? String(input.endPhotoUrl).trim() : null;
+    }
+    if (Object.keys(extras).length) await persistWorkOrderExtras(id, extras);
+
+    const enriched = await this.getById(id, access);
+    if (nextAssigneeId && nextAssigneeId !== current.assigneeId) {
+      const assignee = await prisma.user.findUnique({
+        where: { id: nextAssigneeId },
+        select: { email: true, name: true }
+      });
+      if (assignee) {
+        notifyGestaoOsEvent('assigned', notifyPayloadFromWo(enriched), [assignee]);
+      }
+    }
+    if (input.parts !== undefined) {
+      notifyGestaoOsEvent(
+        'parts',
+        notifyPayloadFromWo(enriched),
+        [enriched.requester, enriched.assignee].filter(Boolean) as Array<{
+          email?: string | null;
+          name?: string | null;
+        }>
+      );
+    }
+
     void actorId;
-    return updated;
+    return enriched;
   }
 
   async transitionStatus(
@@ -690,6 +968,11 @@ export class GestaoOsService {
       dueAt?: string | null;
       safetyChecklistResponses?: unknown;
       safetyPhotoUrl?: string | null;
+      parts?: unknown;
+      startPhotoUrl?: string | null;
+      endPhotoUrl?: string | null;
+      autoAssign?: boolean;
+      relatedWorkOrderId?: string | null;
     },
     access: GestaoOsAccessContext
   ) {
@@ -725,6 +1008,17 @@ export class GestaoOsService {
       }
     }
 
+    const startPhoto = String(
+      input.startPhotoUrl !== undefined
+        ? input.startPhotoUrl ?? ''
+        : (current as { startPhotoUrl?: string | null }).startPhotoUrl ?? ''
+    ).trim();
+    const endPhoto = String(
+      input.endPhotoUrl !== undefined
+        ? input.endPhotoUrl ?? ''
+        : (current as { endPhotoUrl?: string | null }).endPhotoUrl ?? ''
+    ).trim();
+
     if (
       (current.status === 'APPROVED' || current.status === 'SAFETY_CHECK') &&
       nextStatus === 'IN_PROGRESS'
@@ -748,6 +1042,26 @@ export class GestaoOsService {
       if (!photo) {
         throw createError(
           'Envie uma foto usando os equipamentos de proteção antes de iniciar a execução',
+          400
+        );
+      }
+      if (!startPhoto) {
+        throw createError('Envie a foto de início do serviço antes de iniciar a execução', 400);
+      }
+    }
+
+    if (nextStatus === 'COMPLETED' && !endPhoto) {
+      throw createError('Envie a foto de conclusão do serviço antes de concluir', 400);
+    }
+
+    if (nextStatus === 'WAITING_PARTS') {
+      const parts =
+        input.parts !== undefined
+          ? parseParts(input.parts)
+          : parsePartsLoose((current as { parts?: unknown }).parts ?? []);
+      if (!parts.length) {
+        throw createError(
+          'Informe ao menos uma peça/material (nome, fornecedor, valor ou previsão) ao aguardar peça',
           400
         );
       }
@@ -780,11 +1094,22 @@ export class GestaoOsService {
     if (input.maintenanceType !== undefined) {
       data.maintenanceType = parseMaintenanceType(input.maintenanceType);
     }
-    if (input.assigneeId !== undefined) {
-      data.assignee = input.assigneeId
-        ? { connect: { id: String(input.assigneeId) } }
+
+    let assignedId: string | null | undefined = undefined;
+    if (input.autoAssign && !input.assigneeId) {
+      const suggested = await gestaoOsOpsService.suggestAssignee(access, {
+        buildingId: current.buildingId,
+        category: current.category
+      });
+      assignedId = suggested?.id ?? null;
+      data.assignee = assignedId ? { connect: { id: assignedId } } : { disconnect: true };
+    } else if (input.assigneeId !== undefined) {
+      assignedId = input.assigneeId ? String(input.assigneeId) : null;
+      data.assignee = assignedId
+        ? { connect: { id: assignedId } }
         : { disconnect: true };
     }
+
     if (input.providerName !== undefined) {
       data.providerName = input.providerName ? String(input.providerName).trim() : null;
     }
@@ -800,6 +1125,17 @@ export class GestaoOsService {
     }
     if (input.checklistResponses !== undefined) {
       data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
+    } else if (
+      nextStatus === 'APPROVED' &&
+      isChecklistEmpty(current.checklistResponses)
+    ) {
+      const copied = await resolveCategoryChecklistResponses(
+        String(current.category || ''),
+        current.companyId
+      );
+      if (copied.length) {
+        data.checklistResponses = copied as Prisma.InputJsonValue;
+      }
     }
     if (input.safetyChecklistResponses !== undefined || nextStatus === 'APPROVED') {
       data.safetyChecklistResponses = mergeSafetyChecklist(
@@ -837,13 +1173,34 @@ export class GestaoOsService {
         ? String(input.signatureTechnicianUrl).trim()
         : null;
     }
+
+    let slaHoursToPersist: number | null | undefined = undefined;
     if (input.dueAt !== undefined) {
       const d = input.dueAt ? new Date(input.dueAt) : null;
       data.dueAt = d && !Number.isNaN(d.getTime()) ? d : null;
+    } else if (nextStatus === 'APPROVED' && !current.dueAt) {
+      const sla = await resolveSlaDueAt({
+        priority: (input.priority != null
+          ? parsePriority(input.priority)
+          : current.priority) as GestaoOsPriority,
+        assetId: current.assetId,
+        from: now
+      });
+      data.dueAt = sla.dueAt;
+      slaHoursToPersist = sla.slaHoursApplied;
     }
 
     if (nextStatus === 'APPROVED') data.approvedAt = now;
-    if (nextStatus === 'IN_PROGRESS' && !current.startedAt) data.startedAt = now;
+    const clock = applyExecutionClock({
+      currentStatus: current.status,
+      nextStatus,
+      now,
+      startedAt: current.startedAt,
+      executionMs: (current as { executionMs?: number | null }).executionMs,
+      lastExecutionResumeAt: (current as { lastExecutionResumeAt?: string | null })
+        .lastExecutionResumeAt
+    });
+    if (clock.startedAt) data.startedAt = clock.startedAt;
     if (current.status === 'REWORK' && nextStatus === 'IN_PROGRESS') {
       data.completedAt = null;
     }
@@ -869,6 +1226,9 @@ export class GestaoOsService {
     if (createdOsNumber != null) {
       noteParts.push(`OS #${createdOsNumber} criada a partir do chamado`);
     }
+    if (slaHoursToPersist != null) {
+      noteParts.push(`SLA ${slaHoursToPersist}h definido na aprovação`);
+    }
     const note = noteParts.filter(Boolean).join(' · ') || null;
 
     // Atribui o número da OS antes do update de status (coluna via SQL).
@@ -880,7 +1240,7 @@ export class GestaoOsService {
       `;
     }
 
-    const updated = await prisma.gestaoOsWorkOrder.update({
+    await prisma.gestaoOsWorkOrder.update({
       where: { id },
       data: {
         ...data,
@@ -896,15 +1256,52 @@ export class GestaoOsService {
       include: workOrderInclude
     });
 
-    if (createdOsNumber != null) {
-      return { ...updated, osNumber: createdOsNumber };
+    const extras: Parameters<typeof persistWorkOrderExtras>[1] = {};
+    if (slaHoursToPersist !== undefined) extras.slaHoursApplied = slaHoursToPersist;
+    if (input.parts !== undefined) extras.parts = parseParts(input.parts);
+    if (input.startPhotoUrl !== undefined || (nextStatus === 'IN_PROGRESS' && startPhoto)) {
+      extras.startPhotoUrl = startPhoto || null;
+    }
+    if (input.endPhotoUrl !== undefined || (nextStatus === 'COMPLETED' && endPhoto)) {
+      extras.endPhotoUrl = endPhoto || null;
+    }
+    if (input.relatedWorkOrderId !== undefined) {
+      extras.relatedWorkOrderId = input.relatedWorkOrderId
+        ? String(input.relatedWorkOrderId)
+        : null;
+    }
+    extras.executionMs = clock.executionMs;
+    extras.lastExecutionResumeAt = clock.lastExecutionResumeAt;
+    if (Object.keys(extras).length) await persistWorkOrderExtras(id, extras);
+
+    const enriched = await this.getById(id, access);
+    const actor = await prisma.user.findUnique({
+      where: { id: actorId },
+      select: { name: true, email: true }
+    });
+    notifyGestaoOsEvent(
+      'status',
+      {
+        ...notifyPayloadFromWo(enriched),
+        actorName: actor?.name,
+        note
+      },
+      [enriched.requester, enriched.assignee].filter(Boolean) as Array<{
+        email?: string | null;
+        name?: string | null;
+      }>
+    );
+    if (assignedId && assignedId !== current.assigneeId) {
+      const assignee = await prisma.user.findUnique({
+        where: { id: assignedId },
+        select: { email: true, name: true }
+      });
+      if (assignee) {
+        notifyGestaoOsEvent('assigned', notifyPayloadFromWo(enriched), [assignee]);
+      }
     }
 
-    // Anexa osNumber lido do banco (client Prisma pode ainda não tipar o campo).
-    const osRows = await prisma.$queryRaw<{ osNumber: number | null }[]>`
-      SELECT "osNumber" FROM "gestao_os_work_orders" WHERE "id" = ${id} LIMIT 1
-    `;
-    return { ...updated, osNumber: osRows[0]?.osNumber ?? null };
+    return enriched;
   }
 
   async summary(access: GestaoOsAccessContext) {

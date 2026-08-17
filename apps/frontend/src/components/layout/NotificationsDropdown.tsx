@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import {
   Bell,
+  CalendarClock,
   CalendarRange,
   ClipboardList,
   FileCheck,
@@ -14,8 +15,10 @@ import {
   Package,
   PackageCheck,
   PackageX,
+  Shield,
   ShoppingCart,
   Truck,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -72,6 +75,31 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     isAdministrator ||
     isDepartmentCompras ||
     can(pathToModuleKey('/ponto/fds-aprovadas'));
+
+  const canSeeGestaoOs =
+    isAdministrator ||
+    can(pathToModuleKey('/ponto/sistema-gestao-os')) ||
+    can(pathToModuleKey('/ponto/meus-chamados')) ||
+    can(pathToModuleKey('/ponto/sistema-gestao-os/planos'));
+
+  const { data: gestaoOsInbox } = useQuery({
+    queryKey: ['gestao-os-inbox'],
+    queryFn: async () => {
+      const res = await api.get('/gestao-os/inbox');
+      return (res.data?.data ?? null) as {
+        assignedCount: number;
+        slaOverdueCount: number;
+        slaWarningCount: number;
+        overduePlansCount: number;
+        warrantyExpiringCount: number;
+        warrantyExpiredCount: number;
+      } | null;
+    },
+    enabled: canSeeGestaoOs && !permissionsLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
 
   const { data: pendingFuroCount = 0 } = useQuery({
     queryKey: ['stock-shortfalls-pending-count'],
@@ -279,6 +307,63 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
       });
     }
 
+    const assignedCount = gestaoOsInbox?.assignedCount ?? 0;
+    const slaOverdueCount = gestaoOsInbox?.slaOverdueCount ?? 0;
+    const slaWarningCount = gestaoOsInbox?.slaWarningCount ?? 0;
+    const overduePlansCount = gestaoOsInbox?.overduePlansCount ?? 0;
+    const warrantyCount =
+      (gestaoOsInbox?.warrantyExpiredCount ?? 0) + (gestaoOsInbox?.warrantyExpiringCount ?? 0);
+    if (assignedCount > 0) {
+      list.push({
+        id: 'gestao-os-assigned',
+        title: 'OS atribuídas',
+        description: 'Chamados sob sua responsabilidade',
+        count: assignedCount,
+        href: '/ponto/sistema-gestao-os',
+        Icon: Wrench,
+      });
+    }
+    if (slaOverdueCount > 0) {
+      list.push({
+        id: 'gestao-os-sla-overdue',
+        title: 'SLA atrasado',
+        description: 'OS fora do prazo',
+        count: slaOverdueCount,
+        href: '/ponto/sistema-gestao-os?overdue=1',
+        Icon: Wrench,
+      });
+    }
+    if (slaWarningCount > 0) {
+      list.push({
+        id: 'gestao-os-sla-warning',
+        title: 'SLA no fim do prazo',
+        description: 'OS próximas do estouro',
+        count: slaWarningCount,
+        href: '/ponto/sistema-gestao-os',
+        Icon: Wrench,
+      });
+    }
+    if (overduePlansCount > 0) {
+      list.push({
+        id: 'gestao-os-plans',
+        title: 'Planos vencidos',
+        description: 'Preventivas / PMOC em atraso',
+        count: overduePlansCount,
+        href: '/ponto/sistema-gestao-os/planos',
+        Icon: CalendarClock,
+      });
+    }
+    if (warrantyCount > 0) {
+      list.push({
+        id: 'gestao-os-warranty',
+        title: 'Garantia de ativos',
+        description: 'Vencidas ou a vencer em 30 dias',
+        count: warrantyCount,
+        href: '/ponto/sistema-gestao-os/locais',
+        Icon: Shield,
+      });
+    }
+
     return list;
   }, [
     canAccessDpApproverPages,
@@ -300,6 +385,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     vehicleReservationSuppliesPendingCount,
     entregaLogisticaPendingCount,
     chatUnreadCount,
+    gestaoOsInbox,
   ]);
 
   const badgeTotal = useMemo(

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardList, Eye, Search, Wrench, X } from 'lucide-react';
+import { ClipboardList, Eye, Plus, Search, Star, Wrench, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -36,7 +36,9 @@ import {
   GestaoOsEmptyTab,
   GestaoOsHistoryList,
   GestaoOsModalFooter,
-  GestaoOsRequiredMark
+  GestaoOsRecurrenceBanner,
+  GestaoOsRequiredMark,
+  type GestaoOsAssetHistory
 } from '@/components/gestao-os/GestaoOsModalUi';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
@@ -45,12 +47,15 @@ import {
   GestaoOsLocationTree,
   GestaoOsPriority,
   GestaoOsServiceCategory,
+  GESTAO_OS_SLA_DOT,
+  GESTAO_OS_SLA_LABEL,
   GestaoOsWorkOrder,
   PRIORITY_LABELS,
   SERVICE_CATEGORIES,
   STATUS_LABELS,
   formatGestaoOsLabel,
   formatGestaoOsNumber,
+  gestaoOsSlaState,
   gestaoOsStatusBadgeClass
 } from '../sistema-gestao-os/gestaoOsTypes';
 
@@ -103,6 +108,8 @@ export default function MeusChamadosPageClient() {
   const [assetId, setAssetId] = useState('');
   const [attachments, setAttachments] = useState<GestaoOsAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
   const [qrHandled, setQrHandled] = useState(false);
   const [openedAtLabel, setOpenedAtLabel] = useState(() =>
     formatDateTime(new Date().toISOString())
@@ -166,6 +173,17 @@ export default function MeusChamadosPageClient() {
     }
   });
 
+  const { data: createAssetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history-create', assetId],
+    enabled: createOpen && Boolean(assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${assetId}/history`
+      );
+      return res.data?.data;
+    }
+  });
+
   const categoryOptions = useMemo(() => {
     const fromDb = serviceCategories.filter((c) => c.isActive).map((c) => c.name);
     if (fromDb.length > 0) return fromDb;
@@ -208,6 +226,13 @@ export default function MeusChamadosPageClient() {
       cancelled = true;
     };
   }, [searchParams, qrHandled, router]);
+
+  useEffect(() => {
+    const id = searchParams?.get('id');
+    if (!id) return;
+    setDetailId(id);
+    setDetailTab('resumo');
+  }, [searchParams]);
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ['gestao-os-detail', detailId],
@@ -275,6 +300,8 @@ export default function MeusChamadosPageClient() {
   const openDetail = (row: GestaoOsWorkOrder) => {
     setDetailId(row.id);
     setDetailTab('resumo');
+    setRatingValue(row.rating ?? 5);
+    setRatingComment('');
   };
 
   const {
@@ -317,6 +344,27 @@ export default function MeusChamadosPageClient() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message ?? 'Não foi possível abrir o chamado');
+    }
+  });
+
+  const ratingMutation = useMutation({
+    mutationFn: async () => {
+      if (!detailId) throw new Error('Chamado inválido');
+      const res = await api.post(`/gestao-os/${detailId}/transition`, {
+        status: 'CLOSED',
+        rating: ratingValue,
+        ratingComment: ratingComment.trim() || undefined
+      });
+      return res.data?.data as GestaoOsWorkOrder;
+    },
+    onSuccess: () => {
+      toast.success('Avaliação registrada. Obrigado!');
+      setRatingComment('');
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-mine'] });
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', detailId] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'Não foi possível registrar a avaliação');
     }
   });
 
@@ -409,7 +457,7 @@ export default function MeusChamadosPageClient() {
                     onClick={() => setCreateOpen(true)}
                     className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <ClipboardList className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Novo chamado
                   </button>
                 </div>
@@ -475,7 +523,21 @@ export default function MeusChamadosPageClient() {
                             }}
                           >
                             <td className={cadastroListClasses.tdMono}>
-                              {formatGestaoOsNumber(row)}
+                              {(() => {
+                                const sla = gestaoOsSlaState(row);
+                                return (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {sla ? (
+                                      <span
+                                        className={`h-2 w-2 shrink-0 rounded-full ${GESTAO_OS_SLA_DOT[sla]}`}
+                                        title={GESTAO_OS_SLA_LABEL[sla]}
+                                        aria-label={GESTAO_OS_SLA_LABEL[sla]}
+                                      />
+                                    ) : null}
+                                    {formatGestaoOsNumber(row)}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className={cadastroListClasses.td}>
                               <ListRowNavigableLabel className="whitespace-normal break-words text-sm text-gray-600 dark:text-gray-400">
@@ -650,6 +712,12 @@ export default function MeusChamadosPageClient() {
                   disabled={!placeId}
                 />
               </div>
+              <div className="sm:col-span-2">
+                <GestaoOsRecurrenceBanner
+                  count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
+                  predicted
+                />
+              </div>
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Categoria
@@ -766,11 +834,85 @@ export default function MeusChamadosPageClient() {
                 }
               >
                 {detailTab === 'resumo' ? (
-                  <GestaoOsChamadoResumo
-                    detail={detail}
-                    formatDateTime={formatDateTime}
-                    showRequester={false}
-                  />
+                  <div className="space-y-5">
+                    <GestaoOsChamadoResumo
+                      detail={detail}
+                      formatDateTime={formatDateTime}
+                      showRequester={false}
+                    />
+
+                    {detail.status === 'COMPLETED' && detail.rating == null ? (
+                      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Avalie o atendimento
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          O serviço foi concluído. Dê sua nota para encerrar o chamado.
+                        </p>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              aria-label={`${n} estrela(s)`}
+                              onClick={() => setRatingValue(n)}
+                              className="p-0.5"
+                            >
+                              <Star
+                                className={`h-6 w-6 ${
+                                  n <= ratingValue
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-gray-300 dark:text-gray-600'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          className={`${FORM_FIELD_TEXTAREA_CLS} mt-3`}
+                          rows={3}
+                          value={ratingComment}
+                          onChange={(e) => setRatingComment(e.target.value)}
+                          placeholder="Comentário (opcional)"
+                        />
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            disabled={ratingMutation.isPending}
+                            onClick={() => ratingMutation.mutate()}
+                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {ratingMutation.isPending ? 'Enviando...' : 'Enviar avaliação'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {detail.rating != null ? (
+                      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Sua avaliação
+                        </p>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={`h-5 w-5 ${
+                                n <= (detail.rating ?? 0)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-gray-300 dark:text-gray-600'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        {detail.ratingComment ? (
+                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                            {detail.ratingComment}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
 
                 {detailTab === 'checklist' ? (

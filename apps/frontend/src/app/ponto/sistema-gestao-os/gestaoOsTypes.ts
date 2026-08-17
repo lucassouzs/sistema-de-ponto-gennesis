@@ -38,6 +38,16 @@ export type GestaoOsChecklistResponseItem = {
   required?: boolean;
 };
 
+export type GestaoOsPartLine = {
+  id: string;
+  name: string;
+  supplier: string | null;
+  quantity: number;
+  unitCost: number | null;
+  expectedAt: string | null;
+  notes: string | null;
+};
+
 export type GestaoOsWorkOrder = {
   id: string;
   displayNumber: number;
@@ -65,6 +75,19 @@ export type GestaoOsWorkOrder = {
   rating: number | null;
   ratingComment: string | null;
   dueAt?: string | null;
+  slaHoursApplied?: number | null;
+  slaWarnedAt?: string | null;
+  slaOverdue?: boolean;
+  slaWarning?: boolean;
+  slaRemainingMs?: number | null;
+  parts?: GestaoOsPartLine[];
+  partsTotalCost?: number;
+  relatedWorkOrderId?: string | null;
+  startPhotoUrl?: string | null;
+  endPhotoUrl?: string | null;
+  executionMs?: number | null;
+  lastExecutionResumeAt?: string | null;
+  recurrence90dCount?: number | null;
   checklistResponses?: GestaoOsChecklistResponseItem[] | null;
   safetyChecklistResponses?: GestaoOsChecklistResponseItem[] | null;
   safetyPhotoUrl?: string | null;
@@ -173,6 +196,7 @@ export type GestaoOsLocationTree = Array<{
         code?: string | null;
         category: string | null;
         qrToken?: string;
+        warrantyEndsAt?: string | null;
       }>;
     }>;
   }>;
@@ -216,6 +240,8 @@ export type GestaoOsServiceCategory = {
   code: string | null;
   description: string | null;
   isActive: boolean;
+  checklistId?: string | null;
+  checklistItems?: Array<{ id: string; label: string }>;
 };
 
 export type GestaoOsMembership = {
@@ -268,6 +294,38 @@ export const STATUS_BADGE: Record<GestaoOsStatus, string> = {
 export function gestaoOsStatusBadgeClass(status: GestaoOsStatus): string {
   return `inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${STATUS_BADGE[status]}`;
 }
+
+export type GestaoOsSlaState = 'overdue' | 'warning' | null;
+
+/** Estado de SLA de uma OS: atrasada, no prazo em risco ou ok. */
+export function gestaoOsSlaState(row: {
+  status: GestaoOsStatus;
+  dueAt?: string | null;
+  slaOverdue?: boolean;
+  slaWarning?: boolean;
+}): GestaoOsSlaState {
+  if (row.status === 'CLOSED' || row.status === 'CANCELLED') return null;
+  const dueMs = row.dueAt ? new Date(row.dueAt).getTime() : NaN;
+  const overdueByDate = Number.isFinite(dueMs) && dueMs < Date.now();
+  if (row.slaOverdue || overdueByDate) return 'overdue';
+  if (row.slaWarning) return 'warning';
+  return null;
+}
+
+export const GESTAO_OS_SLA_LABEL: Record<'overdue' | 'warning', string> = {
+  overdue: 'Atrasada',
+  warning: 'No prazo em risco'
+};
+
+export const GESTAO_OS_SLA_BADGE: Record<'overdue' | 'warning', string> = {
+  overdue: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
+  warning: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+};
+
+export const GESTAO_OS_SLA_DOT: Record<'overdue' | 'warning', string> = {
+  overdue: 'bg-rose-500',
+  warning: 'bg-amber-500'
+};
 
 export const PRIORITY_LABELS: Record<GestaoOsPriority, string> = {
   LOW: 'Baixa',
@@ -368,4 +426,55 @@ export function formatGestaoOsNumber(row: {
 }): string {
   if (row.osNumber != null && row.osNumber > 0) return String(row.osNumber);
   return String(row.displayNumber);
+}
+
+export function liveGestaoOsExecutionMs(row: {
+  status: GestaoOsStatus;
+  executionMs?: number | null;
+  lastExecutionResumeAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  now?: number;
+}): number {
+  const stored = Math.max(0, Math.round(Number(row.executionMs) || 0));
+  const now = row.now ?? Date.now();
+  if (row.status === 'IN_PROGRESS' && row.lastExecutionResumeAt) {
+    const resume = new Date(row.lastExecutionResumeAt).getTime();
+    if (Number.isFinite(resume)) return stored + Math.max(0, now - resume);
+  }
+  if (stored > 0) return stored;
+  if (row.startedAt && row.completedAt) {
+    const start = new Date(row.startedAt).getTime();
+    const end = new Date(row.completedAt).getTime();
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) return end - start;
+  }
+  return stored;
+}
+
+export function formatGestaoOsDuration(ms: number | null | undefined): string {
+  const value = Math.max(0, Math.round(Number(ms) || 0));
+  if (value <= 0) return '—';
+  const totalMinutes = Math.round(value / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}min`;
+}
+
+export function warrantyState(warrantyEndsAt?: string | null): 'expired' | 'expiring' | 'ok' | null {
+  if (!warrantyEndsAt) return null;
+  const end = new Date(warrantyEndsAt).getTime();
+  if (!Number.isFinite(end)) return null;
+  const now = Date.now();
+  if (end < now) return 'expired';
+  if (end <= now + 30 * 24 * 60 * 60 * 1000) return 'expiring';
+  return 'ok';
+}
+
+export function checklistItemsToText(
+  items?: Array<{ label?: string }> | null
+): string {
+  if (!items?.length) return '';
+  return items.map((item) => String(item.label ?? '').trim()).filter(Boolean).join('\n');
 }

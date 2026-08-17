@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  AlertTriangle,
   ClipboardList,
   Eye,
   Filter,
+  Link2,
   Search,
+  Sparkles,
   Wrench,
   X
 } from 'lucide-react';
@@ -34,11 +37,14 @@ import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { SignaturePad } from '@/components/gestao-os/SignaturePad';
 import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
 import { GestaoOsCommentsSection } from '@/components/gestao-os/GestaoOsCommentsSection';
+import { GestaoOsPartsEditor } from '@/components/gestao-os/GestaoOsPartsEditor';
 import {
   GESTAO_OS_FORM_LABEL_CLS,
+  GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
   GestaoOsDetailModalChrome,
@@ -46,17 +52,22 @@ import {
   GestaoOsEmptyTab,
   GestaoOsHistoryList,
   GestaoOsModalFooter,
+  GestaoOsRecurrenceBanner,
   GestaoOsRequiredMark,
-  gestaoOsTechnicianSelectOptions
+  gestaoOsTechnicianSelectOptions,
+  type GestaoOsAssetHistory
 } from '@/components/gestao-os/GestaoOsModalUi';
 import api from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
+  GESTAO_OS_SLA_DOT,
+  GESTAO_OS_SLA_LABEL,
   GestaoOsAttachment,
   GestaoOsChecklistResponseItem,
   GestaoOsLocationTree,
   GestaoOsMaintenanceType,
+  GestaoOsPartLine,
   GestaoOsPriority,
   GestaoOsServiceCategory,
   GestaoOsStatus,
@@ -69,6 +80,7 @@ import {
   cloneGestaoOsSafetyChecklist,
   formatGestaoOsLabel,
   formatGestaoOsNumber,
+  gestaoOsSlaState,
   isGestaoOsSafetyChecklistComplete
 } from './gestaoOsTypes';
 import { useGestaoOsCompany } from './useGestaoOsCompany';
@@ -175,6 +187,7 @@ export default function SistemaGestaoOsPageClient() {
   const [activePhase, setActivePhase] = useState<GestaoOsStatus>('OPEN');
   const [priorityFilter, setPriorityFilter] = useState<GestaoOsPriority | ''>('');
   const [buildingFilter, setBuildingFilter] = useState('');
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -207,6 +220,15 @@ export default function SistemaGestaoOsPageClient() {
   );
   const [safetyPhotoUrl, setSafetyPhotoUrl] = useState<string | null>(null);
   const [uploadingSafetyPhoto, setUploadingSafetyPhoto] = useState(false);
+  const [parts, setParts] = useState<GestaoOsPartLine[]>([]);
+  const [startPhotoUrl, setStartPhotoUrl] = useState<string | null>(null);
+  const [endPhotoUrl, setEndPhotoUrl] = useState<string | null>(null);
+  const [uploadingStartPhoto, setUploadingStartPhoto] = useState(false);
+  const [uploadingEndPhoto, setUploadingEndPhoto] = useState(false);
+  const [relatedWorkOrderId, setRelatedWorkOrderId] = useState('');
+  const [autoAssign, setAutoAssign] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const slaCheckedRef = useRef(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -230,13 +252,14 @@ export default function SistemaGestaoOsPageClient() {
     data: rows = [],
     isLoading: loadingRows
   } = useQuery({
-    queryKey: ['gestao-os-list', search, activePhase, priorityFilter, buildingFilter],
+    queryKey: ['gestao-os-list', search, activePhase, priorityFilter, buildingFilter, overdueOnly],
     enabled: !loadingCompany,
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder[] }>('/gestao-os', {
         params: {
           search: search || undefined,
-          status: activePhase,
+          status: overdueOnly ? undefined : activePhase,
+          overdue: overdueOnly ? '1' : undefined,
           priority: priorityFilter || undefined,
           buildingId: buildingFilter || undefined
         }
@@ -254,6 +277,7 @@ export default function SistemaGestaoOsPageClient() {
         byStatus: Partial<Record<GestaoOsStatus, number>>;
         openLike: number;
         total: number;
+        overdue?: number;
       };
     }
   });
@@ -264,6 +288,19 @@ export default function SistemaGestaoOsPageClient() {
       PHASE_TABS.map((tab) => [tab.id, byStatus[tab.id] ?? 0])
     ) as Record<GestaoOsStatus, number>;
   }, [summary]);
+
+  useEffect(() => {
+    if (loadingCompany || !summary || slaCheckedRef.current) return;
+    slaCheckedRef.current = true;
+    api
+      .post('/gestao-os/sla/check-warnings', {})
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
+      })
+      .catch(() => {
+        /* alertas de SLA são best-effort */
+      });
+  }, [loadingCompany, summary, queryClient]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -307,6 +344,20 @@ export default function SistemaGestaoOsPageClient() {
     router.replace(`/ponto/meus-chamados?qr=${encodeURIComponent(qr)}`);
   }, [searchParams, qrHandled, router]);
 
+  useEffect(() => {
+    const overdue = searchParams?.get('overdue');
+    if (overdue === '1' || overdue === 'true') setOverdueOnly(true);
+    // Só aplica o atalho da URL na entrada da página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const id = searchParams?.get('id');
+    if (!id) return;
+    setDetailId(id);
+    setDetailTab('resumo');
+  }, [searchParams]);
+
   const { data: technicians = [] } = useQuery({
     queryKey: ['gestao-os-technicians'],
     enabled: !loadingCompany,
@@ -330,6 +381,28 @@ export default function SistemaGestaoOsPageClient() {
     }
   });
 
+  const { data: assetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history', detail?.assetId],
+    enabled: Boolean(detailId && detail?.assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${detail?.assetId}/history`
+      );
+      return res.data?.data;
+    }
+  });
+
+  const { data: createAssetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history-create', assetId],
+    enabled: createOpen && Boolean(assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${assetId}/history`
+      );
+      return res.data?.data;
+    }
+  });
+
   useEffect(() => {
     if (!detail) return;
     setChecklistDraft(
@@ -344,6 +417,12 @@ export default function SistemaGestaoOsPageClient() {
         detail.safetyChecklistResponses.length > 0);
     setSafetyChecklistDraft(hasSafety ? cloneGestaoOsSafetyChecklist(detail.safetyChecklistResponses) : []);
     setSafetyPhotoUrl(detail.safetyPhotoUrl ?? null);
+    setParts(Array.isArray(detail.parts) ? detail.parts.map((p) => ({ ...p })) : []);
+    setStartPhotoUrl(detail.startPhotoUrl ?? null);
+    setEndPhotoUrl(detail.endPhotoUrl ?? null);
+    setRelatedWorkOrderId(detail.relatedWorkOrderId ?? '');
+    setAutoAssign(false);
+    setActivePhase(detail.status);
     if (detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK') {
       setTransitionStatus('IN_PROGRESS');
     } else if (detail.status === 'REWORK') setTransitionStatus('IN_PROGRESS');
@@ -364,11 +443,12 @@ export default function SistemaGestaoOsPageClient() {
     return places.find((p) => p.id === placeId)?.assets ?? [];
   }, [places, placeId]);
 
-  const hasActiveFilters = Boolean(priorityFilter || buildingFilter);
+  const hasActiveFilters = Boolean(priorityFilter || buildingFilter || overdueOnly);
 
   const clearFilters = () => {
     setPriorityFilter('');
     setBuildingFilter('');
+    setOverdueOnly(false);
   };
 
   const priorityFilterOptions = useMemo(
@@ -511,7 +591,17 @@ export default function SistemaGestaoOsPageClient() {
           transitionStatus === 'CLOSED' ? signatureRequesterUrl || undefined : undefined,
         checklistResponses: checklistDraft.length ? checklistDraft : undefined,
         safetyChecklistResponses: safetyChecklistDraft.length ? safetyChecklistDraft : undefined,
-        safetyPhotoUrl: safetyPhotoUrl || undefined
+        safetyPhotoUrl: safetyPhotoUrl || undefined,
+        parts:
+          transitionStatus === 'WAITING_PARTS' ||
+          detail?.status === 'WAITING_PARTS' ||
+          parts.length > 0
+            ? parts
+            : undefined,
+        startPhotoUrl: startPhotoUrl || undefined,
+        endPhotoUrl: endPhotoUrl || undefined,
+        relatedWorkOrderId: relatedWorkOrderId.trim() || undefined,
+        autoAssign: autoAssign || undefined
       });
       return res.data?.data as GestaoOsWorkOrder;
     },
@@ -614,6 +704,63 @@ export default function SistemaGestaoOsPageClient() {
     }
   };
 
+  const uploadPhoto = async (
+    files: FileList | File[] | null,
+    setUrl: (url: string) => void,
+    setBusy: (busy: boolean) => void
+  ) => {
+    const list = !files ? [] : Array.from(files);
+    const file = list.find((item) => item.type.startsWith('image/')) ?? list[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/') && !/\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) {
+      toast.error('Envie uma foto (PNG ou JPG)');
+      return;
+    }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('/gestao-os/upload-attachment', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const url = res.data?.data?.url as string | undefined;
+      if (!url) throw new Error('URL da foto não retornada');
+      setUrl(url);
+      toast.success('Foto enviada');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Falha no upload da foto');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSuggestAssignee = async () => {
+    if (!detail) return;
+    setSuggesting(true);
+    try {
+      const res = await api.get<{ success: boolean; data: { id: string; name: string } | null }>(
+        '/gestao-os/suggest-assignee',
+        {
+          params: {
+            buildingId: detail.buildingId || undefined,
+            category: detail.category || undefined
+          }
+        }
+      );
+      const suggestion = res.data?.data;
+      if (!suggestion?.id) {
+        toast.error('Nenhum técnico sugerido');
+        return;
+      }
+      setAssigneeId(suggestion.id);
+      toast.success(`Técnico sugerido: ${suggestion.name}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Falha ao sugerir técnico');
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const nextStatuses = detail
     ? allowedTransitionsByPermission({
         from: detail.status,
@@ -670,6 +817,25 @@ export default function SistemaGestaoOsPageClient() {
 
   const safetyReady = isGestaoOsSafetyChecklistComplete(safetyChecklistDraft) && Boolean(safetyPhotoUrl);
 
+  const assetHistoryCard = assetHistory ? (
+    <GestaoOsAssetHistoryCard
+      history={assetHistory}
+      currentId={detail?.id}
+      onOpenWorkOrder={(id) => {
+        setDetailId(id);
+        setDetailTab('resumo');
+        router.replace(`/ponto/sistema-gestao-os?id=${id}`);
+      }}
+    />
+  ) : null;
+
+  const createAssetRecurrenceBanner = (
+    <GestaoOsRecurrenceBanner
+      count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
+      predicted
+    />
+  );
+
   if (loadingUser || loadingCompany) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
   }
@@ -696,8 +862,11 @@ export default function SistemaGestaoOsPageClient() {
                   return (
                     <AppTabButton
                       key={tab.id}
-                      active={active}
-                      onClick={() => setActivePhase(tab.id)}
+                      active={!overdueOnly && active}
+                      onClick={() => {
+                        setOverdueOnly(false);
+                        setActivePhase(tab.id);
+                      }}
                       className="flex items-center gap-2 whitespace-nowrap px-2 py-2 text-xs font-medium sm:px-3 sm:text-sm"
                     >
                       {tab.label}
@@ -720,12 +889,14 @@ export default function SistemaGestaoOsPageClient() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {STATUS_LABELS[activePhase]}
+                      {overdueOnly ? 'Atrasadas' : STATUS_LABELS[activePhase]}
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {summary?.total != null
-                        ? `${summary.total} registros · ${rows.length} nesta fase`
-                        : `${rows.length} nesta fase`}
+                      {overdueOnly
+                        ? `${rows.length} chamado${rows.length === 1 ? '' : 's'} fora do SLA`
+                        : summary?.total != null
+                          ? `${summary.total} registros · ${rows.length} nesta fase`
+                          : `${rows.length} nesta fase`}
                     </p>
                   </div>
                 </div>
@@ -839,7 +1010,21 @@ export default function SistemaGestaoOsPageClient() {
                             }}
                           >
                             <td className={cadastroListClasses.tdMono}>
-                              {formatGestaoOsNumber(row)}
+                              {(() => {
+                                const sla = gestaoOsSlaState(row);
+                                return (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {sla ? (
+                                      <span
+                                        className={`h-2 w-2 shrink-0 rounded-full ${GESTAO_OS_SLA_DOT[sla]}`}
+                                        title={GESTAO_OS_SLA_LABEL[sla]}
+                                        aria-label={GESTAO_OS_SLA_LABEL[sla]}
+                                      />
+                                    ) : null}
+                                    {formatGestaoOsNumber(row)}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className={cadastroListClasses.td}>
                               <ListRowNavigableLabel className="whitespace-normal break-words text-sm text-gray-600 dark:text-gray-400">
@@ -938,6 +1123,27 @@ export default function SistemaGestaoOsPageClient() {
                 emptyOptionLabel="Todos"
                 allowEmpty
               />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Prazo
+              </label>
+              <button
+                type="button"
+                onClick={() => setOverdueOnly((v) => !v)}
+                className={`inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-semibold transition-colors ${
+                  overdueOnly
+                    ? 'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800/60 dark:bg-rose-950/40 dark:text-rose-200'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                }`}
+                title="Mostrar só OS fora do prazo"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Atrasadas
+                {typeof summary?.overdue === 'number' && summary.overdue > 0 ? (
+                  <span className="tabular-nums">{summary.overdue}</span>
+                ) : null}
+              </button>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -1066,6 +1272,7 @@ export default function SistemaGestaoOsPageClient() {
                   disabled={!placeId}
                 />
               </div>
+              <div className="sm:col-span-2">{createAssetRecurrenceBanner}</div>
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Categoria
@@ -1188,6 +1395,7 @@ export default function SistemaGestaoOsPageClient() {
                 {detailTab === 'fluxo' ? (
                   nextStatuses.length > 0 ? (
                     <div className="space-y-4">
+                      {assetHistoryCard}
                       {detail.status === 'OPEN' ? (
                         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                           Na primeira análise (Em Análise), o sistema cria a OS e atribui o número
@@ -1251,7 +1459,20 @@ export default function SistemaGestaoOsPageClient() {
                               />
                             </div>
                             <div>
-                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Técnico responsável</label>
+                              <div className="mb-1.5 flex items-center justify-between gap-2">
+                                <label className={`${GESTAO_OS_FORM_LABEL_CLS} mb-0`}>
+                                  Técnico responsável
+                                </label>
+                                <button
+                                  type="button"
+                                  disabled={suggesting}
+                                  onClick={() => void handleSuggestAssignee()}
+                                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  {suggesting ? 'Sugerindo...' : 'Sugerir técnico'}
+                                </button>
+                              </div>
                               <StringSingleSelectDropdown
                                 value={assigneeId}
                                 onChange={setAssigneeId}
@@ -1260,6 +1481,13 @@ export default function SistemaGestaoOsPageClient() {
                                 emptyOptionLabel="Não atribuído"
                                 allowEmpty
                               />
+                              <div className="mt-2">
+                                <Checkbox
+                                  checked={autoAssign}
+                                  onChange={setAutoAssign}
+                                  label="Atribuir automaticamente (menor carga)"
+                                />
+                              </div>
                             </div>
                           </>
                         )}
@@ -1334,6 +1562,83 @@ export default function SistemaGestaoOsPageClient() {
                           </>
                         ) : null}
 
+                        {transitionStatus === 'WAITING_PARTS' ||
+                        detail.status === 'WAITING_PARTS' ? (
+                          <div className="sm:col-span-2">
+                            <GestaoOsPartsEditor parts={parts} onChange={setParts} />
+                            {transitionStatus === 'WAITING_PARTS' && parts.length === 0 ? (
+                              <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+                                Adicione ao menos uma peça para aguardar peça/terceiro.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {transitionStatus === 'IN_PROGRESS' ? (
+                          <div className="sm:col-span-2">
+                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                              Foto de início da execução
+                              <GestaoOsRequiredMark />
+                            </label>
+                            <GestaoOsAttachmentsField
+                              files={
+                                startPhotoUrl
+                                  ? [{ url: startPhotoUrl, name: 'Foto de início', mimeType: 'image/jpeg' }]
+                                  : []
+                              }
+                              uploading={uploadingStartPhoto}
+                              onFilesSelect={(selected) =>
+                                void uploadPhoto(selected, setStartPhotoUrl, setUploadingStartPhoto)
+                              }
+                              onRemove={() => setStartPhotoUrl(null)}
+                              label="Clique ou arraste a foto"
+                              hint="PNG ou JPG"
+                              accept="image/*"
+                              multiple={false}
+                            />
+                          </div>
+                        ) : null}
+
+                        {transitionStatus === 'COMPLETED' ? (
+                          <div className="sm:col-span-2">
+                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                              Foto de conclusão
+                              <GestaoOsRequiredMark />
+                            </label>
+                            <GestaoOsAttachmentsField
+                              files={
+                                endPhotoUrl
+                                  ? [{ url: endPhotoUrl, name: 'Foto de conclusão', mimeType: 'image/jpeg' }]
+                                  : []
+                              }
+                              uploading={uploadingEndPhoto}
+                              onFilesSelect={(selected) =>
+                                void uploadPhoto(selected, setEndPhotoUrl, setUploadingEndPhoto)
+                              }
+                              onRemove={() => setEndPhotoUrl(null)}
+                              label="Clique ou arraste a foto"
+                              hint="PNG ou JPG"
+                              accept="image/*"
+                              multiple={false}
+                            />
+                          </div>
+                        ) : null}
+
+                        <div className="sm:col-span-2">
+                          <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                            <span className="inline-flex items-center gap-1.5">
+                              <Link2 className="h-3.5 w-3.5" />
+                              OS relacionada (ID)
+                            </span>
+                          </label>
+                          <input
+                            className={FORM_FIELD_INPUT_CLS}
+                            value={relatedWorkOrderId}
+                            onChange={(e) => setRelatedWorkOrderId(e.target.value)}
+                            placeholder="Cole o ID de outra OS relacionada"
+                          />
+                        </div>
+
                         <div className="sm:col-span-2">
                           <label className={GESTAO_OS_FORM_LABEL_CLS}>
                             {transitionStatus === 'REWORK' ? (
@@ -1360,9 +1665,17 @@ export default function SistemaGestaoOsPageClient() {
                           disabled={
                             !transitionStatus ||
                             transitionMutation.isPending ||
+                            uploadingStartPhoto ||
+                            uploadingEndPhoto ||
                             (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
                             (transitionStatus === 'REWORK' && !transitionNote.trim()) ||
                             (transitionStatus === 'APPROVED' && !maintenanceType) ||
+                            (transitionStatus === 'WAITING_PARTS' && parts.length === 0) ||
+                            (transitionStatus === 'IN_PROGRESS' &&
+                              (detail.status === 'APPROVED' ||
+                                detail.status === 'SAFETY_CHECK') &&
+                              !startPhotoUrl) ||
+                            (transitionStatus === 'COMPLETED' && !endPhotoUrl) ||
                             (transitionStatus === 'IN_PROGRESS' &&
                               (detail.status === 'APPROVED' ||
                                 detail.status === 'SAFETY_CHECK') &&
@@ -1376,10 +1689,13 @@ export default function SistemaGestaoOsPageClient() {
                       </div>
                     </div>
                   ) : (
-                    <GestaoOsEmptyTab>
-                      Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem novas
-                      transições.
-                    </GestaoOsEmptyTab>
+                    <div className="space-y-4">
+                      {assetHistoryCard}
+                      <GestaoOsEmptyTab>
+                        Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem
+                        novas transições.
+                      </GestaoOsEmptyTab>
+                    </div>
                   )
                 ) : null}
 

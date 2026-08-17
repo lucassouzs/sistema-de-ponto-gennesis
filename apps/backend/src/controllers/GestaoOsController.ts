@@ -93,6 +93,7 @@ export class GestaoOsController {
       const buildingId = typeof req.query.buildingId === 'string' ? req.query.buildingId : undefined;
       const mine = req.query.mine === '1' || req.query.mine === 'true';
       const assignedToMe = req.query.assignedToMe === '1' || req.query.assignedToMe === 'true';
+      const overdue = req.query.overdue === '1' || req.query.overdue === 'true';
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
 
       // Sem visão geral: só mine ou assignedToMe.
@@ -110,6 +111,7 @@ export class GestaoOsController {
           priority,
           buildingId,
           limit,
+          overdue,
           requesterId: mine ? req.user.id : undefined,
           assigneeId: assignedToMe ? req.user.id : undefined
         },
@@ -163,7 +165,9 @@ export class GestaoOsController {
           attachments: body.attachments,
           companyId: null,
           dueAt: body.dueAt,
-          maintenanceType: body.maintenanceType
+          maintenanceType: body.maintenanceType,
+          relatedWorkOrderId: body.relatedWorkOrderId,
+          autoAssign: body.autoAssign === true
         },
         access
       );
@@ -198,7 +202,12 @@ export class GestaoOsController {
           safetyChecklistResponses: body.safetyChecklistResponses,
           safetyPhotoUrl: body.safetyPhotoUrl,
           signatureRequesterUrl: body.signatureRequesterUrl,
-          signatureTechnicianUrl: body.signatureTechnicianUrl
+          signatureTechnicianUrl: body.signatureTechnicianUrl,
+          parts: body.parts,
+          relatedWorkOrderId: body.relatedWorkOrderId,
+          startPhotoUrl: body.startPhotoUrl,
+          endPhotoUrl: body.endPhotoUrl,
+          autoAssign: body.autoAssign === true
         },
         access
       );
@@ -236,7 +245,12 @@ export class GestaoOsController {
           signatureTechnicianUrl: body.signatureTechnicianUrl,
           dueAt: body.dueAt,
           safetyChecklistResponses: body.safetyChecklistResponses,
-          safetyPhotoUrl: body.safetyPhotoUrl
+          safetyPhotoUrl: body.safetyPhotoUrl,
+          parts: body.parts,
+          startPhotoUrl: body.startPhotoUrl,
+          endPhotoUrl: body.endPhotoUrl,
+          autoAssign: body.autoAssign === true,
+          relatedWorkOrderId: body.relatedWorkOrderId
         },
         access
       );

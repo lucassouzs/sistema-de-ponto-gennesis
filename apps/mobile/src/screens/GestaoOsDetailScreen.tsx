@@ -65,6 +65,12 @@ export default function GestaoOsDetailScreen({ route }: Props) {
   const [safetyChecklist, setSafetyChecklist] = useState<SafetyItem[]>([]);
   const [safetyPhotoUrl, setSafetyPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [startPhotoUrl, setStartPhotoUrl] = useState<string | null>(null);
+  const [endPhotoUrl, setEndPhotoUrl] = useState<string | null>(null);
+  const [uploadingStart, setUploadingStart] = useState(false);
+  const [uploadingEnd, setUploadingEnd] = useState(false);
+  const [parts, setParts] = useState<Array<{ id: string; name: string; quantity: number }>>([]);
+  const [newPartName, setNewPartName] = useState('');
 
   const query = useQuery({
     queryKey: ['gestao-os-detail', id],
@@ -85,6 +91,13 @@ export default function GestaoOsDetailScreen({ route }: Props) {
       setSafetyChecklist(mergeSafetyChecklist(data.safetyChecklistResponses));
     }
     setSafetyPhotoUrl(data.safetyPhotoUrl ?? null);
+    setStartPhotoUrl(data.startPhotoUrl ?? null);
+    setEndPhotoUrl(data.endPhotoUrl ?? null);
+    setParts(
+      Array.isArray(data.parts)
+        ? data.parts.map((p) => ({ id: p.id, name: p.name, quantity: p.quantity || 1 }))
+        : []
+    );
   }, [query.data]);
 
   const mutation = useMutation({
@@ -96,6 +109,20 @@ export default function GestaoOsDetailScreen({ route }: Props) {
         checklistResponses: checklist.length ? checklist : undefined,
         safetyChecklistResponses: safetyChecklist.length ? safetyChecklist : undefined,
         safetyPhotoUrl: safetyPhotoUrl || undefined,
+        startPhotoUrl: startPhotoUrl || undefined,
+        endPhotoUrl: endPhotoUrl || undefined,
+        parts:
+          status === 'WAITING_PARTS' || parts.length
+            ? parts.map((p) => ({
+                id: p.id,
+                name: p.name,
+                supplier: null,
+                quantity: p.quantity || 1,
+                unitCost: null,
+                expectedAt: null,
+                notes: null
+              }))
+            : undefined,
         signatureTechnicianUrl: status === 'COMPLETED' ? 'mobile:assinatura-tecnico' : undefined
       }),
     onSuccess: () => {
@@ -133,6 +160,47 @@ export default function GestaoOsDetailScreen({ route }: Props) {
     } finally {
       setUploadingPhoto(false);
     }
+  };
+
+  const capturePhoto = async (
+    setUrl: (url: string) => void,
+    setBusy: (busy: boolean) => void
+  ) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão', 'Precisamos da câmera para registrar a foto.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    const asset = result.assets[0];
+    setBusy(true);
+    try {
+      const uploaded = await uploadGestaoOsAttachment({
+        uri: asset.uri,
+        name: asset.fileName || `foto-${Date.now()}.jpg`,
+        type: asset.mimeType || 'image/jpeg'
+      });
+      if (!uploaded?.url) throw new Error('URL da foto não retornada');
+      setUrl(uploaded.url);
+    } catch (err) {
+      Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao enviar a foto');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addPart = () => {
+    const name = newPartName.trim();
+    if (!name) return;
+    setParts((prev) => [
+      ...prev,
+      { id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name, quantity: 1 }
+    ]);
+    setNewPartName('');
   };
 
   const wo = query.data;
@@ -233,6 +301,79 @@ export default function GestaoOsDetailScreen({ route }: Props) {
             </View>
           ) : null}
 
+          {actions.includes('IN_PROGRESS') ? (
+            <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.boxTitle, { color: colors.text }]}>Foto de início</Text>
+              <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
+                Registre uma foto antes de iniciar a execução.
+              </Text>
+              {startPhotoUrl ? <Image source={{ uri: startPhotoUrl }} style={styles.photo} /> : null}
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+                disabled={uploadingStart}
+                onPress={() => void capturePhoto(setStartPhotoUrl, setUploadingStart)}
+              >
+                <Text style={{ color: colors.text, fontWeight: '700' }}>
+                  {uploadingStart ? 'Enviando foto...' : startPhotoUrl ? 'Tirar outra foto' : 'Tirar foto de início'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {actions.includes('WAITING_PARTS') ? (
+            <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.boxTitle, { color: colors.text }]}>Peças / materiais</Text>
+              {parts.map((part) => (
+                <View key={part.id} style={styles.partRow}>
+                  <Text style={{ color: colors.text, flex: 1 }}>{part.name}</Text>
+                  <TouchableOpacity
+                    onPress={() => setParts((prev) => prev.filter((p) => p.id !== part.id))}
+                  >
+                    <Text style={{ color: '#ef4444', fontWeight: '700' }}>Remover</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <View style={styles.partAddRow}>
+                <TextInput
+                  value={newPartName}
+                  onChangeText={setNewPartName}
+                  placeholder="Nome da peça"
+                  placeholderTextColor={colors.textSecondary}
+                  style={[
+                    styles.partInput,
+                    { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }
+                  ]}
+                  onSubmitEditing={addPart}
+                />
+                <TouchableOpacity
+                  style={[styles.partAddBtn, { backgroundColor: colors.primary }]}
+                  onPress={addPart}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Adicionar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {actions.includes('COMPLETED') ? (
+            <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
+              <Text style={[styles.boxTitle, { color: colors.text }]}>Foto de conclusão</Text>
+              <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
+                Registre uma foto antes de concluir o serviço.
+              </Text>
+              {endPhotoUrl ? <Image source={{ uri: endPhotoUrl }} style={styles.photo} /> : null}
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+                disabled={uploadingEnd}
+                onPress={() => void capturePhoto(setEndPhotoUrl, setUploadingEnd)}
+              >
+                <Text style={{ color: colors.text, fontWeight: '700' }}>
+                  {uploadingEnd ? 'Enviando foto...' : endPhotoUrl ? 'Tirar outra foto' : 'Tirar foto de conclusão'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           <TextInput
             value={note}
             onChangeText={setNote}
@@ -249,9 +390,14 @@ export default function GestaoOsDetailScreen({ route }: Props) {
             const blocked =
               mutation.isPending ||
               uploadingPhoto ||
+              uploadingStart ||
+              uploadingEnd ||
               (status === 'IN_PROGRESS' &&
                 (wo.status === 'APPROVED' || wo.status === 'SAFETY_CHECK') &&
-                !safetyReady);
+                !safetyReady) ||
+              (status === 'IN_PROGRESS' && !startPhotoUrl) ||
+              (status === 'COMPLETED' && !endPhotoUrl) ||
+              (status === 'WAITING_PARTS' && parts.length === 0);
             return (
               <TouchableOpacity
                 key={status}
@@ -293,5 +439,25 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   btnText: { color: '#fff', fontWeight: '700' },
-  photo: { width: '100%', height: 180, borderRadius: 10, marginTop: 8, marginBottom: 4 }
+  photo: { width: '100%', height: 180, borderRadius: 10, marginTop: 8, marginBottom: 4 },
+  partRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8
+  },
+  partAddRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  partInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  partAddBtn: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center'
+  }
 });

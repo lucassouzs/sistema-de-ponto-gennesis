@@ -64,6 +64,7 @@ type LocationAdminTree = Array<{
         category: string | null;
         qrToken: string;
         isActive: boolean;
+        warrantyEndsAt?: string | null;
       }>;
     }>;
   }>;
@@ -106,6 +107,7 @@ type AssetRow = {
   placeName: string;
   sectorName: string;
   buildingName: string;
+  warrantyEndsAt?: string | null;
 };
 
 function flattenTree(tree: LocationAdminTree) {
@@ -144,7 +146,8 @@ function flattenTree(tree: LocationAdminTree) {
             placeId: p.id,
             placeName: p.name,
             sectorName: s.name,
-            buildingName: b.name
+            buildingName: b.name,
+            warrantyEndsAt: a.warrantyEndsAt ?? null
           });
         }
       }
@@ -167,7 +170,8 @@ export default function GestaoOsLocaisPageClient() {
     placeId: '',
     name: '',
     code: '',
-    category: ''
+    category: '',
+    warrantyEndsAt: ''
   });
   const [qrPreview, setQrPreview] = useState<GestaoOsAssetQr | null>(null);
   const [viewing, setViewing] = useState<
@@ -432,12 +436,13 @@ export default function GestaoOsLocaisPageClient() {
         placeId: assetForm.placeId,
         name: assetForm.name.trim(),
         code: assetForm.code.trim() || null,
-        category: assetForm.category.trim() || null
+        category: assetForm.category.trim() || null,
+        warrantyEndsAt: assetForm.warrantyEndsAt || null
       });
     },
     onSuccess: () => {
       toast.success('Ativo cadastrado (QR gerado).');
-      setAssetForm({ placeId: '', name: '', code: '', category: '' });
+      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
       closeForm();
       invalidate();
     },
@@ -451,12 +456,13 @@ export default function GestaoOsLocaisPageClient() {
       await api.patch(`/gestao-os/cadastros/assets/${id}`, {
         name: assetForm.name.trim(),
         code: assetForm.code.trim() || null,
-        category: assetForm.category.trim() || null
+        category: assetForm.category.trim() || null,
+        warrantyEndsAt: assetForm.warrantyEndsAt || null
       });
     },
     onSuccess: () => {
       toast.success('Ativo atualizado.');
-      setAssetForm({ placeId: '', name: '', code: '', category: '' });
+      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
       closeForm();
       invalidate();
     },
@@ -521,7 +527,8 @@ export default function GestaoOsLocaisPageClient() {
     if (tab === 'predios') setBuildingForm({ name: '', code: '' });
     if (tab === 'setores') setSectorForm({ buildingId: '', name: '', code: '' });
     if (tab === 'locais') setPlaceForm({ sectorId: '', name: '', code: '' });
-    if (tab === 'ativos') setAssetForm({ placeId: '', name: '', code: '', category: '' });
+    if (tab === 'ativos')
+      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
     setShowForm(true);
   };
 
@@ -558,7 +565,8 @@ export default function GestaoOsLocaisPageClient() {
       placeId: r.placeId,
       name: r.name,
       code: r.code ?? '',
-      category: r.category ?? ''
+      category: r.category ?? '',
+      warrantyEndsAt: r.warrantyEndsAt ? String(r.warrantyEndsAt).slice(0, 10) : ''
     });
     setShowForm(true);
   };
@@ -1198,6 +1206,22 @@ export default function GestaoOsLocaisPageClient() {
                         className={FORM_FIELD_INPUT_CLS}
                       />
                     </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Fim da garantia
+                      </label>
+                      <input
+                        type="date"
+                        value={assetForm.warrantyEndsAt}
+                        onChange={(e) =>
+                          setAssetForm((s) => ({ ...s, warrantyEndsAt: e.target.value }))
+                        }
+                        className={FORM_FIELD_INPUT_CLS}
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        O sino avisa 30 dias antes e quando vencer.
+                      </p>
+                    </div>
                   </>
                 ) : null}
 
@@ -1297,6 +1321,16 @@ export default function GestaoOsLocaisPageClient() {
                       </p>
                       <p className="text-sm text-gray-900 dark:text-gray-100">
                         {viewing.row.category || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Garantia
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.warrantyEndsAt
+                          ? new Date(viewing.row.warrantyEndsAt).toLocaleDateString('pt-BR')
+                          : '—'}
                       </p>
                     </div>
                     <div>

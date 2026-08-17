@@ -2,6 +2,16 @@ import { GestaoOsProfile, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
+import {
+  attachWarrantyToLocationTree,
+  loadAssetWarrantyMap,
+  loadCategoryChecklistId,
+  persistAssetWarranty,
+  persistCategoryChecklistId,
+  parseChecklistLabels,
+  parseOptionalDate,
+  upsertChecklistTemplate
+} from '../lib/gestaoOsChecklistCopy';
 import { gestaoOsService } from './GestaoOsService';
 
 async function qrCodeToDataUrl(
@@ -216,7 +226,7 @@ export class GestaoOsCadastrosService {
   async getLocationTreeAdmin(companyId?: string | null) {
     const where: Prisma.GestaoOsBuildingWhereInput = {};
     if (companyId) where.companyId = companyId;
-    return prisma.gestaoOsBuilding.findMany({
+    const tree = await prisma.gestaoOsBuilding.findMany({
       where,
       orderBy: { name: 'asc' },
       include: {
@@ -235,6 +245,7 @@ export class GestaoOsCadastrosService {
         }
       }
     });
+    return attachWarrantyToLocationTree(tree);
   }
 
   async createBuilding(input: {
@@ -340,6 +351,7 @@ export class GestaoOsCadastrosService {
     name?: string;
     code?: string | null;
     category?: string | null;
+    warrantyEndsAt?: unknown;
   }) {
     const placeId = String(input.placeId ?? '').trim();
     const name = String(input.name ?? '').trim();
@@ -347,7 +359,7 @@ export class GestaoOsCadastrosService {
     if (!name) throw createError('Informe o nome do ativo', 400);
     const place = await prisma.gestaoOsPlace.findUnique({ where: { id: placeId } });
     if (!place) throw createError('Sala/local não encontrado', 404);
-    return prisma.gestaoOsAsset.create({
+    const created = await prisma.gestaoOsAsset.create({
       data: {
         placeId,
         name,
@@ -356,6 +368,9 @@ export class GestaoOsCadastrosService {
         qrToken: newQrToken()
       }
     });
+    const warrantyEndsAt = parseOptionalDate(input.warrantyEndsAt);
+    await persistAssetWarranty(created.id, warrantyEndsAt);
+    return { ...created, warrantyEndsAt: warrantyEndsAt ? warrantyEndsAt.toISOString() : null };
   }
 
   async updateAsset(
@@ -366,11 +381,12 @@ export class GestaoOsCadastrosService {
       category?: string | null;
       isActive?: boolean;
       regenerateQr?: boolean;
+      warrantyEndsAt?: unknown;
     }
   ) {
     const existing = await prisma.gestaoOsAsset.findUnique({ where: { id } });
     if (!existing) throw createError('Ativo não encontrado', 404);
-    return prisma.gestaoOsAsset.update({
+    const updated = await prisma.gestaoOsAsset.update({
       where: { id },
       data: {
         ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
@@ -380,6 +396,18 @@ export class GestaoOsCadastrosService {
         ...(input.regenerateQr ? { qrToken: newQrToken() } : {})
       }
     });
+    const warrantyEndsAt = parseOptionalDate(input.warrantyEndsAt);
+    await persistAssetWarranty(id, warrantyEndsAt);
+    const map = warrantyEndsAt === undefined ? await loadAssetWarrantyMap([id]) : null;
+    return {
+      ...updated,
+      warrantyEndsAt:
+        warrantyEndsAt === undefined
+          ? map?.get(id)?.toISOString() ?? null
+          : warrantyEndsAt
+            ? warrantyEndsAt.toISOString()
+            : null
+    };
   }
 
   async deleteBuilding(id: string) {
@@ -727,10 +755,32 @@ export class GestaoOsCadastrosService {
     await this.ensureDefaultCategories(companyId || null);
     const where: Prisma.GestaoOsServiceCategoryWhereInput = {};
     if (companyId) where.OR = [{ companyId }, { companyId: null }];
-    return prisma.gestaoOsServiceCategory.findMany({
+    const rows = await prisma.gestaoOsServiceCategory.findMany({
       where,
       orderBy: { name: 'asc' }
     });
+    const withChecklists = await Promise.all(
+      rows.map(async (row) => {
+        const checklistId = await loadCategoryChecklistId(row.id);
+        let checklistItems: Array<{ id: string; label: string }> = [];
+        if (checklistId) {
+          const template = await prisma.gestaoOsChecklistTemplate.findUnique({
+            where: { id: checklistId },
+            select: { items: true }
+          });
+          if (Array.isArray(template?.items)) {
+            checklistItems = (template!.items as Array<{ id?: string; label?: string }>)
+              .map((item, idx) => ({
+                id: item.id || `item-${idx + 1}`,
+                label: String(item.label ?? '').trim()
+              }))
+              .filter((item) => item.label);
+          }
+        }
+        return { ...row, checklistId, checklistItems };
+      })
+    );
+    return withChecklists;
   }
 
   async createCategory(input: {
@@ -738,10 +788,11 @@ export class GestaoOsCadastrosService {
     name?: string;
     code?: string | null;
     description?: string | null;
+    checklistItems?: unknown;
   }) {
     const name = String(input.name ?? '').trim();
     if (!name) throw createError('Informe o nome da categoria', 400);
-    return prisma.gestaoOsServiceCategory.create({
+    const created = await prisma.gestaoOsServiceCategory.create({
       data: {
         companyId: input.companyId?.trim() || null,
         name,
@@ -749,6 +800,19 @@ export class GestaoOsCadastrosService {
         description: input.description?.trim() || null
       }
     });
+    const labels = parseChecklistLabels(input.checklistItems);
+    let checklistId: string | null = null;
+    if (labels.length) {
+      checklistId = await upsertChecklistTemplate({
+        companyId: created.companyId,
+        name: `Tipo: ${created.name}`,
+        planType: 'PREVENTIVE',
+        category: created.name,
+        labels
+      });
+      await persistCategoryChecklistId(created.id, checklistId);
+    }
+    return { ...created, checklistId, checklistItems: labels.map((label, idx) => ({ id: `item-${idx + 1}`, label })) };
   }
 
   async updateCategory(
@@ -758,11 +822,12 @@ export class GestaoOsCadastrosService {
       code?: string | null;
       description?: string | null;
       isActive?: boolean;
+      checklistItems?: unknown;
     }
   ) {
     const existing = await prisma.gestaoOsServiceCategory.findUnique({ where: { id } });
     if (!existing) throw createError('Categoria não encontrada', 404);
-    return prisma.gestaoOsServiceCategory.update({
+    const updated = await prisma.gestaoOsServiceCategory.update({
       where: { id },
       data: {
         ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
@@ -773,6 +838,30 @@ export class GestaoOsCadastrosService {
         ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
       }
     });
+    if (input.checklistItems === undefined) {
+      const checklistId = await loadCategoryChecklistId(id);
+      return { ...updated, checklistId };
+    }
+    const labels = parseChecklistLabels(input.checklistItems);
+    const existingChecklistId = await loadCategoryChecklistId(id);
+    if (!labels.length) {
+      await persistCategoryChecklistId(id, null);
+      return { ...updated, checklistId: null, checklistItems: [] };
+    }
+    const checklistId = await upsertChecklistTemplate({
+      companyId: updated.companyId,
+      name: `Tipo: ${updated.name}`,
+      planType: 'PREVENTIVE',
+      category: updated.name,
+      labels,
+      existingId: existingChecklistId
+    });
+    await persistCategoryChecklistId(id, checklistId);
+    return {
+      ...updated,
+      checklistId,
+      checklistItems: labels.map((label, idx) => ({ id: `item-${idx + 1}`, label }))
+    };
   }
 
   async deleteCategory(id: string) {

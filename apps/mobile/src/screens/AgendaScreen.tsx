@@ -17,6 +17,7 @@ import {
   Linking,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -40,6 +41,7 @@ import {
   FileText,
   Upload,
   Download,
+  Wrench,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
@@ -59,6 +61,7 @@ import {
   type PlannerEvent,
   type PlannerEventAttendee,
 } from '../services/plannerEvents';
+import { fetchGestaoOsAgenda } from '../services/gestaoOs';
 import {
   createPlannerTask,
   createPlannerTaskList,
@@ -69,6 +72,7 @@ import {
   type PlannerTaskList,
 } from '../services/plannerTasks';
 import { resolveMediaUrl } from '../utils/resolveMediaUrl';
+import type { RootStackParamList } from '../../App';
 
 type Mode = 'agenda' | 'tasks';
 
@@ -122,6 +126,7 @@ const PLANNER_ICON_OPTIONS: Array<{
   { id: 'users', label: 'Equipe', Icon: Users },
   { id: 'map-pin', label: 'Local', Icon: MapPin },
   { id: 'briefcase', label: 'Trabalho', Icon: Briefcase },
+  { id: 'wrench', label: 'Manutenção', Icon: Wrench },
 ];
 
 const PLANNER_ICON_MAP: Record<
@@ -221,7 +226,7 @@ function AnimatedModeSwitcher({
 }
 
 export default function AgendaScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
   const { user: meUser } = useAuth();
   const { colors, isDark } = useTheme();
@@ -270,6 +275,12 @@ export default function AgendaScreen() {
     enabled: mode === 'agenda',
   });
 
+  const gestaoOsQuery = useQuery({
+    queryKey: ['gestao-os-agenda', rangeFrom.toISOString(), rangeTo.toISOString()],
+    queryFn: () => fetchGestaoOsAgenda(rangeFrom, rangeTo),
+    enabled: mode === 'agenda',
+  });
+
   const listsQuery = useQuery({
     queryKey: ['planner-task-lists'],
     queryFn: fetchPlannerTaskLists,
@@ -283,8 +294,25 @@ export default function AgendaScreen() {
     staleTime: 60_000,
   });
 
-  const events = eventsQuery.data?.events ?? [];
+  const plannerEvents = eventsQuery.data?.events ?? [];
   const canWrite = eventsQuery.data?.meta?.canWrite !== false;
+  const events = useMemo<PlannerEvent[]>(() => {
+    const linked: PlannerEvent[] = (gestaoOsQuery.data || []).map((item) => ({
+      id: item.id,
+      userId: meUser?.id || '',
+      title: item.title,
+      description: item.description || '',
+      startAt: item.startAt,
+      endAt: item.endAt,
+      color: item.color,
+      icon: item.kind === 'plan' ? 'check' : 'wrench',
+      href: item.href,
+      source: item.kind === 'plan' ? 'gestao-os-plan' : 'gestao-os',
+      workOrderId: item.workOrderId,
+      planId: item.planId,
+    }));
+    return [...plannerEvents, ...linked];
+  }, [plannerEvents, gestaoOsQuery.data, meUser?.id]);
   const lists = listsQuery.data ?? [];
   const activeList: PlannerTaskList | undefined =
     lists.find((l) => l.id === activeListId) || lists[0];
@@ -373,6 +401,17 @@ export default function AgendaScreen() {
   };
 
   const openEditEvent = (ev: PlannerEvent) => {
+    if (ev.workOrderId) {
+      navigation.navigate('GestaoOsDetail', { id: ev.workOrderId });
+      return;
+    }
+    if (ev.planId || ev.source === 'gestao-os-plan') {
+      Alert.alert(
+        'Plano de manutenção',
+        'Este compromisso vem de um plano. Abra Planos no sistema web para editar ou gerar a OS.'
+      );
+      return;
+    }
     setEventTitle(ev.title);
     setEventDesc(ev.description || '');
     setEventStart(formatTime(ev.startAt) || '09:00');
@@ -569,9 +608,11 @@ export default function AgendaScreen() {
   };
 
   const onRefresh = useCallback(() => {
-    if (mode === 'agenda') void eventsQuery.refetch();
-    else void listsQuery.refetch();
-  }, [mode, eventsQuery, listsQuery]);
+    if (mode === 'agenda') {
+      void eventsQuery.refetch();
+      void gestaoOsQuery.refetch();
+    } else void listsQuery.refetch();
+  }, [mode, eventsQuery, listsQuery, gestaoOsQuery]);
 
   const openTasks = activeList?.tasks.filter((t) => !t.completed) ?? [];
   const doneTasks = activeList?.tasks.filter((t) => t.completed) ?? [];
@@ -721,7 +762,7 @@ export default function AgendaScreen() {
             ) : null}
           </View>
 
-          {eventsQuery.isLoading ? (
+          {eventsQuery.isLoading || gestaoOsQuery.isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
           ) : dayEvents.length === 0 ? (
             <Text style={styles.empty}>Nenhum evento neste dia.</Text>
@@ -745,7 +786,13 @@ export default function AgendaScreen() {
                   <TouchableOpacity
                     key={ev.id}
                     style={styles.eventCard}
-                    onPress={() => canWrite && openEditEvent(ev)}
+                    onPress={() => {
+                      if (ev.workOrderId || ev.planId || ev.href) {
+                        openEditEvent(ev);
+                        return;
+                      }
+                      if (canWrite) openEditEvent(ev);
+                    }}
                     activeOpacity={0.75}
                   >
                     <View style={[styles.eventTimeChip, { backgroundColor: `${accent}18` }]}>

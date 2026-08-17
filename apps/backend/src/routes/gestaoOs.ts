@@ -43,11 +43,131 @@ router.get('/summary', (req, res, next) => gestaoOsController.summary(req, res, 
 router.get('/locations', (req, res, next) => gestaoOsController.locationTree(req, res, next));
 router.get('/technicians', (req, res, next) => gestaoOsController.technicians(req, res, next));
 
+router.get('/inbox', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const data = await gestaoOsOpsService.inbox(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/agenda', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const fromRaw = typeof req.query.from === 'string' ? req.query.from : '';
+    const toRaw = typeof req.query.to === 'string' ? req.query.to : '';
+    const from = fromRaw ? new Date(fromRaw) : new Date();
+    const to = toRaw ? new Date(toRaw) : new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const ownerUserId =
+      typeof req.query.ownerId === 'string' && req.query.ownerId.trim()
+        ? req.query.ownerId.trim()
+        : access.userId;
+    const data = await gestaoOsOpsService.agenda(access, { from, to, ownerUserId });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/reports/summary', async (req: AuthRequest, res, next) => {
   try {
     const access = await withOpsAccess(req);
     const data = await gestaoOsReportsService.summary(access);
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/reports/workload', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const data = await gestaoOsOpsService.technicianWorkload(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/reports/plan-compliance', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const data = await gestaoOsOpsService.planCompliance(access);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/assets/:assetId/history', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const data = await gestaoOsOpsService.assetHistory(access, req.params.assetId);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/suggest-assignee', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const data = await gestaoOsOpsService.suggestAssignee(access, {
+      buildingId: typeof req.query.buildingId === 'string' ? req.query.buildingId : undefined,
+      category: typeof req.query.category === 'string' ? req.query.category : undefined
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/sla/check-warnings', async (req: AuthRequest, res, next) => {
+  try {
+    const access = await withOpsAccess(req);
+    const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
+    const { notifyGestaoOsEvent } = await import('../lib/gestaoOsNotify');
+    const { prisma } = await import('../lib/prisma');
+    const scan = await gestaoOsOpsService.scanSlaAlerts(access);
+    let notified = 0;
+    for (const row of scan.pendingNotify) {
+      const ex = scan.extras.get(row.id);
+      const overdue = row.dueAt && row.dueAt.getTime() < Date.now();
+      notifyGestaoOsEvent(
+        overdue ? 'sla_overdue' : 'sla_warning',
+        {
+          displayNumber: row.displayNumber,
+          osNumber: row.osNumber,
+          statusLabel: String(row.status),
+          locationLabel: row.locationLabel,
+          category: row.category,
+          dueAtLabel: row.dueAt ? row.dueAt.toLocaleString('pt-BR') : null
+        },
+        [row.requester, row.assignee].filter(
+          (u): u is { email: string; name: string } => Boolean(u)
+        )
+      );
+      await prisma.$executeRawUnsafe(
+        `UPDATE "gestao_os_work_orders" SET "slaWarnedAt" = CURRENT_TIMESTAMP WHERE "id" = '${row.id.replace(
+          /'/g,
+          "''"
+        )}'`
+      );
+      notified += 1;
+      void ex;
+    }
+    res.json({
+      success: true,
+      data: { warnings: scan.warnings.length, notified }
+    });
   } catch (error) {
     next(error);
   }

@@ -29,7 +29,7 @@ import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import type { GestaoOsServiceCategory } from '../gestaoOsTypes';
 
 function emptyForm() {
-  return { name: '', code: '', description: '' };
+  return { name: '', code: '', description: '', checklistText: '' };
 }
 
 export default function GestaoOsTiposServicoPageClient() {
@@ -182,7 +182,8 @@ export default function GestaoOsTiposServicoPageClient() {
     setFormData({
       name: row.name ?? '',
       code: row.code ?? '',
-      description: row.description ?? ''
+      description: row.description ?? '',
+      checklistText: (row.checklistItems ?? []).map((item) => item.label).join('\n')
     });
     setShowForm(true);
   };
@@ -196,7 +197,8 @@ export default function GestaoOsTiposServicoPageClient() {
     const payload = {
       name: formData.name.trim(),
       code: formData.code.trim() || null,
-      description: formData.description.trim() || null
+      description: formData.description.trim() || null,
+      checklistItems: formData.checklistText
     };
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload });
@@ -447,6 +449,21 @@ export default function GestaoOsTiposServicoPageClient() {
                     rows={3}
                   />
                 </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Checklist do tipo de serviço
+                  </label>
+                  <textarea
+                    value={formData.checklistText}
+                    onChange={(e) => setFormData({ ...formData, checklistText: e.target.value })}
+                    placeholder={'Um item por linha\nEx.: Verificar filtros\nEx.: Medir corrente'}
+                    className={FORM_FIELD_TEXTAREA_CLS}
+                    rows={5}
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Copiado para a OS na abertura. Evita checklist genérico ou vazio.
+                  </p>
+                </div>
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
@@ -504,6 +521,20 @@ export default function GestaoOsTiposServicoPageClient() {
                   <p className="text-sm text-gray-900 dark:text-gray-100">
                     {viewing.description || '—'}
                   </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Checklist
+                  </p>
+                  {viewing.checklistItems && viewing.checklistItems.length > 0 ? (
+                    <ul className="list-disc space-y-1 pl-5 text-sm text-gray-900 dark:text-gray-100">
+                      {viewing.checklistItems.map((item) => (
+                        <li key={item.id}>{item.label}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-900 dark:text-gray-100">—</p>
+                  )}
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">

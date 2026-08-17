@@ -37,6 +37,9 @@ export type PlannerEvent = {
   ataMimeType?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  /** Evento gerado pela Gestão de OS (não é editável na agenda). */
+  href?: string | null;
+  source?: 'planner' | 'gestao-os' | 'gestao-os-plan';
 };
 
 export type PlannerEventInput = {

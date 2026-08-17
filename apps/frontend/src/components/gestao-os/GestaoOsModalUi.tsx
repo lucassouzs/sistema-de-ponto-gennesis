@@ -1,23 +1,36 @@
 'use client';
 
 import React from 'react';
-import { Paperclip, X } from 'lucide-react';
+import { Activity, AlertTriangle, CalendarCheck, ClipboardList, FileText, Paperclip, Timer, Wrench, X } from 'lucide-react';
+import { exportGestaoOsPdf } from '@/lib/exportGestaoOsPdf';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { useModalRequestClose } from '@/components/ui/Modal';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import { DpRequestHistoryTimeline } from '@/lib/dpRequestHistoryModal';
 import type { DpTimelineStep } from '@/lib/dpRequestTimeline';
 import {
   type GestaoOsAttachment,
   type GestaoOsChecklistResponseItem,
+  type GestaoOsMaintenanceType,
   type GestaoOsPriority,
+  type GestaoOsStatus,
   type GestaoOsWorkOrder,
+  GESTAO_OS_SLA_BADGE,
+  GESTAO_OS_SLA_LABEL,
   PRIORITY_LABELS,
   MAINTENANCE_TYPE_LABELS,
   STATUS_LABELS,
+  formatGestaoOsLabel,
+  formatGestaoOsDuration,
+  liveGestaoOsExecutionMs,
+  warrantyState,
+  gestaoOsSlaState,
   gestaoOsStatusBadgeClass
 } from '@/app/ponto/sistema-gestao-os/gestaoOsTypes';
 
@@ -273,13 +286,30 @@ export function GestaoOsDocumentsTab({ detail }: { detail: GestaoOsWorkOrder }) 
   const files = Array.isArray(detail.attachments) ? detail.attachments : [];
   const hasSignatures = Boolean(detail.signatureRequesterUrl || detail.signatureTechnicianUrl);
   const hasSafetyPhoto = Boolean(detail.safetyPhotoUrl);
-
-  if (files.length === 0 && !hasSignatures && !hasSafetyPhoto) {
-    return <GestaoOsEmptyTab>Nenhum documento neste chamado.</GestaoOsEmptyTab>;
-  }
+  const hasStartPhoto = Boolean(detail.startPhotoUrl);
+  const hasEndPhoto = Boolean(detail.endPhotoUrl);
+  const hasOtherDocs =
+    files.length > 0 || hasSignatures || hasSafetyPhoto || hasStartPhoto || hasEndPhoto;
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => void exportGestaoOsPdf(detail)}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+        >
+          <FileText className="h-4 w-4" />
+          Baixar PDF
+        </button>
+      </div>
+
+      {!hasOtherDocs ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Nenhum anexo neste chamado. Use o PDF para imprimir a OS.
+        </p>
+      ) : null}
+
       {files.length > 0 ? (
         <GestaoOsDocSection title="Anexos">
           {files.map((file, index) => (
@@ -294,14 +324,32 @@ export function GestaoOsDocumentsTab({ detail }: { detail: GestaoOsWorkOrder }) 
         </GestaoOsDocSection>
       ) : null}
 
-      {hasSafetyPhoto ? (
-        <GestaoOsDocSection title="Segurança do Trabalho">
-          <GestaoOsDocumentItem
-            label="Foto de EPIs"
-            subtitle="Equipamentos de proteção"
-            url={detail.safetyPhotoUrl ?? undefined}
-            fileName="foto-epis.jpg"
-          />
+      {hasSafetyPhoto || hasStartPhoto || hasEndPhoto ? (
+        <GestaoOsDocSection title="Registros fotográficos">
+          {hasSafetyPhoto ? (
+            <GestaoOsDocumentItem
+              label="Foto de EPIs"
+              subtitle="Equipamentos de proteção"
+              url={detail.safetyPhotoUrl ?? undefined}
+              fileName="foto-epis.jpg"
+            />
+          ) : null}
+          {hasStartPhoto ? (
+            <GestaoOsDocumentItem
+              label="Início da execução"
+              subtitle="Foto de campo"
+              url={detail.startPhotoUrl ?? undefined}
+              fileName="foto-inicio.jpg"
+            />
+          ) : null}
+          {hasEndPhoto ? (
+            <GestaoOsDocumentItem
+              label="Conclusão"
+              subtitle="Foto de campo"
+              url={detail.endPhotoUrl ?? undefined}
+              fileName="foto-conclusao.jpg"
+            />
+          ) : null}
         </GestaoOsDocSection>
       ) : null}
 
@@ -468,6 +516,272 @@ export function GestaoOsEmptyTab({ children }: { children: React.ReactNode }) {
   );
 }
 
+export type GestaoOsAssetHistory = {
+  asset: {
+    id: string;
+    name: string;
+    category: string | null;
+    code: string | null;
+    warrantyEndsAt?: string | null;
+  };
+  totalOrders: number;
+  recurrence90dCount?: number;
+  correctiveCount: number;
+  preventiveCount: number;
+  openCount: number;
+  mtbfHours: number | null;
+  lastPreventive: {
+    id: string;
+    displayNumber: number;
+    osNumber: number | null;
+    openedAt: string;
+    completedAt: string | null;
+  } | null;
+  recent?: Array<{
+    id: string;
+    displayNumber: number;
+    osNumber: number | null;
+    status: GestaoOsStatus;
+    maintenanceType: GestaoOsMaintenanceType | null;
+    category: string;
+    openedAt: string;
+  }>;
+};
+
+function formatMtbf(hours: number | null) {
+  if (hours == null) {
+    return { value: '—', hint: 'Com 2+ corretivas' };
+  }
+  if (hours >= 48) {
+    const days = Math.round((hours / 24) * 10) / 10;
+    return {
+      value: `${String(days).replace('.', ',')} d`,
+      hint: 'Tempo médio entre falhas'
+    };
+  }
+  return {
+    value: `${String(hours).replace('.', ',')} h`,
+    hint: 'Tempo médio entre falhas'
+  };
+}
+
+function formatHistoryDate(value: string | null | undefined) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatHistoryAgo(value: string | null | undefined) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.max(0, Math.round((Date.now() - d.getTime()) / 86_400_000));
+  if (days === 0) return 'hoje';
+  if (days === 1) return 'há 1 dia';
+  if (days < 30) return `há ${days} dias`;
+  const months = Math.max(1, Math.round(days / 30));
+  if (months < 12) return months === 1 ? 'há 1 mês' : `há ${months} meses`;
+  const years = Math.max(1, Math.round(days / 365));
+  return years === 1 ? 'há 1 ano' : `há ${years} anos`;
+}
+
+export function GestaoOsAssetHistoryCard({
+  history,
+  currentId,
+  onOpenWorkOrder
+}: {
+  history: GestaoOsAssetHistory;
+  currentId?: string | null;
+  onOpenWorkOrder?: (id: string) => void;
+}) {
+  const mtbf = formatMtbf(history.mtbfHours);
+  const lastPrevAt = history.lastPreventive
+    ? history.lastPreventive.completedAt ?? history.lastPreventive.openedAt
+    : null;
+  const mixTotal = history.correctiveCount + history.preventiveCount;
+  const corrPct = mixTotal > 0 ? (history.correctiveCount / mixTotal) * 100 : 0;
+  const prevPct = mixTotal > 0 ? (history.preventiveCount / mixTotal) * 100 : 0;
+  const recent = (history.recent || []).slice(0, 4);
+  const subtitle = [history.asset.name, history.asset.code, history.asset.category]
+    .filter(Boolean)
+    .join(' · ');
+  const warranty = warrantyState(history.asset.warrantyEndsAt);
+  const warrantyLabel = history.asset.warrantyEndsAt
+    ? new Date(history.asset.warrantyEndsAt).toLocaleDateString('pt-BR')
+    : null;
+
+  return (
+    <Card className={cadastroListClasses.card}>
+      <CardHeader className={cadastroListClasses.cardHeader}>
+        <div className={cadastroListClasses.cardHeaderRow}>
+          <div className={cadastroListClasses.cardHeaderIconRow}>
+            <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+              <Activity className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Histórico do ativo
+              </h3>
+              <p className="truncate text-sm text-gray-600 dark:text-gray-400">{subtitle}</p>
+              {warranty && warrantyLabel ? (
+                <p
+                  className={`mt-0.5 text-xs font-medium ${
+                    warranty === 'expired'
+                      ? 'text-rose-700 dark:text-rose-300'
+                      : warranty === 'expiring'
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-emerald-700 dark:text-emerald-300'
+                  }`}
+                >
+                  Garantia {warranty === 'expired' ? 'vencida em' : 'até'} {warrantyLabel}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          {history.openCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              {history.openCount} aberta{history.openCount === 1 ? '' : 's'}
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+              Sem OS aberta
+            </span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className={cadastroListClasses.cardContent}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FilterStatCard
+            label="MTBF"
+            count={mtbf.value}
+            subtitle={mtbf.hint}
+            icon={Timer}
+            iconBg="bg-sky-100 dark:bg-sky-900/30"
+            iconColor="text-sky-600 dark:text-sky-400"
+            size="sm"
+          />
+          <FilterStatCard
+            label="Últ. preventiva"
+            count={lastPrevAt ? formatHistoryDate(lastPrevAt) : 'Nunca'}
+            subtitle={
+              lastPrevAt ? formatHistoryAgo(lastPrevAt) ?? undefined : 'Nenhuma preventiva neste ativo'
+            }
+            icon={CalendarCheck}
+            iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+            iconColor="text-emerald-600 dark:text-emerald-400"
+            size="sm"
+          />
+          <FilterStatCard
+            label="Total de OS"
+            count={history.totalOrders}
+            subtitle={
+              history.openCount > 0
+                ? `${history.openCount} em andamento`
+                : 'Nenhuma em andamento'
+            }
+            icon={ClipboardList}
+            iconBg="bg-red-100 dark:bg-red-900/30"
+            iconColor="text-red-600 dark:text-red-400"
+            size="sm"
+          />
+          <FilterStatCard
+            label="Corretivas / prev."
+            count={`${history.correctiveCount} / ${history.preventiveCount}`}
+            subtitle={mixTotal === 0 ? 'Ainda sem mix' : `${Math.round(corrPct)}% corretivas`}
+            icon={Wrench}
+            iconBg="bg-orange-100 dark:bg-orange-900/30"
+            iconColor="text-orange-600 dark:text-orange-400"
+            size="sm"
+          />
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+            <span>Mix de manutenção</span>
+            <span>
+              {history.correctiveCount} corret. · {history.preventiveCount} prev.
+            </span>
+          </div>
+          <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+            {mixTotal === 0 ? (
+              <span className="h-full w-full bg-gray-200 dark:bg-gray-600" />
+            ) : (
+              <>
+                {corrPct > 0 ? (
+                  <span
+                    className="h-full bg-red-500/80 dark:bg-red-400/80"
+                    style={{ width: `${corrPct}%` }}
+                  />
+                ) : null}
+                {prevPct > 0 ? (
+                  <span
+                    className="h-full bg-emerald-500/80 dark:bg-emerald-400/70"
+                    style={{ width: `${prevPct}%` }}
+                  />
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+
+        {recent.length > 0 ? (
+          <ul className="mt-4 divide-y divide-gray-200 dark:divide-gray-700">
+            {recent.map((row) => {
+              const current = row.id === currentId;
+              const typeLabel = row.maintenanceType
+                ? MAINTENANCE_TYPE_LABELS[row.maintenanceType]
+                : null;
+              const content = (
+                <>
+                  <span className="min-w-0 truncate font-medium text-gray-800 dark:text-gray-100">
+                    {formatGestaoOsLabel(row)}
+                    {typeLabel ? (
+                      <span className="font-normal text-gray-500 dark:text-gray-400">
+                        {' '}
+                        · {typeLabel}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <span>{STATUS_LABELS[row.status]}</span>
+                    <span className="tabular-nums text-gray-400 dark:text-gray-500">
+                      {formatHistoryDate(row.openedAt)}
+                    </span>
+                  </span>
+                </>
+              );
+              if (!onOpenWorkOrder || current) {
+                return (
+                  <li
+                    key={row.id}
+                    className={`flex items-center justify-between gap-3 py-2.5 text-xs ${
+                      current ? 'rounded-md bg-red-50/70 px-2 dark:bg-red-950/20' : ''
+                    }`}
+                  >
+                    {content}
+                  </li>
+                );
+              }
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenWorkOrder(row.id)}
+                    className="-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-3 rounded-md px-1 py-2.5 text-left text-xs transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/70"
+                  >
+                    {content}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function GestaoOsSignaturesBlock({
   requesterUrl,
   technicianUrl
@@ -582,6 +896,28 @@ export function GestaoOsDetailModalChrome({
   );
 }
 
+export function GestaoOsRecurrenceBanner({
+  count,
+  predicted
+}: {
+  count?: number | null;
+  predicted?: boolean;
+}) {
+  const n = Number(count) || 0;
+  if (n < 3) return null;
+  return (
+    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-100">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <p>
+        <span className="font-semibold">
+          {predicted ? `Esta será a ${n}ª OS` : `${n}ª OS`} neste ativo em 90 dias.
+        </span>{' '}
+        Recorrência alta — vale checar causa raiz e o histórico.
+      </p>
+    </div>
+  );
+}
+
 export function GestaoOsChamadoResumo({
   detail,
   formatDateTime,
@@ -591,12 +927,7 @@ export function GestaoOsChamadoResumo({
   formatDateTime: (value: string | null | undefined) => string;
   showRequester?: boolean;
 }) {
-  const dueMs = detail.dueAt ? new Date(detail.dueAt).getTime() : NaN;
-  const overdue =
-    Number.isFinite(dueMs) &&
-    dueMs < Date.now() &&
-    detail.status !== 'CLOSED' &&
-    detail.status !== 'CANCELLED';
+  const slaState = gestaoOsSlaState(detail);
 
   const infoRows: Array<{ label: string; value: React.ReactNode; stacked?: boolean }> = [
     { label: 'Chamado', value: `#${detail.displayNumber}` },
@@ -652,15 +983,63 @@ export function GestaoOsChamadoResumo({
     }
   );
 
-  if (detail.dueAt) {
+  if (detail.dueAt || slaState || detail.slaHoursApplied != null) {
     infoRows.push({
-      label: 'Prazo',
+      label: 'Prazo (SLA)',
       value: (
-        <span className={overdue ? 'text-rose-700 dark:text-rose-300' : undefined}>
-          {formatDateTime(detail.dueAt)}
-          {overdue ? ' · Atrasada' : ''}
+        <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+          {detail.dueAt ? <span>{formatDateTime(detail.dueAt)}</span> : null}
+          {slaState ? (
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${GESTAO_OS_SLA_BADGE[slaState]}`}
+            >
+              {GESTAO_OS_SLA_LABEL[slaState]}
+            </span>
+          ) : null}
+          {detail.slaHoursApplied != null ? (
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              SLA {detail.slaHoursApplied}h
+            </span>
+          ) : null}
         </span>
       )
+    });
+  }
+
+  const executionMs = liveGestaoOsExecutionMs(detail);
+  if (executionMs > 0 || detail.startedAt) {
+    infoRows.push({
+      label: 'Tempo de execução',
+      value: (
+        <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+          <span>{formatGestaoOsDuration(executionMs)}</span>
+          {detail.startedAt ? (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              início {formatDateTime(detail.startedAt)}
+            </span>
+          ) : null}
+        </span>
+      )
+    });
+  }
+
+  if (detail.relatedWorkOrderId) {
+    infoRows.push({
+      label: 'OS relacionada',
+      value: (
+        <span className="font-mono text-xs text-gray-700 dark:text-gray-300">
+          {detail.relatedWorkOrderId}
+        </span>
+      )
+    });
+  }
+
+  if (detail.parts && detail.parts.length > 0) {
+    infoRows.push({
+      label: 'Peças',
+      value: `${detail.parts.length} item(ns) · ${(
+        detail.partsTotalCost ?? 0
+      ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
     });
   }
 
@@ -676,6 +1055,7 @@ export function GestaoOsChamadoResumo({
 
   return (
     <div className="space-y-4 text-sm">
+      <GestaoOsRecurrenceBanner count={detail.recurrence90dCount} />
       <div className="overflow-hidden">
         <div className="border-b border-gray-200 pb-4 pt-1 dark:border-gray-700">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Local / Ativo</p>

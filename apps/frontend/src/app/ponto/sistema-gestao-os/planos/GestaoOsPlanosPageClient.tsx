@@ -1,14 +1,15 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { AlertCircle, CalendarClock, ChevronDown, ChevronUp, Plus, Search, X } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle, AlertTriangle, CalendarClock, CheckCircle, ChevronDown, ChevronUp, Clock, Plus, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -30,7 +31,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
-import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
 import { gestaoOsTechnicianSelectOptions } from '@/components/gestao-os/GestaoOsModalUi';
@@ -38,7 +39,8 @@ import {
   GestaoOsLocationTree,
   GestaoOsMaintenancePlan,
   GestaoOsPlanType,
-  PLAN_TYPE_LABELS
+  PLAN_TYPE_LABELS,
+  checklistItemsToText
 } from '../gestaoOsTypes';
 import { useGestaoOsCompany } from '../useGestaoOsCompany';
 
@@ -60,6 +62,34 @@ type CatalogGroup = {
   name: string;
   isActive?: boolean;
   subgroups: CatalogSubgroup[];
+};
+
+type PlanComplianceBucket = 'overdue' | 'due7' | 'due30' | 'onTrack';
+
+type PlanCompliance = {
+  summary: {
+    total: number;
+    overdue: number;
+    dueIn7Days: number;
+    dueIn30Days: number;
+    onTrack: number;
+    compliancePct: number;
+  };
+  plans: Array<{ id: string; bucket: PlanComplianceBucket }>;
+};
+
+const PLAN_BUCKET_DOT: Record<PlanComplianceBucket, string> = {
+  overdue: 'bg-rose-500',
+  due7: 'bg-amber-500',
+  due30: 'bg-sky-500',
+  onTrack: 'bg-emerald-500'
+};
+
+const PLAN_BUCKET_LABEL: Record<PlanComplianceBucket, string> = {
+  overdue: 'Vencido',
+  due7: 'Vence em 7 dias',
+  due30: 'Vence em 30 dias',
+  onTrack: 'Em dia'
 };
 
 function asIdList(value: unknown): string[] {
@@ -93,6 +123,7 @@ type PlanForm = {
   scheduledTime: string;
   technicianIds: string[];
   rotateTechnicians: boolean;
+  checklistText: string;
 };
 
 function emptyForm(): PlanForm {
@@ -111,7 +142,8 @@ function emptyForm(): PlanForm {
     nextDueAt: '',
     scheduledTime: '',
     technicianIds: [],
-    rotateTechnicians: false
+    rotateTechnicians: false,
+    checklistText: ''
   };
 }
 
@@ -147,15 +179,18 @@ function findAssetPath(tree: GestaoOsLocationTree, assetId: string) {
 
 export default function GestaoOsPlanosPageClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { isManager, isLoading: loadingCompany } = useGestaoOsCompany();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [bucketFilter, setBucketFilter] = useState<PlanComplianceBucket | 'ALL'>('ALL');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GestaoOsMaintenancePlan | null>(null);
   const [viewing, setViewing] = useState<GestaoOsMaintenancePlan | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GestaoOsMaintenancePlan | null>(null);
   const [form, setForm] = useState<PlanForm>(emptyForm);
+  const planFromUrlRef = useRef<string | null>(null);
 
   const closeForm = useCallback(() => {
     setShowForm(false);
@@ -193,6 +228,23 @@ export default function GestaoOsPlanosPageClient() {
       return res.data?.data ?? [];
     }
   });
+
+  const { data: compliance } = useQuery({
+    queryKey: ['gestao-os-plan-compliance'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: PlanCompliance }>(
+        '/gestao-os/reports/plan-compliance'
+      );
+      return res.data?.data;
+    }
+  });
+
+  const bucketByPlan = useMemo(() => {
+    const map = new Map<string, PlanComplianceBucket>();
+    for (const row of compliance?.plans ?? []) map.set(row.id, row.bucket);
+    return map;
+  }, [compliance]);
 
   const { data: locationTree = [] } = useQuery({
     queryKey: ['gestao-os-locations'],
@@ -307,15 +359,19 @@ export default function GestaoOsPlanosPageClient() {
 
   const q = searchTerm.trim().toLowerCase();
   const rows = useMemo(() => {
-    if (!q) return plans;
-    return plans.filter((plan) =>
+    const byBucket =
+      bucketFilter === 'ALL'
+        ? plans
+        : plans.filter((plan) => bucketByPlan.get(plan.id) === bucketFilter);
+    if (!q) return byBucket;
+    return byBucket.filter((plan) =>
       [plan.name, PLAN_TYPE_LABELS[plan.planType], plan.building?.name, plan.asset?.name]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .includes(q)
     );
-  }, [plans, q]);
+  }, [plans, q, bucketFilter, bucketByPlan]);
 
   const {
     rowActionMenu,
@@ -358,10 +414,25 @@ export default function GestaoOsPlanosPageClient() {
           : plan.assigneeId
             ? [plan.assigneeId]
             : [],
-      rotateTechnicians: Boolean(plan.rotateTechnicians) && asIdList(plan.technicianIds).length >= 2
+      rotateTechnicians: Boolean(plan.rotateTechnicians) && asIdList(plan.technicianIds).length >= 2,
+      checklistText: checklistItemsToText(
+        (plan.checklist?.items as Array<{ label?: string }> | undefined) ?? null
+      )
     });
     setShowForm(true);
   };
+
+  useEffect(() => {
+    const planId = searchParams?.get('plan');
+    if (!planId || planFromUrlRef.current === planId) return;
+    const plan = plans.find((p) => p.id === planId);
+    if (!plan) return;
+    if (plan.assetId && locationTree.length === 0) return;
+    planFromUrlRef.current = planId;
+    openEdit(plan);
+    // Abre o plano vindo da Agenda uma vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, plans, locationTree]);
 
   const planPayload = () => ({
     name: form.name.trim(),
@@ -374,7 +445,9 @@ export default function GestaoOsPlanosPageClient() {
     buildingId: form.buildingId || null,
     assetId: form.specifyAsset ? form.assetId || null : null,
     technicianIds: form.technicianIds,
-    rotateTechnicians: form.technicianIds.length >= 2 && form.rotateTechnicians
+    rotateTechnicians: form.technicianIds.length >= 2 && form.rotateTechnicians,
+    checklistItems: form.checklistText,
+    checklistId: form.checklistText.trim() ? editing?.checklistId || null : null
   });
 
   const createMutation = useMutation({
@@ -462,6 +535,55 @@ export default function GestaoOsPlanosPageClient() {
             </p>
           </div>
 
+          {compliance ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
+              <FilterStatCard
+                label="Vencidos"
+                count={compliance.summary.overdue}
+                icon={AlertTriangle}
+                iconBg="bg-rose-100 dark:bg-rose-900/30"
+                iconColor="text-rose-600 dark:text-rose-400"
+                isActive={bucketFilter === 'overdue'}
+                onClick={() =>
+                  setBucketFilter((current) => (current === 'overdue' ? 'ALL' : 'overdue'))
+                }
+              />
+              <FilterStatCard
+                label="Vencem em 7 dias"
+                count={compliance.summary.dueIn7Days}
+                icon={Clock}
+                iconBg="bg-yellow-100 dark:bg-yellow-900/30"
+                iconColor="text-yellow-600 dark:text-yellow-400"
+                isActive={bucketFilter === 'due7'}
+                onClick={() =>
+                  setBucketFilter((current) => (current === 'due7' ? 'ALL' : 'due7'))
+                }
+              />
+              <FilterStatCard
+                label="Vencem em 30 dias"
+                count={compliance.summary.dueIn30Days}
+                icon={CalendarClock}
+                iconBg="bg-sky-100 dark:bg-sky-900/30"
+                iconColor="text-sky-600 dark:text-sky-400"
+                isActive={bucketFilter === 'due30'}
+                onClick={() =>
+                  setBucketFilter((current) => (current === 'due30' ? 'ALL' : 'due30'))
+                }
+              />
+              <FilterStatCard
+                label="Conformidade"
+                count={`${compliance.summary.compliancePct}%`}
+                icon={CheckCircle}
+                iconBg="bg-green-100 dark:bg-green-900/30"
+                iconColor="text-green-600 dark:text-green-400"
+                isActive={bucketFilter === 'onTrack'}
+                onClick={() =>
+                  setBucketFilter((current) => (current === 'onTrack' ? 'ALL' : 'onTrack'))
+                }
+              />
+            </div>
+          ) : null}
+
           <Card className={cadastroListClasses.card}>
             <CardHeader className={cadastroListClasses.cardHeader}>
               <div className={cadastroListClasses.cardHeaderRow}>
@@ -474,7 +596,9 @@ export default function GestaoOsPlanosPageClient() {
                       Planos
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {rows.length} plano{rows.length === 1 ? '' : 's'}
+                      {bucketFilter === 'ALL'
+                        ? `${rows.length} plano${rows.length === 1 ? '' : 's'}`
+                        : `${rows.length} · ${PLAN_BUCKET_LABEL[bucketFilter]}`}
                     </p>
                   </div>
                 </div>
@@ -575,7 +699,21 @@ export default function GestaoOsPlanosPageClient() {
                             }}
                           >
                             <td className={`${cadastroListClasses.tdMono} w-14 !px-2 sm:!px-3`}>
-                              {formatCadastroListId(null, index + 1)}
+                              {(() => {
+                                const bucket = bucketByPlan.get(plan.id);
+                                return (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {bucket ? (
+                                      <span
+                                        className={`h-2 w-2 shrink-0 rounded-full ${PLAN_BUCKET_DOT[bucket]}`}
+                                        title={PLAN_BUCKET_LABEL[bucket]}
+                                        aria-label={PLAN_BUCKET_LABEL[bucket]}
+                                      />
+                                    ) : null}
+                                    {formatCadastroListId(null, index + 1)}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className={`${cadastroListClasses.tdTruncate} !pl-2 sm:!pl-3`}>
                               <ListRowNavigableLabel className="block truncate">
@@ -844,6 +982,21 @@ export default function GestaoOsPlanosPageClient() {
                       className={FORM_FIELD_INPUT_CLS}
                       required
                     />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Checklist da preventiva
+                    </label>
+                    <textarea
+                      value={form.checklistText}
+                      onChange={(e) => setForm((s) => ({ ...s, checklistText: e.target.value }))}
+                      placeholder={'Um item por linha\nEx.: Limpar serpentinas\nEx.: Verificar drenos'}
+                      className={FORM_FIELD_TEXTAREA_CLS}
+                      rows={5}
+                    />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Copiado para a OS gerada pelo plano. Se vazio, usa o checklist do tipo de serviço.
+                    </p>
                   </div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">

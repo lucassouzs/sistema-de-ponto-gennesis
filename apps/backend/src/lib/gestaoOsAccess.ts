@@ -165,6 +165,7 @@ export function assertCanTransition(
 
   if (from === 'COMPLETED' && (to === 'CLOSED' || to === 'REWORK')) {
     if (ctx.canEncerrar || ctx.canAnalisar) return;
+    if (to === 'CLOSED' && _workOrder.requesterId === ctx.userId) return;
     throw createError('Sem permissão para encerrar. Libere «Encerrar OS» em Controle.', 403);
   }
 

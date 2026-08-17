@@ -1,29 +1,112 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, Download } from 'lucide-react';
-import toast from 'react-hot-toast';
+import {
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  Clock3,
+  FolderKanban,
+  Timer,
+  Users,
+  Wrench
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
+import {
+  CadastroListEmpty,
+  CadastroListLoading
+} from '@/components/ui/CadastroListSummary';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import api from '@/lib/api';
-import { GestaoOsReportsSummary } from '../gestaoOsTypes';
+import { GestaoOsReportsSummary, STATUS_LABELS, type GestaoOsStatus } from '../gestaoOsTypes';
 import { useGestaoOsCompany } from '../useGestaoOsCompany';
 
-function downloadCsv(filename: string, rows: string[][]) {
-  const escape = (value: string) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-  const body = rows.map((r) => r.map(escape).join(';')).join('\n');
-  const blob = new Blob([`\uFEFF${body}`], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+type GestaoOsWorkloadRow = {
+  assigneeId: string;
+  name: string;
+  email: string | null;
+  openCount: number;
+  overdueCount: number;
+  warningCount: number;
+  openHours?: number;
+};
+
+type DistRow = { key: string; label: string; count: number };
+
+const PHASE_ORDER: GestaoOsStatus[] = [
+  'OPEN',
+  'UNDER_REVIEW',
+  'APPROVED',
+  'IN_PROGRESS',
+  'WAITING_PARTS',
+  'COMPLETED',
+  'REWORK',
+  'CLOSED',
+  'CANCELLED'
+];
+
+function DistributionCard({
+  title,
+  icon: Icon,
+  rows,
+  emptyTitle
+}: {
+  title: string;
+  icon: LucideIcon;
+  rows: DistRow[];
+  emptyTitle: string;
+}) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <Card className={cadastroListClasses.card}>
+      <CardHeader className={cadastroListClasses.cardHeader}>
+        <div className={cadastroListClasses.cardHeaderIconRow}>
+          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30">
+            <Icon className="h-5 w-5 text-red-600 dark:text-red-400" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {rows.length} {rows.length === 1 ? 'item' : 'itens'}
+            </p>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className={cadastroListClasses.cardContent}>
+        {rows.length === 0 ? (
+          <CadastroListEmpty icon={Icon} title={emptyTitle} />
+        ) : (
+          <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+            {rows.map((row) => (
+              <li key={row.key} className="py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                    {row.label}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    {row.count}
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                  <div
+                    className="h-full rounded-full bg-red-500/80 dark:bg-red-400/80"
+                    style={{ width: `${Math.max(6, (row.count / max) * 100)}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function GestaoOsRelatoriosPageClient() {
@@ -56,29 +139,25 @@ export default function GestaoOsRelatoriosPageClient() {
     }
   });
 
-  const exportCsv = () => {
-    if (!data) {
-      toast.error('Sem dados para exportar');
-      return;
+  const { data: workload = [], isLoading: loadingWorkload } = useQuery({
+    queryKey: ['gestao-os-reports-workload'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsWorkloadRow[] }>(
+        '/gestao-os/reports/workload'
+      );
+      return res.data?.data ?? [];
     }
-    const rows: string[][] = [
-      ['Métrica', 'Valor'],
-      ['Em aberto', String(data.openLike)],
-      ['Atrasadas', String(data.overdue)],
-      ['MTTR (horas)', data.mttrHours != null ? String(data.mttrHours) : '—'],
-      [],
-      ['Categoria', 'Quantidade'],
-      ...data.byCategory.map((r) => [r.category, String(r.count)]),
-      [],
-      ['Prédio', 'Quantidade'],
-      ...data.byBuilding.map((r) => [r.name, String(r.count)]),
-      [],
-      ['Técnico', 'Quantidade'],
-      ...data.byTechnician.map((r) => [r.name, String(r.count)])
-    ];
-    downloadCsv(`gestao-os-relatorio-${new Date().toISOString().slice(0, 10)}.csv`, rows);
-    toast.success('CSV exportado');
-  };
+  });
+
+  const phaseRows = useMemo<DistRow[]>(() => {
+    if (!data) return [];
+    return PHASE_ORDER.map((status) => ({
+      key: status,
+      label: STATUS_LABELS[status],
+      count: data.byStatus[status] ?? 0
+    })).filter((row) => row.count > 0);
+  }, [data]);
 
   if (loadingUser || loadingCompany) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
@@ -92,153 +171,175 @@ export default function GestaoOsRelatoriosPageClient() {
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
               Relatórios de Chamados
             </h1>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
               Indicadores de backlog, atraso, MTTR e distribuição.
             </p>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-sm">
-              <Link
-                href="/ponto/sistema-gestao-os"
-                className="font-medium text-red-700 hover:underline dark:text-red-300"
-              >
-                Voltar à Central de Chamados
-              </Link>
-            </div>
           </div>
 
           {isLoading || !data ? (
-            <div className="py-16 text-center text-sm text-gray-500">Carregando indicadores...</div>
+            <Card className={cadastroListClasses.card}>
+              <CardContent className={cadastroListClasses.cardContent}>
+                <CadastroListLoading message="Carregando indicadores..." />
+              </CardContent>
+            </Card>
           ) : (
-            <>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={exportCsv}
-                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                >
-                  <Download className="h-4 w-4" />
-                  Exportar CSV
-                </button>
+            <div className="flex flex-col gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                <FilterStatCard
+                  label="Em aberto"
+                  count={data.openLike}
+                  subtitle="Chamados ainda em andamento"
+                  icon={FolderKanban}
+                  iconBg="bg-red-100 dark:bg-red-900/30"
+                  iconColor="text-red-600 dark:text-red-400"
+                />
+                <FilterStatCard
+                  label="Atrasadas"
+                  count={data.overdue}
+                  subtitle="Prazo de SLA estourado"
+                  icon={AlertTriangle}
+                  iconBg="bg-rose-100 dark:bg-rose-900/30"
+                  iconColor="text-rose-600 dark:text-rose-400"
+                />
+                <FilterStatCard
+                  label="MTTR"
+                  count={data.mttrHours != null ? data.mttrHours : '—'}
+                  subtitle="Tempo médio de reparo (horas)"
+                  icon={Timer}
+                  iconBg="bg-sky-100 dark:bg-sky-900/30"
+                  iconColor="text-sky-600 dark:text-sky-400"
+                />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Card>
-                  <CardContent className="py-5">
-                    <p className="text-xs uppercase text-gray-500">Em aberto</p>
-                    <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">
-                      {data.openLike}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="py-5">
-                    <p className="text-xs uppercase text-gray-500">Atrasadas</p>
-                    <p className="mt-1 text-3xl font-bold text-rose-700 dark:text-rose-300">
-                      {data.overdue}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="py-5">
-                    <p className="text-xs uppercase text-gray-500">MTTR (horas)</p>
-                    <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-gray-100">
-                      {data.mttrHours != null ? data.mttrHours : '—'}
-                    </p>
-                  </CardContent>
-                </Card>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <DistributionCard
+                  title="Por fase"
+                  icon={BarChart3}
+                  rows={phaseRows}
+                  emptyTitle="Nenhum chamado no período"
+                />
+                <DistributionCard
+                  title="Por categoria"
+                  icon={Wrench}
+                  rows={data.byCategory.map((r) => ({
+                    key: r.category,
+                    label: r.category,
+                    count: r.count
+                  }))}
+                  emptyTitle="Nenhuma categoria com chamado"
+                />
+                <DistributionCard
+                  title="Por prédio"
+                  icon={Building2}
+                  rows={data.byBuilding.map((r) => ({
+                    key: r.buildingId || r.name,
+                    label: r.name,
+                    count: r.count
+                  }))}
+                  emptyTitle="Nenhum prédio com chamado"
+                />
+                <DistributionCard
+                  title="Por técnico"
+                  icon={Users}
+                  rows={data.byTechnician.map((r) => ({
+                    key: r.assigneeId || r.name,
+                    label: r.name,
+                    count: r.count
+                  }))}
+                  emptyTitle="Nenhum técnico atribuído"
+                />
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Card>
-                  <CardHeader>
-                    <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-                      <BarChart3 className="h-4 w-4 text-red-600" />
-                      Por categoria
-                    </h3>
-                  </CardHeader>
-                  <CardContent>
-                    {data.byCategory.length === 0 ? (
-                      <p className="text-sm text-gray-500">Sem dados</p>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {data.byCategory.map((row) => (
-                            <tr
-                              key={row.category}
-                              className="border-b border-gray-100 dark:border-gray-800"
-                            >
-                              <td className="py-1.5 text-gray-800 dark:text-gray-200">
-                                {row.category}
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <div className={cadastroListClasses.cardHeaderIconRow}>
+                    <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                      <Clock3 className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Carga dos técnicos
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        OS abertas, horas em execução, atrasadas e no prazo em risco
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className={cadastroListClasses.cardContent}>
+                  {loadingWorkload ? (
+                    <CadastroListLoading message="Carregando carga dos técnicos..." />
+                  ) : workload.length === 0 ? (
+                    <CadastroListEmpty
+                      icon={Users}
+                      title="Nenhum técnico com OS aberta"
+                      hint="Quando houver chamados atribuídos, a carga aparece aqui."
+                    />
+                  ) : (
+                    <div className={cadastroListClasses.tableScroll}>
+                      <table className={`${cadastroListClasses.table} min-w-[36rem]`}>
+                        <thead className="border-b border-gray-200 dark:border-gray-700">
+                          <tr>
+                            <th className={cadastroListClasses.th}>Técnico</th>
+                            <th className={cadastroListClasses.thCenter}>Abertas</th>
+                            <th className={cadastroListClasses.thCenter}>Horas</th>
+                            <th className={cadastroListClasses.thCenter}>Atrasadas</th>
+                            <th className={cadastroListClasses.thCenter}>Em risco</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                          {workload.map((row) => (
+                            <tr key={row.assigneeId}>
+                              <td className={cadastroListClasses.td}>
+                                <span className="block truncate font-medium">{row.name}</span>
+                                {row.email ? (
+                                  <span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">
+                                    {row.email}
+                                  </span>
+                                ) : null}
                               </td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                                {row.count}
+                              <td className={cadastroListClasses.tdCenter}>
+                                <span className="tabular-nums font-semibold">{row.openCount}</span>
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>
+                                <span className="tabular-nums font-semibold">
+                                  {Number(row.openHours ?? 0)
+                                    .toFixed(1)
+                                    .replace('.', ',')}
+                                  h
+                                </span>
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>
+                                <span
+                                  className={`tabular-nums font-semibold ${
+                                    row.overdueCount > 0
+                                      ? 'text-rose-700 dark:text-rose-300'
+                                      : 'text-gray-500 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {row.overdueCount}
+                                </span>
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>
+                                <span
+                                  className={`tabular-nums font-semibold ${
+                                    row.warningCount > 0
+                                      ? 'text-amber-700 dark:text-amber-300'
+                                      : 'text-gray-500 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {row.warningCount}
+                                </span>
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                      Por prédio
-                    </h3>
-                  </CardHeader>
-                  <CardContent>
-                    {data.byBuilding.length === 0 ? (
-                      <p className="text-sm text-gray-500">Sem dados</p>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {data.byBuilding.map((row) => (
-                            <tr
-                              key={row.buildingId || row.name}
-                              className="border-b border-gray-100 dark:border-gray-800"
-                            >
-                              <td className="py-1.5 text-gray-800 dark:text-gray-200">{row.name}</td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                                {row.count}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                      Por técnico
-                    </h3>
-                  </CardHeader>
-                  <CardContent>
-                    {data.byTechnician.length === 0 ? (
-                      <p className="text-sm text-gray-500">Sem dados</p>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {data.byTechnician.map((row) => (
-                            <tr
-                              key={row.assigneeId || row.name}
-                              className="border-b border-gray-100 dark:border-gray-800"
-                            >
-                              <td className="py-1.5 text-gray-800 dark:text-gray-200">{row.name}</td>
-                              <td className="py-1.5 text-right font-semibold text-gray-900 dark:text-gray-100">
-                                {row.count}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
         </div>
       </MainLayout>

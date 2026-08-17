@@ -38,6 +38,10 @@ export type PlannerEvent = {
   ataMimeType?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  href?: string | null;
+  source?: 'planner' | 'gestao-os' | 'gestao-os-plan';
+  workOrderId?: string;
+  planId?: string;
 };
 
 export type PlannerEventInput = {

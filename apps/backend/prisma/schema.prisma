@@ -3975,6 +3975,8 @@ model GestaoOsServiceCategory {
   name        String
   code        String?
   description String?
+  /// Template de checklist copiado para a OS na abertura (por tipo de serviço).
+  checklistId String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -4077,6 +4079,8 @@ model GestaoOsAsset {
   category  String?
   /// Token estável usado no QR Code do ativo.
   qrToken   String   @unique
+  /// Fim da garantia do ativo (alerta no sino antes de vencer).
+  warrantyEndsAt DateTime?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4197,6 +4201,20 @@ model GestaoOsWorkOrder {
 
   /// Prazo / SLA da OS.
   dueAt DateTime?
+  /// Horas de SLA aplicadas na abertura/aprovação (auditoria).
+  slaHoursApplied Int?
+  /// Quando o alerta pré-estouro de SLA foi enviado.
+  slaWarnedAt DateTime?
+  /// Peças/custos: [{ id, name, supplier, quantity, unitCost, expectedAt, notes }]
+  parts Json?
+  /// Chamado/OS relacionado (reincidência).
+  relatedWorkOrderId String?
+  relatedWorkOrder   GestaoOsWorkOrder?  @relation("GestaoOsRelated", fields: [relatedWorkOrderId], references: [id], onDelete: SetNull)
+  relatedFrom        GestaoOsWorkOrder[] @relation("GestaoOsRelated")
+  /// Foto no início da execução (campo).
+  startPhotoUrl String?
+  /// Foto no fim da execução (campo).
+  endPhotoUrl   String?
   /// Respostas de checklist preenchidas na execução [{ id, label, checked, note? }].
   checklistResponses Json?
   /// Checklist de segurança do trabalho (EPIs) antes da execução.
@@ -4210,6 +4228,10 @@ model GestaoOsWorkOrder {
   approvedAt   DateTime?
   startedAt    DateTime?
   completedAt  DateTime?
+  /// Tempo efetivo de execução em milissegundos (pausa em Aguardando peça).
+  executionMs  Int       @default(0)
+  /// Quando o relógio de execução foi retomado (status Em Execução).
+  lastExecutionResumeAt DateTime?
   closedAt     DateTime?
   cancelledAt  DateTime?
 
@@ -4229,6 +4251,8 @@ model GestaoOsWorkOrder {
   @@index([providerId])
   @@index([openedAt])
   @@index([dueAt])
+  @@index([relatedWorkOrderId])
+  @@index([assetId])
   @@map("gestao_os_work_orders")
 }
 
