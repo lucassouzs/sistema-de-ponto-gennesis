@@ -697,9 +697,7 @@ const purchaseOrderIncludeList = {
       bank: true,
       agency: true,
       account: true,
-      accountDigit: true,
-      pixKeyType: true,
-      pixKey: true
+      accountDigit: true
     }
   },
   quoteMap: { select: { id: true, createdAt: true } },
