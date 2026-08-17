@@ -111,48 +111,69 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<number | null>(null);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current == null) return;
+    window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+  }, []);
 
   const showTooltip = useCallback(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     const el = triggerRef.current;
     if (!el) return;
+    clearHideTimer();
     const rect = el.getBoundingClientRect();
     setCoords({
       top: rect.top + rect.height / 2,
       left: rect.right + 8,
     });
     setVisible(true);
-  }, []);
+  }, [clearHideTimer]);
 
   const hideTooltip = useCallback(() => {
+    clearHideTimer();
     setVisible(false);
-  }, []);
+  }, [clearHideTimer]);
+
+  const hideIfNotHovering = useCallback(() => {
+    clearHideTimer();
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      const el = triggerRef.current;
+      if (el?.matches(':hover')) return;
+      setVisible(false);
+    }, 80);
+  }, [clearHideTimer]);
 
   useEffect(() => {
-    if (!visible) return;
-    const hide = () => setVisible(false);
     const onVisibility = () => {
-      if (document.hidden) hide();
+      if (document.hidden) hideTooltip();
     };
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('blur', hide);
-    window.addEventListener('pagehide', hide);
+    window.addEventListener('pagehide', hideTooltip);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('blur', hide);
-      window.removeEventListener('pagehide', hide);
+      window.removeEventListener('pagehide', hideTooltip);
+      clearHideTimer();
     };
-  }, [visible]);
+  }, [hideTooltip, clearHideTimer]);
 
   return (
     <>
       <div
         ref={triggerRef}
         className="relative flex justify-center"
-        onMouseEnter={showTooltip}
-        onMouseLeave={hideTooltip}
-        onPointerDown={hideTooltip}
-        onFocusCapture={showTooltip}
-        onBlurCapture={hideTooltip}
+        onPointerEnter={showTooltip}
+        onPointerLeave={hideIfNotHovering}
+        onFocusCapture={(event) => {
+          const target = event.target;
+          if (target instanceof HTMLElement && target.matches(':focus-visible')) {
+            showTooltip();
+          }
+        }}
+        onBlurCapture={hideIfNotHovering}
       >
         {children}
       </div>

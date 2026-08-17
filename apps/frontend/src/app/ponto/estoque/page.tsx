@@ -36,6 +36,7 @@ import {
 import { normalizeCostCentersResponse } from '@/lib/costCenters';
 import { getListTableRowClassName, listTableRowClasses, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
+import { ListPagination } from '@/components/ui/ListPagination';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import {
   buildLinkedOcStockDocuments,
@@ -2325,26 +2326,11 @@ export default function EstoquePage() {
                         </table>
                       )}
                     </div>
-                    {balanceTotalPages > 1 && (
-                      <div className="mt-4 flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setBalanceCurrentPage((prev) => Math.max(prev - 1, 1))}
-                          disabled={balanceCurrentPage === 1}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setBalanceCurrentPage((prev) => Math.min(prev + 1, balanceTotalPages))}
-                          disabled={balanceCurrentPage === balanceTotalPages}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    )}
+                    <ListPagination
+                      currentPage={balanceCurrentPage}
+                      totalPages={balanceTotalPages}
+                      onPageChange={setBalanceCurrentPage}
+                    />
                   </>
                 )}
               </CardContent>
@@ -2580,26 +2566,11 @@ export default function EstoquePage() {
                         </tbody>
                       </table>
                     </div>
-                    {historyTotalPages > 1 && (
-                      <div className="mt-4 flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHistoryCurrentPage((prev) => Math.max(prev - 1, 1))}
-                          disabled={historyCurrentPage === 1}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryCurrentPage((prev) => Math.min(prev + 1, historyTotalPages))}
-                          disabled={historyCurrentPage === historyTotalPages}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    )}
+                    <ListPagination
+                      currentPage={historyCurrentPage}
+                      totalPages={historyTotalPages}
+                      onPageChange={setHistoryCurrentPage}
+                    />
                   </>
                 )}
               </CardContent>
