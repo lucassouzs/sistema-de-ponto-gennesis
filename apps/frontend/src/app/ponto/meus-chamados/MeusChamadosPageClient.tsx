@@ -438,14 +438,14 @@ export default function MeusChamadosPageClient() {
                     itemLabelPlural="chamados"
                   />
                   <div className={cadastroListClasses.tableScroll}>
-                    <table className={`${cadastroListClasses.table} min-w-[56rem]`}>
+                    <table className={`${cadastroListClasses.table} min-w-[64rem]`}>
                       <colgroup>
                         <col className="w-[4.5rem]" />
                         <col />
-                        <col className="w-28" />
-                        <col className="w-28" />
-                        <col className="w-32" />
+                        <col className="w-52" />
                         <col className="w-36" />
+                        <col className="w-40" />
+                        <col className="w-48" />
                         <col className="w-[4%]" />
                       </colgroup>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -483,22 +483,30 @@ export default function MeusChamadosPageClient() {
                               </ListRowNavigableLabel>
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
-                              <span className={gestaoOsStatusBadgeClass(row.status)}>
-                                {STATUS_LABELS[row.status]}
+                              <span className="flex justify-center">
+                                <span className={gestaoOsStatusBadgeClass(row.status)}>
+                                  {STATUS_LABELS[row.status]}
+                                </span>
                               </span>
                             </td>
                             <td
                               className={`${cadastroListClasses.tdCenter} ${PRIORITY_BADGE[row.priority]}`}
                             >
-                              {PRIORITY_LABELS[row.priority]}
+                              <span className="flex justify-center">
+                                {PRIORITY_LABELS[row.priority]}
+                              </span>
                             </td>
                             <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
-                              <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
-                                {row.category}
+                              <span className="flex justify-center">
+                                <span className="max-w-full truncate text-sm text-gray-600 dark:text-gray-400">
+                                  {row.category}
+                                </span>
                               </span>
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
-                              {formatDateTime(row.openedAt)}
+                              <span className="flex justify-center">
+                                {formatDateTime(row.openedAt)}
+                              </span>
                             </td>
                             <RowActionMenuCell
                               isOpen={isRowMenuOpen(row.id)}
