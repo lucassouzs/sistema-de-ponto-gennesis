@@ -101,6 +101,10 @@ export type GestaoOsMaintenancePlan = {
   nextDueAt: string;
   lastGeneratedAt?: string | null;
   assigneeId: string | null;
+  scheduledTime?: string | null;
+  technicianIds?: string[];
+  rotateTechnicians?: boolean;
+  rotationIndex?: number;
   isActive: boolean;
   building?: { id: string; name: string } | null;
   asset?: { id: string; name: string; category?: string | null } | null;
@@ -134,18 +138,6 @@ export type GestaoOsReportsSummary = {
   byCategory: Array<{ category: string; count: number }>;
   byBuilding: Array<{ buildingId: string | null; name: string; count: number }>;
   byTechnician: Array<{ assigneeId: string | null; name: string; count: number }>;
-};
-
-export type GestaoOsPmocOverview = {
-  dueSoonCount: number;
-  plans: GestaoOsMaintenancePlan[];
-  climateAssets: Array<{
-    id: string;
-    name: string;
-    category: string | null;
-    building: { id: string; name: string };
-    placeName: string;
-  }>;
 };
 
 export const PLAN_TYPE_LABELS: Record<GestaoOsPlanType, string> = {

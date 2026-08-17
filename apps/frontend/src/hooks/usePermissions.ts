@@ -648,10 +648,6 @@ export function useRoutePermission(route: string) {
       isAdministrator ||
       can(pk('/ponto/sistema-gestao-os/planos')) ||
       can(pk('/ponto/sistema-gestao-os')),
-    '/ponto/sistema-gestao-os/pmoc':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/pmoc')) ||
-      can(pk('/ponto/sistema-gestao-os')),
     '/ponto/sistema-gestao-os/relatorios':
       isAdministrator ||
       can(pk('/ponto/sistema-gestao-os/relatorios')) ||

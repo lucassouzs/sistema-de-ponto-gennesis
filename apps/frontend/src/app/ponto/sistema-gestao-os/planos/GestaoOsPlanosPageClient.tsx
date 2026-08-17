@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CalendarClock, Plus, Search, X } from 'lucide-react';
+import { AlertCircle, CalendarClock, ChevronDown, ChevronUp, Plus, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -25,7 +25,11 @@ import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { DatePickerField } from '@/components/ui/DatePickerField';
+import { TimePickerField } from '@/components/ui/TimePickerField';
+import { Checkbox } from '@/components/ui/Checkbox';
+import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
@@ -58,6 +62,17 @@ type CatalogGroup = {
   subgroups: CatalogSubgroup[];
 };
 
+function asIdList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+}
+
+function mergeTechnicianOrder(current: string[], selected: string[]) {
+  const kept = current.filter((id) => selected.includes(id));
+  const added = selected.filter((id) => !current.includes(id));
+  return [...kept, ...added];
+}
+
 function RequiredMark() {
   return <span className="ml-0.5 text-red-600 dark:text-red-400">*</span>;
 }
@@ -75,7 +90,9 @@ type PlanForm = {
   planType: GestaoOsPlanType;
   intervalDays: string;
   nextDueAt: string;
-  assigneeId: string;
+  scheduledTime: string;
+  technicianIds: string[];
+  rotateTechnicians: boolean;
 };
 
 function emptyForm(): PlanForm {
@@ -92,7 +109,9 @@ function emptyForm(): PlanForm {
     planType: 'PREVENTIVE',
     intervalDays: '30',
     nextDueAt: '',
-    assigneeId: ''
+    scheduledTime: '',
+    technicianIds: [],
+    rotateTechnicians: false
   };
 }
 
@@ -332,24 +351,35 @@ export default function GestaoOsPlanosPageClient() {
       planType: plan.planType,
       intervalDays: String(plan.intervalDays || 30),
       nextDueAt: isoToYmd(plan.nextDueAt),
-      assigneeId: plan.assigneeId || ''
+      scheduledTime: plan.scheduledTime || '',
+      technicianIds:
+        asIdList(plan.technicianIds).length > 0
+          ? asIdList(plan.technicianIds)
+          : plan.assigneeId
+            ? [plan.assigneeId]
+            : [],
+      rotateTechnicians: Boolean(plan.rotateTechnicians) && asIdList(plan.technicianIds).length >= 2
     });
     setShowForm(true);
   };
 
+  const planPayload = () => ({
+    name: form.name.trim(),
+    planType: form.planType,
+    intervalDays: Number(form.intervalDays) || 30,
+    nextDueAt: form.nextDueAt
+      ? new Date(`${form.nextDueAt}T${form.scheduledTime || '12:00'}:00`).toISOString()
+      : new Date().toISOString(),
+    scheduledTime: form.scheduledTime || null,
+    buildingId: form.buildingId || null,
+    assetId: form.specifyAsset ? form.assetId || null : null,
+    technicianIds: form.technicianIds,
+    rotateTechnicians: form.technicianIds.length >= 2 && form.rotateTechnicians
+  });
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post('/gestao-os/plans', {
-        name: form.name.trim(),
-        planType: form.planType,
-        intervalDays: Number(form.intervalDays) || 30,
-        nextDueAt: form.nextDueAt
-          ? new Date(`${form.nextDueAt}T12:00:00`).toISOString()
-          : new Date().toISOString(),
-        buildingId: form.buildingId || null,
-        assetId: form.specifyAsset ? form.assetId || null : null,
-        assigneeId: form.assigneeId || null
-      });
+      const res = await api.post('/gestao-os/plans', planPayload());
       return res.data?.data;
     },
     onSuccess: () => {
@@ -364,17 +394,7 @@ export default function GestaoOsPlanosPageClient() {
 
   const updateMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.patch(`/gestao-os/plans/${id}`, {
-        name: form.name.trim(),
-        planType: form.planType,
-        intervalDays: Number(form.intervalDays) || 30,
-        nextDueAt: form.nextDueAt
-          ? new Date(`${form.nextDueAt}T12:00:00`).toISOString()
-          : undefined,
-        buildingId: form.buildingId || null,
-        assetId: form.specifyAsset ? form.assetId || null : null,
-        assigneeId: form.assigneeId || null
-      });
+      await api.patch(`/gestao-os/plans/${id}`, planPayload());
     },
     onSuccess: () => {
       toast.success('Plano atualizado.');
@@ -438,7 +458,7 @@ export default function GestaoOsPlanosPageClient() {
               Planos de Manutenção
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Preventiva, PMOC e segurança — gere OS automaticamente quando vencerem.
+              Programe as manutenções e gere os chamados automaticamente na data.
             </p>
           </div>
 
@@ -754,25 +774,19 @@ export default function GestaoOsPlanosPageClient() {
                     <p className="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                       Especificar ativo?
                     </p>
-                    <div className="flex gap-5">
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
-                        <input
-                          type="radio"
-                          checked={form.specifyAsset}
-                          onChange={() => setForm((s) => ({ ...s, specifyAsset: true }))}
-                        />
-                        Sim
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm text-gray-800 dark:text-gray-200">
-                        <input
-                          type="radio"
-                          checked={!form.specifyAsset}
-                          onChange={() =>
-                            setForm((s) => ({ ...s, specifyAsset: false, assetId: '' }))
-                          }
-                        />
-                        Não
-                      </label>
+                    <div className="flex gap-2">
+                      <ButtonSeg
+                        active={form.specifyAsset}
+                        onClick={() => setForm((s) => ({ ...s, specifyAsset: true }))}
+                        label="Sim"
+                      />
+                      <ButtonSeg
+                        active={!form.specifyAsset}
+                        onClick={() =>
+                          setForm((s) => ({ ...s, specifyAsset: false, assetId: '' }))
+                        }
+                        label="Não"
+                      />
                     </div>
                     {!form.specifyAsset ? (
                       <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
@@ -845,16 +859,140 @@ export default function GestaoOsPlanosPageClient() {
                   </div>
                   <div>
                     <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Técnico
+                      Horário
                     </label>
-                    <StringSingleSelectDropdown
-                      value={form.assigneeId}
-                      onChange={(v) => setForm((s) => ({ ...s, assigneeId: v }))}
-                      options={technicianOptions}
-                      placeholder="Selecione o técnico"
-                      emptyOptionLabel="Selecione o técnico"
+                    <TimePickerField
+                      value={form.scheduledTime}
+                      onChange={(v) => setForm((s) => ({ ...s, scheduledTime: v }))}
+                      noFocusRing
                       allowEmpty
+                      aria-label="Horário"
                     />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Técnico(s)
+                    </label>
+                    <MultiSelectSearchDropdown
+                      options={technicianOptions}
+                      selected={form.technicianIds}
+                      onChange={(selected) =>
+                        setForm((s) => {
+                          const technicianIds = mergeTechnicianOrder(s.technicianIds, selected);
+                          return {
+                            ...s,
+                            technicianIds,
+                            rotateTechnicians:
+                              technicianIds.length >= 2 ? s.rotateTechnicians : false
+                          };
+                        })
+                      }
+                      placeholder="Selecione os técnicos"
+                      searchPlaceholder="Buscar técnico..."
+                      emptyOptionsMessage="Nenhum técnico disponível."
+                      emptySearchMessage="Nenhum técnico encontrado."
+                      noFocusRing
+                    />
+                    {form.technicianIds.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          Ordem dos técnicos selecionados
+                        </p>
+                        <ul className="space-y-1.5">
+                          {form.technicianIds.map((id, index) => {
+                            const tech = technicians.find((item) => item.id === id);
+                            return (
+                              <li
+                                key={id}
+                                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40"
+                              >
+                                <span className="w-5 shrink-0 text-xs font-semibold tabular-nums text-gray-500">
+                                  {index + 1}.
+                                </span>
+                                <span className="min-w-0 flex-1 truncate text-sm text-gray-900 dark:text-gray-100">
+                                  {tech?.name || id}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={index === 0}
+                                  onClick={() =>
+                                    setForm((s) => {
+                                      const next = [...s.technicianIds];
+                                      const swap = next[index - 1];
+                                      next[index - 1] = next[index];
+                                      next[index] = swap;
+                                      return { ...s, technicianIds: next };
+                                    })
+                                  }
+                                  className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-gray-700"
+                                  aria-label="Subir na ordem"
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={index === form.technicianIds.length - 1}
+                                  onClick={() =>
+                                    setForm((s) => {
+                                      const next = [...s.technicianIds];
+                                      const swap = next[index + 1];
+                                      next[index + 1] = next[index];
+                                      next[index] = swap;
+                                      return { ...s, technicianIds: next };
+                                    })
+                                  }
+                                  className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:hover:bg-gray-700"
+                                  aria-label="Descer na ordem"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((s) => {
+                                      const technicianIds = s.technicianIds.filter(
+                                        (item) => item !== id
+                                      );
+                                      return {
+                                        ...s,
+                                        technicianIds,
+                                        rotateTechnicians:
+                                          technicianIds.length >= 2
+                                            ? s.rotateTechnicians
+                                            : false
+                                      };
+                                    })
+                                  }
+                                  className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-700 dark:hover:text-red-400"
+                                  aria-label="Remover técnico"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="mt-3">
+                      <Checkbox
+                        checked={form.rotateTechnicians && form.technicianIds.length >= 2}
+                        disabled={form.technicianIds.length < 2}
+                        onChange={(checked) =>
+                          setForm((s) => ({ ...s, rotateTechnicians: checked }))
+                        }
+                        label="Habilitar rodízio de técnico"
+                      />
+                      {form.technicianIds.length < 2 ? (
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Selecione dois ou mais técnicos para ativar o rodízio.
+                        </p>
+                      ) : form.rotateTechnicians ? (
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                          Cada OS gerada vai para o próximo da ordem.
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 <div className="mt-6 flex gap-3">
@@ -925,7 +1063,30 @@ export default function GestaoOsPlanosPageClient() {
                   </p>
                   <p className="text-sm text-gray-900 dark:text-gray-100">
                     {formatDate(viewing.nextDueAt)}
+                    {viewing.scheduledTime ? ` · ${viewing.scheduledTime}` : ''}
                   </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Técnico(s)
+                  </p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">
+                    {(asIdList(viewing.technicianIds).length
+                      ? asIdList(viewing.technicianIds)
+                      : viewing.assigneeId
+                        ? [viewing.assigneeId]
+                        : []
+                    )
+                      .map(
+                        (id) => technicians.find((tech) => tech.id === id)?.name || viewing.assignee?.name || id
+                      )
+                      .join(', ') || '—'}
+                  </p>
+                  {viewing.rotateTechnicians ? (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Rodízio habilitado
+                    </p>
+                  ) : null}
                 </div>
                 <div>
                   <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">

@@ -14,6 +14,55 @@ function parsePlanType(value: unknown): GestaoOsPlanType {
   throw createError('Tipo de plano inválido', 400);
 }
 
+function parseTechnicianIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const item of value) {
+    const id = String(item ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function parseScheduledTime(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  if (!/^\d{2}:\d{2}$/.test(raw)) throw createError('Horário inválido', 400);
+  return raw;
+}
+
+function applyScheduledTime(date: Date, hm: string | null | undefined): Date {
+  if (!hm) return date;
+  const [h, m] = hm.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return date;
+  const next = new Date(date);
+  next.setHours(h, m, 0, 0);
+  return next;
+}
+
+function nextAssigneeFromPlan(plan: {
+  technicianIds?: unknown;
+  assigneeId?: string | null;
+  rotateTechnicians?: boolean;
+  rotationIndex?: number;
+}): { assigneeId: string | null; nextRotationIndex: number } {
+  const ids = parseTechnicianIds(plan.technicianIds);
+  if (ids.length === 0) {
+    return { assigneeId: plan.assigneeId ?? null, nextRotationIndex: plan.rotationIndex ?? 0 };
+  }
+  const rotate = Boolean(plan.rotateTechnicians) && ids.length >= 2;
+  const currentIndex = rotate
+    ? Math.abs(Number(plan.rotationIndex) || 0) % ids.length
+    : 0;
+  return {
+    assigneeId: ids[currentIndex] ?? plan.assigneeId ?? null,
+    nextRotationIndex: rotate ? (currentIndex + 1) % ids.length : 0
+  };
+}
+
 function parseChecklistItems(value: unknown): Array<{ id: string; label: string; required?: boolean }> {
   if (!Array.isArray(value)) return [];
   return value
@@ -128,6 +177,13 @@ export class GestaoOsPlansService {
     const nextDueAt = body.nextDueAt ? new Date(String(body.nextDueAt)) : new Date();
     if (Number.isNaN(nextDueAt.getTime())) throw createError('Data de vencimento inválida', 400);
     const intervalDays = Math.max(1, Number(body.intervalDays ?? 30) || 30);
+    const technicianIds = parseTechnicianIds(body.technicianIds);
+    if (technicianIds.length === 0 && body.assigneeId) {
+      technicianIds.push(String(body.assigneeId));
+    }
+    const scheduledTime = parseScheduledTime(body.scheduledTime);
+    const dueAt = applyScheduledTime(nextDueAt, scheduledTime);
+    const rotateTechnicians = technicianIds.length >= 2 && body.rotateTechnicians === true;
 
     return prisma.gestaoOsMaintenancePlan.create({
       data: {
@@ -140,8 +196,12 @@ export class GestaoOsPlansService {
         assetId: body.assetId ? String(body.assetId) : null,
         checklistId: body.checklistId ? String(body.checklistId) : null,
         intervalDays,
-        nextDueAt,
-        assigneeId: body.assigneeId ? String(body.assigneeId) : null,
+        nextDueAt: dueAt,
+        assigneeId: technicianIds[0] ?? null,
+        scheduledTime,
+        technicianIds: technicianIds as Prisma.InputJsonValue,
+        rotateTechnicians,
+        rotationIndex: 0,
         isActive: body.isActive === false ? false : true
       },
       include: {
@@ -179,15 +239,37 @@ export class GestaoOsPlansService {
         : { disconnect: true };
     }
     if (body.intervalDays != null) data.intervalDays = Math.max(1, Number(body.intervalDays) || 30);
-    if (body.nextDueAt != null) {
-      const d = new Date(String(body.nextDueAt));
-      if (Number.isNaN(d.getTime())) throw createError('Data inválida', 400);
-      data.nextDueAt = d;
+    if (body.nextDueAt != null || body.scheduledTime !== undefined) {
+      const base =
+        body.nextDueAt != null ? new Date(String(body.nextDueAt)) : current.nextDueAt;
+      if (Number.isNaN(base.getTime())) throw createError('Data inválida', 400);
+      const scheduledTime =
+        body.scheduledTime !== undefined
+          ? parseScheduledTime(body.scheduledTime)
+          : current.scheduledTime;
+      if (body.scheduledTime !== undefined) data.scheduledTime = scheduledTime;
+      data.nextDueAt = applyScheduledTime(base, scheduledTime);
     }
-    if (body.assigneeId !== undefined) {
-      data.assignee = body.assigneeId
-        ? { connect: { id: String(body.assigneeId) } }
+    if (body.technicianIds !== undefined || body.assigneeId !== undefined) {
+      const technicianIds = parseTechnicianIds(
+        body.technicianIds !== undefined
+          ? body.technicianIds
+          : body.assigneeId
+            ? [body.assigneeId]
+            : current.technicianIds
+      );
+      data.technicianIds = technicianIds as Prisma.InputJsonValue;
+      data.assignee = technicianIds[0]
+        ? { connect: { id: technicianIds[0] } }
         : { disconnect: true };
+      data.rotateTechnicians =
+        technicianIds.length >= 2 &&
+        (body.rotateTechnicians !== undefined
+          ? body.rotateTechnicians === true
+          : current.rotateTechnicians);
+      if (technicianIds.length < 2) data.rotateTechnicians = false;
+    } else if (body.rotateTechnicians !== undefined) {
+      data.rotateTechnicians = body.rotateTechnicians === true;
     }
     if (body.isActive != null) data.isActive = !!body.isActive;
 
@@ -224,7 +306,8 @@ export class GestaoOsPlansService {
 
     const created: string[] = [];
     for (const plan of duePlans) {
-      const systemUserId = plan.assigneeId;
+      const { assigneeId, nextRotationIndex } = nextAssigneeFromPlan(plan);
+      const systemUserId = assigneeId;
       let requesterId = systemUserId;
       if (!requesterId) {
         const manager = await prisma.gestaoOsMembership.findFirst({
@@ -255,7 +338,7 @@ export class GestaoOsPlansService {
           priority: 'MEDIUM',
           buildingId: plan.buildingId,
           assetId: plan.assetId,
-          dueAt: plan.nextDueAt.toISOString(),
+          dueAt: applyScheduledTime(plan.nextDueAt, plan.scheduledTime).toISOString(),
           maintenanceType
         },
         {
@@ -278,17 +361,17 @@ export class GestaoOsPlansService {
           where: { id: wo.id },
           data: {
             checklistResponses: checklistItems as Prisma.InputJsonValue,
-            assigneeId: plan.assigneeId,
+            assigneeId,
             status: GestaoOsStatus.APPROVED,
             approvedAt: now,
             maintenanceType
           }
         });
-      } else if (plan.assigneeId) {
+      } else if (assigneeId) {
         await prisma.gestaoOsWorkOrder.update({
           where: { id: wo.id },
           data: {
-            assigneeId: plan.assigneeId,
+            assigneeId,
             status: GestaoOsStatus.APPROVED,
             approvedAt: now,
             maintenanceType
@@ -304,50 +387,27 @@ export class GestaoOsPlansService {
         }
       });
 
-      const next = new Date(plan.nextDueAt);
-      next.setDate(next.getDate() + plan.intervalDays);
+      const next = applyScheduledTime(
+        (() => {
+          const d = new Date(plan.nextDueAt);
+          d.setDate(d.getDate() + plan.intervalDays);
+          return d;
+        })(),
+        plan.scheduledTime
+      );
       await prisma.gestaoOsMaintenancePlan.update({
         where: { id: plan.id },
-        data: { nextDueAt: next, lastGeneratedAt: now }
+        data: {
+          nextDueAt: next,
+          lastGeneratedAt: now,
+          rotationIndex: nextRotationIndex,
+          assigneeId
+        }
       });
       created.push(wo.id);
     }
 
     return { generated: created.length, workOrderIds: created };
-  }
-
-  async pmocOverview(access: GestaoOsAccessContext) {
-    const plans = await this.listPlans(access, { planType: 'PMOC' });
-    const now = new Date();
-    const dueSoon = plans.filter((p) => {
-      const diff = p.nextDueAt.getTime() - now.getTime();
-      return p.isActive && diff <= 1000 * 60 * 60 * 24 * 30;
-    });
-    const assets = await prisma.gestaoOsAsset.findMany({
-      where: {
-        isActive: true,
-        category: { contains: 'Climat', mode: 'insensitive' }
-      },
-      include: {
-        place: {
-          include: {
-            sector: { include: { building: { select: { id: true, name: true } } } }
-          }
-        }
-      },
-      take: 200
-    });
-    return {
-      plans,
-      dueSoonCount: dueSoon.length,
-      climateAssets: assets.map((a) => ({
-        id: a.id,
-        name: a.name,
-        category: a.category,
-        building: a.place.sector.building,
-        placeName: a.place.name
-      }))
-    };
   }
 }
 

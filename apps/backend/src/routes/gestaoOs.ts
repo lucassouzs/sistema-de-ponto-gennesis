@@ -99,15 +99,6 @@ router.post('/plans/generate-due', async (req: AuthRequest, res, next) => {
     next(error);
   }
 });
-router.get('/pmoc', async (req: AuthRequest, res, next) => {
-  try {
-    const access = await withOpsAccess(req);
-    const data = await gestaoOsPlansService.pmocOverview(access);
-    res.json({ success: true, data });
-  } catch (error) {
-    next(error);
-  }
-});
 router.get('/checklists', async (req: AuthRequest, res, next) => {
   try {
     const access = await withOpsAccess(req);

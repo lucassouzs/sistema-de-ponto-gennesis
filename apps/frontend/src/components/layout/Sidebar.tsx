@@ -92,6 +92,7 @@ import {
 } from '@/lib/sidebarStorage';
 import {
   LAYOUT_CHROME,
+  dispatchReplayPageEnter,
   type MenuSearchDetail,
 } from '@/lib/layoutChrome';
 import { useBrandingLogo } from '@/hooks/useBrandingLogo';
@@ -126,6 +127,22 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
     setVisible(false);
   }, []);
 
+  useEffect(() => {
+    if (!visible) return;
+    const hide = () => setVisible(false);
+    const onVisibility = () => {
+      if (document.hidden) hide();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', hide);
+    window.addEventListener('pagehide', hide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', hide);
+      window.removeEventListener('pagehide', hide);
+    };
+  }, [visible]);
+
   return (
     <>
       <div
@@ -133,6 +150,7 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
         className="relative flex justify-center"
         onMouseEnter={showTooltip}
         onMouseLeave={hideTooltip}
+        onPointerDown={hideTooltip}
         onFocusCapture={showTooltip}
         onBlurCapture={hideTooltip}
       >
@@ -857,14 +875,6 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             section: 'Central de Chamados'
           },
           {
-            name: 'PMOC',
-            href: '/ponto/sistema-gestao-os/pmoc',
-            icon: ClipboardCheck,
-            description: 'Visão PMOC e ativos de climatização',
-            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/pmoc')),
-            section: 'Central de Chamados'
-          },
-          {
             name: 'Relatórios de Chamados',
             href: '/ponto/sistema-gestao-os/relatorios',
             icon: BarChart3,
@@ -1429,9 +1439,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                       onMouseEnter={
                         FLUIG_PREFETCH_HREFS.has(child.href) ? prefetchFluigDatasets : undefined
                       }
+                      onClick={(event) => {
+                        if (!active) return;
+                        event.preventDefault();
+                        bumpNavPop(child.href);
+                        dispatchReplayPageEnter();
+                      }}
                       className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2 ${
                         active
-                          ? 'sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
+                          ? `sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500${
+                              navPopHref === child.href ? ' sidebar-nav-item--pop' : ''
+                            }`
                           : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
                       }`}
                     >
@@ -1455,9 +1473,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           href={resolveNavHref(item.href)}
           prefetch={navLinkPrefetch}
           onMouseEnter={FLUIG_PREFETCH_HREFS.has(item.href) ? prefetchFluigDatasets : undefined}
+          onClick={(event) => {
+            if (!active) return;
+            event.preventDefault();
+            bumpNavPop(item.href);
+            dispatchReplayPageEnter();
+          }}
           className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2.5 ${
             active
-              ? 'sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500'
+              ? `sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500${
+                  navPopHref === item.href ? ' sidebar-nav-item--pop' : ''
+                }`
               : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
           }`}
         >
@@ -1528,6 +1554,46 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
   /** Anima entrada só ao abrir o painel ou trocar de módulo — nunca ao navegar entre páginas. */
   const [navEnterClass, setNavEnterClass] = useState(false);
+  const [railPop, setRailPop] = useState<{ id: string; n: number }>({ id: '', n: 0 });
+  const [navPopHref, setNavPopHref] = useState('');
+  const railPopRafRef = useRef<number | null>(null);
+  const navPopRafRef = useRef<number | null>(null);
+  const navEnterTimeoutRef = useRef<number | null>(null);
+
+  const bumpRailPop = useCallback((id: string) => {
+    if (railPopRafRef.current != null) cancelAnimationFrame(railPopRafRef.current);
+    setRailPop({ id, n: 0 });
+    railPopRafRef.current = requestAnimationFrame(() => {
+      railPopRafRef.current = requestAnimationFrame(() => {
+        setRailPop({ id, n: Date.now() });
+        railPopRafRef.current = null;
+      });
+    });
+  }, []);
+
+  const bumpNavPop = useCallback((href: string) => {
+    if (navPopRafRef.current != null) cancelAnimationFrame(navPopRafRef.current);
+    setNavPopHref('');
+    navPopRafRef.current = requestAnimationFrame(() => {
+      navPopRafRef.current = requestAnimationFrame(() => {
+        setNavPopHref(href);
+        navPopRafRef.current = null;
+      });
+    });
+  }, []);
+
+  const replayNavEnter = useCallback(() => {
+    setNavEnterClass(false);
+    requestAnimationFrame(() => setNavEnterClass(true));
+    if (navEnterTimeoutRef.current != null) window.clearTimeout(navEnterTimeoutRef.current);
+    navEnterTimeoutRef.current = window.setTimeout(() => {
+      setNavEnterClass(false);
+      navEnterTimeoutRef.current = null;
+    }, 700);
+  }, []);
+
+  const isRailPopping = (id: string) => railPop.id === id && railPop.n > 0;
+
   const prevNavModuleRef = useRef(displayedModuleId);
   const prevTier2VisibleRef = useRef(tier2Visible);
   useEffect(() => {
@@ -1538,21 +1604,31 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
     if (!tier2Visible || (!moduleChanged && !justOpened)) return;
 
-    setNavEnterClass(false);
-    const raf = requestAnimationFrame(() => {
-      setNavEnterClass(true);
-    });
-    const timeout = window.setTimeout(() => setNavEnterClass(false), 700);
+    replayNavEnter();
     return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(timeout);
+      if (navEnterTimeoutRef.current != null) {
+        window.clearTimeout(navEnterTimeoutRef.current);
+        navEnterTimeoutRef.current = null;
+      }
     };
-  }, [displayedModuleId, tier2Visible]);
+  }, [displayedModuleId, tier2Visible, replayNavEnter]);
 
   /** Rail: painel aberto → módulo exibido; recolhido → rota ativa; na home recolhida → nenhum (só logo) */
   const railModuleActiveId: string | null = tier2Visible
     ? displayedModuleId
     : activeModuleId ?? (onHomeRoute || onRailFooterRoute ? null : displayedModuleId);
+
+  useEffect(() => {
+    if (railModuleActiveId) {
+      bumpRailPop(railModuleActiveId);
+      return;
+    }
+    if (isFooterShortcutActive('/ponto/conversas')) bumpRailPop('footer:conversas');
+    else if (isFooterShortcutActive('/ponto/kanban')) bumpRailPop('footer:kanban');
+    else if (isFooterShortcutActive('/ponto/agenda')) bumpRailPop('footer:agenda');
+    else if (isFooterShortcutActive('/ponto/flow')) bumpRailPop('footer:flow');
+    else if (isFooterShortcutActive('/ponto/drive')) bumpRailPop('footer:drive');
+  }, [railModuleActiveId, pathname, bumpRailPop]);
 
   const closeSidebarPanel = useCallback(() => {
     userPickedModuleRef.current = false;
@@ -1648,9 +1724,11 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
   const handleSelectModule = (categoryId: string) => {
     const panelOpen = !isCollapsed || isOpen;
     if (panelOpen && displayedModuleId === categoryId) {
+      bumpRailPop(categoryId);
       closeSidebarPanel();
       return;
     }
+    bumpRailPop(categoryId);
     userPickedModuleRef.current = true;
     setSelectedModuleId(categoryId);
     if (isCollapsed) setCollapsed(false);
@@ -1772,9 +1850,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                     <Link
                       href={singleItem.href}
                       prefetch={navLinkPrefetch}
+                      onClick={(event) => {
+                        if (!active) return;
+                        event.preventDefault();
+                        bumpRailPop(category.id);
+                        dispatchReplayPageEnter();
+                      }}
                       className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                         active
-                          ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                          ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                              isRailPopping(category.id) ? ' sidebar-rail-btn--pop' : ''
+                            }`
                           : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                       }`}
                       aria-label={singleItem.name}
@@ -1795,7 +1881,9 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                     onClick={() => handleSelectModule(category.id)}
                     className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                       isRailActive
-                        ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                        ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                            isRailPopping(category.id) ? ' sidebar-rail-btn--pop' : ''
+                          }`
                         : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                     }`}
                     aria-label={category.name}
@@ -1825,9 +1913,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   prefetch={navLinkPrefetch}
                   aria-label={`Conversas${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
                   aria-current={isFooterShortcutActive('/ponto/conversas') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/conversas')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:conversas');
+                    dispatchReplayPageEnter();
+                  }}
                   className={`sidebar-rail-btn relative flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/conversas')
-                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:conversas') ? ' sidebar-rail-btn--pop' : ''
+                        }`
                       : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -1841,9 +1937,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   prefetch={navLinkPrefetch}
                   aria-label="Tasks"
                   aria-current={isFooterShortcutActive('/ponto/kanban') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/kanban')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:kanban');
+                    dispatchReplayPageEnter();
+                  }}
                   className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/kanban')
-                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:kanban') ? ' sidebar-rail-btn--pop' : ''
+                        }`
                       : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -1856,9 +1960,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   prefetch={navLinkPrefetch}
                   aria-label="Agenda"
                   aria-current={isFooterShortcutActive('/ponto/agenda') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/agenda')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:agenda');
+                    dispatchReplayPageEnter();
+                  }}
                   className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/agenda')
-                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:agenda') ? ' sidebar-rail-btn--pop' : ''
+                        }`
                       : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -1871,9 +1983,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   prefetch={navLinkPrefetch}
                   aria-label="Flow"
                   aria-current={isFooterShortcutActive('/ponto/flow') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/flow')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:flow');
+                    dispatchReplayPageEnter();
+                  }}
                   className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/flow')
-                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:flow') ? ' sidebar-rail-btn--pop' : ''
+                        }`
                       : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >
@@ -1886,9 +2006,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   prefetch={navLinkPrefetch}
                   aria-label="Drive"
                   aria-current={isFooterShortcutActive('/ponto/drive') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/drive')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:drive');
+                    dispatchReplayPageEnter();
+                  }}
                   className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
                     isFooterShortcutActive('/ponto/drive')
-                      ? 'sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500'
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:drive') ? ' sidebar-rail-btn--pop' : ''
+                        }`
                       : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
                   }`}
                 >

@@ -7,6 +7,7 @@ export const LAYOUT_CHROME = {
   CLOSE_MOBILE_SIDEBAR: 'gennesis:layout-close-mobile-sidebar',
   CLOSE_PROFILE_MENU: 'gennesis:layout-close-profile-menu',
   SET_MENU_SEARCH: 'gennesis:layout-set-menu-search',
+  REPLAY_PAGE_ENTER: 'gennesis:layout-replay-page-enter',
 } as const;
 
 export type MenuSearchDetail = {
@@ -42,4 +43,10 @@ export function dispatchCloseProfileMenu() {
 export function dispatchSetMenuSearch(detail: MenuSearchDetail) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(LAYOUT_CHROME.SET_MENU_SEARCH, { detail }));
+}
+
+/** Reexecuta a animação de entrada da página (ex.: clique no item já ativo). */
+export function dispatchReplayPageEnter() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(LAYOUT_CHROME.REPLAY_PAGE_ENTER));
 }

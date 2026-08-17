@@ -16,6 +16,7 @@ export type TimePickerFieldProps = {
   stepMinutes?: number;
   /** Só lista horários estritamente depois deste (`HH:mm`). */
   minTime?: string;
+  allowEmpty?: boolean;
   'aria-label'?: string;
 };
 
@@ -69,6 +70,7 @@ export function TimePickerField({
   noFocusRing = false,
   stepMinutes = 15,
   minTime,
+  allowEmpty = false,
 }: TimePickerFieldProps) {
   const timeOptions = useMemo(
     () => buildTimeOptions(stepMinutes, minTime),
@@ -90,7 +92,7 @@ export function TimePickerField({
       searchPlaceholder="Pesquisar hora..."
       emptyOptionsMessage="Nenhum horário disponível."
       emptySearchMessage="Nenhum horário encontrado."
-      allowEmpty={false}
+      allowEmpty={allowEmpty}
       className={className}
       noFocusRing={noFocusRing}
       matchTriggerWidth

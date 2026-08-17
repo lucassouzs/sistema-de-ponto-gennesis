@@ -4306,6 +4306,12 @@ model GestaoOsMaintenancePlan {
   nextDueAt       DateTime
   lastGeneratedAt DateTime?
   assigneeId      String?
+  /// Horário previsto da OS (HH:mm).
+  scheduledTime   String?
+  /// IDs dos técnicos na ordem do rodízio.
+  technicianIds   Json            @default("[]")
+  rotateTechnicians Boolean       @default(false)
+  rotationIndex   Int             @default(0)
   isActive        Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt

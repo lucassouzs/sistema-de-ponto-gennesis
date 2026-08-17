@@ -135,12 +135,6 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     category: 'Engenharia',
   },
   {
-    key: pathToModuleKey('/ponto/sistema-gestao-os/pmoc'),
-    name: 'PMOC',
-    href: '/ponto/sistema-gestao-os/pmoc',
-    category: 'Engenharia',
-  },
-  {
     key: pathToModuleKey('/ponto/sistema-gestao-os/relatorios'),
     name: 'Relatórios de Chamados',
     href: '/ponto/sistema-gestao-os/relatorios',

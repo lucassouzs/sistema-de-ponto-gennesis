@@ -416,6 +416,10 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
       "nextDueAt" TIMESTAMP(3) NOT NULL,
       "lastGeneratedAt" TIMESTAMP(3),
       "assigneeId" TEXT REFERENCES "users"("id") ON DELETE SET NULL,
+      "scheduledTime" TEXT,
+      "technicianIds" JSONB NOT NULL DEFAULT '[]'::jsonb,
+      "rotateTechnicians" BOOLEAN NOT NULL DEFAULT false,
+      "rotationIndex" INTEGER NOT NULL DEFAULT 0,
       "isActive" BOOLEAN NOT NULL DEFAULT true,
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -476,6 +480,21 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   await prisma.$executeRawUnsafe(
     `CREATE INDEX IF NOT EXISTS "gestao_os_work_order_comments_userId_idx" ON "gestao_os_work_order_comments"("userId");`
   );
+
+  if (await columnExists(prisma, 'gestao_os_maintenance_plans', 'id')) {
+    for (const col of [
+      ['scheduledTime', 'TEXT'],
+      ['technicianIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
+      ['rotateTechnicians', 'BOOLEAN NOT NULL DEFAULT false'],
+      ['rotationIndex', 'INTEGER NOT NULL DEFAULT 0']
+    ] as const) {
+      if (!(await columnExists(prisma, 'gestao_os_maintenance_plans', col[0]))) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "gestao_os_maintenance_plans" ADD COLUMN "${col[0]}" ${col[1]};`
+        );
+      }
+    }
+  }
 
   if (await columnExists(prisma, 'gestao_os_equipments', 'id')) {
     for (const col of [

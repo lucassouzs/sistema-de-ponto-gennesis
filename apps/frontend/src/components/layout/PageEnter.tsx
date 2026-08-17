@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { isDocumentReload } from '@/lib/pageReveal';
+import { LAYOUT_CHROME } from '@/lib/layoutChrome';
 
 /**
  * Reexecuta a animação de entrada a cada troca de rota e após F5 / bfcache.
@@ -33,8 +34,16 @@ export function PageEnter({
         setTick((n) => n + 1);
       }
     };
+    const onReplay = () => {
+      setReloadAnim(false);
+      setTick((n) => n + 1);
+    };
     window.addEventListener('pageshow', onPageShow);
-    return () => window.removeEventListener('pageshow', onPageShow);
+    window.addEventListener(LAYOUT_CHROME.REPLAY_PAGE_ENTER, onReplay);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener(LAYOUT_CHROME.REPLAY_PAGE_ENTER, onReplay);
+    };
   }, []);
 
   // Troca de rota (não no mount): limpa flag de reload
