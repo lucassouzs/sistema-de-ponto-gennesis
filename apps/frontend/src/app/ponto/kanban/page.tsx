@@ -2057,8 +2057,14 @@ interface CardColumnActionModalProps {
   cardTitle: string;
   currentColumnId: string;
   columns: KanbanColumn[];
+  labelsCount?: number;
+  attachmentsCount?: number;
   onClose: () => void;
-  onConfirm: (columnId: string, title?: string) => void;
+  onConfirm: (
+    columnId: string,
+    title?: string,
+    keep?: { copyLabels: boolean; copyAttachments: boolean },
+  ) => void;
 }
 
 function CardColumnActionModal({
@@ -2066,11 +2072,15 @@ function CardColumnActionModal({
   cardTitle,
   currentColumnId,
   columns,
+  labelsCount = 0,
+  attachmentsCount = 0,
   onClose,
   onConfirm,
 }: CardColumnActionModalProps) {
   const [columnId, setColumnId] = useState(currentColumnId);
   const [title, setTitle] = useState(cardTitle);
+  const [copyLabels, setCopyLabels] = useState(true);
+  const [copyAttachments, setCopyAttachments] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   const columnOptions = useMemo(
@@ -2114,6 +2124,45 @@ function CardColumnActionModal({
             placeholder="Selecione a coluna..."
           />
         </div>
+        {mode === 'copy' && (labelsCount > 0 || attachmentsCount > 0) ? (
+          <div>
+            <p className={kanbanLabel}>Manter...</p>
+            <div className="space-y-2">
+              {labelsCount > 0 ? (
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={copyLabels}
+                    onChange={(e) => setCopyLabels(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span className="shrink-0">
+                    <CheckboxIndicator checked={copyLabels} />
+                  </span>
+                  <span className="text-sm text-gray-800 dark:text-gray-100">
+                    Etiquetas ({labelsCount})
+                  </span>
+                </label>
+              ) : null}
+              {attachmentsCount > 0 ? (
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={copyAttachments}
+                    onChange={(e) => setCopyAttachments(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span className="shrink-0">
+                    <CheckboxIndicator checked={copyAttachments} />
+                  </span>
+                  <span className="text-sm text-gray-800 dark:text-gray-100">
+                    Anexos ({attachmentsCount})
+                  </span>
+                </label>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <div className="flex justify-end gap-3 border-t border-gray-200 pt-2 dark:border-gray-700">
           <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
             Cancelar
@@ -2134,7 +2183,16 @@ function CardColumnActionModal({
                 return;
               }
               setSubmitting(true);
-              onConfirm(columnId, mode === 'copy' ? title.trim() : undefined);
+              onConfirm(
+                columnId,
+                mode === 'copy' ? title.trim() : undefined,
+                mode === 'copy'
+                  ? {
+                      copyLabels: labelsCount > 0 ? copyLabels : true,
+                      copyAttachments: attachmentsCount > 0 ? copyAttachments : true,
+                    }
+                  : undefined,
+              );
             }}
           >
             {mode === 'move' ? 'Mover' : 'Copiar'}
@@ -2943,7 +3001,14 @@ function KanbanPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'card'; cardId: string; columnId: string } | { type: 'column'; columnId: string } | null>(null);
   const [cardColumnAction, setCardColumnAction] = useState<
     | { mode: 'move'; cardId: string; columnId: string; title: string }
-    | { mode: 'copy'; cardId: string; columnId: string; title: string }
+    | {
+        mode: 'copy';
+        cardId: string;
+        columnId: string;
+        title: string;
+        labelsCount: number;
+        attachmentsCount: number;
+      }
     | null
   >(null);
 
@@ -3630,10 +3695,16 @@ function KanbanPage() {
       cardId: card.id,
       columnId,
       title: card.title,
+      labelsCount: card.labels?.length ?? 0,
+      attachmentsCount: card.attachments ?? 0,
     });
   }
 
-  function confirmCardColumnAction(targetColumnId: string, title?: string) {
+  function confirmCardColumnAction(
+    targetColumnId: string,
+    title?: string,
+    keep?: { copyLabels: boolean; copyAttachments: boolean },
+  ) {
     if (!cardColumnAction) return;
     const action = cardColumnAction;
     setCardColumnAction(null);
@@ -3667,6 +3738,10 @@ function KanbanPage() {
       return;
     }
 
+    const copyKeep = {
+      copyLabels: keep?.copyLabels !== false,
+      copyAttachments: keep?.copyAttachments !== false,
+    };
     const copyTitle = title?.trim() || action.title;
     const tempId = `optimistic-copy-${action.cardId}-${Date.now()}`;
     const sourceCard = previousBoard?.columns
@@ -3674,7 +3749,7 @@ function KanbanPage() {
       ?.cards.find((card) => card.id === action.cardId);
 
     if (sourceCard) {
-      const optimistic = buildOptimisticCardCopy(sourceCard, copyTitle, tempId);
+      const optimistic = buildOptimisticCardCopy(sourceCard, copyTitle, tempId, copyKeep);
       queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) =>
         insertCardIntoBoardCache(old, targetColumnId, optimistic, true),
       );
@@ -3687,6 +3762,8 @@ function KanbanPage() {
         const created = await duplicateKanbanCard(action.cardId, {
           columnId: targetColumnId,
           title,
+          copyLabels: copyKeep.copyLabels,
+          copyAttachments: copyKeep.copyAttachments,
         });
         queryClient.setQueryData<KanbanBoard>(kanbanBoardQueryKey, (old) => {
           const withoutTemp = removeCardFromBoardCache(old, tempId);
@@ -4698,6 +4775,10 @@ function KanbanPage() {
           cardTitle={cardColumnAction.title}
           currentColumnId={cardColumnAction.columnId}
           columns={columns}
+          labelsCount={cardColumnAction.mode === 'copy' ? cardColumnAction.labelsCount : 0}
+          attachmentsCount={
+            cardColumnAction.mode === 'copy' ? cardColumnAction.attachmentsCount : 0
+          }
           onClose={() => setCardColumnAction(null)}
           onConfirm={confirmCardColumnAction}
         />

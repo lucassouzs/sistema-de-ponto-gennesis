@@ -15,7 +15,8 @@ import {
   Filter,
   FileSpreadsheet,
   CheckCircle,
-  Eye
+  Eye,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import {
@@ -39,6 +40,7 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { isMaterialCadastroBudgetNature } from '@/lib/budgetNatureMatch';
 import * as XLSX from 'xlsx';
 import { ButtonSeg } from '../solicitacoes-dp/DpSolicitacaoTypeFields';
+import { TableCheckbox } from '@/components/ui/Checkbox';
 
 const MATERIAL_ACTIVE_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos' },
@@ -435,6 +437,8 @@ export default function MateriaisConstrucaoPage() {
     isActive: true
   });
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [detailMaterial, setDetailMaterial] = useState<ConstructionMaterial | null>(null);
   const [detailTab, setDetailTab] = useState<'detalhes' | 'historico'>('detalhes');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -614,6 +618,27 @@ export default function MateriaisConstrucaoPage() {
       queryClient.invalidateQueries({ queryKey: ['construction-materials'] });
       queryClient.invalidateQueries({ queryKey: ['materials-rm-dropdown'] });
       setShowDeleteModal(null);
+    }
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await api.post('/construction-materials/delete-many', { ids });
+      return Number(res.data?.data?.deleted || ids.length);
+    },
+    onSuccess: (deleted) => {
+      toast.success(
+        deleted === 1 ? '1 cadastro excluído' : `${deleted} cadastros excluídos`
+      );
+      queryClient.invalidateQueries({ queryKey: ['construction-materials'] });
+      queryClient.invalidateQueries({ queryKey: ['materials-rm-dropdown'] });
+      setSelectedIds(new Set());
+      setShowBulkDeleteModal(false);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || 'Erro ao excluir os cadastros selecionados'
+      );
     }
   });
 
@@ -1046,6 +1071,34 @@ export default function MateriaisConstrucaoPage() {
     return materials;
   }, [materials]);
 
+  const allPageSelected =
+    filteredMaterials.length > 0 && filteredMaterials.every((m: ConstructionMaterial) => selectedIds.has(m.id));
+  const somePageSelected = filteredMaterials.some((m: ConstructionMaterial) => selectedIds.has(m.id));
+  const selectedCount = selectedIds.size;
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((prev) => {
+      if (filteredMaterials.length === 0) return prev;
+      if (filteredMaterials.every((m: ConstructionMaterial) => prev.has(m.id))) {
+        const next = new Set(prev);
+        filteredMaterials.forEach((m: ConstructionMaterial) => next.delete(m.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredMaterials.forEach((m: ConstructionMaterial) => next.add(m.id));
+      return next;
+    });
+  };
+
   const {
     rowActionMenu,
     rowForActionMenu,
@@ -1185,6 +1238,16 @@ export default function MateriaisConstrucaoPage() {
                   </div>
                 </div>
                 <div className={cadastroListClasses.cardToolbar}>
+                  {selectedCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkDeleteModal(true)}
+                      className="flex h-10 items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                    >
+                      <Trash2 className="h-4 w-4 shrink-0" />
+                      <span>Excluir ({selectedCount})</span>
+                    </button>
+                  ) : null}
                   <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
@@ -1286,6 +1349,7 @@ export default function MateriaisConstrucaoPage() {
               <div className="table-scroll">
                 <table className={cadastroListClasses.table}>
                   <colgroup>
+                    <col className="w-10" />
                     <col className="w-[4.5rem]" />
                     <col />
                     <col className="w-[7rem]" />
@@ -1296,6 +1360,15 @@ export default function MateriaisConstrucaoPage() {
                   </colgroup>
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
+                      <th scope="col" className="w-10 px-3 py-4 sm:px-4">
+                        <TableCheckbox
+                          checked={allPageSelected}
+                          indeterminate={!allPageSelected && somePageSelected}
+                          onChange={() => toggleSelectAllOnPage()}
+                          onClick={(e) => e.stopPropagation()}
+                          ariaLabel="Selecionar todos os cadastros desta página"
+                        />
+                      </th>
                       <th scope="col" className={cadastroListClasses.th}>
                         ID
                       </th>
@@ -1346,6 +1419,17 @@ export default function MateriaisConstrucaoPage() {
                             }
                           }}
                         >
+                          <td
+                            className="w-10 px-3 py-4 sm:px-4"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <TableCheckbox
+                              checked={selectedIds.has(material.id)}
+                              onChange={() => toggleSelectOne(material.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              ariaLabel={`Selecionar cadastro ${material.name || material.id}`}
+                            />
+                          </td>
                           <td className={cadastroListClasses.tdMono}>
                             {formatCadastroListId(material.code, listRange.startItem + index)}
                           </td>
@@ -1682,6 +1766,46 @@ export default function MateriaisConstrucaoPage() {
                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
                 {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showBulkDeleteModal}
+          onClose={() => !bulkDeleteMutation.isPending && setShowBulkDeleteModal(false)}
+          title="Excluir selecionados"
+          size="md"
+          confirmBeforeClose={false}
+        >
+          <div className="space-y-6">
+            <div className="flex items-center justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+            </div>
+            <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+              Tem certeza que deseja excluir{' '}
+              <strong>{selectedCount}</strong>{' '}
+              {selectedCount === 1 ? 'cadastro selecionado' : 'cadastros selecionados'}? Esta ação
+              não pode ser desfeita.
+            </p>
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                disabled={bulkDeleteMutation.isPending}
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={bulkDeleteMutation.isPending || selectedCount === 0}
+                onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+              >
+                {bulkDeleteMutation.isPending ? 'Excluindo...' : `Excluir ${selectedCount}`}
               </button>
             </div>
           </div>

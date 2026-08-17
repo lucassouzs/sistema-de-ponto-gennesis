@@ -746,6 +746,29 @@ export class ConstructionMaterialController {
     }
   }
 
+  async deleteMany(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const ids = Array.isArray(req.body?.ids)
+        ? (req.body.ids as unknown[]).map((id) => String(id).trim()).filter(Boolean)
+        : [];
+      if (ids.length === 0) {
+        throw createError('Envie um array "ids" com ao menos um item', 400);
+      }
+
+      const result = await prisma.constructionMaterial.deleteMany({
+        where: { id: { in: ids } },
+      });
+
+      res.json({
+        success: true,
+        data: { deleted: result.count },
+        message: `${result.count} cadastro(s) excluído(s) com sucesso`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async importMaterials(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { materials } = req.body;

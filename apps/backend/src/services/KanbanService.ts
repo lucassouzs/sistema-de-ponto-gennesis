@@ -2013,7 +2013,12 @@ export class KanbanService {
   async duplicateCard(
     userId: string,
     cardId: string,
-    options?: { title?: string; columnId?: string },
+    options?: {
+      title?: string;
+      columnId?: string;
+      copyLabels?: boolean;
+      copyAttachments?: boolean;
+    },
   ) {
     const source = await prisma.kanbanCard.findUnique({
       where: { id: cardId },
@@ -2021,6 +2026,7 @@ export class KanbanService {
         column: { include: { board: { select: this.boardAccessSelect } } },
         members: { select: { userId: true } },
         checklistItems: { orderBy: { position: 'asc' } },
+        attachments: true,
       },
     });
     if (!source) throw new Error('Card não encontrado');
@@ -2028,6 +2034,8 @@ export class KanbanService {
 
     const targetColumnId = options?.columnId?.trim() || source.columnId;
     const nextTitle = options?.title?.trim() || source.title;
+    const copyLabels = options?.copyLabels !== false;
+    const copyAttachments = options?.copyAttachments !== false;
 
     if (targetColumnId !== source.columnId) {
       await this.assertColumnAccess(userId, targetColumnId);
@@ -2041,6 +2049,7 @@ export class KanbanService {
     }
 
     const checklistCount = source.checklistItems.length;
+    const attachmentsToCopy = copyAttachments ? source.attachments : [];
 
     const duplicated = await prisma.$transaction(async (tx) => {
       await tx.kanbanCard.updateMany({
@@ -2056,13 +2065,13 @@ export class KanbanService {
           priority: source.priority,
           startDate: source.startDate,
           endDate: source.endDate,
-          labels: source.labels ?? [],
+          labels: copyLabels ? source.labels ?? [] : [],
           assigneeUserId: source.assigneeUserId,
           assigneeName: source.assigneeName,
           totalTasks: source.checklistEnabled ? checklistCount : source.totalTasks,
           completedTasks: source.checklistEnabled ? 0 : source.completedTasks,
           checklistEnabled: source.checklistEnabled,
-          attachmentsEnabled: source.attachmentsEnabled,
+          attachmentsEnabled: attachmentsToCopy.length > 0 ? true : source.attachmentsEnabled,
           workHours: source.workHours,
           completedAt: null,
           position: 0,
@@ -2082,6 +2091,20 @@ export class KanbanService {
                     position: index,
                     assigneeUserId: item.assigneeUserId,
                     dueDate: item.dueDate,
+                  })),
+                },
+              }
+            : {}),
+          ...(attachmentsToCopy.length > 0
+            ? {
+                attachments: {
+                  create: attachmentsToCopy.map((att) => ({
+                    userId: att.userId,
+                    fileName: att.fileName,
+                    fileUrl: att.fileUrl,
+                    fileKey: att.fileKey,
+                    fileSize: att.fileSize,
+                    mimeType: att.mimeType,
                   })),
                 },
               }
