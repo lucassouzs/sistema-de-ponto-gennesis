@@ -27,6 +27,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
 import { ButtonSeg } from '../solicitacoes-dp/DpSolicitacaoTypeFields';
 import api from '@/lib/api';
 import {
@@ -1926,98 +1927,74 @@ export default function EstoquePage() {
             </p>
           </div>
 
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav
-              className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
-              role="tablist"
-              aria-label="Seções de estoque"
+          <nav
+            className="flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2"
+            role="tablist"
+            aria-label="Seções de estoque"
+          >
+            <AppTabButton
+              active={activeTab === 'balance'}
+              onClick={() => setActiveTab('balance')}
+              className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'balance'}
-                onClick={() => setActiveTab('balance')}
-                className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                  activeTab === 'balance'
-                    ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200'
-                }`}
-              >
-                Lista de Estoque
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeTab === 'movements'}
-                onClick={() => setActiveTab('movements')}
-                className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                  activeTab === 'movements'
-                    ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200'
-                }`}
-              >
-                Histórico
-              </button>
-            </nav>
-          </div>
-          {activeTab === 'balance' && (
-            <div className="border-b border-gray-200 dark:border-gray-700">
-              <nav
-                className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
-                role="tablist"
-                aria-label="Agrupar lista de estoque"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={balanceView === 'contract'}
+              Lista de Estoque
+            </AppTabButton>
+            <AppTabButton
+              active={activeTab === 'movements'}
+              onClick={() => setActiveTab('movements')}
+              className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+            >
+              Histórico
+            </AppTabButton>
+          </nav>
+
+          {activeTab === 'balance' ? (
+            <div className="flex justify-center">
+              <AppSegmentedControl aria-label="Agrupar lista de estoque" className="justify-center">
+                <AppSegmentedButton
+                  active={balanceView === 'contract'}
                   onClick={() => {
                     setBalanceView('contract');
                     setSelectedContractKey(null);
                     setSelectedMaterialId(null);
                   }}
-                  className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                    balanceView === 'contract'
-                      ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className="whitespace-nowrap"
                 >
                   Por contrato
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={balanceView === 'material'}
+                </AppSegmentedButton>
+                <AppSegmentedButton
+                  active={balanceView === 'material'}
                   onClick={() => {
                     setBalanceView('material');
                     setSelectedContractKey(null);
                     setSelectedMaterialId(null);
                   }}
-                  className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                    balanceView === 'material'
-                      ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                  }`}
+                  className="whitespace-nowrap"
                 >
                   Por material
-                </button>
-              </nav>
+                </AppSegmentedButton>
+              </AppSegmentedControl>
             </div>
-          )}
+          ) : null}
 
           {activeTab === 'balance' && (
             <Card className="w-full">
               <CardHeader className="border-b-0 pb-1">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="p-2 sm:p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
-                      <Box className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400" />
+                    <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                      <Box className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold leading-7 text-gray-900 dark:text-gray-100">Lista de Estoque</h3>
+                      <h3 className="text-lg font-semibold leading-7 text-gray-900 dark:text-gray-100">
+                        Lista de Estoque
+                      </h3>
                       <div className="h-5 text-sm leading-5">
                         {showingContractStock ? (
-                          <nav className="flex h-5 min-w-0 items-center gap-1" aria-label="Navegação do contrato">
+                          <nav
+                            className="flex h-5 min-w-0 items-center gap-1"
+                            aria-label="Navegação do contrato"
+                          >
                             <button
                               type="button"
                               onClick={() => {
@@ -2037,7 +2014,10 @@ export default function EstoquePage() {
                             </span>
                           </nav>
                         ) : showingMaterialStock ? (
-                          <nav className="flex h-5 min-w-0 items-center gap-1" aria-label="Navegação do material">
+                          <nav
+                            className="flex h-5 min-w-0 items-center gap-1"
+                            aria-label="Navegação do material"
+                          >
                             <button
                               type="button"
                               onClick={() => {
@@ -2067,7 +2047,7 @@ export default function EstoquePage() {
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:w-[280px] sm:min-w-[240px] sm:flex-none sm:basis-auto">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
                         type="text"

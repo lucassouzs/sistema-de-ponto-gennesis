@@ -25,6 +25,7 @@ import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
 import { exportLicitacaoAnalisePdf } from '@/lib/exportLicitacaoAnalisePdf';
@@ -1305,44 +1306,36 @@ export default function LicitacoesPage() {
             </div>
           </header>
 
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav
-              className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
-              role="tablist"
-              aria-label="Seções do módulo"
-            >
-              {(
-                [
-                  { id: 'orcamento' as const, label: 'Orçamento' },
-                  { id: 'analise' as const, label: 'Em Análise' },
-                  { id: 'arquivadas' as const, label: 'Análise Final' },
-                  { id: 'regioes' as const, label: 'Por Região' },
-                  { id: 'banco-cats' as const, label: 'Banco CATs' },
-                ] as const
-              ).map((tab) => {
-                const active = viewMode === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => {
-                      if (tab.id === 'arquivadas') setSelectedId(null);
-                      setViewMode(tab.id);
-                    }}
-                    className={`inline-flex items-center whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                      active
-                        ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          <nav
+            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
+            role="tablist"
+            aria-label="Seções do módulo"
+          >
+            {(
+              [
+                { id: 'orcamento' as const, label: 'Orçamento' },
+                { id: 'analise' as const, label: 'Em Análise' },
+                { id: 'arquivadas' as const, label: 'Análise Final' },
+                { id: 'regioes' as const, label: 'Por Região' },
+                { id: 'banco-cats' as const, label: 'Banco CATs' },
+              ] as const
+            ).map((tab) => {
+              const active = viewMode === tab.id;
+              return (
+                <AppTabButton
+                  key={tab.id}
+                  active={active}
+                  onClick={() => {
+                    if (tab.id === 'arquivadas') setSelectedId(null);
+                    setViewMode(tab.id);
+                  }}
+                  className="inline-flex items-center whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+                >
+                  {tab.label}
+                </AppTabButton>
+              );
+            })}
+          </nav>
 
           {viewMode === 'banco-cats' ? (
             <div
@@ -1379,12 +1372,8 @@ export default function LicitacoesPage() {
           ) : null}
 
           {viewMode === 'regioes' ? (
-            <div className="border-b border-gray-200 dark:border-gray-700">
-              <nav
-                className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
-                role="tablist"
-                aria-label="Regiões"
-              >
+            <div className="flex justify-center">
+              <AppSegmentedControl aria-label="Regiões" className="justify-center">
                 {(loadingRegiaoTabs && regiaoTabs.length === 0
                   ? [
                       { key: 'centro-oeste', label: 'Região Centro-Oeste' },
@@ -1401,34 +1390,28 @@ export default function LicitacoesPage() {
                       ? (tab as LicitacaoRegiaoTab).count
                       : null;
                   return (
-                    <button
+                    <AppSegmentedButton
                       key={tab.key}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
+                      active={active}
                       onClick={() => setPlanilhaRegiaoKey(tab.key)}
-                      className={`inline-flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                        active
-                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                      }`}
+                      className="gap-1.5 whitespace-nowrap"
                     >
                       <span>{tab.label.replace(/^Região\s+/i, '')}</span>
                       {count != null ? (
                         <span
-                          className={`inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+                          className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
                             active
                               ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700/60 dark:text-gray-300'
+                              : 'bg-gray-200/80 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                           }`}
                         >
                           {count}
                         </span>
                       ) : null}
-                    </button>
+                    </AppSegmentedButton>
                   );
                 })}
-              </nav>
+              </AppSegmentedControl>
             </div>
           ) : null}
 

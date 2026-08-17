@@ -22,6 +22,7 @@ import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
@@ -593,31 +594,25 @@ export default function GestaoOsEquipamentosPageClient() {
             </p>
           </div>
 
-          <div className="scroll-mt-4 border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2">
-              {TABS.map((item) => {
-                const active = tab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setTab(item.id);
-                      setSearchTerm('');
-                      closeRowActionMenu();
-                    }}
-                    className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                      active
-                        ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'
-                    }`}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
+            {TABS.map((item) => {
+              const active = tab === item.id;
+              return (
+                <AppTabButton
+                  key={item.id}
+                  active={active}
+                  onClick={() => {
+                    setTab(item.id);
+                    setSearchTerm('');
+                    closeRowActionMenu();
+                  }}
+                  className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+                >
+                  {item.label}
+                </AppTabButton>
+              );
+            })}
+          </nav>
 
           <Card className={cadastroListClasses.card}>
             <CardHeader className={cadastroListClasses.cardHeader}>

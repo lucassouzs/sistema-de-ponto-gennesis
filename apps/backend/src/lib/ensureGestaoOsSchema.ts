@@ -36,7 +36,7 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
     DO $$ BEGIN
       CREATE TYPE "GestaoOsStatus" AS ENUM (
         'OPEN', 'UNDER_REVIEW', 'APPROVED', 'SAFETY_CHECK', 'IN_PROGRESS',
-        'WAITING_PARTS', 'COMPLETED', 'CLOSED', 'CANCELLED'
+        'WAITING_PARTS', 'COMPLETED', 'REWORK', 'CLOSED', 'CANCELLED'
       );
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $$;
@@ -47,6 +47,13 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
     );
   } catch {
     /* valor já existe ou o tipo acabou de ser criado com SAFETY_CHECK */
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TYPE "GestaoOsStatus" ADD VALUE IF NOT EXISTS 'REWORK'`
+    );
+  } catch {
+    /* valor já existe ou o tipo acabou de ser criado com REWORK */
   }
   await prisma.$executeRawUnsafe(`
     DO $$ BEGIN
@@ -517,5 +524,15 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
     );
   } catch {
     /* tabela/enum ainda não prontos */
+  }
+
+  try {
+    await prisma.$executeRawUnsafe(`
+      UPDATE "gestao_os_work_orders"
+      SET "status" = 'APPROVED'
+      WHERE "status" = 'SAFETY_CHECK'
+    `);
+  } catch {
+    /* enum/tabela ainda não prontos */
   }
 }

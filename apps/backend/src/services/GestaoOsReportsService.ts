@@ -15,7 +15,8 @@ export class GestaoOsReportsService {
       'APPROVED',
       'SAFETY_CHECK',
       'IN_PROGRESS',
-      'WAITING_PARTS'
+      'WAITING_PARTS',
+      'REWORK'
     ];
 
     const [byStatus, overdue, completed, byCategory, byBuilding, byAssignee] = await Promise.all([

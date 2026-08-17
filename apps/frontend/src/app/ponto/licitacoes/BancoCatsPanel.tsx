@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -1005,33 +1006,23 @@ export function BancoCatsPanel() {
           />
           {matchingActive && activeServicoQuadrante ? (
             <div className="space-y-4">
-              <div className="flex flex-col gap-2 border-b border-gray-200 dark:border-gray-700 sm:flex-row sm:items-end sm:justify-between">
-                <nav
-                  className="-mb-px flex flex-wrap gap-x-1 gap-y-1 overflow-x-auto"
-                  role="tablist"
-                  aria-label="Serviços consultados"
-                >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <AppSegmentedControl aria-label="Serviços consultados" className="max-w-full justify-start overflow-x-auto">
                   {servicoQuadrantes.map((tab) => {
                     const active = tab.id === activeServicoQuadrante.id;
                     return (
-                      <button
+                      <AppSegmentedButton
                         key={tab.id}
-                        type="button"
-                        role="tab"
-                        aria-selected={active}
+                        active={active}
                         title={tab.query}
                         onClick={() => setActiveServicoTabId(tab.id)}
-                        className={`inline-flex max-w-[16rem] items-center rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:max-w-[20rem] sm:px-3 sm:text-sm ${
-                          active
-                            ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                        }`}
+                        className="max-w-[16rem] gap-1.5 sm:max-w-[20rem]"
                       >
                         <span className="min-w-0 truncate">
                           {tab.query.trim() || `Serviço ${tab.index}`}
                         </span>
                         <span
-                          className={`ml-1.5 shrink-0 tabular-nums ${
+                          className={`shrink-0 tabular-nums ${
                             active
                               ? 'text-red-500/80 dark:text-red-400/80'
                               : 'text-gray-400 dark:text-gray-500'
@@ -1039,10 +1030,10 @@ export function BancoCatsPanel() {
                         >
                           ({tab.matches.length})
                         </span>
-                      </button>
+                      </AppSegmentedButton>
                     );
                   })}
-                </nav>
+                </AppSegmentedControl>
                 {(() => {
                   const selecao = somaPorQuadrante.get(activeServicoQuadrante.id) ?? {
                     count: 0,

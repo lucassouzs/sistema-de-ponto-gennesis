@@ -1,5 +1,7 @@
 'use client';
 
+import { AppTabButton } from '@/components/ui/AppTabButton';
+
 export type BalancoFinanceiroTabId = 'extrato' | 'demonstrativo';
 
 const TABS: ReadonlyArray<{ id: BalancoFinanceiroTabId; label: string }> = [
@@ -16,26 +18,20 @@ export function BalancoFinanceiroTabNav({
 }) {
   return (
     <nav
-      className="flex flex-wrap justify-center gap-1 border-b border-gray-200 dark:border-gray-700"
+      className="flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3"
       aria-label="Abas do balanço financeiro"
     >
       {TABS.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
-          <button
+          <AppTabButton
             key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
+            active={isActive}
             onClick={() => onTabChange(tab.id)}
-            className={`whitespace-nowrap rounded-t-lg border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-              isActive
-                ? 'border-red-600 text-red-700 dark:border-red-500 dark:text-red-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className="whitespace-nowrap px-4 py-3 text-sm font-medium"
           >
             {tab.label}
-          </button>
+          </AppTabButton>
         );
       })}
     </nav>

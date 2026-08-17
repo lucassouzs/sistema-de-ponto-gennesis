@@ -153,16 +153,17 @@ export function assertCanTransition(
   }
 
   if (
-    (from === 'APPROVED' && to === 'SAFETY_CHECK') ||
+    (from === 'APPROVED' && to === 'IN_PROGRESS') ||
     (from === 'SAFETY_CHECK' && to === 'IN_PROGRESS') ||
     (from === 'IN_PROGRESS' && (to === 'WAITING_PARTS' || to === 'COMPLETED')) ||
-    (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED'))
+    (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED')) ||
+    (from === 'REWORK' && to === 'IN_PROGRESS')
   ) {
     if (ctx.canExecutar || ctx.canAnalisar) return;
     throw createError('Sem permissão para executar. Libere «Executar OS» em Controle.', 403);
   }
 
-  if (from === 'COMPLETED' && to === 'CLOSED') {
+  if (from === 'COMPLETED' && (to === 'CLOSED' || to === 'REWORK')) {
     if (ctx.canEncerrar || ctx.canAnalisar) return;
     throw createError('Sem permissão para encerrar. Libere «Encerrar OS» em Controle.', 403);
   }

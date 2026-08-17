@@ -6,6 +6,7 @@ export type GestaoOsStatus =
   | 'IN_PROGRESS'
   | 'WAITING_PARTS'
   | 'COMPLETED'
+  | 'REWORK'
   | 'CLOSED'
   | 'CANCELLED';
 
@@ -245,6 +246,7 @@ export const STATUS_LABELS: Record<GestaoOsStatus, string> = {
   IN_PROGRESS: 'Em Execução',
   WAITING_PARTS: 'Aguardando Peça/Terceiro',
   COMPLETED: 'Concluída',
+  REWORK: 'Aguardando ajuste',
   CLOSED: 'Encerrada/Avaliada',
   CANCELLED: 'Cancelada'
 };
@@ -258,6 +260,7 @@ export const STATUS_BADGE: Record<GestaoOsStatus, string> = {
   IN_PROGRESS: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200',
   WAITING_PARTS: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200',
   COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
+  REWORK: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
   CLOSED: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
   CANCELLED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
 };
@@ -289,11 +292,12 @@ export const PROFILE_LABELS: Record<GestaoOsProfile, string> = {
 export const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
   OPEN: ['UNDER_REVIEW', 'CANCELLED'],
   UNDER_REVIEW: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['SAFETY_CHECK', 'CANCELLED'],
+  APPROVED: ['IN_PROGRESS', 'CANCELLED'],
   SAFETY_CHECK: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED', 'CANCELLED'],
   WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
-  COMPLETED: ['CLOSED', 'CANCELLED'],
+  COMPLETED: ['REWORK', 'CLOSED', 'CANCELLED'],
+  REWORK: ['IN_PROGRESS', 'CANCELLED'],
   CLOSED: [],
   CANCELLED: []
 };

@@ -18,6 +18,7 @@ import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -88,14 +89,15 @@ function allowedTransitionsByPermission(opts: {
     if (from === 'OPEN' && to === 'UNDER_REVIEW') return canAnalisar;
     if (from === 'UNDER_REVIEW' && to === 'APPROVED') return canAnalisar;
     if (
-      (from === 'APPROVED' && to === 'SAFETY_CHECK') ||
+      (from === 'APPROVED' && to === 'IN_PROGRESS') ||
       (from === 'SAFETY_CHECK' && to === 'IN_PROGRESS') ||
       (from === 'IN_PROGRESS' && (to === 'WAITING_PARTS' || to === 'COMPLETED')) ||
-      (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED'))
+      (from === 'WAITING_PARTS' && (to === 'IN_PROGRESS' || to === 'COMPLETED')) ||
+      (from === 'REWORK' && to === 'IN_PROGRESS')
     ) {
       return canExecutar || canAnalisar;
     }
-    if (from === 'COMPLETED' && to === 'CLOSED') return canEncerrar || canAnalisar;
+    if (from === 'COMPLETED' && (to === 'CLOSED' || to === 'REWORK')) return canEncerrar || canAnalisar;
     return canAnalisar;
   });
 }
@@ -129,10 +131,10 @@ const PHASE_TABS: ReadonlyArray<{ id: GestaoOsStatus; label: string }> = [
   { id: 'OPEN', label: 'Aberta' },
   { id: 'UNDER_REVIEW', label: 'Em Análise' },
   { id: 'APPROVED', label: 'Aprovada' },
-  { id: 'SAFETY_CHECK', label: 'Segurança do Trabalho' },
   { id: 'IN_PROGRESS', label: 'Em Execução' },
   { id: 'WAITING_PARTS', label: 'Aguardando Peça/Terceiro' },
   { id: 'COMPLETED', label: 'Concluída' },
+  { id: 'REWORK', label: 'Aguardando ajuste' },
   { id: 'CLOSED', label: 'Encerrada/Avaliada' },
   { id: 'CANCELLED', label: 'Cancelada' }
 ];
@@ -336,15 +338,17 @@ export default function SistemaGestaoOsPageClient() {
         : []
     );
     const hasSafety =
+      detail.status === 'APPROVED' ||
       detail.status === 'SAFETY_CHECK' ||
       (Array.isArray(detail.safetyChecklistResponses) &&
         detail.safetyChecklistResponses.length > 0);
     setSafetyChecklistDraft(hasSafety ? cloneGestaoOsSafetyChecklist(detail.safetyChecklistResponses) : []);
     setSafetyPhotoUrl(detail.safetyPhotoUrl ?? null);
-    if (detail.status === 'SAFETY_CHECK') setTransitionStatus('IN_PROGRESS');
-    else if (detail.status === 'APPROVED') setTransitionStatus('SAFETY_CHECK');
+    if (detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK') {
+      setTransitionStatus('IN_PROGRESS');
+    } else if (detail.status === 'REWORK') setTransitionStatus('IN_PROGRESS');
     else setTransitionStatus('');
-    // Recarrega ao abrir outro chamado ou mudar de fase (ex.: Aprovada → SST).
+    // Recarrega ao abrir outro chamado ou mudar de fase.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.id, detail?.status]);
 
@@ -661,7 +665,7 @@ export default function SistemaGestaoOsPageClient() {
   const safetyEditable = Boolean(
     detail &&
       (isAdmin || canExecutar || canAnalisar) &&
-      detail.status === 'SAFETY_CHECK'
+      (detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK')
   );
 
   const safetyReady = isGestaoOsSafetyChecklistComplete(safetyChecklistDraft) && Boolean(safetyPhotoUrl);
@@ -690,19 +694,17 @@ export default function SistemaGestaoOsPageClient() {
                 {PHASE_TABS.map((tab) => {
                   const active = activePhase === tab.id;
                   return (
-                    <button
+                    <AppTabButton
                       key={tab.id}
-                      type="button"
+                      active={active}
                       onClick={() => setActivePhase(tab.id)}
-                      className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                        active
-                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                      }`}
+                      className="flex items-center gap-2 whitespace-nowrap px-2 py-2 text-xs font-medium sm:px-3 sm:text-sm"
                     >
                       {tab.label}
-                      <TabCountBadge count={phaseCounts[tab.id] ?? 0} active={active} tone="red" />
-                    </button>
+                      <span className="app-tab__badge">
+                        <TabCountBadge count={phaseCounts[tab.id] ?? 0} active={active} tone="red" />
+                      </span>
+                    </AppTabButton>
                   );
                 })}
               </nav>
@@ -800,14 +802,14 @@ export default function SistemaGestaoOsPageClient() {
                     itemLabelPlural="chamados"
                   />
                   <div className={cadastroListClasses.tableScroll}>
-                    <table className={`${cadastroListClasses.table} min-w-[56rem]`}>
+                    <table className={`${cadastroListClasses.table} min-w-[64rem]`}>
                       <colgroup>
                         <col className="w-[4.5rem]" />
                         <col />
-                        <col className="w-28" />
-                        <col className="w-32" />
                         <col className="w-36" />
-                        <col className="w-36" />
+                        <col className="w-40" />
+                        <col className="w-44" />
+                        <col className="w-48" />
                         <col className="w-[4%]" />
                       </colgroup>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -816,7 +818,7 @@ export default function SistemaGestaoOsPageClient() {
                           <th className={cadastroListClasses.th}>Local / Ativo</th>
                           <th className={cadastroListClasses.thCenter}>Prioridade</th>
                           <th className={cadastroListClasses.thCenter}>Categoria</th>
-                          <th className={cadastroListClasses.th}>Solicitante</th>
+                          <th className={cadastroListClasses.thCenter}>Solicitante</th>
                           <th className={`${cadastroListClasses.thCenter} whitespace-nowrap`}>Abertura</th>
                           <th className={cadastroListClasses.thRight}>Ação</th>
                         </tr>
@@ -847,20 +849,28 @@ export default function SistemaGestaoOsPageClient() {
                             <td
                               className={`${cadastroListClasses.tdCenter} ${PRIORITY_BADGE[row.priority]}`}
                             >
-                              {PRIORITY_LABELS[row.priority]}
-                            </td>
-                            <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
-                              <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
-                                {row.category}
+                              <span className="flex justify-center">
+                                {PRIORITY_LABELS[row.priority]}
                               </span>
                             </td>
-                            <td className={cadastroListClasses.tdTruncate}>
-                              <span className="block truncate text-sm text-gray-600 dark:text-gray-400">
-                                {row.requester?.name || '—'}
+                            <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
+                              <span className="flex justify-center">
+                                <span className="max-w-full truncate text-sm text-gray-600 dark:text-gray-400">
+                                  {row.category}
+                                </span>
+                              </span>
+                            </td>
+                            <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
+                              <span className="flex justify-center">
+                                <span className="max-w-full truncate text-sm text-gray-600 dark:text-gray-400">
+                                  {row.requester?.name || '—'}
+                                </span>
                               </span>
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
-                              {formatDateTime(row.openedAt)}
+                              <span className="flex justify-center">
+                                {formatDateTime(row.openedAt)}
+                              </span>
                             </td>
                             <RowActionMenuCell
                               isOpen={isRowMenuOpen(row.id)}
@@ -1184,25 +1194,30 @@ export default function SistemaGestaoOsPageClient() {
                           da ordem de serviço.
                         </p>
                       ) : null}
-                      {detail.status === 'APPROVED' ? (
+                      {detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK' ? (
                         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                          Antes de iniciar a execução, a pessoa que for fazer o serviço precisa
-                          preencher o checklist de segurança do trabalho e enviar uma foto usando os
-                          EPIs.
-                        </p>
-                      ) : null}
-                      {detail.status === 'SAFETY_CHECK' ? (
-                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                          Preencha o checklist de segurança do trabalho e envie a foto com os EPIs
-                          na aba{' '}
+                          Antes de iniciar a execução, preencha o checklist de segurança do trabalho
+                          e envie a foto com os EPIs na aba{' '}
                           <button
                             type="button"
                             onClick={() => setDetailTab('checklist')}
                             className="font-semibold text-red-600 hover:underline dark:text-red-400"
                           >
                             Checklist
-                          </button>{' '}
-                          antes de avançar para execução.
+                          </button>
+                          .
+                        </p>
+                      ) : null}
+                      {detail.status === 'COMPLETED' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Se o resultado não foi aceito, envie para Aguardando ajuste. O técnico
+                          volta para execução sem passar de novo pelo checklist de SST.
+                        </p>
+                      ) : null}
+                      {detail.status === 'REWORK' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          O serviço precisa de correção. Avance para Em Execução para o técnico
+                          retomar o ajuste.
                         </p>
                       ) : null}
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1320,7 +1335,16 @@ export default function SistemaGestaoOsPageClient() {
                         ) : null}
 
                         <div className="sm:col-span-2">
-                          <label className={GESTAO_OS_FORM_LABEL_CLS}>Observação / relato</label>
+                          <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                            {transitionStatus === 'REWORK' ? (
+                              <>
+                                O que precisa ser ajustado
+                                <GestaoOsRequiredMark />
+                              </>
+                            ) : (
+                              'Observação / relato'
+                            )}
+                          </label>
                           <textarea
                             className={FORM_FIELD_TEXTAREA_CLS}
                             rows={3}
@@ -1337,9 +1361,11 @@ export default function SistemaGestaoOsPageClient() {
                             !transitionStatus ||
                             transitionMutation.isPending ||
                             (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
+                            (transitionStatus === 'REWORK' && !transitionNote.trim()) ||
                             (transitionStatus === 'APPROVED' && !maintenanceType) ||
                             (transitionStatus === 'IN_PROGRESS' &&
-                              detail.status === 'SAFETY_CHECK' &&
+                              (detail.status === 'APPROVED' ||
+                                detail.status === 'SAFETY_CHECK') &&
                               !safetyReady)
                           }
                           onClick={() => transitionMutation.mutate()}

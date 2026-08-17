@@ -34,6 +34,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
@@ -437,29 +438,23 @@ export function UserPermissionsTabBar({
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-center gap-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-1">
         {items.map((t) => {
           const isActive = !t.disabled && activeTab === t.id;
           return (
-            <button
+            <AppTabButton
               key={t.id}
-              type="button"
+              active={isActive}
               onClick={() => {
                 if (!t.disabled) onChange(t.id);
               }}
               disabled={t.disabled}
               aria-disabled={t.disabled}
               title={t.disabled ? 'Ative o módulo Contratos na aba Acesso' : undefined}
-              className={`-mb-px border-b-2 pb-3 text-sm font-medium transition-colors ${
-                t.disabled
-                  ? 'cursor-not-allowed border-transparent text-gray-400 opacity-70 dark:text-gray-500'
-                  : isActive
-                    ? 'border-red-600 text-red-600 dark:border-red-500 dark:text-red-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-              }`}
+              className="px-3 py-2 text-sm font-medium"
             >
               {t.label}
-            </button>
+            </AppTabButton>
           );
         })}
       </div>

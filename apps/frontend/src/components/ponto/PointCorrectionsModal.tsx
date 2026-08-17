@@ -5,6 +5,7 @@ import { X, Plus, List, FileText } from 'lucide-react';
 import { PointCorrectionCard } from './PointCorrectionCard';
 import { PointCorrectionList } from './PointCorrectionList';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 
 interface PointCorrectionsModalProps {
   isOpen: boolean;
@@ -54,32 +55,24 @@ export const PointCorrectionsModal: React.FC<PointCorrectionsModalProps> = ({
         </div>
 
         {/* Abas */}
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8 px-6">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'list'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <List className="w-4 h-4" />
-              Minhas Solicitações
-            </button>
-            <button
-              onClick={() => setActiveTab('new')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'new'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              Nova Solicitação
-            </button>
-          </nav>
-        </div>
+        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto px-6 py-1">
+          <AppTabButton
+            active={activeTab === 'list'}
+            onClick={() => setActiveTab('list')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            <List className="w-4 h-4" />
+            Minhas Solicitações
+          </AppTabButton>
+          <AppTabButton
+            active={activeTab === 'new'}
+            onClick={() => setActiveTab('new')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Solicitação
+          </AppTabButton>
+        </nav>
 
         {/* Conteúdo */}
         <div className="overflow-y-auto max-h-[calc(90vh-140px)]">

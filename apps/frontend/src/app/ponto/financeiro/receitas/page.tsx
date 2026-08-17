@@ -31,6 +31,7 @@ import {
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { Modal } from '@/components/ui/Modal';
+import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
@@ -323,45 +324,58 @@ function TabNav<T extends string>({
   onChange,
   ariaLabel,
   centered = false,
+  variant = 'tabs',
 }: {
   tabs: Array<{ key: T; label: string }>;
   active: T;
   onChange: (key: T) => void;
   ariaLabel: string;
   centered?: boolean;
+  variant?: 'tabs' | 'segment';
 }) {
-  return (
-    <div className="border-b border-gray-200 dark:border-gray-700">
-      <nav
-        className={
-          centered
-            ? '-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6'
-            : '-mb-px flex flex-wrap gap-x-1 overflow-x-auto sm:gap-x-2'
-        }
-        role="tablist"
-        aria-label={ariaLabel}
-      >
-        {tabs.map((tab) => {
-          const isActive = active === tab.key;
-          return (
-            <button
+  if (variant === 'segment') {
+    return (
+      <div className={centered ? 'flex justify-center' : ''}>
+        <AppSegmentedControl aria-label={ariaLabel}>
+          {tabs.map((tab) => (
+            <AppSegmentedButton
               key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
+              active={active === tab.key}
               onClick={() => onChange(tab.key)}
-              className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                isActive
-                  ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
+              className="whitespace-nowrap"
             >
               {tab.label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
+            </AppSegmentedButton>
+          ))}
+        </AppSegmentedControl>
+      </div>
+    );
+  }
+
+  return (
+    <nav
+      className={
+        centered
+          ? 'flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2'
+          : 'flex flex-wrap gap-x-1 gap-y-2 overflow-x-auto py-1 sm:gap-x-2'
+      }
+      role="tablist"
+      aria-label={ariaLabel}
+    >
+      {tabs.map((tab) => {
+        const isActive = active === tab.key;
+        return (
+          <AppTabButton
+            key={tab.key}
+            active={isActive}
+            onClick={() => onChange(tab.key)}
+            className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+          >
+            {tab.label}
+          </AppTabButton>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -859,6 +873,8 @@ export default function ReceitasPage() {
               active={tipo}
               onChange={setTipo}
               ariaLabel="Tipo de lançamento"
+              variant="segment"
+              centered
             />
           ) : null}
 

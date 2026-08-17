@@ -31,6 +31,7 @@ import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { Modal } from '@/components/ui/Modal';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { FinancialControlEntryModal } from '@/components/financeiro/FinancialControlEntryModal';
@@ -77,33 +78,25 @@ function ConsorcioTabNav({
   onChange: (key: FinancialControlConsorcio) => void;
 }) {
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700">
-      <nav
-        className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
-        role="tablist"
-        aria-label="Consórcios do controle financeiro"
-      >
-        {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((tab) => {
-          const isActive = active === tab.value;
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onChange(tab.value)}
-              className={`whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                isActive
-                  ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
+    <nav
+      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
+      role="tablist"
+      aria-label="Consórcios do controle financeiro"
+    >
+      {FINANCIAL_CONTROL_CONSORCIO_OPTIONS.map((tab) => {
+        const isActive = active === tab.value;
+        return (
+          <AppTabButton
+            key={tab.value}
+            active={isActive}
+            onClick={() => onChange(tab.value)}
+            className="whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+          >
+            {tab.label}
+          </AppTabButton>
+        );
+      })}
+    </nav>
   );
 }
 

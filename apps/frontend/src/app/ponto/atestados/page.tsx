@@ -9,6 +9,7 @@ import { List, Plus, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
 export default function AtestadosPage() {
@@ -61,32 +62,24 @@ export default function AtestadosPage() {
         </div>
 
         {/* Navegação no topo */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'list'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <List className="w-4 h-4" />
-              Meus Registros
-            </button>
-            <button
-              onClick={() => setActiveTab('send')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'send'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              Registrar Ausência
-            </button>
-          </nav>
-        </div>
+        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+          <AppTabButton
+            active={activeTab === 'list'}
+            onClick={() => setActiveTab('list')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            <List className="w-4 h-4" />
+            Meus Registros
+          </AppTabButton>
+          <AppTabButton
+            active={activeTab === 'send'}
+            onClick={() => setActiveTab('send')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Registrar Ausência
+          </AppTabButton>
+        </nav>
 
         {/* Conteúdo principal */}
         <Card>

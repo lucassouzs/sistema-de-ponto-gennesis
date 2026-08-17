@@ -1,6 +1,7 @@
 'use client';
 
 import { NotificationCountBadge } from '@/components/ui/NotificationCountBadge';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 
 export type AprovacaoTabId = 'dp' | 'espelho' | 'fd' | 'fuel' | 'rm' | 'oc';
 
@@ -23,27 +24,26 @@ export function AprovacoesTabsNav({
 
   return (
     <nav
-      className="flex flex-wrap justify-center gap-1 border-b border-gray-200 dark:border-gray-700"
+      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
       aria-label="Abas de aprovações"
     >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
+        const count = tab.count ?? 0;
         return (
-          <button
+          <AppTabButton
             key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
+            active={isActive}
             onClick={() => onTabChange(tab.id)}
-            className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 ${
-              isActive
-                ? 'border-red-600 text-red-700 dark:border-red-500 dark:text-red-400'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-            }`}
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium sm:px-4"
           >
             {tab.label}
-            <NotificationCountBadge count={tab.count ?? 0} inline />
-          </button>
+            {count > 0 ? (
+              <span className="app-tab__badge">
+                <NotificationCountBadge count={count} inline />
+              </span>
+            ) : null}
+          </AppTabButton>
         );
       })}
     </nav>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   isUnbCostCenter,
@@ -107,21 +108,22 @@ export function OcFluxTabsNav({
     <div id="secao-fluxo-oc-tabs" className="scroll-mt-4">
       <div className="px-2 bg-transparent">
         <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onActiveTab(tab.id)}
-              className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                activeTab === tab.id
-                  ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-            >
-              {tab.label}
-              <TabCountBadge count={countFor(tab.countKey)} active={activeTab === tab.id} tone="red" />
-            </button>
-          ))}
+          {visibleTabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <AppTabButton
+                key={tab.id}
+                active={active}
+                onClick={() => onActiveTab(tab.id)}
+                className="flex items-center gap-2 whitespace-nowrap px-2 py-2 text-xs font-medium sm:px-3 sm:text-sm"
+              >
+                {tab.label}
+                <span className="app-tab__badge">
+                  <TabCountBadge count={countFor(tab.countKey)} active={active} tone="red" />
+                </span>
+              </AppTabButton>
+            );
+          })}
         </nav>
       </div>
     </div>

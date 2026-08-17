@@ -884,6 +884,78 @@ body::-webkit-scrollbar:vertical {
   }
 }
 
+/* Abas (Central de Chamados, modal de OS) */
+@keyframes app-tab-select {
+  0% {
+    transform: scale(0.92);
+  }
+  55% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.app-tab {
+  transform-origin: center;
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1),
+    color 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.app-tab:hover {
+  transform: scale(1.08);
+}
+
+.app-tab:not(.app-tab--active) {
+  background-color: transparent;
+}
+
+.app-tab:not(.app-tab--active):hover {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.app-tab--active:hover {
+  transform: scale(1.05);
+}
+
+.app-tab .app-tab__badge {
+  display: inline-flex;
+  transition: transform 0.28s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.app-tab:hover .app-tab__badge {
+  transform: scale(1.1);
+}
+
+.app-tab--pop {
+  animation: app-tab-select 0.38s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.app-tab--pop .app-tab__badge {
+  animation: sidebar-rail-icon-pop 0.42s cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tab {
+    transition-duration: 0.01ms !important;
+  }
+
+  .app-tab--pop,
+  .app-tab--pop .app-tab__badge {
+    animation: none;
+  }
+
+  .app-tab:hover,
+  .app-tab--active:hover,
+  .app-tab:hover .app-tab__badge {
+    transform: none;
+  }
+}
+
 /* Logo do rail */
 @keyframes sidebar-logo-spin {
   0% {

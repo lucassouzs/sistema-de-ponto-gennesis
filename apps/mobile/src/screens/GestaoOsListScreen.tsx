@@ -31,6 +31,7 @@ const STATUS_LABEL: Record<string, string> = {
   IN_PROGRESS: 'Em execução',
   WAITING_PARTS: 'Aguardando peça',
   COMPLETED: 'Concluída',
+  REWORK: 'Aguardando ajuste',
   CLOSED: 'Encerrada',
   CANCELLED: 'Cancelada'
 };

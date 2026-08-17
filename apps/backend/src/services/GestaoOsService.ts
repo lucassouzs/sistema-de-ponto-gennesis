@@ -33,6 +33,7 @@ const STATUS_FEED_LABELS: Record<GestaoOsStatus, string> = {
   IN_PROGRESS: 'Em Execução',
   WAITING_PARTS: 'Aguardando Peça/Terceiro',
   COMPLETED: 'Concluída',
+  REWORK: 'Aguardando ajuste',
   CLOSED: 'Encerrada/Avaliada',
   CANCELLED: 'Cancelada'
 };
@@ -40,11 +41,12 @@ const STATUS_FEED_LABELS: Record<GestaoOsStatus, string> = {
 const STATUS_TRANSITIONS: Record<GestaoOsStatus, GestaoOsStatus[]> = {
   OPEN: ['UNDER_REVIEW', 'CANCELLED'],
   UNDER_REVIEW: ['APPROVED', 'CANCELLED'],
-  APPROVED: ['SAFETY_CHECK', 'CANCELLED'],
+  APPROVED: ['IN_PROGRESS', 'CANCELLED'],
   SAFETY_CHECK: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED', 'CANCELLED'],
   WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
-  COMPLETED: ['CLOSED', 'CANCELLED'],
+  COMPLETED: ['REWORK', 'CLOSED', 'CANCELLED'],
+  REWORK: ['IN_PROGRESS', 'CANCELLED'],
   CLOSED: [],
   CANCELLED: []
 };
@@ -712,13 +714,21 @@ export class GestaoOsService {
       if (!reason) throw createError('Informe a justificativa do cancelamento', 400);
     }
 
+    if (nextStatus === 'REWORK') {
+      const reason = String(input.note ?? '').trim();
+      if (!reason) throw createError('Informe o que precisa ser ajustado', 400);
+    }
+
     if (nextStatus === 'APPROVED') {
       if (!input.maintenanceType && !current.maintenanceType) {
         throw createError('Defina o tipo de manutenção ao aprovar a OS', 400);
       }
     }
 
-    if (current.status === 'SAFETY_CHECK' && nextStatus === 'IN_PROGRESS') {
+    if (
+      (current.status === 'APPROVED' || current.status === 'SAFETY_CHECK') &&
+      nextStatus === 'IN_PROGRESS'
+    ) {
       const safetyItems = mergeSafetyChecklist(
         input.safetyChecklistResponses !== undefined
           ? input.safetyChecklistResponses
@@ -791,7 +801,7 @@ export class GestaoOsService {
     if (input.checklistResponses !== undefined) {
       data.checklistResponses = (input.checklistResponses ?? null) as Prisma.InputJsonValue;
     }
-    if (input.safetyChecklistResponses !== undefined || nextStatus === 'SAFETY_CHECK') {
+    if (input.safetyChecklistResponses !== undefined || nextStatus === 'APPROVED') {
       data.safetyChecklistResponses = mergeSafetyChecklist(
         input.safetyChecklistResponses !== undefined
           ? input.safetyChecklistResponses
@@ -801,7 +811,10 @@ export class GestaoOsService {
     if (input.safetyPhotoUrl !== undefined) {
       data.safetyPhotoUrl = input.safetyPhotoUrl ? String(input.safetyPhotoUrl).trim() : null;
     }
-    if (current.status === 'SAFETY_CHECK' && nextStatus === 'IN_PROGRESS') {
+    if (
+      (current.status === 'APPROVED' || current.status === 'SAFETY_CHECK') &&
+      nextStatus === 'IN_PROGRESS'
+    ) {
       data.safetyChecklistResponses = mergeSafetyChecklist(
         input.safetyChecklistResponses !== undefined
           ? input.safetyChecklistResponses
@@ -831,6 +844,9 @@ export class GestaoOsService {
 
     if (nextStatus === 'APPROVED') data.approvedAt = now;
     if (nextStatus === 'IN_PROGRESS' && !current.startedAt) data.startedAt = now;
+    if (current.status === 'REWORK' && nextStatus === 'IN_PROGRESS') {
+      data.completedAt = null;
+    }
     if (nextStatus === 'COMPLETED') data.completedAt = now;
     if (nextStatus === 'CLOSED') {
       data.closedAt = now;
@@ -907,7 +923,8 @@ export class GestaoOsService {
       (byStatus.APPROVED ?? 0) +
       (byStatus.SAFETY_CHECK ?? 0) +
       (byStatus.IN_PROGRESS ?? 0) +
-      (byStatus.WAITING_PARTS ?? 0);
+      (byStatus.WAITING_PARTS ?? 0) +
+      (byStatus.REWORK ?? 0);
     const overdue = await prisma.gestaoOsWorkOrder.count({
       where: {
         ...visibility,

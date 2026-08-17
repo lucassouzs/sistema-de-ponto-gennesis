@@ -33,14 +33,14 @@ type SafetyItem = {
 };
 
 const NEXT: Record<string, string[]> = {
-  APPROVED: ['SAFETY_CHECK'],
+  APPROVED: ['IN_PROGRESS'],
   SAFETY_CHECK: ['IN_PROGRESS'],
   IN_PROGRESS: ['WAITING_PARTS', 'COMPLETED'],
-  WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED']
+  WAITING_PARTS: ['IN_PROGRESS', 'COMPLETED'],
+  REWORK: ['IN_PROGRESS']
 };
 
 const LABEL: Record<string, string> = {
-  SAFETY_CHECK: 'Ir para segurança do trabalho',
   IN_PROGRESS: 'Iniciar / Retomar',
   WAITING_PARTS: 'Aguardando peça',
   COMPLETED: 'Concluir serviço'
@@ -78,6 +78,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
       setChecklist(data.checklistResponses);
     }
     if (
+      data.status === 'APPROVED' ||
       data.status === 'SAFETY_CHECK' ||
       (Array.isArray(data.safetyChecklistResponses) && data.safetyChecklistResponses.length > 0)
     ) {
@@ -159,7 +160,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
             <Text style={{ color: colors.textSecondary, marginTop: 8 }}>{wo.locationLabel}</Text>
           ) : null}
 
-          {wo.status === 'SAFETY_CHECK' ? (
+          {wo.status === 'APPROVED' || wo.status === 'SAFETY_CHECK' ? (
             <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <Text style={[styles.boxTitle, { color: colors.text }]}>
                 Segurança do trabalho
@@ -248,7 +249,9 @@ export default function GestaoOsDetailScreen({ route }: Props) {
             const blocked =
               mutation.isPending ||
               uploadingPhoto ||
-              (status === 'IN_PROGRESS' && wo.status === 'SAFETY_CHECK' && !safetyReady);
+              (status === 'IN_PROGRESS' &&
+                (wo.status === 'APPROVED' || wo.status === 'SAFETY_CHECK') &&
+                !safetyReady);
             return (
               <TouchableOpacity
                 key={status}

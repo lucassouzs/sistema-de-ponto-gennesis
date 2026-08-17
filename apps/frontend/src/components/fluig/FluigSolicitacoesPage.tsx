@@ -34,6 +34,7 @@ import {
   ListRowNavigableLabel,
 } from '@/components/ui/listTableUi';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
+import { AppTabButton, AppSegmentedButton, AppSegmentedControl } from '@/components/ui/AppTabButton';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import {
   buildFluigWorkflowProcessViewUrl,
@@ -1377,33 +1378,25 @@ export function FluigSolicitacoesPage({
 
         {/* Abas G3 / G4 / G5 (centralizadas, padrão OCs) */}
         {showProcessCard && (
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav
-              className="-mb-px flex flex-wrap justify-center gap-x-4 gap-y-2 overflow-x-auto sm:gap-x-6"
-              role="tablist"
-              aria-label="Processos Fluig"
-            >
-              {datasets.map((ds, idx) => {
-                const active = activeTab === idx;
-                return (
-                  <button
-                    key={ds}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => handleDatasetTabClick(idx)}
-                    className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                      active
-                        ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    {datasetTabLabels[ds]}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
+          <nav
+            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2"
+            role="tablist"
+            aria-label="Processos Fluig"
+          >
+            {datasets.map((ds, idx) => {
+              const active = activeTab === idx;
+              return (
+                <AppTabButton
+                  key={ds}
+                  active={active}
+                  onClick={() => handleDatasetTabClick(idx)}
+                  className="flex items-center gap-2 whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
+                >
+                  {datasetTabLabels[ds]}
+                </AppTabButton>
+              );
+            })}
+          </nav>
         )}
 
         {/* Modal de filtros (padrão do sistema) */}
@@ -1622,35 +1615,28 @@ export function FluigSolicitacoesPage({
               };
               return (
                 <div className="space-y-5">
-                  <div className="border-b border-gray-200 dark:border-gray-700">
-                    <nav
-                      className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto sm:gap-x-2"
-                      role="tablist"
-                      aria-label="Etapas do processo"
-                    >
-                      {filteredStatusList.map(([etapa, rows], idx) => {
-                        const active = idx === selectedEtapaIndex;
-                        return (
-                          <button
-                            key={`${datasetId}-${etapa}`}
-                            type="button"
-                            role="tab"
-                            aria-selected={active}
-                            onClick={() => setSelectedEtapaIndex(idx)}
-                            className={`flex items-center gap-2 whitespace-nowrap rounded-t-lg border-b-2 px-2 py-2.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm ${
-                              active
-                                ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-                            }`}
-                            title={`${etapa} — ${rows.length} registro(s)`}
-                          >
-                            {etapa}
-                            <TabCountBadge count={rows.length} active={active} tone="red" />
-                          </button>
-                        );
-                      })}
-                    </nav>
-                  </div>
+                    <div className="flex justify-center">
+                      <AppSegmentedControl
+                        aria-label="Etapas do processo"
+                        className="max-w-full justify-center overflow-x-auto"
+                      >
+                        {filteredStatusList.map(([etapa, rows], idx) => {
+                          const active = idx === selectedEtapaIndex;
+                          return (
+                            <AppSegmentedButton
+                              key={`${datasetId}-${etapa}`}
+                              active={active}
+                              onClick={() => setSelectedEtapaIndex(idx)}
+                              className="gap-1.5 whitespace-nowrap"
+                              title={`${etapa} — ${rows.length} registro(s)`}
+                            >
+                              {etapa}
+                              <TabCountBadge count={rows.length} active={active} tone="red" />
+                            </AppSegmentedButton>
+                          );
+                        })}
+                      </AppSegmentedControl>
+                    </div>
 
                   <Card className={`${cadastroListClasses.card} overflow-hidden`}>
                     <CardHeader className={cadastroListClasses.cardHeader}>

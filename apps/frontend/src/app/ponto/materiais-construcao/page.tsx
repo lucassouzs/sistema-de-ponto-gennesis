@@ -29,6 +29,7 @@ import {
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { Modal } from '@/components/ui/Modal';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -1578,20 +1579,14 @@ export default function MateriaisConstrucaoPage() {
                 ).map((tab) => {
                   const active = detailTab === tab.value;
                   return (
-                    <button
+                    <AppTabButton
                       key={tab.value}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
+                      active={active}
                       onClick={() => setDetailTab(tab.value)}
-                      className={`shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                        active
-                          ? 'border-red-500 text-red-600 dark:border-red-400 dark:text-red-400'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                      }`}
+                      className="shrink-0 px-3 py-2.5 text-sm font-medium"
                     >
                       {tab.label}
-                    </button>
+                    </AppTabButton>
                   );
                 })}
               </div>

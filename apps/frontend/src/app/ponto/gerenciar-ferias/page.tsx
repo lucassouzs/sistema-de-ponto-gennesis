@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { 
@@ -294,40 +295,29 @@ export default function FeriasPage() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setSelectedTab('pending')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'pending'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Pendentes ({pendingVacationsList.length})
-            </button>
-            <button
-              onClick={() => setSelectedTab('all')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'all'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Todas ({allVacationsList.length})
-            </button>
-            <button
-              onClick={() => setSelectedTab('compliance')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'compliance'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Conformidade
-            </button>
-          </nav>
-        </div>
+        <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+          <AppTabButton
+            active={selectedTab === 'pending'}
+            onClick={() => setSelectedTab('pending')}
+            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            Pendentes ({pendingVacationsList.length})
+          </AppTabButton>
+          <AppTabButton
+            active={selectedTab === 'all'}
+            onClick={() => setSelectedTab('all')}
+            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            Todas ({allVacationsList.length})
+          </AppTabButton>
+          <AppTabButton
+            active={selectedTab === 'compliance'}
+            onClick={() => setSelectedTab('compliance')}
+            className="whitespace-nowrap px-3 py-2 text-sm font-medium"
+          >
+            Conformidade
+          </AppTabButton>
+        </nav>
 
         {/* Conteúdo das Tabs */}
         {selectedTab === 'pending' && (

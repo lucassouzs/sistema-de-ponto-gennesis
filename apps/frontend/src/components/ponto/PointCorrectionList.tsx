@@ -13,6 +13,7 @@ import {
   User
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
@@ -155,60 +156,26 @@ export const PointCorrectionList: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* Tabs de Status */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
-          <button
-            onClick={() => setActiveStatusTab('PENDING')}
-            className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-              activeStatusTab === 'PENDING'
-                ? 'border-yellow-500 dark:border-yellow-400 text-yellow-600 dark:text-yellow-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
+      <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+        {(
+          [
+            { id: 'PENDING' as const, label: `Pendentes (${statusCounts.PENDING})` },
+            { id: 'APPROVED' as const, label: `Aprovados (${statusCounts.APPROVED})` },
+            { id: 'REJECTED' as const, label: `Rejeitados (${statusCounts.REJECTED})` },
+            { id: 'CANCELLED' as const, label: `Cancelados (${statusCounts.CANCELLED})` },
+            { id: 'all' as const, label: `Todas (${statusCounts.all})` },
+          ] as const
+        ).map((tab) => (
+          <AppTabButton
+            key={tab.id}
+            active={activeStatusTab === tab.id}
+            onClick={() => setActiveStatusTab(tab.id)}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
           >
-            Pendentes ({statusCounts.PENDING})
-          </button>
-          <button
-            onClick={() => setActiveStatusTab('APPROVED')}
-            className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-              activeStatusTab === 'APPROVED'
-                ? 'border-green-500 dark:border-green-400 text-green-600 dark:text-green-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            Aprovados ({statusCounts.APPROVED})
-          </button>
-          <button
-            onClick={() => setActiveStatusTab('REJECTED')}
-            className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-              activeStatusTab === 'REJECTED'
-                ? 'border-red-500 dark:border-red-400 text-red-600 dark:text-red-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            Rejeitados ({statusCounts.REJECTED})
-          </button>
-          <button
-            onClick={() => setActiveStatusTab('CANCELLED')}
-            className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-              activeStatusTab === 'CANCELLED'
-                ? 'border-gray-500 dark:border-gray-400 text-gray-600 dark:text-gray-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            Cancelados ({statusCounts.CANCELLED})
-          </button>
-          <button
-            onClick={() => setActiveStatusTab('all')}
-            className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-              activeStatusTab === 'all'
-                ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          >
-            Todas ({statusCounts.all})
-          </button>
-        </nav>
-      </div>
+            {tab.label}
+          </AppTabButton>
+        ))}
+      </nav>
 
       <div className="space-y-3">
         {filteredRequests.length === 0 ? (

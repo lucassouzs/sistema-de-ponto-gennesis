@@ -43,6 +43,7 @@ import { useCostCenters } from '@/hooks/useCostCenters';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
 import { Modal } from '@/components/ui/Modal';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
@@ -10769,29 +10770,21 @@ export function OrcamentoPageView({
             </div>
 
             {/* Abas */}
-            <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 shrink-0 px-6">
-              <button
-                type="button"
+            <div className="flex gap-1 shrink-0 px-6 py-1">
+              <AppTabButton
+                active={orcafascioModalTab === 'composicoes'}
                 onClick={() => setOrcafascioModalTab('composicoes')}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  orcafascioModalTab === 'composicoes'
-                    ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
+                className="px-4 py-2.5 text-sm font-medium"
               >
                 Composições
-              </button>
-              <button
-                type="button"
+              </AppTabButton>
+              <AppTabButton
+                active={orcafascioModalTab === 'orcamentos'}
                 onClick={() => setOrcafascioModalTab('orcamentos')}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  orcafascioModalTab === 'orcamentos'
-                    ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
+                className="px-4 py-2.5 text-sm font-medium"
               >
                 Orçamentos
-              </button>
+              </AppTabButton>
             </div>
 
             {/* ── Aba Orçamentos (API Orçafascio) ────────────────────────────── */}
@@ -11457,30 +11450,22 @@ export function OrcamentoPageView({
                       </div>
 
                       {/* Sub-abas: conteúdo da composição */}
-                      <div className="flex border-b border-gray-100 dark:border-gray-800 shrink-0 px-2">
-                        <button
-                          type="button"
+                      <div className="flex gap-1 shrink-0 px-2 py-1">
+                        <AppTabButton
+                          active={orcafascioComposicaoDetalheTab === 'itens'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('itens')}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
-                            orcafascioComposicaoDetalheTab === 'itens'
-                              ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
+                          className="px-3 py-2 text-xs font-medium"
                         >
                           Itens
-                        </button>
-                        <button
-                          type="button"
+                        </AppTabButton>
+                        <AppTabButton
+                          active={orcafascioComposicaoDetalheTab === 'analitico'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('analitico')}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
-                            orcafascioComposicaoDetalheTab === 'analitico'
-                              ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
+                          className="px-3 py-2 text-xs font-medium"
                           title="Mesmos insumos e serviços da composição em formato de tabela (visão analítica)"
                         >
                           Analítico
-                        </button>
+                        </AppTabButton>
                       </div>
 
                       <div className="flex-1 min-h-0 overflow-y-auto">

@@ -10,6 +10,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { PointCorrectionCard } from '@/components/ponto/PointCorrectionCard';
 import { PointCorrectionList } from '@/components/ponto/PointCorrectionList';
 import { Loading } from '@/components/ui/Loading';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
 export default function SolicitacoesPage() {
@@ -66,32 +67,24 @@ export default function SolicitacoesPage() {
           </div>
 
           {/* Navegação no topo */}
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="-mb-px flex space-x-8">
-              <button
-                onClick={() => setActiveTab('list')}
-                className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'list'
-                    ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <List className="w-4 h-4" />
-                Minhas alterações
-              </button>
-              <button
-                onClick={() => setActiveTab('new')}
-                className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'new'
-                    ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                }`}
-              >
-                <Plus className="w-4 h-4" />
-                Nova alteração
-              </button>
-            </nav>
-          </div>
+          <nav className="-mb-px flex flex-wrap gap-1 overflow-x-auto py-1">
+            <AppTabButton
+              active={activeTab === 'list'}
+              onClick={() => setActiveTab('list')}
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            >
+              <List className="w-4 h-4" />
+              Minhas alterações
+            </AppTabButton>
+            <AppTabButton
+              active={activeTab === 'new'}
+              onClick={() => setActiveTab('new')}
+              className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              Nova alteração
+            </AppTabButton>
+          </nav>
 
           {/* Conteúdo principal */}
           <Card>

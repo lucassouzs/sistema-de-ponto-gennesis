@@ -1,5 +1,8 @@
+'use client';
+
 import type { FluxTab, GerenciarStats } from '../_lib/types';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
+import { AppTabButton } from '@/components/ui/AppTabButton';
 
 type OcTabCounts = {
   compras: number;
@@ -13,6 +16,9 @@ type OcTabCounts = {
   ATTACH_NF: number;
   FINALIZADAS: number;
 };
+
+const TAB_CLS =
+  'flex items-center gap-2 whitespace-nowrap px-2 py-2 text-xs font-medium sm:px-3 sm:text-sm';
 
 export function FluxTabsNav({
   fluxTab,
@@ -43,12 +49,12 @@ export function FluxTabsNav({
   return (
     <div id="secao-fluxo-tabs" className={embeddedInCard ? '' : 'scroll-mt-4'}>
       {!embeddedInCard && (
-        <p className="text-center text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">
+        <p className="mb-3 text-center text-sm font-medium text-gray-800 dark:text-gray-200">
           Requisições de materiais e fases de OC
         </p>
       )}
-      <div className="px-2 bg-transparent">
-        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 sm:gap-x-2 overflow-x-auto py-3">
+      <div className="bg-transparent px-2">
+        <nav className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-x-auto py-3 sm:gap-x-2">
           {(
             [
               { id: 'rm_PENDING' as const, label: 'Pendentes', count: rmPending },
@@ -56,22 +62,20 @@ export function FluxTabsNav({
               { id: 'rm_APPROVED' as const, label: 'RMs Aprovadas', count: rmApproved }
             ] as const
           ).map((tab) => (
-            <button
+            <AppTabButton
               key={tab.id}
-              type="button"
+              active={fluxTab === tab.id}
               onClick={() => onFluxTab(tab.id)}
-              className={`flex items-center gap-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap rounded-t-lg transition-colors ${
-                fluxTab === tab.id
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={TAB_CLS}
             >
               {tab.label}
-              <TabCountBadge count={tab.count} active={fluxTab === tab.id} tone="blue" />
-            </button>
+              <span className="app-tab__badge">
+                <TabCountBadge count={tab.count} active={fluxTab === tab.id} tone="red" />
+              </span>
+            </AppTabButton>
           ))}
           <span
-            className="hidden sm:inline-flex w-px min-h-[2rem] bg-gray-300 dark:bg-gray-600 self-center mx-1 shrink-0"
+            className="mx-1 hidden min-h-[2rem] w-px shrink-0 self-center bg-gray-300 dark:bg-gray-600 sm:inline-flex"
             aria-hidden
           />
           {(
@@ -104,36 +108,32 @@ export function FluxTabsNav({
               }
             ] as const
           ).map((tab) => (
-            <button
+            <AppTabButton
               key={tab.id}
-              type="button"
+              active={fluxTab === tab.id}
               onClick={() => onFluxTab(tab.id)}
-              className={`flex items-center gap-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap rounded-t-lg transition-colors ${
-                fluxTab === tab.id
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
+              className={TAB_CLS}
             >
               {tab.label}
-              <TabCountBadge count={tab.count} active={fluxTab === tab.id} tone="blue" />
-            </button>
+              <span className="app-tab__badge">
+                <TabCountBadge count={tab.count} active={fluxTab === tab.id} tone="red" />
+              </span>
+            </AppTabButton>
           ))}
           <span
-            className="hidden sm:inline-flex w-px min-h-[2rem] bg-gray-300 dark:bg-gray-600 self-center mx-1 shrink-0"
+            className="mx-1 hidden min-h-[2rem] w-px shrink-0 self-center bg-gray-300 dark:bg-gray-600 sm:inline-flex"
             aria-hidden
           />
-          <button
-            type="button"
+          <AppTabButton
+            active={fluxTab === 'rm_CANCELLED'}
             onClick={() => onFluxTab('rm_CANCELLED')}
-            className={`flex items-center gap-2 py-2 px-2 sm:px-3 border-b-2 font-medium text-xs sm:text-sm whitespace-nowrap rounded-t-lg transition-colors ${
-              fluxTab === 'rm_CANCELLED'
-                ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
+            className={TAB_CLS}
           >
             Canceladas
-            <TabCountBadge count={rmCancelled} active={fluxTab === 'rm_CANCELLED'} tone="blue" />
-          </button>
+            <span className="app-tab__badge">
+              <TabCountBadge count={rmCancelled} active={fluxTab === 'rm_CANCELLED'} tone="red" />
+            </span>
+          </AppTabButton>
         </nav>
       </div>
     </div>
