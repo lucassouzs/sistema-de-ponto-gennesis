@@ -62,6 +62,10 @@ router.post('/import', (req, res, next) =>
   constructionMaterialController.importMaterials(req, res, next)
 );
 
+router.post('/delete-many', (req, res, next) =>
+  constructionMaterialController.deleteMany(req, res, next)
+);
+
 // Produtos ativos do TOTVS RM (consulta PRODUTOSATIVOS)
 router.get('/totvs/produtos-ativos', (req, res, next) =>
   constructionMaterialController.getTotvsProdutosAtivos(req, res, next)

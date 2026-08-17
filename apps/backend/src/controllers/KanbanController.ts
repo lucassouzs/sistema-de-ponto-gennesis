@@ -503,10 +503,17 @@ export class KanbanController {
       const userId = requireUserId(req, next);
       if (!userId) return;
       const { id } = req.params;
-      const body = req.body as { title?: string; columnId?: string } | undefined;
+      const body = req.body as {
+        title?: string;
+        columnId?: string;
+        copyLabels?: boolean;
+        copyAttachments?: boolean;
+      } | undefined;
       const card = await kanbanService.duplicateCard(userId, id, {
         title: body?.title,
         columnId: body?.columnId,
+        copyLabels: body?.copyLabels,
+        copyAttachments: body?.copyAttachments,
       });
       res.status(201).json({ success: true, data: card });
     } catch (error: unknown) {

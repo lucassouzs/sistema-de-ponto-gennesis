@@ -511,15 +511,20 @@ export function buildOptimisticCardCopy(
   source: KanbanCard,
   title: string,
   tempId: string,
+  keep?: { copyLabels?: boolean; copyAttachments?: boolean },
 ): KanbanCard {
+  const copyLabels = keep?.copyLabels !== false;
+  const copyAttachments = keep?.copyAttachments !== false;
   return {
     ...source,
     id: tempId,
     title,
+    labels: copyLabels ? source.labels : [],
     progress: source.checklistEnabled ? 0 : source.progress,
     completedTasks: source.checklistEnabled ? 0 : source.completedTasks,
     comments: 0,
-    attachments: 0,
+    attachments: copyAttachments ? source.attachments : 0,
+    attachmentsEnabled: copyAttachments ? source.attachmentsEnabled : false,
     createdAt: new Date().toISOString(),
     completedAt: null,
   };
@@ -743,7 +748,12 @@ export async function deleteKanbanCard(id: string) {
 
 export async function duplicateKanbanCard(
   id: string,
-  payload?: { title?: string; columnId?: string },
+  payload?: {
+    title?: string;
+    columnId?: string;
+    copyLabels?: boolean;
+    copyAttachments?: boolean;
+  },
   options?: { timeout?: number },
 ) {
   const res = await api.post(`/kanban/cards/${id}/duplicate`, payload ?? {}, {
