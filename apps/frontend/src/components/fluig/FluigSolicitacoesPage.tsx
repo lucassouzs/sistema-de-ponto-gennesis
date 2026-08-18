@@ -39,10 +39,14 @@ import { useCostCenters } from '@/hooks/useCostCenters';
 import {
   buildFluigWorkflowProcessViewUrl,
   formatFluigBudgetFieldDisplay,
+  formatWorkflowValorDisplay,
+  readFluigDatasetValor,
 } from '@/lib/fluigWorkflowApproval';
 import api from '@/lib/api';
 import * as XLSX from 'xlsx';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 
 const FLUIG_LIST_PAGE_SIZE = 20;
 
@@ -56,9 +60,15 @@ export const G5_RELATORIO_DATASET_ID = 'G5-Relatorio-DF-GO-TODOS-SETORES';
 const DEFAULT_BI_DATASETS = ['DataSet_G3FollowUp', 'DataSet_G4FollowUp', G5_RELATORIO_DATASET_ID] as const;
 
 const DEFAULT_DATASET_TAB_LABELS: Record<string, string> = {
-  DataSet_G3FollowUp: 'G3 - Aprovação de Ordem de Compra',
-  DataSet_G4FollowUp: 'G4 - Anexação de Comprovante',
-  [G5_RELATORIO_DATASET_ID]: 'G5 - Pagamentos Avulsos',
+  DataSet_G3FollowUp: 'G3',
+  DataSet_G4FollowUp: 'G4',
+  [G5_RELATORIO_DATASET_ID]: 'G5',
+};
+
+const DEFAULT_DATASET_TAB_TITLES: Record<string, string> = {
+  DataSet_G3FollowUp: 'G3 — Aprovação de Ordem de Compra',
+  DataSet_G4FollowUp: 'G4 — Anexação de Comprovante',
+  [G5_RELATORIO_DATASET_ID]: 'G5 — Pagamentos Avulsos',
 };
 
 const FILIAIS_PERMITIDAS = [
@@ -142,6 +152,40 @@ function parseCellDate(val: unknown): Date | null {
     v = o.display ?? o.displayValue ?? o.internalValue ?? o.value ?? o.date ?? '';
   }
   return parseFluigDateTime(v);
+}
+
+function handleCreationPeriodFromChange(
+  value: string,
+  periodTo: string,
+  setPeriodFrom: (value: string) => void,
+  setPeriodTo: (value: string) => void
+) {
+  setPeriodFrom(value);
+  if (value && periodTo && value > periodTo) setPeriodTo(value);
+}
+
+function handleCreationPeriodToChange(
+  value: string,
+  periodFrom: string,
+  setPeriodFrom: (value: string) => void,
+  setPeriodTo: (value: string) => void
+) {
+  setPeriodTo(value);
+  if (value && periodFrom && periodFrom > value) setPeriodFrom(value);
+}
+
+function isCreationDateInRange(date: Date | null, fromIso: string, toIso: string): boolean {
+  if (!fromIso && !toIso) return true;
+  if (!date) return false;
+  if (fromIso) {
+    const from = new Date(`${fromIso}T00:00:00`);
+    if (!Number.isNaN(from.getTime()) && date < from) return false;
+  }
+  if (toIso) {
+    const to = new Date(`${toIso}T23:59:59.999`);
+    if (!Number.isNaN(to.getTime()) && date > to) return false;
+  }
+  return true;
 }
 
 /** Detecta coluna de natureza orçamentária com nomes variados no Fluig/G5. */
@@ -238,6 +282,17 @@ function isEtapaSemLeadTime(etapaLabel: string): boolean {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
   return /\bfinalizad[oa]\b/.test(n) || n.includes('finaliz');
+}
+
+function formatCreationDateDisplay(from: Date | null): string {
+  if (!from) return '—';
+  return from.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatLeadTime(from: Date | null): string {
@@ -562,6 +617,8 @@ export function FluigSolicitacoesPage({
   const [selectedNaturezasOrcamentarias, setSelectedNaturezasOrcamentarias] = useState<string[]>([]);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [periodFrom, setPeriodFrom] = useState('');
+  const [periodTo, setPeriodTo] = useState('');
   // Quando o usuário mexe em um filtro (Filial/CC/Fornecedor/…), ele vira o "ativo".
   // Os outros ficam temporariamente ignorados no resultado para evitar influência cruzada.
   const [activeFilterCategory, setActiveFilterCategory] = useState<
@@ -996,10 +1053,21 @@ export function FluigSolicitacoesPage({
     );
   }, [currentColumns, currentValuesFilteredByFilial, config?.leadTimeColumn]);
 
+  const getCreationDateFromRow = (row: Record<string, unknown>): string => {
+    if (!movimentoDataHoraCol) return '—';
+    return formatCreationDateDisplay(parseCellDate(row[movimentoDataHoraCol]));
+  };
+
   const getLeadTimeFromRow = (row: Record<string, unknown>): string => {
     if (!movimentoDataHoraCol) return '—';
     const date = parseCellDate(row[movimentoDataHoraCol]);
     return formatLeadTime(date);
+  };
+
+  const getRowValorDisplay = (row: Record<string, unknown>): string => {
+    const columns =
+      currentColumns.length > 0 ? currentColumns : Object.keys(row);
+    return formatWorkflowValorDisplay(readFluigDatasetValor(row, columns, datasetId));
   };
 
   const { statusList: fullStatusList, idCol, historicoCol, statusCol } = useMemo(
@@ -1211,11 +1279,15 @@ export function FluigSolicitacoesPage({
     setSelectedUrgencias(urgencias);
     setSelectedFornecedores(fornecedores);
     setSelectedNaturezasOrcamentarias(naturezasOrcamentarias);
+    setPeriodFrom('');
+    setPeriodTo('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetId]);
 
+  const hasPeriodFilter = Boolean(periodFrom || periodTo);
   const hasActiveFilters =
     searchText.trim() !== '' ||
+    hasPeriodFilter ||
     (filialCol && filiais.length > 0 && (selectedFiliais.length === 0 || selectedFiliais.length < filiais.length)) ||
     (ccColResolved && centrosCusto.length > 0 && (selectedCCs.length === 0 || selectedCCs.length < centrosCusto.length)) ||
     (setorSolicitanteCol && setoresSolicitantes.length > 0 && (selectedSetoresSolicitantes.length === 0 || selectedSetoresSolicitantes.length < setoresSolicitantes.length)) ||
@@ -1265,6 +1337,10 @@ export function FluigSolicitacoesPage({
         return false;
       if (byNaturezasOrcamentarias && naturezaOrcamentariaCol && !byNaturezasOrcamentarias.has(getNaturezaOrcamentariaValue(row)))
         return false;
+      if (hasPeriodFilter) {
+        const createdAt = movimentoDataHoraCol ? parseCellDate(row[movimentoDataHoraCol]) : null;
+        if (!isCreationDateInRange(createdAt, periodFrom, periodTo)) return false;
+      }
       if (search) {
         const colKeys = currentColumns.slice();
         for (const k of Object.keys(row)) {
@@ -1307,6 +1383,10 @@ export function FluigSolicitacoesPage({
     fornecedores.length,
     naturezasOrcamentarias.length,
     activeFilterCategory,
+    hasPeriodFilter,
+    periodFrom,
+    periodTo,
+    movimentoDataHoraCol,
   ]);
 
   /** Com busca ativa, se a aba atual não tem linhas mas outra aba tem, muda para a primeira aba com resultado (evita “sumir” o IdMov em outra etapa). */
@@ -1325,7 +1405,7 @@ export function FluigSolicitacoesPage({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedEtapaIndex, searchText, datasetId]);
+  }, [selectedEtapaIndex, searchText, datasetId, periodFrom, periodTo]);
 
   const handleClearFilters = () => {
     setSelectedFiliais([...filiais]);
@@ -1334,6 +1414,8 @@ export function FluigSolicitacoesPage({
     setSelectedUrgencias([...urgencias]);
     setSelectedFornecedores([...fornecedores]);
     setSelectedNaturezasOrcamentarias([...naturezasOrcamentarias]);
+    setPeriodFrom('');
+    setPeriodTo('');
     setSearchText('');
     setActiveFilterCategory(null);
   };
@@ -1377,27 +1459,21 @@ export function FluigSolicitacoesPage({
           </p>
         </div>
 
-        {/* Abas G3 / G4 / G5 (centralizadas, padrão OCs) */}
         {showProcessCard && (
-          <nav
-            className="-mb-px flex flex-wrap justify-center gap-x-1 gap-y-2 overflow-visible py-3 sm:gap-x-2"
-            role="tablist"
-            aria-label="Processos Fluig"
-          >
-            {datasets.map((ds, idx) => {
-              const active = activeTab === idx;
-              return (
-                <AppTabButton
-                  key={ds}
-                  active={active}
-                  onClick={() => handleDatasetTabClick(idx)}
-                  className="flex items-center gap-2 whitespace-nowrap px-2 py-2.5 text-xs font-medium sm:px-3 sm:text-sm"
-                >
-                  {datasetTabLabels[ds]}
-                </AppTabButton>
-              );
-            })}
-          </nav>
+          <div className="flex justify-center">
+            <SegmentedControl
+              aria-label="Processos Fluig"
+              className="h-auto [&>button]:px-5 [&>button]:py-2 [&>button]:font-medium"
+              pillClassName="bg-white shadow-sm dark:bg-gray-900"
+              value={datasetId}
+              onChange={(next) => handleDatasetTabClick(datasets.indexOf(next))}
+              options={datasets.map((ds) => ({
+                value: ds,
+                label: datasetTabLabels[ds],
+                title: DEFAULT_DATASET_TAB_TITLES[ds] ?? datasetTabLabels[ds],
+              }))}
+            />
+          </div>
         )}
 
         {/* Modal de filtros (padrão do sistema) */}
@@ -1518,6 +1594,38 @@ export function FluigSolicitacoesPage({
                     noFocusRing
                   />
                 ) : null}
+                <div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Criação (de)
+                      </label>
+                      <DatePickerField
+                        value={periodFrom}
+                        onChange={(value) =>
+                          handleCreationPeriodFromChange(value, periodTo, setPeriodFrom, setPeriodTo)
+                        }
+                        placeholder="dd/mm/aaaa"
+                        noFocusRing
+                        aria-label="Data inicial da criação"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Criação (até)
+                      </label>
+                      <DatePickerField
+                        value={periodTo}
+                        onChange={(value) =>
+                          handleCreationPeriodToChange(value, periodFrom, setPeriodFrom, setPeriodTo)
+                        }
+                        placeholder="dd/mm/aaaa"
+                        noFocusRing
+                        aria-label="Data final da criação"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4 dark:border-gray-700">
                 <button
@@ -1604,6 +1712,7 @@ export function FluigSolicitacoesPage({
 
             {!error && !isEmpty && filteredStatusList.length > 0 && (() => {
               const [etapaAtual, rowsAtuais] = filteredStatusList[selectedEtapaIndex] ?? filteredStatusList[0];
+              const showCreationDateColumn = !!movimentoDataHoraCol;
               const showLeadTimeColumn = !!movimentoDataHoraCol && !isEtapaSemLeadTime(etapaAtual);
               const getHistText = (r: Record<string, unknown>) => {
                 const val = r[historicoCol];
@@ -1734,15 +1843,16 @@ export function FluigSolicitacoesPage({
                       const tdPad = 'py-3';
                       const solicitacaoHeader = g5TitleDatasets.has(datasetId) ? 'Título da Solicitação' : 'Histórico';
                       const emptyColSpan = useEmployeeListLayout
-                        ? 3 +
+                        ? 4 +
                           (listShowFilial ? 1 : 0) +
                           (listShowCC ? 1 : 0) +
                           (listShowNatureza ? 1 : 0) +
                           (listShowFornecedor ? 1 : 0) +
+                          (showCreationDateColumn ? 1 : 0) +
                           (showLeadTimeColumn ? 1 : 0)
-                        : showLeadTimeColumn
-                          ? 4
-                          : 3;
+                        : 4 +
+                          (showCreationDateColumn ? 1 : 0) +
+                          (showLeadTimeColumn ? 1 : 0);
                       return (
                         <>
                           {rowsAtuais.length > 0 ? (
@@ -1806,6 +1916,18 @@ export function FluigSolicitacoesPage({
                                           Filial
                                         </th>
                                       )}
+                                      <th
+                                        className={`px-3 sm:px-6 ${thPad} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap`}
+                                      >
+                                        Valor
+                                      </th>
+                                      {showCreationDateColumn && (
+                                        <th
+                                          className={`px-3 sm:px-6 ${thPad} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap`}
+                                        >
+                                          Data de criação
+                                        </th>
+                                      )}
                                       {showLeadTimeColumn && (
                                         <th
                                           className={`px-3 sm:px-6 ${thPad} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap`}
@@ -1827,6 +1949,18 @@ export function FluigSolicitacoesPage({
                                       >
                                         {solicitacaoHeader}
                                       </th>
+                                      <th
+                                        className="px-5 py-3 text-center font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32"
+                                      >
+                                        Valor
+                                      </th>
+                                      {showCreationDateColumn && (
+                                        <th
+                                          className="px-5 py-3 text-center font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                                        >
+                                          Data de criação
+                                        </th>
+                                      )}
                                       {showLeadTimeColumn && (
                                         <th
                                           className="px-5 py-3 text-center font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32"
@@ -1936,6 +2070,18 @@ export function FluigSolicitacoesPage({
                                               </span>
                                             </td>
                                           )}
+                                          <td
+                                            className={`px-3 sm:px-6 ${tdPad} align-middle text-sm text-center text-gray-900 dark:text-gray-100 whitespace-nowrap tabular-nums`}
+                                          >
+                                            {getRowValorDisplay(row)}
+                                          </td>
+                                          {showCreationDateColumn && (
+                                            <td
+                                              className={`px-3 sm:px-6 ${tdPad} align-middle text-sm text-center text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums`}
+                                            >
+                                              {getCreationDateFromRow(row)}
+                                            </td>
+                                          )}
                                           {showLeadTimeColumn && (
                                             <td
                                               className={`px-3 sm:px-6 ${tdPad} align-middle text-sm text-center text-gray-700 dark:text-gray-300 whitespace-nowrap tabular-nums`}
@@ -1991,6 +2137,14 @@ export function FluigSolicitacoesPage({
                                         <td className="px-5 py-3 text-gray-800 dark:text-gray-200 align-middle overflow-hidden leading-relaxed">
                                           <FluigHistoricoExpandable text={hist} />
                                         </td>
+                                        <td className="px-5 py-3 text-gray-900 dark:text-gray-100 align-middle whitespace-nowrap text-center tabular-nums">
+                                          {getRowValorDisplay(row)}
+                                        </td>
+                                        {showCreationDateColumn && (
+                                          <td className="px-5 py-3 text-gray-800 dark:text-gray-200 align-middle whitespace-nowrap text-center tabular-nums">
+                                            {getCreationDateFromRow(row)}
+                                          </td>
+                                        )}
                                         {showLeadTimeColumn && (
                                           <td className="px-5 py-3 text-gray-800 dark:text-gray-200 align-middle whitespace-nowrap text-center tabular-nums">
                                             {getLeadTimeFromRow(row)}

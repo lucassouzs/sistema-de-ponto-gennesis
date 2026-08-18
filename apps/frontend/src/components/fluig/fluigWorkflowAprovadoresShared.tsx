@@ -34,6 +34,7 @@ import {
 import { ListPagination } from '@/components/ui/ListPagination';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import { ExpandableText } from '@/components/ui/ExpandableText';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import * as XLSX from 'xlsx';
 
 export const FLUIG_WORKFLOW_DATASETS = [
@@ -142,27 +143,26 @@ export function FluigDatasetToggle({
   const tabs = availableTabs ?? FLUIG_WORKFLOW_DATASETS.map((_, index) => index);
   if (tabs.length <= 1) return null;
 
+  const activeId =
+    FLUIG_WORKFLOW_DATASETS[activeTab]?.id ?? FLUIG_WORKFLOW_DATASETS[tabs[0]]?.id;
+  if (!activeId) return null;
+
   return (
     <div className="flex justify-center">
-      <div className="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-gray-800">
-        {tabs.map((idx) => {
+      <SegmentedControl
+        aria-label="Datasets Fluig"
+        className="h-auto [&>button]:px-5 [&>button]:py-2 [&>button]:font-medium"
+        pillClassName="bg-white shadow-sm dark:bg-gray-900"
+        value={activeId}
+        onChange={(next) => {
+          const idx = FLUIG_WORKFLOW_DATASETS.findIndex((dataset) => dataset.id === next);
+          if (idx >= 0) onChange(idx);
+        }}
+        options={tabs.map((idx) => {
           const { id, label } = FLUIG_WORKFLOW_DATASETS[idx];
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onChange(idx)}
-              className={`rounded-md px-5 py-2 text-sm font-medium transition-colors ${
-                activeTab === idx
-                  ? 'bg-white text-red-600 shadow-sm dark:bg-gray-900 dark:text-red-400'
-                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-              }`}
-            >
-              {label}
-            </button>
-          );
+          return { value: id, label };
         })}
-      </div>
+      />
     </div>
   );
 }

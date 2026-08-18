@@ -10,9 +10,9 @@ export default function GestaoSolicitacoesPage() {
         subtitle: 'Acompanhe em tempo real as solicitações do Fluig na visão de suprimentos',
         datasets: ['DataSet_G3FollowUp', 'DataSet_G4FollowUp', 'G5-Relatorio-DF-GO-TODOS-SETORES'],
         datasetTabLabels: {
-          DataSet_G3FollowUp: 'G3 - Aprovação de Ordem de Compra',
-          DataSet_G4FollowUp: 'G4 - Anexação de Comprovante',
-          'G5-Relatorio-DF-GO-TODOS-SETORES': 'G5 - Pagamentos Avulsos',
+          DataSet_G3FollowUp: 'G3',
+          DataSet_G4FollowUp: 'G4',
+          'G5-Relatorio-DF-GO-TODOS-SETORES': 'G5',
         },
         g5TitleDatasets: ['G5-Relatorio-DF-GO-TODOS-SETORES'],
         allowedFiliais: null,

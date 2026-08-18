@@ -762,10 +762,18 @@ function isWorkflowValorColumnName(col: string): boolean {
   return /^(valorliquido|vlrliquido|valortotal|valorsolicitado|valor|vlr|vlrtotal)$/.test(compact);
 }
 
+function isG5LikeWorkflowDataset(datasetId?: string): boolean {
+  if (!datasetId) return false;
+  return (
+    datasetId === FLUIG_WORKFLOW_APPROVAL_DATASET_G5 ||
+    datasetId.startsWith('G5-Relatorio-DF')
+  );
+}
+
 function scoreWorkflowValorColumn(col: string, datasetId?: string): number {
   const compact = workflowValorColumnCompact(col);
   let score = 0;
-  if (isG5WorkflowDataset(datasetId)) {
+  if (isG5LikeWorkflowDataset(datasetId)) {
     if (/^valor$/.test(compact)) score += 50;
     if (/^valorliquido$|^vlrliquido$/.test(compact)) score += 16;
   } else {
@@ -806,7 +814,7 @@ function isWorkflowValorZeroLike(raw: string): boolean {
 function resolveWorkflowValor(
   row: Record<string, unknown>,
   columns: string[],
-  mapping: WorkflowColumnMapping,
+  mapping: Pick<WorkflowColumnMapping, 'valorCol'>,
   datasetId?: string
 ): string | null {
   const candidates = new Set<string>();
@@ -1678,6 +1686,14 @@ export function formatWorkflowValorDisplay(raw: string | null | undefined): stri
     : parseFloat(cleaned);
   if (!Number.isFinite(parsed)) return value;
   return parsed.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+export function readFluigDatasetValor(
+  row: Record<string, unknown>,
+  columns: string[],
+  datasetId?: string
+): string | null {
+  return resolveWorkflowValor(row, columns, { valorCol: null }, datasetId);
 }
 
 /** Exibe sigla da filial na listagem de aprovadores (G3: código 1/5; G5: Matriz / Filial GO). */

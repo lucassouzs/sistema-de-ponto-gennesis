@@ -14,6 +14,7 @@ type SegmentedControlProps<T extends string> = {
   onChange: (next: T) => void;
   options: SegmentedOption<T>[];
   className?: string;
+  pillClassName?: string;
   'aria-label'?: string;
 };
 
@@ -22,6 +23,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   options,
   className = '',
+  pillClassName = 'bg-white shadow-sm dark:bg-gray-600',
   'aria-label': ariaLabel,
 }: SegmentedControlProps<T>) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -68,13 +70,13 @@ export function SegmentedControl<T extends string>({
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute top-1 bottom-1 rounded-md bg-white shadow-sm dark:bg-gray-600"
+        className={`pointer-events-none absolute top-1 bottom-1 rounded-md ${pillClassName}`}
         style={{
           left: pill.left,
           width: pill.width,
           opacity: pill.ready ? 1 : 0,
           transition:
-            'left 220ms cubic-bezier(0.22, 1, 0.36, 1), width 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease',
+            'left 280ms cubic-bezier(0.22, 1, 0.36, 1), width 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease',
         }}
       />
       {options.map((opt, i) => {
