@@ -797,6 +797,7 @@ export default function GerenciarMateriaisPage() {
             filteredRequests={filteredRequests}
             ordersByMaterialRequestId={ordersByMaterialRequestId}
             currentUserId={userData?.data?.id}
+            isAdministrator={isAdministrator}
             onDetails={async (request) => {
               try {
                 const res = await api.get(`/material-requests/${request.id}`);
@@ -1249,7 +1250,8 @@ export default function GerenciarMateriaisPage() {
               </div>
 
               {selectedRequest.status === 'IN_REVIEW' &&
-              userData?.data?.id === rmSolicitante(selectedRequest)?.id ? (
+              (isAdministrator ||
+                userData?.data?.id === rmSolicitante(selectedRequest)?.id) ? (
                 <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
                   <Link
                     href={`/ponto/solicitar-materiais?editRm=${selectedRequest.id}`}

@@ -32,6 +32,7 @@ import {
   GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
+  GestaoOsChecklistTabBody,
   GestaoOsDetailModalChrome,
   GestaoOsDocumentsTab,
   GestaoOsEmptyTab,
@@ -829,7 +830,7 @@ export default function MeusChamadosPageClient() {
           contentClassName="!p-0"
           size="xl"
           panelClassName={
-            detailTab === 'comentarios'
+            detailTab === 'comentarios' || detailTab === 'checklist'
               ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
               : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
           }
@@ -839,7 +840,7 @@ export default function MeusChamadosPageClient() {
             tabs={[...MEUS_CHAMADOS_DETAIL_TABS]}
             activeTab={detailTab}
             onTabChange={(id) => setDetailTab(id as MeusChamadosDetailTab)}
-            fillBody={detailTab === 'comentarios'}
+            fillBody={detailTab === 'comentarios' || detailTab === 'checklist'}
             onClose={() => {
               setDetailId(null);
               setDetailTab('resumo');
@@ -850,7 +851,7 @@ export default function MeusChamadosPageClient() {
             ) : (
               <div
                 className={
-                  detailTab === 'comentarios'
+                  detailTab === 'comentarios' || detailTab === 'checklist'
                     ? 'flex h-full min-h-0 flex-col text-sm'
                     : 'space-y-5 text-sm'
                 }
@@ -958,32 +959,42 @@ export default function MeusChamadosPageClient() {
                     detail.safetyChecklistResponses.length > 0) ||
                   (Array.isArray(detail.checklistResponses) &&
                     detail.checklistResponses.length > 0) ? (
-                    <div className="space-y-6">
-                      {Array.isArray(detail.safetyChecklistResponses) &&
-                      detail.safetyChecklistResponses.length > 0 ? (
-                        <div className="space-y-3">
-                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                            Segurança do Trabalho
-                          </p>
-                          <GestaoOsChecklistField
-                            items={detail.safetyChecklistResponses}
-                            readOnly
-                          />
-                        </div>
-                      ) : null}
-                      {Array.isArray(detail.checklistResponses) &&
-                      detail.checklistResponses.length > 0 ? (
-                        <div className="space-y-3">
-                          {Array.isArray(detail.safetyChecklistResponses) &&
-                          detail.safetyChecklistResponses.length > 0 ? (
+                    <GestaoOsChecklistTabBody
+                      key={detail.id}
+                      preferExecution={
+                        detail.status === 'IN_PROGRESS' ||
+                        detail.status === 'WAITING_PARTS' ||
+                        detail.status === 'REWORK' ||
+                        (Array.isArray(detail.safetyChecklistResponses) &&
+                          detail.safetyChecklistResponses.length > 0 &&
+                          detail.safetyChecklistResponses.every((item) => item.checked))
+                      }
+                      safety={
+                        Array.isArray(detail.safetyChecklistResponses) &&
+                        detail.safetyChecklistResponses.length > 0 ? (
+                          <div className="space-y-3">
+                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                              Segurança do Trabalho
+                            </p>
+                            <GestaoOsChecklistField
+                              items={detail.safetyChecklistResponses}
+                              readOnly
+                            />
+                          </div>
+                        ) : undefined
+                      }
+                      execution={
+                        Array.isArray(detail.checklistResponses) &&
+                        detail.checklistResponses.length > 0 ? (
+                          <div className="space-y-3">
                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                               Checklist da execução
                             </p>
-                          ) : null}
-                          <GestaoOsChecklistField items={detail.checklistResponses} readOnly />
-                        </div>
-                      ) : null}
-                    </div>
+                            <GestaoOsChecklistField items={detail.checklistResponses} readOnly />
+                          </div>
+                        ) : undefined
+                      }
+                    />
                   ) : (
                     <GestaoOsEmptyTab>Nenhum checklist neste chamado.</GestaoOsEmptyTab>
                   )

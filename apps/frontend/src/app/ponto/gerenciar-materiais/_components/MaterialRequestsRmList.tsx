@@ -118,6 +118,7 @@ export function MaterialRequestsRmList({
   filteredRequests,
   ordersByMaterialRequestId,
   currentUserId,
+  isAdministrator = false,
   onDetails,
   flushInCard = false,
   hideSearch = false
@@ -131,6 +132,7 @@ export function MaterialRequestsRmList({
   filteredRequests: MaterialRequest[];
   ordersByMaterialRequestId: Map<string, PurchaseOrder[]>;
   currentUserId?: string;
+  isAdministrator?: boolean;
   onDetails: (r: MaterialRequest) => void;
 }) {
   const [listCurrentPage, setListCurrentPage] = useState(1);
@@ -489,7 +491,7 @@ export function MaterialRequestsRmList({
                 <span>Ver detalhes</span>
               </button>
               {requestForMenu.status === 'IN_REVIEW' &&
-                currentUserId === rmSolicitante(requestForMenu)?.id && (
+                (isAdministrator || currentUserId === rmSolicitante(requestForMenu)?.id) && (
                   <Link
                     href={`/ponto/solicitar-materiais?editRm=${requestForMenu.id}`}
                     role="menuitem"

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, AlertTriangle, CalendarCheck, ClipboardList, Download, Eye, Loader2, Paperclip, Timer, Wrench, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportGestaoOsPdf, gestaoOsPdfFileName, openGestaoOsPdf } from '@/lib/exportGestaoOsPdf';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useModalRequestClose } from '@/components/ui/Modal';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
@@ -232,6 +233,58 @@ export function GestaoOsChecklistField({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+type GestaoOsChecklistPane = 'sst' | 'exec';
+
+/** SST e execução em seções no topo — evita uma lista enorme empurrar a outra para baixo. */
+export function GestaoOsChecklistTabBody({
+  safety,
+  execution,
+  preferExecution = false
+}: {
+  safety?: React.ReactNode;
+  execution?: React.ReactNode;
+  preferExecution?: boolean;
+}) {
+  const hasSafety = safety != null;
+  const hasExec = execution != null;
+  const [pane, setPane] = useState<GestaoOsChecklistPane>(() =>
+    preferExecution && hasExec ? 'exec' : hasSafety ? 'sst' : 'exec'
+  );
+
+  useEffect(() => {
+    if (pane === 'sst' && !hasSafety && hasExec) setPane('exec');
+    if (pane === 'exec' && !hasExec && hasSafety) setPane('sst');
+  }, [hasSafety, hasExec, pane]);
+
+  if (!hasSafety && !hasExec) return null;
+
+  const showSwitch = hasSafety && hasExec;
+  const showSst = showSwitch ? pane === 'sst' : hasSafety;
+  const showExec = showSwitch ? pane === 'exec' : hasExec;
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {showSwitch ? (
+        <div className="shrink-0">
+          <SegmentedControl
+            aria-label="Tipo de checklist"
+            value={pane}
+            onChange={setPane}
+            options={[
+              { value: 'sst', label: 'Segurança' },
+              { value: 'exec', label: 'Execução' }
+            ]}
+          />
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {showSst ? safety : null}
+        {showExec ? execution : null}
+      </div>
     </div>
   );
 }

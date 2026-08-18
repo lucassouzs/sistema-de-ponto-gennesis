@@ -1069,7 +1069,8 @@ export class MaterialRequestService {
   async updateMaterialRequestStatus(
     id: string,
     data: UpdateMaterialRequestStatusData,
-    userId: string
+    userId: string,
+    isAdmin = false
   ) {
     const existing = await prisma.materialRequest.findUnique({ where: { id } });
     if (!existing) {
@@ -1106,8 +1107,8 @@ export class MaterialRequestService {
     }
 
     if (data.status === 'PENDING' && existing.status === 'IN_REVIEW') {
-      if (existing.requestedBy !== userId) {
-        throw new Error('Apenas o solicitante pode reenviar a requisição após correção');
+      if (existing.requestedBy !== userId && !isAdmin) {
+        throw new Error('Apenas o solicitante ou o administrador pode reenviar a requisição após correção');
       }
     }
 
@@ -1198,12 +1199,14 @@ export class MaterialRequestService {
   }
 
   /**
-   * Solicitante edita a RM em Correção RM (IN_REVIEW). Opcionalmente reenvia para análise (PENDING).
+   * Solicitante ou administrador edita a RM em Correção RM (IN_REVIEW).
+   * Opcionalmente reenvia para análise (PENDING).
    */
   async updateMaterialRequestInCorrection(
     id: string,
     userId: string,
-    data: UpdateMaterialRequestCorrectionData
+    data: UpdateMaterialRequestCorrectionData,
+    isAdmin = false
   ) {
     const existing = await prisma.materialRequest.findUnique({
       where: { id },
@@ -1213,8 +1216,8 @@ export class MaterialRequestService {
     if (!existing) {
       throw new Error('Requisição não encontrada');
     }
-    if (existing.requestedBy !== userId) {
-      throw new Error('Apenas o solicitante pode editar esta requisição');
+    if (existing.requestedBy !== userId && !isAdmin) {
+      throw new Error('Apenas o solicitante ou o administrador pode editar esta requisição');
     }
     if (existing.status !== 'IN_REVIEW') {
       throw new Error('Só é possível editar requisições em Correção RM');

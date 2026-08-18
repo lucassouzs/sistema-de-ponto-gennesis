@@ -1469,9 +1469,17 @@ function SolicitarMateriaisPage() {
                 ''
             )
           : '';
+    const unbContract = lockedUnbContractId
+      ? contractOptions.find((c) => c.id === lockedUnbContractId)
+      : undefined;
     setEditFormData({
-      contractId: '',
-      costCenterId: (r as { costCenterId?: string }).costCenterId || (r as { costCenter?: { id?: string } }).costCenter?.id || '',
+      contractId: unbContract?.id || '',
+      costCenterId:
+        unbContract?.costCenterId ||
+        unbContract?.costCenter?.id ||
+        (r as { costCenterId?: string }).costCenterId ||
+        (r as { costCenter?: { id?: string } }).costCenter?.id ||
+        '',
       serviceOrderId: rmServiceOrderId,
       serviceOrder: rmServiceOrderText,
       obra: String((r as { obra?: string }).obra || ''),
@@ -1517,7 +1525,24 @@ function SolicitarMateriaisPage() {
           )
         : ['']
     );
-  }, [correctionEditId, correctionRmDetail, requests]);
+  }, [correctionEditId, correctionRmDetail, requests, lockedUnbContractId, contractOptions]);
+
+  useEffect(() => {
+    if (!correctionEditId || !lockedUnbContractId) return;
+    const contract = contractOptions.find((c) => c.id === lockedUnbContractId);
+    if (!contract) return;
+    setEditFormData((prev) => {
+      const nextCostCenterId = contract.costCenterId || contract.costCenter?.id || '';
+      if (prev.contractId === lockedUnbContractId && prev.costCenterId === nextCostCenterId) {
+        return prev;
+      }
+      return {
+        ...prev,
+        contractId: lockedUnbContractId,
+        costCenterId: nextCostCenterId || prev.costCenterId,
+      };
+    });
+  }, [correctionEditId, lockedUnbContractId, contractOptions]);
 
   useEffect(() => {
     if (!correctionEditId || editFormData.serviceOrderId) return;

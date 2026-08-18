@@ -307,7 +307,7 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
       rejectedBy: status === 'CANCELLED' || status === 'REJECTED' ? req.user.id : undefined,
       rejectionReason: undefined,
       correctionNote: typeof correctionNote === 'string' ? correctionNote : undefined,
-    }, req.user.id);
+    }, req.user.id, !!req.user.isAdmin);
     res.json({ success: true, data: request, message: 'Status atualizado' });
   } catch (error) {
     if (error instanceof Error && /Apenas |Aprove apenas|Não é possível|Sem permissão|Informe o que|Observação muito/.test(error.message)) {
@@ -363,7 +363,7 @@ router.patch('/:id', async (req: AuthRequest, res: Response, next: NextFunction)
       demandSheetAttachmentName,
       demandSheetAttachments,
       submitForApproval: Boolean(submitForApproval)
-    });
+    }, !!req.user.isAdmin);
 
     res.json({
       success: true,

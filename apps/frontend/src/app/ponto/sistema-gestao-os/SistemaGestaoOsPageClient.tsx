@@ -47,6 +47,7 @@ import {
   GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
+  GestaoOsChecklistTabBody,
   GestaoOsDetailModalChrome,
   GestaoOsDocumentsTab,
   GestaoOsEmptyTab,
@@ -429,9 +430,13 @@ export default function SistemaGestaoOsPageClient() {
       setTransitionStatus('IN_PROGRESS');
     } else if (detail.status === 'REWORK') setTransitionStatus('IN_PROGRESS');
     else setTransitionStatus('');
-    // Recarrega ao abrir outro chamado ou mudar de fase.
+    // Recarrega ao abrir outro chamado, mudar de fase ou receber checklist copiado do tipo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail?.id, detail?.status]);
+  }, [
+    detail?.id,
+    detail?.status,
+    Array.isArray(detail?.checklistResponses) ? detail.checklistResponses.length : 0
+  ]);
 
   const sectors = useMemo(() => {
     return locationTree.find((b) => b.id === buildingId)?.sectors ?? [];
@@ -1373,7 +1378,7 @@ export default function SistemaGestaoOsPageClient() {
           contentClassName="!p-0"
           size="xl"
           panelClassName={
-            detailTab === 'comentarios'
+            detailTab === 'comentarios' || detailTab === 'checklist'
               ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
               : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
           }
@@ -1383,7 +1388,7 @@ export default function SistemaGestaoOsPageClient() {
             tabs={[...CHAMADO_DETAIL_TABS]}
             activeTab={detailTab}
             onTabChange={(id) => setDetailTab(id as GestaoOsChamadoDetailTab)}
-            fillBody={detailTab === 'comentarios'}
+            fillBody={detailTab === 'comentarios' || detailTab === 'checklist'}
             onClose={() => {
               setDetailId(null);
               setDetailTab('resumo');
@@ -1394,7 +1399,7 @@ export default function SistemaGestaoOsPageClient() {
             ) : (
               <div
                 className={
-                  detailTab === 'comentarios'
+                  detailTab === 'comentarios' || detailTab === 'checklist'
                     ? 'flex h-full min-h-0 flex-col text-sm'
                     : 'space-y-5 text-sm'
                 }
@@ -1724,106 +1729,116 @@ export default function SistemaGestaoOsPageClient() {
 
                 {detailTab === 'checklist' ? (
                   safetyChecklistDraft.length > 0 || checklistDraft.length > 0 ? (
-                    <div className="space-y-6">
-                      {safetyChecklistDraft.length > 0 ? (
-                        <div className="space-y-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                              Segurança do Trabalho
-                            </p>
-                            {safetyEditable ? (
-                              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                                Marque os equipamentos e condições e envie a foto com os EPIs. Itens
-                                com * são obrigatórios.
+                    <GestaoOsChecklistTabBody
+                      key={detail.id}
+                      preferExecution={
+                        detail.status === 'IN_PROGRESS' ||
+                        detail.status === 'WAITING_PARTS' ||
+                        detail.status === 'REWORK' ||
+                        (safetyChecklistDraft.length > 0 &&
+                          safetyChecklistDraft.every((item) => item.checked))
+                      }
+                      safety={
+                        safetyChecklistDraft.length > 0 ? (
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                Segurança do Trabalho
                               </p>
-                            ) : null}
-                          </div>
-                          <GestaoOsChecklistField
-                            items={safetyChecklistDraft}
-                            readOnly={!safetyEditable}
-                            onToggle={
-                              safetyEditable
-                                ? (index, checked) =>
-                                    setSafetyChecklistDraft((prev) =>
-                                      prev.map((item, i) =>
-                                        i === index ? { ...item, checked } : item
+                              {safetyEditable ? (
+                                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                  Marque os equipamentos e condições e envie a foto com os EPIs.
+                                  Itens com * são obrigatórios.
+                                </p>
+                              ) : null}
+                            </div>
+                            <GestaoOsChecklistField
+                              items={safetyChecklistDraft}
+                              readOnly={!safetyEditable}
+                              onToggle={
+                                safetyEditable
+                                  ? (index, checked) =>
+                                      setSafetyChecklistDraft((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index ? { ...item, checked } : item
+                                        )
                                       )
-                                    )
-                                : undefined
-                            }
-                          />
-                          <div>
-                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
-                              Foto com os EPIs
-                              {safetyEditable ? <GestaoOsRequiredMark /> : null}
-                            </label>
-                            {safetyEditable ? (
-                              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-                                Envie uma foto sua usando os equipamentos de proteção corretos.
-                              </p>
-                            ) : null}
-                            {safetyEditable ? (
-                              <GestaoOsAttachmentsField
-                                files={
-                                  safetyPhotoUrl
-                                    ? [
-                                        {
-                                          url: safetyPhotoUrl,
-                                          name: 'Foto de EPIs',
-                                          mimeType: 'image/jpeg'
-                                        }
-                                      ]
-                                    : []
-                                }
-                                uploading={uploadingSafetyPhoto}
-                                onFilesSelect={(selected) => void uploadSafetyPhoto(selected)}
-                                onRemove={() => setSafetyPhotoUrl(null)}
-                                label="Clique ou arraste a foto"
-                                hint="PNG ou JPG"
-                                accept="image/*"
-                                multiple={false}
-                              />
-                            ) : safetyPhotoUrl ? (
-                              <img
-                                src={resolveApiMediaUrl(safetyPhotoUrl) ?? undefined}
-                                alt="Foto de EPIs"
-                                className="max-h-48 rounded-lg border border-gray-200 object-cover dark:border-gray-700"
-                              />
-                            ) : (
-                              <p className="text-xs text-gray-500">Nenhuma foto enviada.</p>
-                            )}
+                                  : undefined
+                              }
+                            />
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Foto com os EPIs
+                                {safetyEditable ? <GestaoOsRequiredMark /> : null}
+                              </label>
+                              {safetyEditable ? (
+                                <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                                  Envie uma foto sua usando os equipamentos de proteção corretos.
+                                </p>
+                              ) : null}
+                              {safetyEditable ? (
+                                <GestaoOsAttachmentsField
+                                  files={
+                                    safetyPhotoUrl
+                                      ? [
+                                          {
+                                            url: safetyPhotoUrl,
+                                            name: 'Foto de EPIs',
+                                            mimeType: 'image/jpeg'
+                                          }
+                                        ]
+                                      : []
+                                  }
+                                  uploading={uploadingSafetyPhoto}
+                                  onFilesSelect={(selected) => void uploadSafetyPhoto(selected)}
+                                  onRemove={() => setSafetyPhotoUrl(null)}
+                                  label="Clique ou arraste a foto"
+                                  hint="PNG ou JPG"
+                                  accept="image/*"
+                                  multiple={false}
+                                />
+                              ) : safetyPhotoUrl ? (
+                                <img
+                                  src={resolveApiMediaUrl(safetyPhotoUrl) ?? undefined}
+                                  alt="Foto de EPIs"
+                                  className="max-h-48 rounded-lg border border-gray-200 object-cover dark:border-gray-700"
+                                />
+                              ) : (
+                                <p className="text-xs text-gray-500">Nenhuma foto enviada.</p>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-                      {checklistDraft.length > 0 ? (
-                        <div className="space-y-3">
-                          {safetyChecklistDraft.length > 0 ? (
+                        ) : undefined
+                      }
+                      execution={
+                        checklistDraft.length > 0 ? (
+                          <div className="space-y-3">
                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                               Checklist da execução
                             </p>
-                          ) : null}
-                          {checklistEditable ? (
-                            <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                              Marque os itens conforme a execução. Itens com * são obrigatórios.
-                            </p>
-                          ) : null}
-                          <GestaoOsChecklistField
-                            items={checklistDraft}
-                            readOnly={!checklistEditable}
-                            onToggle={
-                              checklistEditable
-                                ? (index, checked) =>
-                                    setChecklistDraft((prev) =>
-                                      prev.map((item, i) =>
-                                        i === index ? { ...item, checked } : item
+                            {checklistEditable ? (
+                              <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                Marque os itens conforme a execução. Itens com * são obrigatórios.
+                              </p>
+                            ) : null}
+                            <GestaoOsChecklistField
+                              items={checklistDraft}
+                              readOnly={!checklistEditable}
+                              onToggle={
+                                checklistEditable
+                                  ? (index, checked) =>
+                                      setChecklistDraft((prev) =>
+                                        prev.map((item, i) =>
+                                          i === index ? { ...item, checked } : item
+                                        )
                                       )
-                                    )
-                                : undefined
-                            }
-                          />
-                        </div>
-                      ) : null}
-                    </div>
+                                  : undefined
+                              }
+                            />
+                          </div>
+                        ) : undefined
+                      }
+                    />
                   ) : (
                     <GestaoOsEmptyTab>Nenhum checklist neste chamado.</GestaoOsEmptyTab>
                   )

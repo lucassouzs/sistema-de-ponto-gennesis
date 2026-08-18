@@ -23,7 +23,8 @@ import { applyExecutionClock } from '../lib/gestaoOsExecution';
 import {
   isChecklistEmpty,
   resolveCategoryChecklistResponses,
-  attachWarrantyToLocationTree
+  attachWarrantyToLocationTree,
+  hydrateEmptyExecutionChecklist
 } from '../lib/gestaoOsChecklistCopy';
 import {
   enrichWorkOrderWithExtras,
@@ -579,7 +580,15 @@ export class GestaoOsService {
       include: workOrderInclude
     });
     if (!row) throw createError('Chamado não encontrado', 404);
-    const [enriched] = await enrichWorkOrders([row]);
+    const hydrated = await hydrateEmptyExecutionChecklist(row);
+    const source = hydrated
+      ? await prisma.gestaoOsWorkOrder.findUnique({
+          where: { id },
+          include: workOrderInclude
+        })
+      : row;
+    if (!source) throw createError('Chamado não encontrado', 404);
+    const [enriched] = await enrichWorkOrders([source]);
     let recurrence90dCount = 0;
     if (row.assetId) {
       const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);

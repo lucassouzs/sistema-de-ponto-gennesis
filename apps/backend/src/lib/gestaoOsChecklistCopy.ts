@@ -144,6 +144,27 @@ export async function resolveCategoryChecklistResponses(
   return checklistResponsesFromItems(template.items);
 }
 
+const SKIP_CHECKLIST_HYDRATE = new Set(['CLOSED', 'CANCELLED']);
+
+/** OS já aberta/aprovada sem itens: copia o checklist atual do tipo de serviço. */
+export async function hydrateEmptyExecutionChecklist(row: {
+  id: string;
+  status: string;
+  category: string;
+  companyId?: string | null;
+  checklistResponses?: unknown;
+}): Promise<GestaoOsChecklistCopyItem[] | null> {
+  if (SKIP_CHECKLIST_HYDRATE.has(row.status)) return null;
+  if (!isChecklistEmpty(row.checklistResponses)) return null;
+  const copied = await resolveCategoryChecklistResponses(row.category, row.companyId);
+  if (!copied.length) return null;
+  await prisma.gestaoOsWorkOrder.update({
+    where: { id: row.id },
+    data: { checklistResponses: copied as Prisma.InputJsonValue }
+  });
+  return copied;
+}
+
 export async function loadAssetWarrantyMap(
   ids: string[]
 ): Promise<Map<string, Date | null>> {
