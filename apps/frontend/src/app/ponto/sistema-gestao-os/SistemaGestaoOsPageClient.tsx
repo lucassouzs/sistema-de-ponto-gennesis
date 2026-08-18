@@ -148,7 +148,7 @@ const PHASE_TABS: ReadonlyArray<{ id: GestaoOsStatus; label: string }> = [
   { id: 'IN_PROGRESS', label: 'Em Execução' },
   { id: 'WAITING_PARTS', label: 'Aguardando Peça/Terceiro' },
   { id: 'COMPLETED', label: 'Concluída' },
-  { id: 'REWORK', label: 'Aguardando ajuste' },
+  { id: 'REWORK', label: 'Aguardando Ajuste' },
   { id: 'CLOSED', label: 'Encerrada/Avaliada' },
   { id: 'CANCELLED', label: 'Cancelada' }
 ];
@@ -623,6 +623,7 @@ export default function SistemaGestaoOsPageClient() {
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', detailId] });
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-technicians'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.message ?? 'Não foi possível atualizar o status');
@@ -1421,7 +1422,7 @@ export default function SistemaGestaoOsPageClient() {
                       ) : null}
                       {detail.status === 'COMPLETED' ? (
                         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                          Se o resultado não foi aceito, envie para Aguardando ajuste. O técnico
+                          Se o resultado não foi aceito, envie para Aguardando Ajuste. O técnico
                           volta para execução sem passar de novo pelo checklist de SST.
                         </p>
                       ) : null}
@@ -1449,7 +1450,9 @@ export default function SistemaGestaoOsPageClient() {
                           detail.status === 'UNDER_REVIEW') && (
                           <>
                             <div>
-                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Tipo de manutenção</label>
+                              <label className={`${GESTAO_OS_FORM_LABEL_CLS} flex h-5 items-center`}>
+                                Tipo de manutenção
+                              </label>
                               <StringSingleSelectDropdown
                                 value={maintenanceType}
                                 onChange={(v) =>
@@ -1462,18 +1465,19 @@ export default function SistemaGestaoOsPageClient() {
                               />
                             </div>
                             <div>
-                              <div className="mb-1.5 flex items-center justify-between gap-2">
-                                <label className={`${GESTAO_OS_FORM_LABEL_CLS} mb-0`}>
+                              <div className="mb-1.5 flex h-5 items-center justify-between gap-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                   Técnico responsável
                                 </label>
                                 <button
                                   type="button"
                                   disabled={suggesting}
                                   onClick={() => void handleSuggestAssignee()}
-                                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                  title="Preenche o técnico com menos chamados abertos, priorizando quem já atende este prédio."
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-red-600 transition-colors hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:text-red-300"
                                 >
                                   <Sparkles className="h-3.5 w-3.5" />
-                                  {suggesting ? 'Sugerindo...' : 'Sugerir técnico'}
+                                  {suggesting ? 'Sugerindo…' : 'Sugerir'}
                                 </button>
                               </div>
                               <StringSingleSelectDropdown

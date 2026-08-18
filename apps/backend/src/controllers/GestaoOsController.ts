@@ -5,7 +5,8 @@ import { gestaoOsService } from '../services/GestaoOsService';
 import {
   assertCanViewAllWorkOrders,
   assertCanViewWorkOrder,
-  resolveGestaoOsAccess
+  resolveGestaoOsAccess,
+  resolveGestaoOsAccessAllowPersonal
 } from '../lib/gestaoOsAccess';
 
 export class GestaoOsController {
@@ -83,21 +84,29 @@ export class GestaoOsController {
   async list(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
-      const access = await resolveGestaoOsAccess({
-        userId: req.user.id,
-        isAdmin: !!req.user.isAdmin
-      });
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
       const status = typeof req.query.status === 'string' ? req.query.status : undefined;
       const priority = typeof req.query.priority === 'string' ? req.query.priority : undefined;
       const buildingId = typeof req.query.buildingId === 'string' ? req.query.buildingId : undefined;
       const mine = req.query.mine === '1' || req.query.mine === 'true';
       const assignedToMe = req.query.assignedToMe === '1' || req.query.assignedToMe === 'true';
+      const involved = req.query.involved === '1' || req.query.involved === 'true';
       const overdue = req.query.overdue === '1' || req.query.overdue === 'true';
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
 
-      // Sem visão geral: só mine ou assignedToMe.
-      if (!access.canViewAll && !mine && !assignedToMe) {
+      const access =
+        mine || assignedToMe || involved
+          ? await resolveGestaoOsAccessAllowPersonal({
+              userId: req.user.id,
+              isAdmin: !!req.user.isAdmin
+            })
+          : await resolveGestaoOsAccess({
+              userId: req.user.id,
+              isAdmin: !!req.user.isAdmin
+            });
+
+      // Sem visão geral: só o que a pessoa abriu ou recebeu.
+      if (!access.canViewAll && !mine && !assignedToMe && !involved) {
         throw createError(
           'Sem permissão para listar todos os chamados. Use Meus Chamados (mine=1).',
           403
@@ -112,8 +121,9 @@ export class GestaoOsController {
           buildingId,
           limit,
           overdue,
-          requesterId: mine ? req.user.id : undefined,
-          assigneeId: assignedToMe ? req.user.id : undefined
+          requesterId: mine && !involved ? req.user.id : undefined,
+          assigneeId: assignedToMe && !involved ? req.user.id : undefined,
+          involvedUserId: involved ? req.user.id : undefined
         },
         access
       );
@@ -126,7 +136,7 @@ export class GestaoOsController {
   async getById(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
-      const access = await resolveGestaoOsAccess({
+      const access = await resolveGestaoOsAccessAllowPersonal({
         userId: req.user.id,
         isAdmin: !!req.user.isAdmin
       });

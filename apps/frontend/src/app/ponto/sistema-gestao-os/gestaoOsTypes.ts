@@ -276,7 +276,7 @@ export const STATUS_LABELS: Record<GestaoOsStatus, string> = {
   IN_PROGRESS: 'Em Execução',
   WAITING_PARTS: 'Aguardando Peça/Terceiro',
   COMPLETED: 'Concluída',
-  REWORK: 'Aguardando ajuste',
+  REWORK: 'Aguardando Ajuste',
   CLOSED: 'Encerrada/Avaliada',
   CANCELLED: 'Cancelada'
 };

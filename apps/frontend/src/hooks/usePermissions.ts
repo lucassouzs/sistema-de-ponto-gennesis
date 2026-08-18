@@ -639,10 +639,7 @@ export function useRoutePermission(route: string) {
     '/ponto/centros-custo': isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
     '/ponto/materiais-construcao': isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
     '/ponto/andamento-da-os': canAccessOsRoutePage,
-    '/ponto/meus-chamados':
-      isAdministrator ||
-      can(pk('/ponto/meus-chamados')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+    '/ponto/meus-chamados': true,
     '/ponto/sistema-gestao-os': isAdministrator || can(pk('/ponto/sistema-gestao-os')),
     '/ponto/sistema-gestao-os/planos':
       isAdministrator ||

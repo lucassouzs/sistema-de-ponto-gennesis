@@ -129,6 +129,16 @@ function formatEventTimeRange(startAt: string, endAt: string): string {
   return end ? `${start} – ${end}` : start;
 }
 
+function isOsLinkedEvent(event: PlannerEvent) {
+  return event.source === 'gestao-os' || event.source === 'gestao-os-plan';
+}
+
+function formatClockShort(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 type CalendarView = 'day' | 'week' | 'month' | 'year';
 
 const VIEW_OPTIONS: { id: CalendarView; label: string; shortcut: string }[] = [
@@ -856,6 +866,23 @@ export function KanbanPlannerView({
     }));
     return [...events, ...linked];
   }, [events, gestaoOsAgenda, activeOwnerId]);
+
+  const osLinkedByDay = useMemo(() => {
+    const map = new Map<string, PlannerEvent[]>();
+    for (const ev of calendarEvents) {
+      if (!isOsLinkedEvent(ev)) continue;
+      const key = startOfDay(new Date(ev.startAt)).toISOString();
+      const list = map.get(key);
+      if (list) list.push(ev);
+      else map.set(key, [ev]);
+    }
+    return map;
+  }, [calendarEvents]);
+
+  const hasOsLinkedInView = useMemo(
+    () => days.some((day) => (osLinkedByDay.get(day.toISOString()) || []).length > 0),
+    [days, osLinkedByDay]
+  );
   // Dono da agenda aberta = usuário logado → sempre pode editar
   const viewingOwnAgenda = !!meUser?.id && activeOwnerId === meUser.id;
   const canWriteEffective =
@@ -1395,41 +1422,89 @@ export function KanbanPlannerView({
             className="min-h-0 flex-1 overflow-auto"
             style={{ scrollbarGutter: 'stable' }}
           >
-            <div
-              className="sticky top-0 z-20 grid border-b border-gray-100 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95"
-              style={{ gridTemplateColumns: gridCols }}
-            >
-              <div className="border-r border-gray-100 dark:border-gray-800" />
-              {days.map((day) => {
-                const { weekday, day: dayNum } = dayHeaderLabel(day);
-                const isToday = isSameDay(day, today);
-                return (
-                  <button
-                    key={day.toISOString()}
-                    type="button"
-                    onClick={() => {
-                      setAnchor(startOfDay(day));
-                      setView('day');
-                    }}
-                    className="flex flex-col items-center gap-1 border-r border-gray-100 py-2.5 transition-colors hover:bg-gray-50/80 dark:border-gray-800 dark:hover:bg-gray-800/40"
-                    title={`Abrir dia ${day.toLocaleDateString('pt-BR')}`}
-                    aria-label={`Abrir agenda do dia ${day.toLocaleDateString('pt-BR')}`}
-                  >
-                    <span className="text-[11px] font-normal uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                      {weekday}
-                    </span>
-                    <span
-                      className={
-                        isToday
-                          ? 'flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-medium text-white'
-                          : 'flex h-8 w-8 items-center justify-center rounded-full text-sm font-normal text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700'
-                      }
+            <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95">
+              <div className="grid" style={{ gridTemplateColumns: gridCols }}>
+                <div className="border-r border-gray-100 dark:border-gray-800" />
+                {days.map((day) => {
+                  const { weekday, day: dayNum } = dayHeaderLabel(day);
+                  const isToday = isSameDay(day, today);
+                  return (
+                    <button
+                      key={day.toISOString()}
+                      type="button"
+                      onClick={() => {
+                        setAnchor(startOfDay(day));
+                        setView('day');
+                      }}
+                      className="flex flex-col items-center gap-1 border-r border-gray-100 py-2.5 transition-colors hover:bg-gray-50/80 dark:border-gray-800 dark:hover:bg-gray-800/40"
+                      title={`Abrir dia ${day.toLocaleDateString('pt-BR')}`}
+                      aria-label={`Abrir agenda do dia ${day.toLocaleDateString('pt-BR')}`}
                     >
-                      {dayNum}
+                      <span className="text-[11px] font-normal uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                        {weekday}
+                      </span>
+                      <span
+                        className={
+                          isToday
+                            ? 'flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-medium text-white'
+                            : 'flex h-8 w-8 items-center justify-center rounded-full text-sm font-normal text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700'
+                        }
+                      >
+                        {dayNum}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {hasOsLinkedInView ? (
+                <div
+                  className="grid border-t border-gray-100 dark:border-gray-800"
+                  style={{ gridTemplateColumns: gridCols }}
+                >
+                  <div className="flex items-start justify-end border-r border-gray-100 px-1.5 py-1.5 dark:border-gray-800">
+                    <span className="pt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                      Prazos
                     </span>
-                  </button>
-                );
-              })}
+                  </div>
+                  {days.map((day) => {
+                    const items = osLinkedByDay.get(day.toISOString()) || [];
+                    const visible = items.slice(0, 3);
+                    const extra = items.length - visible.length;
+                    return (
+                      <div
+                        key={`os-allday-${day.toISOString()}`}
+                        className="flex min-h-[1.75rem] flex-col gap-0.5 border-r border-gray-100 px-1 py-1 dark:border-gray-800"
+                      >
+                        {visible.map((ev) => {
+                          const pastel = plannerPastelFromColor(ev.color || COLOR_OPTIONS[0], isDark);
+                          const clock = formatClockShort(ev.startAt);
+                          return (
+                            <button
+                              key={ev.id}
+                              type="button"
+                              onClick={() => openEdit(ev)}
+                              title={ev.title}
+                              className="truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight"
+                              style={{
+                                backgroundColor: pastel.bg,
+                                color: pastel.text,
+                              }}
+                            >
+                              {clock ? `${clock} ` : ''}
+                              {ev.title}
+                            </button>
+                          );
+                        })}
+                        {extra > 0 ? (
+                          <span className="px-1 text-[10px] text-gray-400 dark:text-gray-500">
+                            +{extra}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="relative" style={{ height: gridHeight }}>

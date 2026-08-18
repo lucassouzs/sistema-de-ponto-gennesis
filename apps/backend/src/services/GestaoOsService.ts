@@ -30,6 +30,17 @@ import {
   gestaoOsOpsService,
   loadWorkOrderExtras
 } from './GestaoOsOpsService';
+import { isAssignableGestaoOsTechnician } from '../lib/gestaoOsTechnicians';
+
+const OPEN_TECHNICIAN_LOAD_STATUSES: GestaoOsStatus[] = [
+  'OPEN',
+  'UNDER_REVIEW',
+  'APPROVED',
+  'SAFETY_CHECK',
+  'IN_PROGRESS',
+  'WAITING_PARTS',
+  'REWORK'
+];
 
 function newAssetQrToken(): string {
   return randomBytes(16).toString('hex');
@@ -49,7 +60,7 @@ const STATUS_FEED_LABELS: Record<GestaoOsStatus, string> = {
   IN_PROGRESS: 'Em Execução',
   WAITING_PARTS: 'Aguardando Peça/Terceiro',
   COMPLETED: 'Concluída',
-  REWORK: 'Aguardando ajuste',
+  REWORK: 'Aguardando Ajuste',
   CLOSED: 'Encerrada/Avaliada',
   CANCELLED: 'Cancelada'
 };
@@ -493,6 +504,7 @@ export class GestaoOsService {
       priority?: string;
       requesterId?: string;
       assigneeId?: string;
+      involvedUserId?: string;
       buildingId?: string;
       overdue?: boolean;
       limit?: number;
@@ -519,8 +531,17 @@ export class GestaoOsService {
       where.status = parseStatus(params.status);
     }
     if (params.priority) where.priority = parsePriority(params.priority);
-    if (params.requesterId) where.requesterId = params.requesterId;
-    if (params.assigneeId) where.assigneeId = params.assigneeId;
+    if (params.involvedUserId) {
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          OR: [{ requesterId: params.involvedUserId }, { assigneeId: params.involvedUserId }]
+        }
+      ];
+    } else {
+      if (params.requesterId) where.requesterId = params.requesterId;
+      if (params.assigneeId) where.assigneeId = params.assigneeId;
+    }
     if (params.buildingId) where.buildingId = params.buildingId;
 
     const search = params.search?.trim();
@@ -600,19 +621,28 @@ export class GestaoOsService {
       position: user.employee?.position ?? null
     });
 
-    const isAssignableTechnician = (user: {
-      name: string;
-      email: string;
-      employee: { position: string } | null;
-    }) => {
-      const name = user.name.trim().toLowerCase();
-      const email = user.email.trim().toLowerCase();
-      const position = (user.employee?.position || '').trim().toLowerCase();
-      if (name === 'administrador' || position === 'administrador') return false;
-      if (name === 'gennecy' || email.startsWith('gennecy-bot@') || email.includes('gennecy-bot')) {
-        return false;
-      }
-      return true;
+    const openRows = await prisma.gestaoOsWorkOrder.findMany({
+      where: { status: { in: OPEN_TECHNICIAN_LOAD_STATUSES }, assigneeId: { not: null } },
+      select: { assigneeId: true, dueAt: true }
+    });
+    const now = Date.now();
+    const loadByAssignee = new Map<string, { openCount: number; overdueCount: number }>();
+    for (const row of openRows) {
+      const id = row.assigneeId;
+      if (!id) continue;
+      const bucket = loadByAssignee.get(id) ?? { openCount: 0, overdueCount: 0 };
+      bucket.openCount += 1;
+      if (row.dueAt && row.dueAt.getTime() < now) bucket.overdueCount += 1;
+      loadByAssignee.set(id, bucket);
+    }
+
+    const withLoad = <T extends { id: string }>(tech: T) => {
+      const load = loadByAssignee.get(tech.id);
+      return {
+        ...tech,
+        openCount: load?.openCount ?? 0,
+        overdueCount: load?.overdueCount ?? 0
+      };
     };
 
     if (companyId) {
@@ -626,8 +656,8 @@ export class GestaoOsService {
         take: 300
       });
       return members
-        .filter((m) => m.user.isActive && m.user.employee && isAssignableTechnician(m.user))
-        .map((m) => toTechnician(m.user));
+        .filter((m) => m.user.isActive && m.user.employee && isAssignableGestaoOsTechnician(m.user))
+        .map((m) => withLoad(toTechnician(m.user)));
     }
 
     const users = await prisma.user.findMany({
@@ -639,7 +669,7 @@ export class GestaoOsService {
       orderBy: { name: 'asc' },
       take: 300
     });
-    return users.filter(isAssignableTechnician).map(toTechnician);
+    return users.filter(isAssignableGestaoOsTechnician).map((user) => withLoad(toTechnician(user)));
   }
 
   async create(

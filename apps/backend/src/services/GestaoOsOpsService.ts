@@ -9,6 +9,7 @@ import { computeSlaMeta, isOpenGestaoOsStatus } from '../lib/gestaoOsSla';
 import { parsePartsLoose, partsTotalCost } from '../lib/gestaoOsParts';
 import { liveExecutionMs } from '../lib/gestaoOsExecution';
 import { loadAssetWarrantyMap } from '../lib/gestaoOsChecklistCopy';
+import { isAssignableGestaoOsTechnician } from '../lib/gestaoOsTechnicians';
 
 const OPEN: GestaoOsStatus[] = [
   'OPEN',
@@ -179,13 +180,14 @@ export class GestaoOsOpsService {
     const workload = await this.technicianWorkload(access);
     const technicians = await prisma.user.findMany({
       where: { isActive: true, employee: { isNot: null } },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, employee: { select: { position: true } } },
       take: 300
     });
-    if (!technicians.length) return null;
+    const eligible = technicians.filter(isAssignableGestaoOsTechnician);
+    if (!eligible.length) return null;
 
     const loadMap = new Map(workload.map((w) => [w.assigneeId, w]));
-    const scored = technicians.map((t) => {
+    const scored = eligible.map((t) => {
       const load = loadMap.get(t.id);
       const openCount = load?.openCount ?? 0;
       const buildingBoost =

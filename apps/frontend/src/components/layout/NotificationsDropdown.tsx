@@ -95,7 +95,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         warrantyExpiredCount: number;
       } | null;
     },
-    enabled: canSeeGestaoOs && !permissionsLoading,
+    enabled: !permissionsLoading,
     refetchInterval: () => visibleTabRefetchInterval(60_000),
     refetchOnWindowFocus: true,
     staleTime: 20_000,
@@ -313,13 +313,16 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     const overduePlansCount = gestaoOsInbox?.overduePlansCount ?? 0;
     const warrantyCount =
       (gestaoOsInbox?.warrantyExpiredCount ?? 0) + (gestaoOsInbox?.warrantyExpiringCount ?? 0);
+    const osHomeHref = canSeeGestaoOs
+      ? '/ponto/sistema-gestao-os'
+      : '/ponto/meus-chamados';
     if (assignedCount > 0) {
       list.push({
         id: 'gestao-os-assigned',
         title: 'OS atribuídas',
         description: 'Chamados sob sua responsabilidade',
         count: assignedCount,
-        href: '/ponto/sistema-gestao-os',
+        href: osHomeHref,
         Icon: Wrench,
       });
     }
@@ -329,7 +332,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         title: 'SLA atrasado',
         description: 'OS fora do prazo',
         count: slaOverdueCount,
-        href: '/ponto/sistema-gestao-os?overdue=1',
+        href: canSeeGestaoOs ? '/ponto/sistema-gestao-os?overdue=1' : '/ponto/meus-chamados',
         Icon: Wrench,
       });
     }
@@ -339,7 +342,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         title: 'SLA no fim do prazo',
         description: 'OS próximas do estouro',
         count: slaWarningCount,
-        href: '/ponto/sistema-gestao-os',
+        href: osHomeHref,
         Icon: Wrench,
       });
     }

@@ -11,7 +11,8 @@ import { gestaoOsDocumentsService } from '../services/GestaoOsDocumentsService';
 import {
   assertCanViewAllWorkOrders,
   pickCompanyIdFromRequest,
-  resolveGestaoOsAccess
+  resolveGestaoOsAccess,
+  resolveGestaoOsAccessAllowPersonal
 } from '../lib/gestaoOsAccess';
 
 const router = Router();
@@ -25,6 +26,15 @@ router.use(authenticate);
 async function withAccess(req: AuthRequest) {
   if (!req.user) throw createError('Usuário não autenticado', 401);
   return resolveGestaoOsAccess({
+    userId: req.user.id,
+    isAdmin: !!req.user.isAdmin,
+    companyId: pickCompanyIdFromRequest(req)
+  });
+}
+
+async function withPersonalAccess(req: AuthRequest) {
+  if (!req.user) throw createError('Usuário não autenticado', 401);
+  return resolveGestaoOsAccessAllowPersonal({
     userId: req.user.id,
     isAdmin: !!req.user.isAdmin,
     companyId: pickCompanyIdFromRequest(req)
@@ -45,7 +55,7 @@ router.get('/technicians', (req, res, next) => gestaoOsController.technicians(re
 
 router.get('/inbox', async (req: AuthRequest, res, next) => {
   try {
-    const access = await withAccess(req);
+    const access = await withPersonalAccess(req);
     const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
     const data = await gestaoOsOpsService.inbox(access);
     res.json({ success: true, data });
@@ -56,16 +66,19 @@ router.get('/inbox', async (req: AuthRequest, res, next) => {
 
 router.get('/agenda', async (req: AuthRequest, res, next) => {
   try {
-    const access = await withAccess(req);
+    const access = await withPersonalAccess(req);
     const { gestaoOsOpsService } = await import('../services/GestaoOsOpsService');
     const fromRaw = typeof req.query.from === 'string' ? req.query.from : '';
     const toRaw = typeof req.query.to === 'string' ? req.query.to : '';
     const from = fromRaw ? new Date(fromRaw) : new Date();
     const to = toRaw ? new Date(toRaw) : new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const ownerUserId =
+    const requestedOwner =
       typeof req.query.ownerId === 'string' && req.query.ownerId.trim()
         ? req.query.ownerId.trim()
         : access.userId;
+    const canInspectOther = access.canViewAll || access.canMeusChamados || access.isAdmin;
+    const ownerUserId =
+      !canInspectOther && requestedOwner !== access.userId ? access.userId : requestedOwner;
     const data = await gestaoOsOpsService.agenda(access, { from, to, ownerUserId });
     res.json({ success: true, data });
   } catch (error) {

@@ -148,6 +148,7 @@ export default function MeusChamadosPageClient() {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder[] }>('/gestao-os', {
         params: {
           mine: 1,
+          involved: 1,
           search: search || undefined,
           limit: 200
         }

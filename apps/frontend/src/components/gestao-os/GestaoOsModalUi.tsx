@@ -42,6 +42,8 @@ export type GestaoOsTechnicianOption = {
   name: string;
   cpf?: string | null;
   profilePhotoUrl?: string | null;
+  openCount?: number;
+  overdueCount?: number;
 };
 
 function formatGestaoOsCpf(cpf?: string | null) {
@@ -50,6 +52,33 @@ function formatGestaoOsCpf(cpf?: string | null) {
     return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
   }
   return cpf?.trim() || '—';
+}
+
+function technicianLoadSegments(tech: GestaoOsTechnicianOption): Array<{
+  text: string;
+  className: string;
+}> {
+  const openCount = tech.openCount ?? 0;
+  const overdueCount = tech.overdueCount ?? 0;
+  const segments: Array<{ text: string; className: string }> = [];
+  if (openCount <= 0) {
+    segments.push({
+      text: 'Livre',
+      className: 'text-emerald-600 dark:text-emerald-300'
+    });
+    return segments;
+  }
+  segments.push({
+    text: openCount === 1 ? '1 chamado aberto' : `${openCount} chamados abertos`,
+    className: 'text-sky-700 dark:text-sky-300'
+  });
+  if (overdueCount > 0) {
+    segments.push({
+      text: overdueCount === 1 ? '1 atrasado' : `${overdueCount} atrasados`,
+      className: 'text-rose-600 dark:text-rose-300'
+    });
+  }
+  return segments;
 }
 
 export function gestaoOsTechnicianSelectOptions(
@@ -64,13 +93,17 @@ export function gestaoOsTechnicianSelectOptions(
       .slice(0, 2)
       .toUpperCase();
     const cpfLabel = formatGestaoOsCpf(tech.cpf);
+    const statusSegments = technicianLoadSegments(tech);
     return {
       value: tech.id,
       label: tech.name,
       description: cpfLabel,
-      searchText: `${tech.name} ${tech.cpf || ''} ${cpfLabel}`,
+      searchText: `${tech.name} ${tech.cpf || ''} ${cpfLabel} ${statusSegments
+        .map((s) => s.text)
+        .join(' ')} livre aberto atrasado`,
       avatarUrl: resolveApiMediaUrl(tech.profilePhotoUrl ?? null),
-      avatarFallback: initials || '?'
+      avatarFallback: initials || '?',
+      statusSegments
     };
   });
 }

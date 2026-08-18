@@ -99,6 +99,42 @@ export async function resolveGestaoOsAccess(input: {
   };
 }
 
+/** Técnico sem módulo de OS: só vê o que abriu ou o que foi atribuído a ele. */
+export function personalGestaoOsAccess(userId: string): GestaoOsAccessContext {
+  return {
+    userId,
+    isAdmin: false,
+    canAnalisar: false,
+    canExecutar: false,
+    canEncerrar: false,
+    canCadastros: false,
+    canMeusChamados: false,
+    canViewAll: false,
+    companyId: null,
+    profile: null,
+    memberships: []
+  };
+}
+
+/**
+ * Agenda / inbox / detalhe da OS atribuída: não exige módulo.
+ * Central, cadastros e abertura de chamado continuam exigindo permissão.
+ */
+export async function resolveGestaoOsAccessAllowPersonal(input: {
+  userId: string;
+  isAdmin: boolean;
+  companyId?: string | null;
+  requireCompany?: boolean;
+}): Promise<GestaoOsAccessContext> {
+  try {
+    return await resolveGestaoOsAccess(input);
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status === 403) return personalGestaoOsAccess(input.userId);
+    throw err;
+  }
+}
+
 /** Visão operacional (todos os chamados, resumos, técnicos). */
 export function assertCanViewAllWorkOrders(ctx: GestaoOsAccessContext) {
   if (ctx.isAdmin || ctx.canViewAll) return;
