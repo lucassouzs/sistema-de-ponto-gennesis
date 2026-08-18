@@ -585,8 +585,12 @@ export default function SistemaGestaoOsPageClient() {
         status: transitionStatus,
         note: transitionNote || undefined,
         cancelReason: transitionStatus === 'CANCELLED' ? cancelReason : undefined,
-        maintenanceType: maintenanceType || undefined,
-        assigneeId: assigneeId || undefined,
+        maintenanceType:
+          transitionStatus === 'APPROVED' ? maintenanceType || undefined : undefined,
+        assigneeId:
+          transitionStatus === 'APPROVED' && !autoAssign
+            ? assigneeId || undefined
+            : undefined,
         rating: transitionStatus === 'CLOSED' ? Number(rating) : undefined,
         ratingComment: transitionStatus === 'CLOSED' ? ratingComment || undefined : undefined,
         signatureRequesterUrl:
@@ -603,7 +607,7 @@ export default function SistemaGestaoOsPageClient() {
         startPhotoUrl: startPhotoUrl || undefined,
         endPhotoUrl: endPhotoUrl || undefined,
         relatedWorkOrderId: relatedWorkOrderId.trim() || undefined,
-        autoAssign: autoAssign || undefined
+        autoAssign: transitionStatus === 'APPROVED' ? autoAssign || undefined : undefined
       });
       return res.data?.data as GestaoOsWorkOrder;
     },
@@ -798,6 +802,8 @@ export default function SistemaGestaoOsPageClient() {
     () => gestaoOsTechnicianSelectOptions(technicians),
     [technicians]
   );
+
+  const showAssignOnTransition = transitionStatus === 'APPROVED';
 
   const ratingOptions = useMemo(
     () => labeledToSelectOptions([1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))),
@@ -1402,8 +1408,14 @@ export default function SistemaGestaoOsPageClient() {
                     <div className="space-y-4">
                       {detail.status === 'OPEN' ? (
                         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                          Na primeira análise (Em Análise), o sistema cria a OS e atribui o número
-                          da ordem de serviço.
+                          Enviar para Em Análise cria a OS e o número. Tipo de manutenção e técnico
+                          responsável entram só se a OS for aprovada.
+                        </p>
+                      ) : null}
+                      {detail.status === 'UNDER_REVIEW' ? (
+                        <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                          Na aprovação, defina o tipo e o técnico. Se não for o caso de seguir,
+                          cancele — ninguém fica atribuído.
                         </p>
                       ) : null}
                       {detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK' ? (
@@ -1445,13 +1457,12 @@ export default function SistemaGestaoOsPageClient() {
                           />
                         </div>
 
-                        {(transitionStatus === 'APPROVED' ||
-                          transitionStatus === 'UNDER_REVIEW' ||
-                          detail.status === 'UNDER_REVIEW') && (
+                        {showAssignOnTransition ? (
                           <>
                             <div>
                               <label className={`${GESTAO_OS_FORM_LABEL_CLS} flex h-5 items-center`}>
                                 Tipo de manutenção
+                                <GestaoOsRequiredMark />
                               </label>
                               <StringSingleSelectDropdown
                                 value={maintenanceType}
@@ -1468,6 +1479,7 @@ export default function SistemaGestaoOsPageClient() {
                               <div className="mb-1.5 flex h-5 items-center justify-between gap-2">
                                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                   Técnico responsável
+                                  <GestaoOsRequiredMark />
                                 </label>
                                 <button
                                   type="button"
@@ -1497,7 +1509,7 @@ export default function SistemaGestaoOsPageClient() {
                               </div>
                             </div>
                           </>
-                        )}
+                        ) : null}
 
                         {transitionStatus === 'CANCELLED' ? (
                           <div className="sm:col-span-2">
@@ -1676,7 +1688,8 @@ export default function SistemaGestaoOsPageClient() {
                             uploadingEndPhoto ||
                             (transitionStatus === 'CANCELLED' && !cancelReason.trim()) ||
                             (transitionStatus === 'REWORK' && !transitionNote.trim()) ||
-                            (transitionStatus === 'APPROVED' && !maintenanceType) ||
+                            (transitionStatus === 'APPROVED' &&
+                              (!maintenanceType || (!assigneeId && !autoAssign))) ||
                             (transitionStatus === 'WAITING_PARTS' && parts.length === 0) ||
                             (transitionStatus === 'IN_PROGRESS' &&
                               (detail.status === 'APPROVED' ||

@@ -1036,6 +1036,13 @@ export class GestaoOsService {
       if (!input.maintenanceType && !current.maintenanceType) {
         throw createError('Defina o tipo de manutenção ao aprovar a OS', 400);
       }
+      const willAssign =
+        Boolean(input.autoAssign) ||
+        Boolean(input.assigneeId) ||
+        Boolean(current.assigneeId);
+      if (!willAssign) {
+        throw createError('Defina o técnico responsável ao aprovar a OS', 400);
+      }
     }
 
     const startPhoto = String(
