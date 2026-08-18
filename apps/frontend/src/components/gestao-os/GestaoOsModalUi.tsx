@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
-import { Activity, AlertTriangle, CalendarCheck, ClipboardList, FileText, Paperclip, Timer, Wrench, X } from 'lucide-react';
-import { exportGestaoOsPdf } from '@/lib/exportGestaoOsPdf';
+import React, { useState } from 'react';
+import { Activity, AlertTriangle, CalendarCheck, ClipboardList, Download, Eye, Loader2, Paperclip, Timer, Wrench, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { exportGestaoOsPdf, gestaoOsPdfFileName, openGestaoOsPdf } from '@/lib/exportGestaoOsPdf';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { useModalRequestClose } from '@/components/ui/Modal';
@@ -12,7 +13,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
-import { DpRequestHistoryTimeline } from '@/lib/dpRequestHistoryModal';
 import type { DpTimelineStep } from '@/lib/dpRequestTimeline';
 import {
   type GestaoOsAttachment,
@@ -246,16 +246,36 @@ function GestaoOsDocumentItem({
   subtitle,
   url,
   fileName,
-  pending = false
+  pending = false,
+  onView,
+  onDownload,
 }: {
   label: string;
   subtitle?: string;
   url?: string | null;
   fileName?: string | null;
   pending?: boolean;
+  onView?: () => void | Promise<void>;
+  onDownload?: () => void | Promise<void>;
 }) {
+  const [busy, setBusy] = useState<'view' | 'download' | null>(null);
   const trimmedUrl = (url || '').trim();
-  const isPending = pending || !trimmedUrl;
+  const hasGeneratedActions = Boolean(onView || onDownload);
+  const isPending = pending || (!hasGeneratedActions && !trimmedUrl);
+  const actionBtnCls =
+    'inline-flex items-center justify-center rounded-md p-1.5 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300';
+
+  const runAction = async (kind: 'view' | 'download', action?: () => void | Promise<void>) => {
+    if (!action) return;
+    setBusy(kind);
+    try {
+      await action();
+    } catch {
+      toast.error(kind === 'view' ? 'Não foi possível abrir o PDF.' : 'Não foi possível baixar o PDF.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="flex items-center justify-between gap-3 py-3 first:pt-3 last:pb-0">
@@ -270,6 +290,41 @@ function GestaoOsDocumentItem({
           <span className="inline-flex whitespace-nowrap rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
             Pendente
           </span>
+        ) : hasGeneratedActions ? (
+          <>
+            {onView ? (
+              <button
+                type="button"
+                onClick={() => void runAction('view', onView)}
+                disabled={busy != null}
+                title="Ver"
+                aria-label={`Ver ${fileName || label}`}
+                className={actionBtnCls}
+              >
+                {busy === 'view' ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+                ) : (
+                  <Eye className="h-5 w-5 shrink-0" />
+                )}
+              </button>
+            ) : null}
+            {onDownload ? (
+              <button
+                type="button"
+                onClick={() => void runAction('download', onDownload)}
+                disabled={busy != null}
+                title="Baixar"
+                aria-label={`Baixar ${fileName || label}`}
+                className={actionBtnCls}
+              >
+                {busy === 'download' ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" />
+                ) : (
+                  <Download className="h-5 w-5 shrink-0" />
+                )}
+              </button>
+            ) : null}
+          </>
         ) : (
           <OcAttachmentActions
             url={trimmedUrl}
@@ -288,41 +343,28 @@ export function GestaoOsDocumentsTab({ detail }: { detail: GestaoOsWorkOrder }) 
   const hasSafetyPhoto = Boolean(detail.safetyPhotoUrl);
   const hasStartPhoto = Boolean(detail.startPhotoUrl);
   const hasEndPhoto = Boolean(detail.endPhotoUrl);
-  const hasOtherDocs =
-    files.length > 0 || hasSignatures || hasSafetyPhoto || hasStartPhoto || hasEndPhoto;
+  const pdfName = gestaoOsPdfFileName(detail);
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => void exportGestaoOsPdf(detail)}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-        >
-          <FileText className="h-4 w-4" />
-          Baixar PDF
-        </button>
-      </div>
-
-      {!hasOtherDocs ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Nenhum anexo neste chamado. Use o PDF para imprimir a OS.
-        </p>
-      ) : null}
-
-      {files.length > 0 ? (
-        <GestaoOsDocSection title="Anexos">
-          {files.map((file, index) => (
-            <GestaoOsDocumentItem
-              key={file.url}
-              label={files.length > 1 ? `Arquivo ${index + 1}` : 'Arquivo'}
-              subtitle={file.name || 'Anexo'}
-              url={file.url}
-              fileName={file.name}
-            />
-          ))}
-        </GestaoOsDocSection>
-      ) : null}
+      <GestaoOsDocSection title="Anexos">
+        <GestaoOsDocumentItem
+          label="PDF"
+          subtitle={pdfName}
+          fileName={pdfName}
+          onView={() => openGestaoOsPdf(detail)}
+          onDownload={() => exportGestaoOsPdf(detail)}
+        />
+        {files.map((file, index) => (
+          <GestaoOsDocumentItem
+            key={file.url}
+            label={files.length > 1 ? `Arquivo ${index + 1}` : 'Arquivo'}
+            subtitle={file.name || 'Anexo'}
+            url={file.url}
+            fileName={file.name}
+          />
+        ))}
+      </GestaoOsDocSection>
 
       {hasSafetyPhoto || hasStartPhoto || hasEndPhoto ? (
         <GestaoOsDocSection title="Registros fotográficos">
@@ -485,6 +527,31 @@ function buildGestaoOsTimeline(
   return steps;
 }
 
+function stripResponsibleFromNote(note: string) {
+  return note
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*respons[aá]vel\s*:/i.test(line))
+    .join('\n')
+    .trim();
+}
+
+function GestaoOsTimelineField({
+  label,
+  children
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+      <dt className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</dt>
+      <dd className="min-w-0 whitespace-pre-wrap break-words text-sm text-gray-900 dark:text-gray-100 sm:text-right">
+        {children}
+      </dd>
+    </div>
+  );
+}
+
 export function GestaoOsHistoryList({
   events,
   status,
@@ -494,11 +561,63 @@ export function GestaoOsHistoryList({
   status: GestaoOsWorkOrder['status'];
   formatDateTime: (value: string | null | undefined) => string;
 }) {
+  const steps = buildGestaoOsTimeline(events, status);
+  const badgeBase =
+    'inline-flex rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap';
+
   return (
-    <DpRequestHistoryTimeline
-      steps={buildGestaoOsTimeline(events, status)}
-      formatDateTime={(iso) => formatDateTime(iso)}
-    />
+    <div className="space-y-4">
+      {steps.map((step) => {
+        const note = stripResponsibleFromNote(step.note || '');
+        const sameInstant = step.from === step.to;
+        const badge = step.isOngoing
+          ? `${badgeBase} bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200`
+          : sameInstant
+            ? null
+            : `${badgeBase} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300`;
+        const badgeLabel = step.isOngoing ? 'Em andamento' : step.leadTime;
+
+        return (
+          <section
+            key={step.key}
+            className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+              <h3 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+                {step.title}
+              </h3>
+              {badge ? (
+                <span className={badge} title={badgeLabel}>
+                  {badgeLabel}
+                </span>
+              ) : null}
+            </div>
+            <dl className="divide-y divide-gray-200 dark:divide-gray-700">
+              {sameInstant ? (
+                <GestaoOsTimelineField label="Data">
+                  {formatDateTime(new Date(step.from).toISOString())}
+                </GestaoOsTimelineField>
+              ) : (
+                <>
+                  <GestaoOsTimelineField label="Início">
+                    {formatDateTime(new Date(step.from).toISOString())}
+                  </GestaoOsTimelineField>
+                  <GestaoOsTimelineField label="Término">
+                    {step.isOngoing
+                      ? 'Em andamento'
+                      : formatDateTime(new Date(step.to).toISOString())}
+                  </GestaoOsTimelineField>
+                </>
+              )}
+              {step.actorName ? (
+                <GestaoOsTimelineField label="Responsável">{step.actorName}</GestaoOsTimelineField>
+              ) : null}
+              {note ? <GestaoOsTimelineField label="Obs.">{note}</GestaoOsTimelineField> : null}
+            </dl>
+          </section>
+        );
+      })}
+    </div>
   );
 }
 

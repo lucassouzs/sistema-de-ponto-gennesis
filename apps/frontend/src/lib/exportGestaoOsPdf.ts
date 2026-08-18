@@ -20,6 +20,11 @@ function money(value?: number | null) {
 }
 
 export async function exportGestaoOsPdf(detail: GestaoOsWorkOrder) {
+  const pdf = await buildGestaoOsPdf(detail);
+  pdf.save(gestaoOsPdfFileName(detail));
+}
+
+async function buildGestaoOsPdf(detail: GestaoOsWorkOrder) {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
   const pageW = pdf.internal.pageSize.getWidth();
   let y = 14;
@@ -167,9 +172,22 @@ export async function exportGestaoOsPdf(detail: GestaoOsWorkOrder) {
     }
   }
 
-  const fileName =
-    detail.osNumber != null
-      ? `OS-${detail.osNumber}.pdf`
-      : `chamado-${detail.displayNumber}.pdf`;
-  pdf.save(fileName);
+  return pdf;
+}
+
+export function gestaoOsPdfFileName(detail: GestaoOsWorkOrder): string {
+  return detail.osNumber != null
+    ? `OS-${detail.osNumber}.pdf`
+    : `chamado-${detail.displayNumber}.pdf`;
+}
+
+export async function openGestaoOsPdf(detail: GestaoOsWorkOrder) {
+  const pdf = await buildGestaoOsPdf(detail);
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    pdf.save(gestaoOsPdfFileName(detail));
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

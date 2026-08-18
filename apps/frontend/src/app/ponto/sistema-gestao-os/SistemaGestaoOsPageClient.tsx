@@ -125,6 +125,7 @@ type Technician = {
 type GestaoOsChamadoDetailTab =
   | 'resumo'
   | 'fluxo'
+  | 'ativo'
   | 'checklist'
   | 'documentos'
   | 'historico'
@@ -133,9 +134,10 @@ type GestaoOsChamadoDetailTab =
 const CHAMADO_DETAIL_TABS: ReadonlyArray<{ id: GestaoOsChamadoDetailTab; label: string }> = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'fluxo', label: 'Fluxo' },
+  { id: 'ativo', label: 'Ativo' },
   { id: 'checklist', label: 'Checklist' },
   { id: 'documentos', label: 'Documentos' },
-  { id: 'historico', label: 'Histórico' },
+  { id: 'historico', label: 'Timeline' },
   { id: 'comentarios', label: 'Comentários' }
 ];
 
@@ -1397,7 +1399,6 @@ export default function SistemaGestaoOsPageClient() {
                 {detailTab === 'fluxo' ? (
                   nextStatuses.length > 0 ? (
                     <div className="space-y-4">
-                      {assetHistoryCard}
                       {detail.status === 'OPEN' ? (
                         <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                           Na primeira análise (Em Análise), o sistema cria a OS e atribui o número
@@ -1691,13 +1692,16 @@ export default function SistemaGestaoOsPageClient() {
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      {assetHistoryCard}
-                      <GestaoOsEmptyTab>
-                        Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem
-                        novas transições.
-                      </GestaoOsEmptyTab>
-                    </div>
+                    <GestaoOsEmptyTab>
+                      Esta solicitação está {STATUS_LABELS[detail.status].toLowerCase()} — sem
+                      novas transições.
+                    </GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'ativo' ? (
+                  assetHistoryCard ?? (
+                    <GestaoOsEmptyTab>Nenhum ativo vinculado a este chamado.</GestaoOsEmptyTab>
                   )
                 ) : null}
 
@@ -1818,7 +1822,7 @@ export default function SistemaGestaoOsPageClient() {
                       formatDateTime={formatDateTime}
                     />
                   ) : (
-                    <GestaoOsEmptyTab>Nenhum histórico neste chamado.</GestaoOsEmptyTab>
+                    <GestaoOsEmptyTab>Nenhum evento na timeline.</GestaoOsEmptyTab>
                   )
                 ) : null}
 

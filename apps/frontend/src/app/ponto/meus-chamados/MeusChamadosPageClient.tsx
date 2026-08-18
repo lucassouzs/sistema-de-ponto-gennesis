@@ -29,6 +29,7 @@ import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachm
 import { GestaoOsCommentsSection } from '@/components/gestao-os/GestaoOsCommentsSection';
 import {
   GESTAO_OS_FORM_LABEL_CLS,
+  GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
   GestaoOsDetailModalChrome,
@@ -79,13 +80,20 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-type MeusChamadosDetailTab = 'resumo' | 'checklist' | 'documentos' | 'historico' | 'comentarios';
+type MeusChamadosDetailTab =
+  | 'resumo'
+  | 'ativo'
+  | 'checklist'
+  | 'documentos'
+  | 'historico'
+  | 'comentarios';
 
 const MEUS_CHAMADOS_DETAIL_TABS: ReadonlyArray<{ id: MeusChamadosDetailTab; label: string }> = [
   { id: 'resumo', label: 'Resumo' },
+  { id: 'ativo', label: 'Ativo' },
   { id: 'checklist', label: 'Checklist' },
   { id: 'documentos', label: 'Documentos' },
-  { id: 'historico', label: 'Histórico' },
+  { id: 'historico', label: 'Timeline' },
   { id: 'comentarios', label: 'Comentários' }
 ];
 
@@ -240,6 +248,17 @@ export default function MeusChamadosPageClient() {
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder }>(
         `/gestao-os/${detailId}`
+      );
+      return res.data?.data;
+    }
+  });
+
+  const { data: assetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history', detail?.assetId],
+    enabled: Boolean(detailId && detail?.assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${detail?.assetId}/history`
       );
       return res.data?.data;
     }
@@ -917,6 +936,22 @@ export default function MeusChamadosPageClient() {
                   </div>
                 ) : null}
 
+                {detailTab === 'ativo' ? (
+                  assetHistory ? (
+                    <GestaoOsAssetHistoryCard
+                      history={assetHistory}
+                      currentId={detail.id}
+                      onOpenWorkOrder={(id) => {
+                        setDetailId(id);
+                        setDetailTab('resumo');
+                        router.replace(`/ponto/meus-chamados?id=${id}`);
+                      }}
+                    />
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum ativo vinculado a este chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
                 {detailTab === 'checklist' ? (
                   (Array.isArray(detail.safetyChecklistResponses) &&
                     detail.safetyChecklistResponses.length > 0) ||
@@ -963,7 +998,7 @@ export default function MeusChamadosPageClient() {
                       formatDateTime={formatDateTime}
                     />
                   ) : (
-                    <GestaoOsEmptyTab>Nenhum histórico neste chamado.</GestaoOsEmptyTab>
+                    <GestaoOsEmptyTab>Nenhum evento na timeline.</GestaoOsEmptyTab>
                   )
                 ) : null}
 
