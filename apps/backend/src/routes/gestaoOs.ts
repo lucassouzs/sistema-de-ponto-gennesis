@@ -328,6 +328,9 @@ router.patch('/cadastros/assets/:id', (req, res, next) =>
 router.delete('/cadastros/assets/:id', (req, res, next) =>
   gestaoOsCadastrosController.deleteAsset(req, res, next)
 );
+router.post('/cadastros/assets/qr-labels', (req, res, next) =>
+  gestaoOsCadastrosController.assetQrLabels(req, res, next)
+);
 router.get('/cadastros/assets/:id/qr', (req, res, next) =>
   gestaoOsCadastrosController.assetQr(req, res, next)
 );

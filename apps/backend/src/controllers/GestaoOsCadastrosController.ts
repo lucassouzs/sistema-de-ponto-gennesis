@@ -316,6 +316,17 @@ export class GestaoOsCadastrosController {
     }
   }
 
+  async assetQrLabels(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const data = await gestaoOsCadastrosService.getAssetQrCodes(ids);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async resolveQr(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);

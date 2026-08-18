@@ -258,6 +258,10 @@ export type GestaoOsAssetQr = {
   assetId: string;
   name: string;
   code: string | null;
+  category?: string | null;
+  buildingName?: string | null;
+  sectorName?: string | null;
+  placeName?: string | null;
   qrToken: string;
   payloadUrl: string;
   dataUrl: string;

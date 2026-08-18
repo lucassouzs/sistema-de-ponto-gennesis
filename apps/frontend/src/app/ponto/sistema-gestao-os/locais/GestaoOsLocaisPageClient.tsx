@@ -9,6 +9,7 @@ import {
   Layers,
   MapPin,
   Plus,
+  Printer,
   QrCode,
   Search,
   Wrench,
@@ -40,6 +41,10 @@ import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { GestaoOsAssetQrLabel } from '@/components/gestao-os/GestaoOsAssetQrLabel';
+import { GestaoOsAssetQrLabelsPickerModal } from '@/components/gestao-os/GestaoOsAssetQrLabelsPickerModal';
+import { useBrandingLogo } from '@/hooks/useBrandingLogo';
+import { downloadGestaoOsAssetQrLabelsPdf } from '@/lib/printGestaoOsAssetQrLabels';
 import type { GestaoOsAssetQr } from '../gestaoOsTypes';
 
 type LocationAdminTree = Array<{
@@ -159,6 +164,8 @@ function flattenTree(tree: LocationAdminTree) {
 export default function GestaoOsLocaisPageClient() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { logoAlt, useUnbBranding } = useBrandingLogo();
+  const printLogoSrc = useUnbBranding ? '/predialpreto.png' : '/logopv.png';
   const [tab, setTab] = useState<LocaisTab>('ativos');
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -174,6 +181,10 @@ export default function GestaoOsLocaisPageClient() {
     warrantyEndsAt: ''
   });
   const [qrPreview, setQrPreview] = useState<GestaoOsAssetQr | null>(null);
+  const [printingLabels, setPrintingLabels] = useState(false);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelPickerInitialIds, setLabelPickerInitialIds] = useState<string[]>([]);
+  const [qrPreviewQty, setQrPreviewQty] = useState(1);
   const [viewing, setViewing] = useState<
     | { kind: 'predios'; row: BuildingRow }
     | { kind: 'setores'; row: SectorRow }
@@ -494,12 +505,73 @@ export default function GestaoOsLocaisPageClient() {
     }
   });
 
+  const downloadLabelsPdf = async (
+    picks: Array<{ id: string; quantity: number }>
+  ) => {
+    const ids = picks.map((pick) => pick.id).filter(Boolean).slice(0, 120);
+    if (!ids.length) {
+      toast.error('Selecione ao menos um ativo.');
+      return;
+    }
+    const quantities = Object.fromEntries(
+      picks.map((pick) => [pick.id, Math.min(20, Math.max(1, pick.quantity || 1))])
+    );
+    setPrintingLabels(true);
+    try {
+      const res = await api.post<{ success: boolean; data: GestaoOsAssetQr[] }>(
+        '/gestao-os/cadastros/assets/qr-labels',
+        { ids }
+      );
+      const labels = res.data?.data ?? [];
+      if (!labels.length) {
+        toast.error('Não foi possível gerar as etiquetas.');
+        return;
+      }
+      const count = await downloadGestaoOsAssetQrLabelsPdf(labels, {
+        companyName: logoAlt,
+        forceUnbBranding: useUnbBranding,
+        quantities
+      });
+      toast.success(`${count} etiqueta(s) no PDF.`);
+      setLabelPickerOpen(false);
+    } catch (err: unknown) {
+      toast.error(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'Erro ao gerar o PDF.'
+      );
+    } finally {
+      setPrintingLabels(false);
+    }
+  };
+
+  const openLabelPicker = (initialIds: string[] = []) => {
+    setLabelPickerInitialIds(initialIds);
+    setLabelPickerOpen(true);
+  };
+
+  const downloadSingleLabelPdf = async (label: GestaoOsAssetQr, quantity = 1) => {
+    setPrintingLabels(true);
+    try {
+      const count = await downloadGestaoOsAssetQrLabelsPdf([label], {
+        companyName: logoAlt,
+        forceUnbBranding: useUnbBranding,
+        quantities: { [label.assetId]: quantity }
+      });
+      toast.success(`${count} etiqueta(s) no PDF.`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao gerar o PDF.');
+    } finally {
+      setPrintingLabels(false);
+    }
+  };
+
   const openQr = async (assetId: string) => {
     try {
       const res = await api.get<{ success: boolean; data: GestaoOsAssetQr }>(
         `/gestao-os/cadastros/assets/${assetId}/qr`
       );
       setQrPreview(res.data?.data ?? null);
+      setQrPreviewQty(1);
     } catch (err: unknown) {
       toast.error(
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
@@ -732,6 +804,18 @@ export default function GestaoOsLocaisPageClient() {
                       </button>
                     ) : null}
                   </div>
+                  {tab === 'ativos' && assetRows.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={printingLabels}
+                      onClick={() => openLabelPicker()}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                      title="Baixar etiquetas PDF"
+                      aria-label="Baixar etiquetas PDF"
+                    >
+                      <Printer className="h-4 w-4" />
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={openNew}
@@ -1005,10 +1089,18 @@ export default function GestaoOsLocaisPageClient() {
                     tab === 'ativos'
                       ? [
                           {
-                            label: 'Ver QR Code',
+                            label: 'Ver QR / etiqueta',
                             icon: <QrCode className="h-4 w-4" />,
                             onClick: () => {
                               void openQr(rowForActionMenu.id);
+                              closeRowActionMenu();
+                            }
+                          },
+                          {
+                            label: 'Baixar etiqueta PDF',
+                            icon: <Printer className="h-4 w-4" />,
+                            onClick: () => {
+                              openLabelPicker([rowForActionMenu.id]);
                               closeRowActionMenu();
                             }
                           }
@@ -1344,7 +1436,21 @@ export default function GestaoOsLocaisPageClient() {
                     </div>
                   </>
                 ) : null}
-                <div className="flex justify-end pt-2">
+                <div className="flex justify-end gap-2 pt-2">
+                  {viewing.kind === 'ativos' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = viewing.row.id;
+                        setViewing(null);
+                        void openQr(id);
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <QrCode className="h-4 w-4" />
+                      QR / etiqueta
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => setViewing(null)}
@@ -1400,26 +1506,57 @@ export default function GestaoOsLocaisPageClient() {
 
         {formConfirmUi}
 
+        <GestaoOsAssetQrLabelsPickerModal
+          isOpen={labelPickerOpen}
+          onClose={() => setLabelPickerOpen(false)}
+          assets={assetRows}
+          initialSelectedIds={labelPickerInitialIds}
+          downloading={printingLabels}
+          onConfirm={(picks) => void downloadLabelsPdf(picks)}
+        />
+
         <Modal
           isOpen={Boolean(qrPreview)}
           onClose={() => setQrPreview(null)}
-          title={qrPreview ? `QR — ${qrPreview.name}` : 'QR Code'}
+          title={qrPreview ? `Etiqueta — ${qrPreview.name}` : 'Etiqueta QR'}
         >
           {qrPreview ? (
-            <div className="space-y-3 text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-300">{qrPreview.locationLabel}</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={qrPreview.dataUrl}
-                alt={`QR Code ${qrPreview.name}`}
-                className="mx-auto h-64 w-64 rounded-lg border border-gray-200 bg-white p-2"
+            <div className="space-y-4">
+              <p className="text-center text-sm text-gray-600 dark:text-gray-300">
+                Modelo para imprimir e colar no ativo. O QR abre o chamado em Meus Chamados.
+              </p>
+              <GestaoOsAssetQrLabel
+                label={qrPreview}
+                companyName={logoAlt}
+                logoSrc={printLogoSrc}
               />
-              <p className="break-all text-xs text-gray-500">{qrPreview.payloadUrl}</p>
               <div className="flex flex-wrap justify-center gap-2">
+                <label className="inline-flex items-center gap-1.5 text-sm text-gray-600 dark:text-gray-300">
+                  Qtd
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={qrPreviewQty}
+                    onChange={(e) =>
+                      setQrPreviewQty(Math.min(20, Math.max(1, Number(e.target.value) || 1)))
+                    }
+                    className={`${FORM_FIELD_INPUT_CLS} h-10 w-16 px-2 text-center tabular-nums`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={printingLabels}
+                  onClick={() => void downloadSingleLabelPdf(qrPreview, qrPreviewQty)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  <Printer className="h-4 w-4" />
+                  {printingLabels ? 'Gerando PDF…' : 'Baixar PDF'}
+                </button>
                 <a
                   href={qrPreview.dataUrl}
                   download={`qr-${qrPreview.name.replace(/\s+/g, '-').toLowerCase()}.png`}
-                  className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white"
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium dark:border-gray-600"
                 >
                   Baixar PNG
                 </a>

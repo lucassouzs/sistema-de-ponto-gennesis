@@ -620,6 +620,51 @@ export class GestaoOsCadastrosService {
     };
   }
 
+  private async ensureAssetQrToken(assetId: string, current?: string | null): Promise<string> {
+    if (current?.trim()) return current.trim();
+    const updated = await prisma.gestaoOsAsset.update({
+      where: { id: assetId },
+      data: { qrToken: newQrToken() }
+    });
+    return updated.qrToken;
+  }
+
+  private async toAssetQrDto(asset: {
+    id: string;
+    name: string;
+    code: string | null;
+    category: string | null;
+    qrToken: string | null;
+    place: {
+      name: string;
+      sector: { name: string; building: { name: string } };
+    };
+  }) {
+    const qrToken = await this.ensureAssetQrToken(asset.id, asset.qrToken);
+    const payloadUrl = assetQrPayloadUrl(qrToken);
+    const dataUrl = await qrCodeToDataUrl(payloadUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 480
+    });
+    const buildingName = asset.place.sector.building.name;
+    const sectorName = asset.place.sector.name;
+    const placeName = asset.place.name;
+    return {
+      assetId: asset.id,
+      name: asset.name,
+      code: asset.code,
+      category: asset.category,
+      buildingName,
+      sectorName,
+      placeName,
+      qrToken,
+      payloadUrl,
+      dataUrl,
+      locationLabel: [buildingName, sectorName, placeName].join(' › ')
+    };
+  }
+
   async getAssetQrCode(assetId: string) {
     const asset = await prisma.gestaoOsAsset.findUnique({
       where: { id: assetId },
@@ -632,33 +677,33 @@ export class GestaoOsCadastrosService {
       }
     });
     if (!asset) throw createError('Ativo não encontrado', 404);
-    if (!asset.qrToken) {
-      const updated = await prisma.gestaoOsAsset.update({
-        where: { id: assetId },
-        data: { qrToken: newQrToken() }
-      });
-      asset.qrToken = updated.qrToken;
-    }
-    const payloadUrl = assetQrPayloadUrl(asset.qrToken);
-    const dataUrl = await qrCodeToDataUrl(payloadUrl, {
-      errorCorrectionLevel: 'M',
-      margin: 1,
-      width: 320
+    return this.toAssetQrDto(asset);
+  }
+
+  async getAssetQrCodes(assetIds: string[]) {
+    const ids = [...new Set(assetIds.map((id) => String(id ?? '').trim()).filter(Boolean))].slice(
+      0,
+      120
+    );
+    if (!ids.length) return [];
+    const assets = await prisma.gestaoOsAsset.findMany({
+      where: { id: { in: ids } },
+      include: {
+        place: {
+          include: {
+            sector: { include: { building: { select: { name: true } } } }
+          }
+        }
+      }
     });
-    return {
-      assetId: asset.id,
-      name: asset.name,
-      code: asset.code,
-      qrToken: asset.qrToken,
-      payloadUrl,
-      dataUrl,
-      locationLabel: [
-        asset.place.sector.building.name,
-        asset.place.sector.name,
-        asset.place.name,
-        asset.name
-      ].join(' › ')
-    };
+    const byId = new Map(assets.map((asset) => [asset.id, asset]));
+    const result = [];
+    for (const id of ids) {
+      const asset = byId.get(id);
+      if (!asset) continue;
+      result.push(await this.toAssetQrDto(asset));
+    }
+    return result;
   }
 
   // ─── Prestadores ──────────────────────────────────────────────────
