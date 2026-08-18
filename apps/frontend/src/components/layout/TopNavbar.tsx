@@ -271,7 +271,7 @@ export function TopNavbar({
 
         {/* Breadcrumb — no mobile só o último item */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <nav aria-label="Breadcrumb" className="min-w-0 max-w-full sm:max-w-[20rem] xl:max-w-[28rem]">
+          <nav aria-label="Breadcrumb" className="min-w-0 max-w-full flex-1">
             <ol className="flex min-w-0 items-center gap-1 overflow-hidden text-sm">
               {breadcrumbs.length === 0 ? (
                 <li className="truncate font-semibold text-gray-900 dark:text-gray-100">Gennesis</li>
@@ -281,7 +281,7 @@ export function TopNavbar({
                   return (
                     <li
                       key={`${crumb.label}-${index}`}
-                      className={`min-w-0 items-center gap-1 ${isLast ? 'flex' : 'hidden sm:flex'}`}
+                      className={`items-center gap-1 ${isLast ? 'flex min-w-0' : 'hidden shrink-0 sm:flex'}`}
                     >
                       {index > 0 ? (
                         <ChevronRight
@@ -300,14 +300,14 @@ export function TopNavbar({
                       ) : crumb.href ? (
                         <Link
                           href={crumb.href}
-                          className="truncate text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                          className="whitespace-nowrap text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                           title={crumb.label}
                         >
                           {crumb.label}
                         </Link>
                       ) : (
                         <span
-                          className="truncate text-gray-400 dark:text-gray-500"
+                          className="whitespace-nowrap text-gray-400 dark:text-gray-500"
                           title={crumb.label}
                         >
                           {crumb.label}
