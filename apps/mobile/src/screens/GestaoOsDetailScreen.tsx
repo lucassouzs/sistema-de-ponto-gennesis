@@ -209,6 +209,8 @@ export default function GestaoOsDetailScreen({ route }: Props) {
     safetyChecklist.length > 0 &&
     safetyChecklist.every((item) => item.required === false || item.checked) &&
     Boolean(safetyPhotoUrl);
+  const executionReady =
+    checklist.length === 0 || checklist.every((item) => !!item.checked);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -359,7 +361,9 @@ export default function GestaoOsDetailScreen({ route }: Props) {
             <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <Text style={[styles.boxTitle, { color: colors.text }]}>Foto de conclusão</Text>
               <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
-                Registre uma foto antes de concluir o serviço.
+                {executionReady
+                  ? 'Registre uma foto antes de concluir o serviço.'
+                  : 'Marque todos os itens do checklist de execução antes de concluir.'}
               </Text>
               {endPhotoUrl ? <Image source={{ uri: endPhotoUrl }} style={styles.photo} /> : null}
               <TouchableOpacity
@@ -396,7 +400,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
                 (wo.status === 'APPROVED' || wo.status === 'SAFETY_CHECK') &&
                 !safetyReady) ||
               (status === 'IN_PROGRESS' && !startPhotoUrl) ||
-              (status === 'COMPLETED' && !endPhotoUrl) ||
+              (status === 'COMPLETED' && (!endPhotoUrl || !executionReady)) ||
               (status === 'WAITING_PARTS' && parts.length === 0);
             return (
               <TouchableOpacity

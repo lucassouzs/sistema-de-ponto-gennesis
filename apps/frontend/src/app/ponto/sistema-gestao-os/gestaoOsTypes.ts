@@ -395,6 +395,14 @@ export function isGestaoOsSafetyChecklistComplete(
   return items.every((item) => item.required === false || !!item.checked);
 }
 
+/** Sem itens: não bloqueia. Com itens: todos precisam estar marcados. */
+export function isGestaoOsExecutionChecklistComplete(
+  items: GestaoOsChecklistResponseItem[] | null | undefined
+): boolean {
+  if (!items?.length) return true;
+  return items.every((item) => !!item.checked);
+}
+
 export const SERVICE_CATEGORIES = [
   'Elétrica',
   'Energia elétrica',

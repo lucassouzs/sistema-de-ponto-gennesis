@@ -53,8 +53,43 @@ export function checklistResponsesFromItems(items: unknown): GestaoOsChecklistCo
     .filter(Boolean) as GestaoOsChecklistCopyItem[];
 }
 
+export function parseChecklistResponses(value: unknown): GestaoOsChecklistCopyItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item, idx) => {
+      if (typeof item === 'string') {
+        const label = item.trim();
+        if (!label) return null;
+        return { id: `item-${idx + 1}`, label, checked: false };
+      }
+      if (!item || typeof item !== 'object') return null;
+      const row = item as {
+        id?: unknown;
+        label?: unknown;
+        checked?: unknown;
+        required?: unknown;
+      };
+      const label = String(row.label ?? '').trim();
+      if (!label) return null;
+      return {
+        id: String(row.id ?? `item-${idx + 1}`),
+        label,
+        checked: Boolean(row.checked),
+        required: !!row.required
+      };
+    })
+    .filter(Boolean) as GestaoOsChecklistCopyItem[];
+}
+
 export function isChecklistEmpty(value: unknown): boolean {
   return checklistResponsesFromItems(value).length === 0;
+}
+
+/** Sem itens: não bloqueia. Com itens: todos precisam estar marcados. */
+export function isExecutionChecklistComplete(value: unknown): boolean {
+  const items = parseChecklistResponses(value);
+  if (items.length === 0) return true;
+  return items.every((item) => !!item.checked);
 }
 
 export async function loadCategoryChecklistId(categoryId: string): Promise<string | null> {
@@ -141,7 +176,10 @@ export async function resolveCategoryChecklistResponses(
     select: { items: true, isActive: true }
   });
   if (!template?.isActive) return [];
-  return checklistResponsesFromItems(template.items);
+  return checklistResponsesFromItems(template.items).map((item) => ({
+    ...item,
+    required: true
+  }));
 }
 
 const SKIP_CHECKLIST_HYDRATE = new Set(['CLOSED', 'CANCELLED']);

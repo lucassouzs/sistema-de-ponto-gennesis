@@ -47,7 +47,7 @@ import {
   GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
-  GestaoOsChecklistTabBody,
+  GestaoOsChecklistScrollPane,
   GestaoOsDetailModalChrome,
   GestaoOsDocumentsTab,
   GestaoOsEmptyTab,
@@ -82,6 +82,7 @@ import {
   formatGestaoOsLabel,
   formatGestaoOsNumber,
   gestaoOsSlaState,
+  isGestaoOsExecutionChecklistComplete,
   isGestaoOsSafetyChecklistComplete
 } from './gestaoOsTypes';
 import { useGestaoOsCompany } from './useGestaoOsCompany';
@@ -127,7 +128,8 @@ type GestaoOsChamadoDetailTab =
   | 'resumo'
   | 'fluxo'
   | 'ativo'
-  | 'checklist'
+  | 'seguranca'
+  | 'execucao'
   | 'documentos'
   | 'historico'
   | 'comentarios';
@@ -136,7 +138,8 @@ const CHAMADO_DETAIL_TABS: ReadonlyArray<{ id: GestaoOsChamadoDetailTab; label: 
   { id: 'resumo', label: 'Resumo' },
   { id: 'fluxo', label: 'Fluxo' },
   { id: 'ativo', label: 'Ativo' },
-  { id: 'checklist', label: 'Checklist' },
+  { id: 'seguranca', label: 'Segurança' },
+  { id: 'execucao', label: 'Execução' },
   { id: 'documentos', label: 'Documentos' },
   { id: 'historico', label: 'Timeline' },
   { id: 'comentarios', label: 'Comentários' }
@@ -830,6 +833,7 @@ export default function SistemaGestaoOsPageClient() {
   );
 
   const safetyReady = isGestaoOsSafetyChecklistComplete(safetyChecklistDraft) && Boolean(safetyPhotoUrl);
+  const executionReady = isGestaoOsExecutionChecklistComplete(checklistDraft);
 
   const assetHistoryCard = assetHistory ? (
     <GestaoOsAssetHistoryCard
@@ -1378,7 +1382,7 @@ export default function SistemaGestaoOsPageClient() {
           contentClassName="!p-0"
           size="xl"
           panelClassName={
-            detailTab === 'comentarios' || detailTab === 'checklist'
+            detailTab === 'comentarios'
               ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
               : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
           }
@@ -1388,7 +1392,7 @@ export default function SistemaGestaoOsPageClient() {
             tabs={[...CHAMADO_DETAIL_TABS]}
             activeTab={detailTab}
             onTabChange={(id) => setDetailTab(id as GestaoOsChamadoDetailTab)}
-            fillBody={detailTab === 'comentarios' || detailTab === 'checklist'}
+            fillBody={detailTab === 'comentarios'}
             onClose={() => {
               setDetailId(null);
               setDetailTab('resumo');
@@ -1399,7 +1403,7 @@ export default function SistemaGestaoOsPageClient() {
             ) : (
               <div
                 className={
-                  detailTab === 'comentarios' || detailTab === 'checklist'
+                  detailTab === 'comentarios'
                     ? 'flex h-full min-h-0 flex-col text-sm'
                     : 'space-y-5 text-sm'
                 }
@@ -1429,10 +1433,10 @@ export default function SistemaGestaoOsPageClient() {
                           e envie a foto com os EPIs na aba{' '}
                           <button
                             type="button"
-                            onClick={() => setDetailTab('checklist')}
+                            onClick={() => setDetailTab('seguranca')}
                             className="font-semibold text-red-600 hover:underline dark:text-red-400"
                           >
-                            Checklist
+                            Segurança
                           </button>
                           .
                         </p>
@@ -1625,6 +1629,19 @@ export default function SistemaGestaoOsPageClient() {
 
                         {transitionStatus === 'COMPLETED' ? (
                           <div className="sm:col-span-2">
+                            {!executionReady ? (
+                              <p className="mb-3 text-xs text-rose-600 dark:text-rose-400">
+                                Marque todos os itens na aba{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setDetailTab('execucao')}
+                                  className="font-semibold underline"
+                                >
+                                  Execução
+                                </button>{' '}
+                                antes de concluir a OS.
+                              </p>
+                            ) : null}
                             <label className={GESTAO_OS_FORM_LABEL_CLS}>
                               Foto de conclusão
                               <GestaoOsRequiredMark />
@@ -1700,7 +1717,8 @@ export default function SistemaGestaoOsPageClient() {
                               (detail.status === 'APPROVED' ||
                                 detail.status === 'SAFETY_CHECK') &&
                               !startPhotoUrl) ||
-                            (transitionStatus === 'COMPLETED' && !endPhotoUrl) ||
+                            (transitionStatus === 'COMPLETED' &&
+                              (!endPhotoUrl || !executionReady)) ||
                             (transitionStatus === 'IN_PROGRESS' &&
                               (detail.status === 'APPROVED' ||
                                 detail.status === 'SAFETY_CHECK') &&
@@ -1727,68 +1745,60 @@ export default function SistemaGestaoOsPageClient() {
                   )
                 ) : null}
 
-                {detailTab === 'checklist' ? (
-                  safetyChecklistDraft.length > 0 || checklistDraft.length > 0 ? (
-                    <GestaoOsChecklistTabBody
-                      key={detail.id}
-                      preferExecution={
-                        detail.status === 'IN_PROGRESS' ||
-                        detail.status === 'WAITING_PARTS' ||
-                        detail.status === 'REWORK' ||
-                        (safetyChecklistDraft.length > 0 &&
-                          safetyChecklistDraft.every((item) => item.checked))
-                      }
-                      safety={
-                        safetyChecklistDraft.length > 0 ? (
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                                Segurança do Trabalho
+                {detailTab === 'seguranca' ? (
+                  safetyChecklistDraft.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                            Segurança do Trabalho
+                          </p>
+                          {safetyEditable ? (
+                            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                              Marque os equipamentos e condições e envie a foto com os EPIs.
+                              A foto fica na aba Documentos. Itens com * são obrigatórios.
+                            </p>
+                          ) : null}
+                        </div>
+                        <GestaoOsChecklistField
+                          items={safetyChecklistDraft}
+                          readOnly={!safetyEditable}
+                          onToggle={
+                            safetyEditable
+                              ? (index, checked) =>
+                                  setSafetyChecklistDraft((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index ? { ...item, checked } : item
+                                    )
+                                  )
+                              : undefined
+                          }
+                        />
+                        {safetyEditable ? (
+                          <div>
+                            <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                              Foto com os EPIs
+                              <GestaoOsRequiredMark />
+                            </label>
+                            {safetyPhotoUrl ? (
+                              <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                Foto enviada. Ela aparece na aba{' '}
+                                <button
+                                  type="button"
+                                  onClick={() => setDetailTab('documentos')}
+                                  className="font-semibold text-red-600 hover:underline dark:text-red-400"
+                                >
+                                  Documentos
+                                </button>
+                                .
                               </p>
-                              {safetyEditable ? (
-                                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                                  Marque os equipamentos e condições e envie a foto com os EPIs.
-                                  Itens com * são obrigatórios.
-                                </p>
-                              ) : null}
-                            </div>
-                            <GestaoOsChecklistField
-                              items={safetyChecklistDraft}
-                              readOnly={!safetyEditable}
-                              onToggle={
-                                safetyEditable
-                                  ? (index, checked) =>
-                                      setSafetyChecklistDraft((prev) =>
-                                        prev.map((item, i) =>
-                                          i === index ? { ...item, checked } : item
-                                        )
-                                      )
-                                  : undefined
-                              }
-                            />
-                            <div>
-                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
-                                Foto com os EPIs
-                                {safetyEditable ? <GestaoOsRequiredMark /> : null}
-                              </label>
-                              {safetyEditable ? (
+                            ) : (
+                              <>
                                 <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
                                   Envie uma foto sua usando os equipamentos de proteção corretos.
                                 </p>
-                              ) : null}
-                              {safetyEditable ? (
                                 <GestaoOsAttachmentsField
-                                  files={
-                                    safetyPhotoUrl
-                                      ? [
-                                          {
-                                            url: safetyPhotoUrl,
-                                            name: 'Foto de EPIs',
-                                            mimeType: 'image/jpeg'
-                                          }
-                                        ]
-                                      : []
-                                  }
+                                  files={[]}
                                   uploading={uploadingSafetyPhoto}
                                   onFilesSelect={(selected) => void uploadSafetyPhoto(selected)}
                                   onRemove={() => setSafetyPhotoUrl(null)}
@@ -1797,54 +1807,61 @@ export default function SistemaGestaoOsPageClient() {
                                   accept="image/*"
                                   multiple={false}
                                 />
-                              ) : safetyPhotoUrl ? (
-                                <img
-                                  src={resolveApiMediaUrl(safetyPhotoUrl) ?? undefined}
-                                  alt="Foto de EPIs"
-                                  className="max-h-48 rounded-lg border border-gray-200 object-cover dark:border-gray-700"
-                                />
-                              ) : (
-                                <p className="text-xs text-gray-500">Nenhuma foto enviada.</p>
-                              )}
-                            </div>
+                              </>
+                            )}
                           </div>
-                        ) : undefined
-                      }
-                      execution={
-                        checklistDraft.length > 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                              Checklist da execução
-                            </p>
-                            {checklistEditable ? (
-                              <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                                Marque os itens conforme a execução. Itens com * são obrigatórios.
-                              </p>
-                            ) : null}
-                            <GestaoOsChecklistField
-                              items={checklistDraft}
-                              readOnly={!checklistEditable}
-                              onToggle={
-                                checklistEditable
-                                  ? (index, checked) =>
-                                      setChecklistDraft((prev) =>
-                                        prev.map((item, i) =>
-                                          i === index ? { ...item, checked } : item
-                                        )
-                                      )
-                                  : undefined
-                              }
-                            />
-                          </div>
-                        ) : undefined
-                      }
-                    />
+                        ) : null}
+                      </div>
+                    </GestaoOsChecklistScrollPane>
                   ) : (
-                    <GestaoOsEmptyTab>Nenhum checklist neste chamado.</GestaoOsEmptyTab>
+                    <GestaoOsEmptyTab>Nenhum checklist de segurança neste chamado.</GestaoOsEmptyTab>
                   )
                 ) : null}
 
-                {detailTab === 'documentos' ? <GestaoOsDocumentsTab detail={detail} /> : null}
+                {detailTab === 'execucao' ? (
+                  checklistDraft.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Checklist da execução
+                        </p>
+                        {checklistEditable ? (
+                          <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            Marque os itens conforme a execução. Itens com * são obrigatórios.
+                          </p>
+                        ) : null}
+                        <GestaoOsChecklistField
+                          items={checklistDraft}
+                          allRequired
+                          readOnly={!checklistEditable}
+                          onToggle={
+                            checklistEditable
+                              ? (index, checked) =>
+                                  setChecklistDraft((prev) =>
+                                    prev.map((item, i) =>
+                                      i === index ? { ...item, checked } : item
+                                    )
+                                  )
+                              : undefined
+                          }
+                        />
+                      </div>
+                    </GestaoOsChecklistScrollPane>
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum checklist de execução neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'documentos' ? (
+                  <GestaoOsDocumentsTab
+                    detail={{
+                      ...detail,
+                      safetyPhotoUrl: safetyPhotoUrl ?? detail.safetyPhotoUrl,
+                      startPhotoUrl: startPhotoUrl ?? detail.startPhotoUrl,
+                      endPhotoUrl: endPhotoUrl ?? detail.endPhotoUrl
+                    }}
+                  />
+                ) : null}
 
                 {detailTab === 'historico' ? (
                   detail.events && detail.events.length > 0 ? (

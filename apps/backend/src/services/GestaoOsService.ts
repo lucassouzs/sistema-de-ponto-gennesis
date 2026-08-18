@@ -22,6 +22,7 @@ import { parseParts, parsePartsLoose } from '../lib/gestaoOsParts';
 import { applyExecutionClock } from '../lib/gestaoOsExecution';
 import {
   isChecklistEmpty,
+  isExecutionChecklistComplete,
   resolveCategoryChecklistResponses,
   attachWarrantyToLocationTree,
   hydrateEmptyExecutionChecklist
@@ -1096,8 +1097,20 @@ export class GestaoOsService {
       }
     }
 
-    if (nextStatus === 'COMPLETED' && !endPhoto) {
-      throw createError('Envie a foto de conclusão do serviço antes de concluir', 400);
+    if (nextStatus === 'COMPLETED') {
+      if (!endPhoto) {
+        throw createError('Envie a foto de conclusão do serviço antes de concluir', 400);
+      }
+      const executionChecklist =
+        input.checklistResponses !== undefined
+          ? input.checklistResponses
+          : current.checklistResponses;
+      if (!isExecutionChecklistComplete(executionChecklist)) {
+        throw createError(
+          'Preencha todo o checklist de execução antes de concluir a OS',
+          400
+        );
+      }
     }
 
     if (nextStatus === 'WAITING_PARTS') {

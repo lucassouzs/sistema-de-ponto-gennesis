@@ -32,7 +32,7 @@ import {
   GestaoOsAssetHistoryCard,
   GestaoOsChamadoResumo,
   GestaoOsChecklistField,
-  GestaoOsChecklistTabBody,
+  GestaoOsChecklistScrollPane,
   GestaoOsDetailModalChrome,
   GestaoOsDocumentsTab,
   GestaoOsEmptyTab,
@@ -84,7 +84,8 @@ function formatDateTime(value: string | null | undefined) {
 type MeusChamadosDetailTab =
   | 'resumo'
   | 'ativo'
-  | 'checklist'
+  | 'seguranca'
+  | 'execucao'
   | 'documentos'
   | 'historico'
   | 'comentarios';
@@ -92,7 +93,8 @@ type MeusChamadosDetailTab =
 const MEUS_CHAMADOS_DETAIL_TABS: ReadonlyArray<{ id: MeusChamadosDetailTab; label: string }> = [
   { id: 'resumo', label: 'Resumo' },
   { id: 'ativo', label: 'Ativo' },
-  { id: 'checklist', label: 'Checklist' },
+  { id: 'seguranca', label: 'Segurança' },
+  { id: 'execucao', label: 'Execução' },
   { id: 'documentos', label: 'Documentos' },
   { id: 'historico', label: 'Timeline' },
   { id: 'comentarios', label: 'Comentários' }
@@ -830,7 +832,7 @@ export default function MeusChamadosPageClient() {
           contentClassName="!p-0"
           size="xl"
           panelClassName={
-            detailTab === 'comentarios' || detailTab === 'checklist'
+            detailTab === 'comentarios'
               ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
               : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
           }
@@ -840,7 +842,7 @@ export default function MeusChamadosPageClient() {
             tabs={[...MEUS_CHAMADOS_DETAIL_TABS]}
             activeTab={detailTab}
             onTabChange={(id) => setDetailTab(id as MeusChamadosDetailTab)}
-            fillBody={detailTab === 'comentarios' || detailTab === 'checklist'}
+            fillBody={detailTab === 'comentarios'}
             onClose={() => {
               setDetailId(null);
               setDetailTab('resumo');
@@ -851,7 +853,7 @@ export default function MeusChamadosPageClient() {
             ) : (
               <div
                 className={
-                  detailTab === 'comentarios' || detailTab === 'checklist'
+                  detailTab === 'comentarios'
                     ? 'flex h-full min-h-0 flex-col text-sm'
                     : 'space-y-5 text-sm'
                 }
@@ -954,49 +956,38 @@ export default function MeusChamadosPageClient() {
                   )
                 ) : null}
 
-                {detailTab === 'checklist' ? (
-                  (Array.isArray(detail.safetyChecklistResponses) &&
-                    detail.safetyChecklistResponses.length > 0) ||
-                  (Array.isArray(detail.checklistResponses) &&
-                    detail.checklistResponses.length > 0) ? (
-                    <GestaoOsChecklistTabBody
-                      key={detail.id}
-                      preferExecution={
-                        detail.status === 'IN_PROGRESS' ||
-                        detail.status === 'WAITING_PARTS' ||
-                        detail.status === 'REWORK' ||
-                        (Array.isArray(detail.safetyChecklistResponses) &&
-                          detail.safetyChecklistResponses.length > 0 &&
-                          detail.safetyChecklistResponses.every((item) => item.checked))
-                      }
-                      safety={
-                        Array.isArray(detail.safetyChecklistResponses) &&
-                        detail.safetyChecklistResponses.length > 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                              Segurança do Trabalho
-                            </p>
-                            <GestaoOsChecklistField
-                              items={detail.safetyChecklistResponses}
-                              readOnly
-                            />
-                          </div>
-                        ) : undefined
-                      }
-                      execution={
-                        Array.isArray(detail.checklistResponses) &&
-                        detail.checklistResponses.length > 0 ? (
-                          <div className="space-y-3">
-                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                              Checklist da execução
-                            </p>
-                            <GestaoOsChecklistField items={detail.checklistResponses} readOnly />
-                          </div>
-                        ) : undefined
-                      }
-                    />
+                {detailTab === 'seguranca' ? (
+                  Array.isArray(detail.safetyChecklistResponses) &&
+                  detail.safetyChecklistResponses.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Segurança do Trabalho
+                        </p>
+                        <GestaoOsChecklistField
+                          items={detail.safetyChecklistResponses}
+                          readOnly
+                        />
+                      </div>
+                    </GestaoOsChecklistScrollPane>
                   ) : (
-                    <GestaoOsEmptyTab>Nenhum checklist neste chamado.</GestaoOsEmptyTab>
+                    <GestaoOsEmptyTab>Nenhum checklist de segurança neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'execucao' ? (
+                  Array.isArray(detail.checklistResponses) &&
+                  detail.checklistResponses.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Checklist da execução
+                        </p>
+                        <GestaoOsChecklistField items={detail.checklistResponses} allRequired readOnly />
+                      </div>
+                    </GestaoOsChecklistScrollPane>
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum checklist de execução neste chamado.</GestaoOsEmptyTab>
                   )
                 ) : null}
 
