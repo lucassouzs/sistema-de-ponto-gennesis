@@ -1118,6 +1118,14 @@ export function KanbanPlannerView({
       router.push(event.href);
       return;
     }
+    if (event.source === 'gestao-os' || event.source === 'gestao-os-plan') {
+      toast(
+        event.source === 'gestao-os-plan'
+          ? 'Prazo de plano de manutenção. Quem tem a Central abre o plano em Planos.'
+          : 'Este item vem de um chamado. Abra a OS em Meus Chamados ou na Central.'
+      );
+      return;
+    }
     setPendingAtaFile(null);
     setMemberPickerOpen(false);
     setForm({

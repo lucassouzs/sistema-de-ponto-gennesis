@@ -68,8 +68,8 @@ function DistributionCard({
     <Card className={cadastroListClasses.card}>
       <CardHeader className={cadastroListClasses.cardHeader}>
         <div className={cadastroListClasses.cardHeaderIconRow}>
-          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30">
-            <Icon className="h-5 w-5 text-red-600 dark:text-red-400" />
+          <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+            <Icon className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
           </div>
           <div className="min-w-0">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>

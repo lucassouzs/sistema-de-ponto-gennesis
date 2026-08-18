@@ -448,68 +448,66 @@ export class GestaoOsOpsService {
       overdue: boolean;
     }> = [];
 
-    if (access.canViewAll) {
-      const companyFilter = access.companyId ? { companyId: access.companyId } : {};
-      const plans = await prisma.gestaoOsMaintenancePlan.findMany({
-        where: {
-          ...companyFilter,
-          isActive: true,
-          nextDueAt: { gte: from, lte: to }
-        },
-        select: {
-          id: true,
-          name: true,
-          planType: true,
-          nextDueAt: true,
-          scheduledTime: true,
-          technicianIds: true,
-          assigneeId: true
-        },
-        orderBy: { nextDueAt: 'asc' },
-        take: 400
-      });
+    const companyFilter = access.companyId ? { companyId: access.companyId } : {};
+    const plans = await prisma.gestaoOsMaintenancePlan.findMany({
+      where: {
+        ...companyFilter,
+        isActive: true,
+        nextDueAt: { gte: from, lte: to }
+      },
+      select: {
+        id: true,
+        name: true,
+        planType: true,
+        nextDueAt: true,
+        scheduledTime: true,
+        technicianIds: true,
+        assigneeId: true
+      },
+      orderBy: { nextDueAt: 'asc' },
+      take: 400
+    });
 
-      const typeColor: Record<string, string> = {
-        PREVENTIVE: '#22C55E',
-        PMOC: '#06B6D4',
-        SAFETY: '#A855F7'
-      };
-      const typeLabel: Record<string, string> = {
-        PREVENTIVE: 'Preventiva',
-        PMOC: 'PMOC',
-        SAFETY: 'SST'
-      };
+    const typeColor: Record<string, string> = {
+      PREVENTIVE: '#22C55E',
+      PMOC: '#06B6D4',
+      SAFETY: '#A855F7'
+    };
+    const typeLabel: Record<string, string> = {
+      PREVENTIVE: 'Preventiva',
+      PMOC: 'PMOC',
+      SAFETY: 'SST'
+    };
 
-      const seeAllPlans = access.isAdmin || access.canAnalisar || access.canCadastros;
+    const seeAllPlans = access.isAdmin || access.canAnalisar || access.canCadastros;
 
-      for (const plan of plans) {
-        const ids = Array.isArray(plan.technicianIds)
-          ? (plan.technicianIds as unknown[]).map((x) => String(x))
-          : [];
-        const assigned = plan.assigneeId === ownerId || ids.includes(ownerId);
-        if (viewingOther || !seeAllPlans) {
-          if (!assigned) continue;
-        }
-        let start = new Date(plan.nextDueAt);
-        const hm = String(plan.scheduledTime || '').trim();
-        if (/^\d{2}:\d{2}$/.test(hm)) {
-          const [h, m] = hm.split(':').map(Number);
-          start.setHours(h, m, 0, 0);
-        }
-        const end = new Date(start.getTime() + 60 * 60 * 1000);
-        planItems.push({
-          id: `plan:${plan.id}`,
-          kind: 'plan',
-          planId: plan.id,
-          title: `${typeLabel[plan.planType] || 'Plano'} · ${plan.name}`,
-          description: 'Plano de manutenção',
-          startAt: start.toISOString(),
-          endAt: end.toISOString(),
-          color: typeColor[plan.planType] || '#22C55E',
-          href: `/ponto/sistema-gestao-os/planos?plan=${plan.id}`,
-          overdue: start.getTime() < Date.now()
-        });
+    for (const plan of plans) {
+      const ids = Array.isArray(plan.technicianIds)
+        ? (plan.technicianIds as unknown[]).map((x) => String(x))
+        : [];
+      const assigned = plan.assigneeId === ownerId || ids.includes(ownerId);
+      if (viewingOther || !seeAllPlans) {
+        if (!assigned) continue;
       }
+      let start = new Date(plan.nextDueAt);
+      const hm = String(plan.scheduledTime || '').trim();
+      if (/^\d{2}:\d{2}$/.test(hm)) {
+        const [h, m] = hm.split(':').map(Number);
+        start.setHours(h, m, 0, 0);
+      }
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      planItems.push({
+        id: `plan:${plan.id}`,
+        kind: 'plan',
+        planId: plan.id,
+        title: `${typeLabel[plan.planType] || 'Plano'} · ${plan.name}`,
+        description: 'Plano de manutenção',
+        startAt: start.toISOString(),
+        endAt: end.toISOString(),
+        color: typeColor[plan.planType] || '#22C55E',
+        href: access.canViewAll ? `/ponto/sistema-gestao-os/planos?plan=${plan.id}` : '',
+        overdue: start.getTime() < Date.now()
+      });
     }
 
     return [...workOrders, ...planItems].sort(
