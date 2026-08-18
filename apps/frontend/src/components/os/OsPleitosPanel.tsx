@@ -43,6 +43,7 @@ import {
   prepareOsFluxList,
   osEtiquetaBadgeClass
 } from './osFluxUtils';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -652,7 +653,7 @@ export function OsPleitosPanel({
       ) : null}
 
       {deleteId && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
           <div className="absolute inset-0" onClick={() => setDeleteId(null)} />
           <div className="relative mx-4 max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
             <div className="mb-3 flex justify-center">
@@ -677,7 +678,7 @@ export function OsPleitosPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </>
   );

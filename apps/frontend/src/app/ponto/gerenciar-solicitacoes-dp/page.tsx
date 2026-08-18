@@ -52,6 +52,7 @@ import {
   DpRequestHistoryTimeline,
   type DpRequestHistoryMetaField,
 } from '@/lib/dpRequestHistoryModal';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type DpUrgency = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 type DpRequestStatus =
@@ -942,7 +943,7 @@ export function GerenciarSolicitacoesGeraisPage({
           </Card>
 
           {isFiltersModalOpen && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
               <div className="absolute inset-0 bg-black/40" onClick={() => setIsFiltersModalOpen(false)} />
               <div className="relative mx-4 w-full max-w-3xl rounded-xl bg-white shadow-2xl dark:bg-gray-800">
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
@@ -1041,7 +1042,7 @@ export function GerenciarSolicitacoesGeraisPage({
                   </button>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
         </div>
 

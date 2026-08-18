@@ -37,6 +37,7 @@ import {
   SalaryDiscount, CreateDiscountData, UpdateDiscountData,
 } from '@/types';
 import toast from 'react-hot-toast';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const MONTH_SELECT_OPTIONS = labeledToSelectOptions([
   { value: '1', label: 'Janeiro' },
@@ -1888,7 +1889,7 @@ export function EmployeeDetailView({
                                         {openRecordMenu === recordMenuId && (
                                           <>
                                             <div 
-                                              className="app-modal-overlay fixed inset-0 z-10" 
+                                              className="fixed inset-0 z-10" 
                                               onClick={() => setOpenRecordMenu(null)}
                                             />
                                             <div className="absolute right-0 top-full mt-1 w-40 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-20 overflow-hidden">
@@ -2051,7 +2052,7 @@ export function EmployeeDetailView({
 
         {/* Modal de edição de registro */}
         {editingRecord && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={handleCancelEdit} />
             <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -2134,7 +2135,7 @@ export function EmployeeDetailView({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
       {showEditForm && editingEmployee && (
@@ -2152,7 +2153,7 @@ export function EmployeeDetailView({
 
       {/* Modal de criar ponto manualmente */}
       {showManualPointModal && selectedEmployee && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowManualPointModal(false)} />
           <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -2266,12 +2267,12 @@ export function EmployeeDetailView({
               </div>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de importar pontos */}
       {showImportModal && selectedEmployee && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => {
             setShowImportModal(false);
             setSelectedFile(null);
@@ -2460,12 +2461,12 @@ export function EmployeeDetailView({
               )}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de confirmação para deletar registro */}
       {deleteRecordConfirm && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteRecordConfirm(null)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
@@ -2514,10 +2515,10 @@ export function EmployeeDetailView({
               </div>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
       {showChangePasswordModal && selectedEmployee && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowChangePasswordModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700">
             <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -2592,10 +2593,10 @@ export function EmployeeDetailView({
               </div>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
         {deleteConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteConfirm(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4">
               <div className="p-6">
@@ -2640,11 +2641,11 @@ export function EmployeeDetailView({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {reactivateConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setReactivateConfirm(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4">
               <div className="p-6">
@@ -2687,7 +2688,7 @@ export function EmployeeDetailView({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
     </div>
   );

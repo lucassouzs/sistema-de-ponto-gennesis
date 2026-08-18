@@ -34,6 +34,8 @@ import {
 import { ApprovalStepCell } from '@/components/fluig/fluigWorkflowStepStatus';
 import { FluigWorkflowRequestDetailModal } from '@/components/fluig/FluigWorkflowRequestDetailModal';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ExpandableText } from '@/components/ui/ExpandableText';
 
 const ITEMS_PER_PAGE = 25;
 
@@ -107,6 +109,7 @@ const WORKFLOW_CARD_LIST_CONFIG: Record<
   CardFilter,
   {
     title: string;
+    subtitle: string;
     Icon: LucideIcon;
     iconBg: string;
     iconColor: string;
@@ -114,36 +117,42 @@ const WORKFLOW_CARD_LIST_CONFIG: Record<
 > = {
   all: {
     title: 'Todas as solicitações',
+    subtitle: 'Processos G3 e G5 em todas as etapas',
     Icon: FileText,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
   },
   approved: {
     title: 'Solicitações aprovadas',
+    subtitle: 'Processos que já concluíram o fluxo de aprovação',
     Icon: CheckCircle2,
     iconBg: 'bg-green-100 dark:bg-green-900/30',
     iconColor: 'text-green-600 dark:text-green-400',
   },
   compras: {
     title: 'Pendências em Compras',
+    subtitle: 'Aguardando aprovação do setor de compras',
     Icon: Clock,
     iconBg: 'bg-amber-100 dark:bg-amber-900/30',
     iconColor: 'text-amber-600 dark:text-amber-400',
   },
   tecnico: {
     title: 'Pendências em Gestor',
+    subtitle: 'Aguardando aprovação do gestor',
     Icon: Clock,
     iconBg: 'bg-amber-100 dark:bg-amber-900/30',
     iconColor: 'text-amber-600 dark:text-amber-400',
   },
   diretoria: {
     title: 'Pendências em Diretoria',
+    subtitle: 'Aguardando aprovação da diretoria',
     Icon: Clock,
     iconBg: 'bg-amber-100 dark:bg-amber-900/30',
     iconColor: 'text-amber-600 dark:text-amber-400',
   },
   other: {
     title: 'Outras pendências',
+    subtitle: 'Pendências fora das etapas principais',
     Icon: HelpCircle,
     iconBg: 'bg-slate-100 dark:bg-slate-800',
     iconColor: 'text-slate-600 dark:text-slate-400',
@@ -455,6 +464,9 @@ export function FluigWorkflowAprovacoesPage() {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           {listHeader.title}
                         </h3>
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                          {listHeader.subtitle}
+                        </p>
                       </div>
                     </div>
                     <div className={cadastroListClasses.cardToolbar}>
@@ -562,11 +574,8 @@ export function FluigWorkflowAprovacoesPage() {
                                     {row.processId}
                                   </ListRowNavigableLabel>
                                 </td>
-                                <td
-                                  className={`${cadastroListClasses.td} max-w-xs truncate`}
-                                  title={row.title || undefined}
-                                >
-                                  {row.title || '—'}
+                                <td className={`${cadastroListClasses.td} max-w-xl`}>
+                                  <ExpandableText text={row.title} />
                                 </td>
                                 {showNaturezaColumn ? (
                                   <td
@@ -623,7 +632,7 @@ export function FluigWorkflowAprovacoesPage() {
               </Card>
 
               {isFiltersModalOpen ? (
-                <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+                <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setIsFiltersModalOpen(false)}
@@ -733,7 +742,7 @@ export function FluigWorkflowAprovacoesPage() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </AppModalOverlay>
               ) : null}
             </>
           )}

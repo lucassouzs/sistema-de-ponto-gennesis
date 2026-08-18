@@ -26,6 +26,7 @@ import { CircularPhotoCropModal } from '@/components/conversas/CircularPhotoCrop
 import { NotificationsDropdown } from '@/components/layout/NotificationsDropdown';
 import { NavSearch } from '@/components/layout/NavSearch';
 import { dispatchOpenMobileSidebar, dispatchCloseMobileSidebar, LAYOUT_CHROME } from '@/lib/layoutChrome';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface TopNavbarProps {
   userName: string;
@@ -484,7 +485,7 @@ export function TopNavbar({
         )}
 
       {showLogoutConfirm && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowLogoutConfirm(false)} />
           <div className="app-modal-panel relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
             <h3 className="mb-2 text-center text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -514,7 +515,7 @@ export function TopNavbar({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       <CircularPhotoCropModal

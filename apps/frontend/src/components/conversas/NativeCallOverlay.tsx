@@ -10,6 +10,7 @@ import api from '@/lib/api';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTheme } from '@/context/ThemeContext';
 import { toast } from 'react-hot-toast';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const AVATAR_COLORS = [
   'bg-red-600',
@@ -597,7 +598,7 @@ export function NativeCallOverlay({
   }
 
   return createPortal(
-    <div className={`app-modal-overlay fixed inset-0 z-[2000] flex min-h-0 flex-col ${overlayShellClass}`}>
+    <AppModalOverlay className={`app-modal-overlay fixed inset-0 z-[2000] flex min-h-0 flex-col ${overlayShellClass}`}>
       {showMain && (
         <>
           <div className={`relative flex min-h-0 flex-1 flex-col bg-gradient-to-b ${callGradientClass}`}>
@@ -1035,7 +1036,7 @@ export function NativeCallOverlay({
           </div>
         </>
       )}
-    </div>,
+    </AppModalOverlay>,
     document.body
   );
 }

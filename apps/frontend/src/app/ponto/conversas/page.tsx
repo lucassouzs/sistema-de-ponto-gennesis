@@ -97,6 +97,7 @@ import { useNativeCallContext } from '@/contexts/NativeCallContext';
 import { syncConversasActiveChatId } from '@/hooks/useChatSounds';
 import { AUTH_TOKEN_REFRESHED_EVENT, hasStoredAuthToken } from '@/lib/authSession';
 import { visibleTabRefetchInterval } from '@/hooks/useVisibleTabRefetchInterval';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const SELECTED_CHAT_STORAGE_KEY = 'conversas-selected-chat-id';
 
@@ -3971,7 +3972,7 @@ function ConversasContent() {
                 editingMessageId &&
                 editingMessageModal &&
                 createPortal(
-                  <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center px-4 py-6 sm:px-6">
+                  <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center px-4 py-6 sm:px-6">
                     <button
                       type="button"
                       className="absolute inset-0 bg-black/50 transition-opacity dark:bg-black/60"
@@ -4123,7 +4124,7 @@ function ConversasContent() {
                         </div>
                       </div>
                     </div>
-                  </div>,
+                  </AppModalOverlay>,
                   document.body
                 )}
 
@@ -4845,7 +4846,8 @@ function ConversasContent() {
 
                   {showAddGroupMembers && isCurrentUserGroupMember && activeChat && (
                     <>
-                      <button
+                      <AppModalOverlay
+                        as="button"
                         type="button"
                         aria-label="Fechar modal"
                         className="app-modal-overlay fixed inset-0 z-[2100] bg-black/50 backdrop-blur-[1px]"
@@ -4854,9 +4856,8 @@ function ConversasContent() {
                           setShowAddGroupMembers(false);
                           setAddMemberPickSelection([]);
                           setAddMemberPickSearch('');
-                        }}
-                      />
-                      <div
+                        }} />
+                      <AppModalOverlay
                         className="app-modal-overlay fixed inset-0 z-[1101] flex items-center justify-center p-4 pointer-events-none"
                         role="presentation"
                       >
@@ -5016,7 +5017,7 @@ function ConversasContent() {
                             </button>
                           </div>
                         </div>
-                      </div>
+                      </AppModalOverlay>
                     </>
                   )}
                 </>

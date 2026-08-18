@@ -46,6 +46,7 @@ import {
   RESPONSAVEL_TECNICO_IMPORT_COLUMNS,
   type ResponsavelTecnicoImportRow,
 } from '@/lib/responsavelTecnicoImport';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ResponsavelTecnico {
   id: string;
@@ -735,7 +736,7 @@ function ResponsaveisTecnicosContent() {
       </Card>
 
       {showFilters && (
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowFilters(false)}
@@ -880,11 +881,11 @@ function ResponsaveisTecnicosContent() {
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {showForm && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => {
@@ -1052,7 +1053,7 @@ function ResponsaveisTecnicosContent() {
               </div>
             </form>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {detail && (

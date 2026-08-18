@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PayrollDetailModalProps {
   employee: PayrollEmployee;
@@ -514,7 +515,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
 
   return (
     <>
-    <div className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
       <div className="absolute inset-0" onClick={requestClose} aria-hidden />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
@@ -2572,7 +2573,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
           </div>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>
   );

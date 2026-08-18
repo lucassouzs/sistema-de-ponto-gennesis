@@ -9,6 +9,7 @@ import { ControleNfsFilterMultiSelectField } from './ControleNfsFilterMultiSelec
 import { ControleNfsFiltrosSalvosPanel } from './ControleNfsFiltrosSalvosPanel';
 import { CONTROLE_NFS_FILTER_DATE_CLASS } from './controleNfsFiltrosConstants';
 import type { ControleNfsCardsFilterState } from './controleNfsTypes';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type FilterFieldKey = 'contratos';
 
@@ -128,7 +129,7 @@ export function ControleNfsFiltrosModal({
   if (!mounted || !isOpen) return null;
 
   return createPortal(
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 cursor-default bg-black/50"
@@ -238,7 +239,7 @@ export function ControleNfsFiltrosModal({
           </button>
         </div>
       </div>
-    </div>,
+    </AppModalOverlay>,
     document.body
   );
 }

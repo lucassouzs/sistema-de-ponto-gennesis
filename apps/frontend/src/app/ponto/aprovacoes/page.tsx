@@ -52,6 +52,7 @@ import {
 import { useApprovalNotificationCounts } from '@/hooks/useApprovalNotificationCounts';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const DP_PHASES = ['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const;
 type DpPhaseFilter = (typeof DP_PHASES)[number];
@@ -1667,7 +1668,7 @@ function AprovacoesPage() {
           </Modal>
 
           {attachmentPreview && (
-            <div
+            <AppModalOverlay
               className="app-modal-overlay fixed inset-0 z-[2200] flex items-center justify-center bg-black/85 p-4"
               role="dialog"
               aria-modal="true"
@@ -1698,7 +1699,7 @@ function AprovacoesPage() {
                   />
                 )}
               </div>
-            </div>
+            </AppModalOverlay>
           )}
 
           {/* Modal de Filtros — bloco «Solicitações» */}

@@ -52,6 +52,7 @@ import {
   parseControlePagamentoArtFromFile,
   type ControlePagamentoArtImportRow,
 } from '@/lib/controlePagamentoArtImport';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ControlePagamentoArt {
   id: string;
@@ -958,7 +959,7 @@ function ControlePagamentoArtContent() {
       </Card>
 
       {showFilters && (
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowFilters(false)}
@@ -1125,7 +1126,7 @@ function ControlePagamentoArtContent() {
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {showForm && (

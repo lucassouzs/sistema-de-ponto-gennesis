@@ -17,6 +17,7 @@ import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppT
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import api from '@/lib/api';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PointCorrectionRequest {
   id: string;
@@ -292,7 +293,7 @@ export const PointCorrectionList: React.FC = () => {
 
       {/* Modal de detalhes */}
       {selectedRequest && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedRequest(null)} />
           <div className="relative w-full max-w-2xl bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -349,7 +350,7 @@ export const PointCorrectionList: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </div>
   );

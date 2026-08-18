@@ -19,6 +19,7 @@ import {
   MOVIMENTO_TIPO_ALL_VALUES,
   MOVIMENTO_TIPO_FILTER_OPTIONS
 } from './extratoFiltrosConstants';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type ExtratoFilterOption = {
   value: string;
@@ -120,7 +121,7 @@ export function ExtratoFiltrosModal({
   }));
 
   return createPortal(
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 cursor-default bg-black/50"
@@ -342,7 +343,7 @@ export function ExtratoFiltrosModal({
           </button>
         </div>
       </div>
-    </div>,
+    </AppModalOverlay>,
     document.body
   );
 }

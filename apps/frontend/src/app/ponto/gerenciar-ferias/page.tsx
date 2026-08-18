@@ -25,6 +25,7 @@ import {
   Search
 } from 'lucide-react';
 import { Vacation, ComplianceReport } from '@/types';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export default function FeriasPage() {
   const router = useRouter();
@@ -522,7 +523,7 @@ export default function FeriasPage() {
 
       {/* Modal de Funcionários com Férias Vencendo */}
       {showExpiringModal && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => {
             setShowExpiringModal(false);
             setSearchExpiring('');
@@ -598,12 +599,12 @@ export default function FeriasPage() {
               })()}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de Funcionários com Férias Vencidas */}
       {showExpiredModal && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => {
             setShowExpiredModal(false);
             setSearchExpired('');
@@ -691,7 +692,7 @@ export default function FeriasPage() {
               })()}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </MainLayout>
   );

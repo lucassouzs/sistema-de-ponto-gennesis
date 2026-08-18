@@ -43,6 +43,7 @@ import { useCostCenters } from '@/hooks/useCostCenters';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useLogout } from '@/hooks/useLogout';
 import { PERMISSION_ACCESS_ACTION, pathToModuleKey } from '@sistema-ponto/permission-modules';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface CostCenter {
   id: string;
@@ -1062,7 +1063,7 @@ export default function ContratosPage() {
 
         {/* Modal Exclusão */}
         {showDeleteModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={() => setShowDeleteModal(null)}
@@ -1095,7 +1096,7 @@ export default function ContratosPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
       </MainLayout>
     </ProtectedRoute>
@@ -1148,7 +1149,7 @@ function ContractFormModal({
 
   return (
     <>
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
       <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -1348,7 +1349,7 @@ function ContractFormModal({
           </form>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>
   );

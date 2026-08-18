@@ -257,7 +257,7 @@ export function FluigWorkflowAprovadorDetailPage() {
                           <input
                             type="search"
                             disabled
-                            placeholder="Buscar ID, título, filial..."
+                            placeholder="Buscar ID, título, etapa..."
                             className="h-10 w-full cursor-not-allowed rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm font-medium text-gray-900 opacity-60 placeholder:text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                           />
                         </div>
@@ -275,6 +275,7 @@ export function FluigWorkflowAprovadorDetailPage() {
                   approvedRequests={approvedRequests}
                   pendingRequests={pendingRequests}
                   onRowClick={handleOpenRequest}
+                  exportName={displayName}
                 />
               )}
             </>

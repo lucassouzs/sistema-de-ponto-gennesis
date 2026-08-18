@@ -298,7 +298,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
    */
   {
     key: pathToModuleKey('/ponto/fluig/aprovadores'),
-    name: 'Aprovadores (legado)',
+    name: 'Aprovadores',
     href: '/ponto/fluig/aprovadores',
     category: 'Principal',
   },

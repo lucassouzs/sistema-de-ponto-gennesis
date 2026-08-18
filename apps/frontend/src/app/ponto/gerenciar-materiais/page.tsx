@@ -68,6 +68,7 @@ import {
 import { formatRmListDisplayId } from './_lib/rmListDisplay';
 import { RmCommentsSection } from './_components/RmCommentsSection';
 import { RmDetailOcTab } from './_components/RmDetailOcTab';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type RmDetailModalTab = 'resumo' | 'materiais' | 'ocs' | 'documentos' | 'comentarios';
 
@@ -884,7 +885,7 @@ export default function GerenciarMateriaisPage() {
           }
 
           return (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={requestCloseDetailsModal}
@@ -1261,7 +1262,7 @@ export default function GerenciarMateriaisPage() {
                 </div>
               ) : null}
             </div>
-          </div>
+          </AppModalOverlay>
           );
         })()}
 
@@ -1274,7 +1275,7 @@ export default function GerenciarMateriaisPage() {
 
         {/* Modal Criar OC */}
         {showCreateOCModal && selectedRequest && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={() => {
@@ -1760,7 +1761,7 @@ export default function GerenciarMateriaisPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
       </MainLayout>

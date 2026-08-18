@@ -45,7 +45,9 @@ export function FluigWorkflowRequestDetailModal({ row, onClose }: FluigWorkflowR
               ))}
           </div>
 
-          <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          <div
+            className="max-h-[40vh] overflow-y-auto overscroll-contain rounded-lg border border-gray-200 dark:border-gray-700 app-thin-scroll"
+          >
             <table className="w-full text-xs">
               <tbody>
                 {Object.entries(row.raw).map(([key, val]) => (

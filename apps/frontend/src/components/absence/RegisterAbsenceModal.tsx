@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface RegisterAbsenceModalProps {
   isOpen: boolean;
@@ -216,7 +217,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
 
   return (
     <>
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="absolute inset-0" onClick={requestClose} aria-hidden />
       <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="border-b border-gray-200 dark:border-gray-700">
@@ -271,7 +272,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                   {showEmployeeDropdown && (
                     <>
                       <div 
-                        className="app-modal-overlay fixed inset-0 z-10" 
+                        className="fixed inset-0 z-10" 
                         onClick={() => setShowEmployeeDropdown(false)}
                       />
                       <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -435,7 +436,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>
   );

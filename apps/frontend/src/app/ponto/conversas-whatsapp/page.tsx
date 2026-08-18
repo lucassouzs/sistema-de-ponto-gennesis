@@ -33,6 +33,7 @@ import api from '@/lib/api';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ConversationSummary {
   id: string;
@@ -1314,7 +1315,7 @@ export default function ConversasWhatsAppPage() {
       {atestadoFilePreview &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div
+          <AppModalOverlay
             className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4"
             role="dialog"
             aria-modal="true"
@@ -1361,7 +1362,7 @@ export default function ConversasWhatsAppPage() {
                 </div>
               )}
             </div>
-          </div>,
+          </AppModalOverlay>,
           document.body
         )}
     </MainLayout>

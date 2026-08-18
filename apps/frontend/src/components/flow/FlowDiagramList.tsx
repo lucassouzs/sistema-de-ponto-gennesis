@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Loading } from '@/components/ui/Loading';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type Props = {
   onOpen: (id: string) => void;
@@ -282,7 +283,7 @@ export function FlowDiagramList({ onOpen }: Props) {
       </Card>
 
       {isFiltersModalOpen && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsFiltersModalOpen(false)} />
           <div className="relative mx-4 w-full max-w-lg rounded-xl bg-white shadow-2xl dark:bg-gray-800">
             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
@@ -340,7 +341,7 @@ export function FlowDiagramList({ onOpen }: Props) {
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </div>
   );

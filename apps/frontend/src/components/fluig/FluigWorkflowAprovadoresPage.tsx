@@ -224,7 +224,7 @@ export function FluigWorkflowAprovadoresPage() {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                           Lista de aprovadores
                         </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
                           {fluigApproverFullAccess
                             ? 'Selecione um aprovador para ver suas solicitações'
                             : 'Escolha um dos aprovadores que você pode acessar'}

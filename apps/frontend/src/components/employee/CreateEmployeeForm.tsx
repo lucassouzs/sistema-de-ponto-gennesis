@@ -19,6 +19,7 @@ import { useCostCenters } from '@/hooks/useCostCenters';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const FIELD_LABEL_CLS = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5';
 const FIELD_GRID_CLS = 'grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5';
@@ -1045,7 +1046,7 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
   };
 
   return (
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
       <div className="relative mx-4 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl dark:bg-gray-800">
         <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4 sm:px-6 dark:border-gray-700">
@@ -1967,6 +1968,6 @@ export function CreateEmployeeForm({ onClose }: CreateEmployeeFormProps) {
       </div>
 
       {confirmUi}
-    </div>
+    </AppModalOverlay>
   );
 }

@@ -829,12 +829,12 @@ export default function SistemaGestaoOsPageClient() {
     />
   ) : null;
 
-  const createAssetRecurrenceBanner = (
-    <GestaoOsRecurrenceBanner
-      count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
-      predicted
-    />
-  );
+  const createRecurrenceCount =
+    (createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0);
+  const createAssetRecurrenceBanner =
+    createRecurrenceCount >= 3 ? (
+      <GestaoOsRecurrenceBanner count={createRecurrenceCount} predicted />
+    ) : null;
 
   if (loadingUser || loadingCompany) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
@@ -1272,7 +1272,9 @@ export default function SistemaGestaoOsPageClient() {
                   disabled={!placeId}
                 />
               </div>
-              <div className="sm:col-span-2">{createAssetRecurrenceBanner}</div>
+              {createAssetRecurrenceBanner ? (
+                <div className="sm:col-span-2">{createAssetRecurrenceBanner}</div>
+              ) : null}
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Categoria

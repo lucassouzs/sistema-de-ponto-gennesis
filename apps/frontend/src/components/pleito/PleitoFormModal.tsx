@@ -28,6 +28,7 @@ import {
   budgetStatusPillClass,
   executionStatusPillClass,
 } from '@/lib/pleitoStatusStyles';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const OS_FORM_LABEL_CLS =
   'mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400';
@@ -210,7 +211,7 @@ export function PleitoFormModal({
   };
 
   const modalContent = (
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
       <div className="absolute inset-0 bg-black/50" onClick={requestClose} aria-hidden />
       <div
         className="relative my-auto flex max-h-[min(92dvh,calc(100dvh-2rem))] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800"
@@ -506,7 +507,7 @@ export function PleitoFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 
   return createPortal(

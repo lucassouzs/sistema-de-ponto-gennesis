@@ -65,6 +65,7 @@ import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDr
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface Material {
   id: string;
@@ -2594,7 +2595,7 @@ export default function EstoquePage() {
               </CardContent>
 
               {isBalanceFiltersModalOpen && (
-                <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+                <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setIsBalanceFiltersModalOpen(false)}
@@ -2656,7 +2657,7 @@ export default function EstoquePage() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </AppModalOverlay>
               )}
             </Card>
           )}
@@ -2834,7 +2835,7 @@ export default function EstoquePage() {
               </CardContent>
 
               {isHistoryFiltersModalOpen && (
-                <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+                <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
                   <div
                     className="absolute inset-0 bg-black/40"
                     onClick={() => setIsHistoryFiltersModalOpen(false)}
@@ -2918,13 +2919,13 @@ export default function EstoquePage() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </AppModalOverlay>
               )}
             </Card>
           )}
 
           {historyDetail ? (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
               <div
                 className="absolute inset-0 bg-black/50"
                 onClick={() => setHistoryDetail(null)}
@@ -3144,11 +3145,11 @@ export default function EstoquePage() {
                   );
                 })()}
               </div>
-            </div>
+            </AppModalOverlay>
           ) : null}
 
           {isMovementModalOpen && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/40" onClick={requestCloseMovementModal} aria-hidden />
               <div
                 className="relative flex max-h-[min(92vh,900px)] w-full max-w-4xl flex-col rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800"
@@ -3772,7 +3773,7 @@ export default function EstoquePage() {
             </form>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
 
           {movementModalConfirmUi}

@@ -712,12 +712,14 @@ export default function MeusChamadosPageClient() {
                   disabled={!placeId}
                 />
               </div>
-              <div className="sm:col-span-2">
-                <GestaoOsRecurrenceBanner
-                  count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
-                  predicted
-                />
-              </div>
+              {((createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)) >= 3 ? (
+                <div className="sm:col-span-2">
+                  <GestaoOsRecurrenceBanner
+                    count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
+                    predicted
+                  />
+                </div>
+              ) : null}
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Categoria

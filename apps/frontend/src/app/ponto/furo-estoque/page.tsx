@@ -17,6 +17,7 @@ import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmLi
 import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { usePermissions } from '@/hooks/usePermissions';
 import { resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const FURO_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'ABERTO', label: 'Aberto' },
@@ -493,7 +494,7 @@ export default function FuroEstoquePage() {
             </CardContent>
 
             {isFiltersModalOpen && (
-              <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+              <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
                 <div className="absolute inset-0 bg-black/40" onClick={() => setIsFiltersModalOpen(false)} />
                 <div className="relative mx-4 w-full max-w-2xl rounded-xl bg-white shadow-2xl dark:bg-gray-800">
                   <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
@@ -585,12 +586,12 @@ export default function FuroEstoquePage() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </AppModalOverlay>
             )}
           </Card>
 
           {detail && (
-            <div
+            <AppModalOverlay
               className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50"
               role="dialog"
               aria-modal="true"
@@ -702,7 +703,7 @@ export default function FuroEstoquePage() {
                   )}
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
         </div>
       </MainLayout>

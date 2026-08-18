@@ -1323,6 +1323,28 @@ body::-webkit-scrollbar:vertical {
   animation-delay: 340ms;
 }
 
+/* Após a entrada, tira o transform residual (fill-mode) para `position:fixed`
+   dos overlays não ficar preso à área do conteúdo. */
+.page-enter--settled,
+.page-enter--settled.page-enter--reload {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+.page-enter--settled > .space-y-4 > *,
+.page-enter--settled > .space-y-5 > *,
+.page-enter--settled > .space-y-6 > *,
+.page-enter--settled > .space-y-8 > *,
+.page-enter--settled > .space-y-4 > .grid > *,
+.page-enter--settled > .space-y-5 > .grid > *,
+.page-enter--settled > .space-y-6 > .grid > *,
+.page-enter--settled > .space-y-8 > .grid > * {
+  animation: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-page-enter-title,
   .animate-page-enter-card,
@@ -1783,7 +1805,7 @@ button[data-form-field-trigger='true']:is(:focus, :focus-visible) {
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
 
@@ -1822,7 +1844,8 @@ button[data-form-field-trigger='true']:is(:focus, :focus-visible) {
 
 .app-modal-panel--open {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: none;
+  will-change: auto;
 }
 
 .app-modal-panel--closed {

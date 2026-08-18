@@ -18,6 +18,7 @@ import {
   type FichaDemandaApprovalFormState,
   type FichaDemandaApprovalRecord,
 } from '@/lib/fichaDemandaApproval';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface UserOption {
   id: string;
@@ -279,7 +280,7 @@ export function FichaDemandaApprovalFormModal({
   if (!isOpen) return null;
 
   const modalContent = (
-    <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" aria-hidden onClick={isSaving ? undefined : requestClose} />
       <div className="relative z-[1101] flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
         <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-700 dark:bg-gray-800">
@@ -523,7 +524,7 @@ export function FichaDemandaApprovalFormModal({
           </div>
         </form>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 
   return createPortal(

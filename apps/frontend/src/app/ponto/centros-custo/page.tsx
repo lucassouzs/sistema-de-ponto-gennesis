@@ -26,6 +26,7 @@ import { normalizeCostCentersResponse } from '@/lib/costCenters';
 import { POLOS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { filterOptionsWithAll, labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const ACTIVE_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos' },
@@ -570,7 +571,7 @@ export default function CentrosCustoPage() {
 
         {/* Modal de confirmação de exclusão */}
         {showDeleteModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteModal(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full">
@@ -618,7 +619,7 @@ export default function CentrosCustoPage() {
                 </div>
               )}
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de Importação */}
@@ -676,7 +677,7 @@ function CostCenterFormModal({
 
   return (
     <>
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
       <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -800,7 +801,7 @@ function CostCenterFormModal({
           </form>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>
   );
@@ -1140,7 +1141,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
 
   return (
     <>
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
       <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -1472,7 +1473,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
           )}
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>
   );

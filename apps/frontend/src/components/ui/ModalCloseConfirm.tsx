@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type ModalCloseConfirmProps = {
   isOpen: boolean;
@@ -25,7 +26,7 @@ export function ModalCloseConfirm({
   if (!isOpen) return null;
 
   return (
-    <div className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} aria-hidden />
       <div
         role="dialog"
@@ -57,6 +58,6 @@ export function ModalCloseConfirm({
           </button>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 }

@@ -30,6 +30,7 @@ import {
 } from '@/components/conversas/chatBubbleTheme';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const DEPARTMENTS = [
   { value: 'Projetos', label: 'Projetos' },
@@ -585,7 +586,7 @@ export function ChatWidget() {
 
       {/* Modal de Chat */}
       {isOpen && (
-        <div className="app-modal-overlay fixed inset-0 bg-black/20 dark:bg-black/40 z-[2000] flex items-center justify-center p-3 md:p-4 lg:p-6">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 bg-black/20 dark:bg-black/40 z-[2000] flex items-center justify-center p-3 md:p-4 lg:p-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[calc(100%-1.5rem)] md:w-[calc(100%-2rem)] lg:w-full max-w-7xl h-[calc(100vh-1.5rem)] md:h-[calc(100vh-2rem)] lg:h-[90vh] flex overflow-hidden border border-gray-200 dark:border-gray-700">
             {/* Sidebar - Lista de Conversas */}
             <div className={`${activeView === 'chat' || activeView === 'new' ? 'hidden' : 'flex'} lg:flex w-full lg:w-80 border-r border-gray-200 dark:border-gray-700 flex-col bg-white dark:bg-gray-800`}>
@@ -1287,7 +1288,7 @@ export function ChatWidget() {
               )}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
     </>

@@ -23,6 +23,7 @@ import {
   type ContractBillingHistorico,
   type ContractPleitoHistorico,
 } from '@/lib/contractHistoricoPleitos';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type OsDetailModalTab = 'resumo' | 'pleitos' | 'ocs' | 'faturamento';
 
@@ -374,7 +375,7 @@ export function ContractOsDetailModal({
   }
 
   return (
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden />
       <div
         className="relative my-auto flex w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 max-h-[min(92dvh,calc(100dvh-2rem))]"
@@ -518,6 +519,6 @@ export function ContractOsDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 }

@@ -13,6 +13,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 // Função para gerar e baixar modelo Excel
 const downloadExcelTemplate = () => {
@@ -625,7 +626,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
   if (!isOpen) return null;
 
   return (
-    <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -1198,6 +1199,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
           )}
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 }

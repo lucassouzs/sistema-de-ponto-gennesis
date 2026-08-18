@@ -45,10 +45,17 @@ function normalizePath(pathname: string): string {
 }
 
 function humanizeSegment(segment: string): string {
+  const lowercaseParticles = new Set(['de', 'da', 'do', 'dos', 'das', 'e']);
   return segment
-    .split('-')
+    .replace(/[-_]+/g, ' ')
+    .split(/\s+/)
     .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((part, index) => {
+      const lower = part.toLowerCase();
+      if (index > 0 && lowercaseParticles.has(lower)) return lower;
+      if (!lower) return part;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
     .join(' ');
 }
 
@@ -66,6 +73,12 @@ function decodePathSegment(segment: string): string {
   } catch {
     return segment;
   }
+}
+
+/** Rótulo do breadcrumb — Aprovadores Fluig não exibe o sufixo interno «(legado)». */
+function breadcrumbModuleLabel(module: { name: string; href: string }): string {
+  if (module.href === '/ponto/fluig/aprovadores') return 'Aprovadores';
+  return module.name;
 }
 
 export type BreadcrumbItem = {
@@ -97,14 +110,15 @@ export function resolveBreadcrumbs(pathname: string): BreadcrumbItem[] {
   }
 
   for (const module of MODULES_BY_HREF_LENGTH) {
+    const moduleLabel = breadcrumbModuleLabel(module);
     if (path === module.href) {
-      if (module.category && module.category !== module.name) {
+      if (module.category && module.category !== moduleLabel) {
         return [
           { label: module.category },
-          { label: module.name, href: module.href },
+          { label: moduleLabel, href: module.href },
         ];
       }
-      return [{ label: module.name, href: module.href }];
+      return [{ label: moduleLabel, href: module.href }];
     }
 
     if (path.startsWith(`${module.href}/`)) {
@@ -113,10 +127,10 @@ export function resolveBreadcrumbs(pathname: string): BreadcrumbItem[] {
       const lastSegment = decodePathSegment(segments[segments.length - 1] ?? '');
 
       const crumbs: BreadcrumbItem[] = [];
-      if (module.category && module.category !== module.name) {
+      if (module.category && module.category !== moduleLabel) {
         crumbs.push({ label: module.category });
       }
-      crumbs.push({ label: module.name, href: module.href });
+      crumbs.push({ label: moduleLabel, href: module.href });
 
       if (lastSegment && !looksLikeOpaqueId(lastSegment)) {
         const subTitle = SUB_PATH_TITLES[lastSegment] ?? humanizeSegment(lastSegment);

@@ -5,6 +5,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import api from '@/lib/api';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -113,7 +114,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
 
   return createPortal(
     <>
-    <div className="app-modal-overlay fixed inset-0 z-[99999] flex items-center justify-center">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[99999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={requestClose} />
       <div className="app-modal-panel relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
@@ -257,7 +258,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </AppModalOverlay>
     {confirmUi}
     </>,
     document.body

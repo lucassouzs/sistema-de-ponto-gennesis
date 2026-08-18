@@ -45,6 +45,7 @@ import {
   normalizeMatchText,
   splitHabilitacaoServicos,
 } from './bancoCatsMatch';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const SPREADSHEET_URL =
   'https://docs.google.com/spreadsheets/d/1n_AhQ9DEGmguyVTfdA41Sm2j5qXmS0Huz4IV0KlBNPE/edit?gid=818440840#gid=818440840';
@@ -1623,7 +1624,7 @@ export function BancoCatsPanel() {
       </Card>
 
       {showFilters ? (
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setShowFilters(false)}
@@ -1703,7 +1704,7 @@ export function BancoCatsPanel() {
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       ) : null}
 
       <CreateServicoModal

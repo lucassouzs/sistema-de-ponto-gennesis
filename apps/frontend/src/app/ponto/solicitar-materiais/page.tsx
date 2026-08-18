@@ -79,6 +79,7 @@ import {
   type RmCardFilter
 } from '@/app/ponto/gerenciar-materiais/_lib/rmCardFilter';
 import { RmDetailOcTab } from '@/app/ponto/gerenciar-materiais/_components/RmDetailOcTab';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type SolicitacaoDetailTab = 'resumo' | 'materiais' | 'ocs' | 'documentos';
 
@@ -2246,7 +2247,7 @@ function SolicitarMateriaisPage() {
           </Card>
 
           {isListFiltersModalOpen && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
               <div className="absolute inset-0 bg-black/40" onClick={() => setIsListFiltersModalOpen(false)} aria-hidden />
               <div className="relative mx-4 w-full max-w-2xl rounded-xl bg-white shadow-2xl dark:bg-gray-800">
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
@@ -2354,11 +2355,11 @@ function SolicitarMateriaisPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
 
           {isNewRequestModalOpen && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
               <div
                 className="absolute inset-0 bg-black/50"
                 onClick={requestCloseNewRequestModal}
@@ -2693,12 +2694,12 @@ function SolicitarMateriaisPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
         </div>
 
         {detailViewId && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={requestCloseDetailModal}
@@ -3071,7 +3072,7 @@ function SolicitarMateriaisPage() {
                 )}
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         <ModalCloseConfirm
@@ -3089,7 +3090,7 @@ function SolicitarMateriaisPage() {
         />
 
         {correctionEditId && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={() => !updateCorrectionMutation.isPending && setCorrectionEditId(null)}
@@ -3404,7 +3405,7 @@ function SolicitarMateriaisPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
       </MainLayout>
     </ProtectedRoute>

@@ -14,6 +14,7 @@ import { useBrandingLogo } from '@/hooks/useBrandingLogo';
 import { persistUnbBranding } from '@/lib/unbBranding';
 import { APP_TITLE } from '@/lib/pageTitle';
 import { authTransitionCover, authTransitionLoginColdEnter, authTransitionRevealIfNeeded, peekAuthTransition } from '@/lib/authTransition';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -287,7 +288,7 @@ export default function LoginPage() {
       </div>
 
       {showHelpModal && (
-        <div
+        <AppModalOverlay
           className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
           role="dialog"
           aria-modal="true"
@@ -328,7 +329,7 @@ export default function LoginPage() {
               </a>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Footer */}

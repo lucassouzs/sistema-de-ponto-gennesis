@@ -2,7 +2,7 @@
 
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { CheckCircle2, Clock, FileText, Filter, RotateCcw, Search, X, type LucideIcon, ExternalLink } from 'lucide-react';
+import { CheckCircle2, Clock, Download, FileText, Filter, RotateCcw, Search, X, type LucideIcon, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -23,14 +23,18 @@ import {
   formatFluigBudgetFieldDisplay,
   isWorkflowApprovalDateInRange,
   compareWorkflowApprovalDateDesc,
-  formatWorkflowFilialDisplay,
+  formatWorkflowValorDisplay,
   parseWorkflowApprovalRows,
   getWorkflowSectorsForDataset,
   SECTOR_TABLE_HEADERS,
+  isWorkflowStagePaid,
   type WorkflowApproverRequestRef,
   type WorkflowSector,
 } from '@/lib/fluigWorkflowApproval';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ExpandableText } from '@/components/ui/ExpandableText';
+import * as XLSX from 'xlsx';
 
 export const FLUIG_WORKFLOW_DATASETS = [
   { id: FLUIG_WORKFLOW_APPROVAL_DATASET_G3, label: 'G3' },
@@ -43,6 +47,14 @@ export const APPROVER_REQUESTS_PAGE_SIZE = 15;
 export type ApproverRequestFilter = 'all' | 'approved' | 'pending';
 
 export type ApproverStageFilter = 'all' | WorkflowSector;
+
+export type ApproverPaidFilter = 'all' | 'paid' | 'unpaid';
+
+const PAID_FILTER_OPTIONS: { value: ApproverPaidFilter; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'paid', label: 'Pagas' },
+  { value: 'unpaid', label: 'Não pagas' },
+];
 
 function buildApproverStageFilterOptions(datasetId: string): { value: ApproverStageFilter; label: string }[] {
   return [
@@ -67,10 +79,20 @@ const ID_COL_TH =
 const ID_COL_TD =
   'w-[1%] whitespace-nowrap px-3 py-4 text-center align-middle text-sm font-mono font-medium text-gray-900 dark:text-gray-100 sm:px-4';
 
+const LIST_BADGE =
+  'inline-flex h-6 items-center justify-center whitespace-nowrap rounded-full px-2.5 text-xs font-semibold leading-none';
+const LIST_BADGE_APPROVED =
+  'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+const LIST_BADGE_PENDING =
+  'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+const LIST_BADGE_UNPAID =
+  'bg-gray-100 text-gray-700 dark:bg-gray-500/25 dark:text-gray-300';
+
 export const APPROVER_FILTER_LIST_CONFIG: Record<
   ApproverRequestFilter,
   {
     title: string;
+    subtitle: string;
     emptyTitle: string;
     emptyHint: string;
     Icon: LucideIcon;
@@ -80,6 +102,7 @@ export const APPROVER_FILTER_LIST_CONFIG: Record<
 > = {
   all: {
     title: 'Todas as Solicitações',
+    subtitle: 'Aprovadas e pendentes deste aprovador no grupo selecionado',
     emptyTitle: 'Nenhuma solicitação neste grupo',
     emptyHint: 'Não há registros para este aprovador no grupo selecionado.',
     Icon: FileText,
@@ -88,6 +111,7 @@ export const APPROVER_FILTER_LIST_CONFIG: Record<
   },
   approved: {
     title: 'Solicitações Aprovadas',
+    subtitle: 'Processos que esta pessoa já aprovou',
     emptyTitle: 'Nenhuma aprovação registrada',
     emptyHint: 'Esta pessoa ainda não aprovou solicitações neste grupo.',
     Icon: CheckCircle2,
@@ -96,6 +120,7 @@ export const APPROVER_FILTER_LIST_CONFIG: Record<
   },
   pending: {
     title: 'Solicitações Pendentes',
+    subtitle: 'Processos aguardando ação desta pessoa',
     emptyTitle: 'Nenhuma pendência',
     emptyHint: 'Não há solicitações aguardando ação desta pessoa neste grupo.',
     Icon: Clock,
@@ -237,17 +262,14 @@ export function buildApproverListItems(
   return combined;
 }
 
-function matchesApproverRequestSearch(
-  item: ApproverRequestListItem,
-  term: string,
-  datasetId: string
-): boolean {
+function matchesApproverRequestSearch(item: ApproverRequestListItem, term: string): boolean {
   if (!term) return true;
   if (item.processId.toLowerCase().includes(term)) return true;
   if (item.title.toLowerCase().includes(term)) return true;
-  if (item.filial?.toLowerCase().includes(term)) return true;
-  const filialLabel = formatWorkflowFilialDisplay(item.filial, datasetId);
-  if (filialLabel?.toLowerCase().includes(term)) return true;
+  if (item.currentStage?.toLowerCase().includes(term)) return true;
+  const valorLabel = formatWorkflowValorDisplay(item.valor);
+  if (valorLabel !== '—' && valorLabel.toLowerCase().includes(term)) return true;
+  if (item.valor?.toLowerCase().includes(term)) return true;
   const centroCustoLabel = formatFluigBudgetFieldDisplay(item.centroCusto);
   if (centroCustoLabel?.toLowerCase().includes(term)) return true;
   const statusWord = item.disposition === 'approved' ? 'aprovado' : 'pendente';
@@ -269,21 +291,23 @@ function matchesApprovalStage(item: ApproverRequestListItem, stageFilter: Approv
   return item.sector === stageFilter;
 }
 
+function matchesCurrentStageFilter(item: ApproverRequestListItem, currentStageFilter: string): boolean {
+  if (!currentStageFilter) return true;
+  return (item.currentStage?.trim() || '') === currentStageFilter;
+}
+
+function matchesPaidFilter(
+  item: ApproverRequestListItem,
+  paidFilter: ApproverPaidFilter,
+  datasetId: string
+): boolean {
+  if (paidFilter === 'all') return true;
+  const paid = isWorkflowStagePaid(item.currentStage, datasetId);
+  return paidFilter === 'paid' ? paid : !paid;
+}
+
 const EMPTY_APPROVED: WorkflowApproverRequestRef[] = [];
 const EMPTY_PENDING: WorkflowApproverRequestRef[] = [];
-
-function approvalSectorBadgeClass(sector: WorkflowApproverRequestRef['sector']): string {
-  switch (sector) {
-    case 'diretoria':
-      return 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300';
-    case 'tecnico':
-      return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-    case 'compras':
-      return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
-    default:
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
-  }
-}
 
 function handleApprovalPeriodFromChange(
   value: string,
@@ -305,24 +329,102 @@ function handleApprovalPeriodToChange(
   if (value && periodFrom && periodFrom > value) setPeriodFrom(value);
 }
 
+function slugifyExportName(value: string): string {
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'solicitacoes'
+  );
+}
+
+function exportApproverRequestsToXlsx({
+  items,
+  datasetId,
+  listTitle,
+  exportName,
+  showPaidColumn,
+  showApprovalDateColumn,
+}: {
+  items: ApproverRequestListItem[];
+  datasetId: string;
+  listTitle: string;
+  exportName?: string;
+  showPaidColumn: boolean;
+  showApprovalDateColumn: boolean;
+}) {
+  if (!items.length) return;
+
+  const headers = [
+    'ID',
+    'Título',
+    'Centro de Custo',
+    'Status',
+    'Etapa atual',
+    ...(showPaidColumn ? ['Pagamento'] : []),
+    'Valor',
+    ...(showApprovalDateColumn ? ['Data de aprovação'] : []),
+    'Etapa de aprovação',
+  ];
+
+  const rows = items.map((item) => {
+    const isApproved = item.disposition === 'approved';
+    const paid = isWorkflowStagePaid(item.currentStage, datasetId);
+    return [
+      item.processId,
+      item.title,
+      formatFluigBudgetFieldDisplay(item.centroCusto) ?? '',
+      isApproved ? 'Aprovado' : 'Pendente',
+      item.currentStage?.trim() ?? '',
+      ...(showPaidColumn ? [paid ? 'Pago' : 'Não pago'] : []),
+      formatWorkflowValorDisplay(item.valor) === '—' ? '' : formatWorkflowValorDisplay(item.valor),
+      ...(showApprovalDateColumn
+        ? [isApproved ? formatWorkflowApprovalDateDisplay(item.approvedAt) : '']
+        : []),
+      item.sectorLabel,
+    ];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Solicitações');
+
+  const datasetLabel =
+    FLUIG_WORKFLOW_DATASETS.find((item) => item.id === datasetId)?.label ?? 'fluig';
+  const date = new Date().toISOString().slice(0, 10);
+  const parts = [
+    slugifyExportName(exportName || listTitle),
+    slugifyExportName(listTitle),
+    slugifyExportName(datasetLabel),
+    date,
+  ];
+  XLSX.writeFile(wb, `${parts.join('-')}.xlsx`);
+}
+
 export const FilteredApproverRequestList = React.memo(function FilteredApproverRequestList({
   filter,
   datasetId,
   approvedRequests,
   pendingRequests,
   onRowClick,
+  exportName,
 }: {
   filter: ApproverRequestFilter;
   datasetId: string;
   approvedRequests: WorkflowApproverRequestRef[];
   pendingRequests: WorkflowApproverRequestRef[];
   onRowClick?: (item: ApproverRequestListItem) => void;
+  exportName?: string;
 }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
   const [stageFilter, setStageFilter] = useState<ApproverStageFilter>('all');
+  const [currentStageFilter, setCurrentStageFilter] = useState('');
+  const [paidFilter, setPaidFilter] = useState<ApproverPaidFilter>('all');
   const [filterCentroCusto, setFilterCentroCusto] = useState('');
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const stageFilterOptions = useMemo(
@@ -333,11 +435,21 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
   const deferredPeriodFrom = useDeferredValue(periodFrom);
   const deferredPeriodTo = useDeferredValue(periodTo);
   const deferredStageFilter = useDeferredValue(stageFilter);
+  const deferredCurrentStageFilter = useDeferredValue(currentStageFilter);
+  const deferredPaidFilter = useDeferredValue(paidFilter);
   const deferredCentroCusto = useDeferredValue(filterCentroCusto);
   const hasPeriodFilter = Boolean(periodFrom || periodTo);
   const hasStageFilter = stageFilter !== 'all';
+  const hasCurrentStageFilter = Boolean(currentStageFilter);
+  const hasPaidFilter = paidFilter !== 'all';
   const hasCentroCustoFilter = Boolean(filterCentroCusto);
-  const hasActiveModalFilter = hasPeriodFilter || hasStageFilter || hasCentroCustoFilter;
+  const showPaidColumn = datasetId !== FLUIG_WORKFLOW_APPROVAL_DATASET_G3;
+  const hasActiveModalFilter =
+    hasPeriodFilter ||
+    hasStageFilter ||
+    hasCurrentStageFilter ||
+    (showPaidColumn && hasPaidFilter) ||
+    hasCentroCustoFilter;
   const showApprovalDateColumn = filter !== 'pending';
   const showPeriodFilterFields = filter !== 'pending';
 
@@ -363,11 +475,24 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
       .map((value) => ({ value, label: value }));
   }, [items]);
 
+  const currentStageFilterOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of items) {
+      const stage = item.currentStage?.trim();
+      if (stage) values.add(stage);
+    }
+    return Array.from(values)
+      .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
+      .map((value) => ({ value, label: value }));
+  }, [items]);
+
   const filteredItems = useMemo(() => {
     const term = deferredSearch.trim().toLowerCase();
     return items.filter((item) => {
-      if (term && !matchesApproverRequestSearch(item, term, datasetId)) return false;
+      if (term && !matchesApproverRequestSearch(item, term)) return false;
       if (!matchesApprovalStage(item, deferredStageFilter)) return false;
+      if (!matchesCurrentStageFilter(item, deferredCurrentStageFilter)) return false;
+      if (showPaidColumn && !matchesPaidFilter(item, deferredPaidFilter, datasetId)) return false;
       if (!matchesApprovalPeriod(item, deferredPeriodFrom, deferredPeriodTo)) return false;
       if (
         deferredCentroCusto &&
@@ -381,10 +506,13 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
     items,
     deferredSearch,
     deferredStageFilter,
+    deferredCurrentStageFilter,
+    deferredPaidFilter,
     deferredPeriodFrom,
     deferredPeriodTo,
     deferredCentroCusto,
     datasetId,
+    showPaidColumn,
   ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / APPROVER_REQUESTS_PAGE_SIZE));
@@ -400,6 +528,8 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
     filter,
     deferredSearch,
     deferredStageFilter,
+    deferredCurrentStageFilter,
+    deferredPaidFilter,
     deferredPeriodFrom,
     deferredPeriodTo,
     deferredCentroCusto,
@@ -410,6 +540,8 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
     setPeriodFrom('');
     setPeriodTo('');
     setStageFilter('all');
+    setCurrentStageFilter('');
+    setPaidFilter('all');
     setFilterCentroCusto('');
     setIsFiltersModalOpen(false);
   }, [filter]);
@@ -421,6 +553,12 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
   }, [datasetId, stageFilter, stageFilterOptions]);
 
   useEffect(() => {
+    if (!showPaidColumn && paidFilter !== 'all') {
+      setPaidFilter('all');
+    }
+  }, [showPaidColumn, paidFilter]);
+
+  useEffect(() => {
     if (
       filterCentroCusto &&
       !centroCustoFilterOptions.some((option) => option.value === filterCentroCusto)
@@ -428,6 +566,15 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
       setFilterCentroCusto('');
     }
   }, [filterCentroCusto, centroCustoFilterOptions]);
+
+  useEffect(() => {
+    if (
+      currentStageFilter &&
+      !currentStageFilterOptions.some((option) => option.value === currentStageFilter)
+    ) {
+      setCurrentStageFilter('');
+    }
+  }, [currentStageFilter, currentStageFilterOptions]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -452,6 +599,9 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {listHeader.title}
               </h3>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                {listHeader.subtitle}
+              </p>
             </div>
           </div>
           <div className={cadastroListClasses.cardToolbar}>
@@ -463,7 +613,7 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                   role="searchbox"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Buscar ID, título, filial..."
+                  placeholder="Buscar ID, título, etapa..."
                   autoComplete="off"
                   className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 />
@@ -493,6 +643,25 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                 {hasActiveModalFilter ? (
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  exportApproverRequestsToXlsx({
+                    items: filteredItems,
+                    datasetId,
+                    listTitle: listHeader.title,
+                    exportName,
+                    showPaidColumn,
+                    showApprovalDateColumn,
+                  })
+                }
+                disabled={filteredItems.length === 0}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                aria-label="Exportar solicitações filtradas"
+                title="Exportar solicitações filtradas"
+              >
+                <Download className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -536,11 +705,14 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                     <th className={cadastroListClasses.th}>Título</th>
                     <th className={cadastroListClasses.thCenter}>Centro de Custo</th>
                     <th className={cadastroListClasses.thCenter}>Status</th>
-                    <th className={cadastroListClasses.thCenter}>Etapa</th>
+                    <th className={cadastroListClasses.thCenter}>Etapa atual</th>
+                    {showPaidColumn ? (
+                      <th className={cadastroListClasses.thCenter}>Pagamento</th>
+                    ) : null}
+                    <th className={cadastroListClasses.thCenter}>Valor</th>
                     {showApprovalDateColumn ? (
                       <th className={cadastroListClasses.thCenter}>Data de aprovação</th>
                     ) : null}
-                    <th className={cadastroListClasses.thCenter}>Filial</th>
                     <th className={ACTIONS_COL_TH}>Ações</th>
                   </tr>
                 </thead>
@@ -548,6 +720,9 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                   {paginatedItems.map((item) => {
                     const isApproved = item.disposition === 'approved';
                     const isNavigable = Boolean(onRowClick);
+                    const isPaid = showPaidColumn
+                      ? isWorkflowStagePaid(item.currentStage, datasetId)
+                      : false;
                     return (
                       <tr
                         key={`${item.rowKey}-${item.sector}-${item.disposition}`}
@@ -575,7 +750,9 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                             item.processId
                           )}
                         </td>
-                        <td className={`${cadastroListClasses.td} max-w-xs truncate`}>{item.title}</td>
+                        <td className={`${cadastroListClasses.td} max-w-xl`}>
+                          <ExpandableText text={item.title} />
+                        </td>
                         <td
                           className={`${cadastroListClasses.tdCenter} max-w-[14rem] truncate`}
                           title={formatFluigBudgetFieldDisplay(item.centroCusto) ?? undefined}
@@ -584,21 +761,35 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                         </td>
                         <td className={cadastroListClasses.tdCenter}>
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              isApproved
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                            className={`${LIST_BADGE} ${
+                              isApproved ? LIST_BADGE_APPROVED : LIST_BADGE_PENDING
                             }`}
                           >
                             {isApproved ? 'Aprovado' : 'Pendente'}
                           </span>
                         </td>
-                        <td className={cadastroListClasses.tdCenter}>
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${approvalSectorBadgeClass(item.sector)}`}
-                          >
-                            {item.sectorLabel}
-                          </span>
+                        <td
+                          className={`${cadastroListClasses.tdCenter} max-w-[16rem] truncate`}
+                          title={item.currentStage || undefined}
+                        >
+                          {item.currentStage?.trim() || '—'}
+                        </td>
+                        {showPaidColumn ? (
+                          <td className={cadastroListClasses.tdCenter}>
+                            <span
+                              className={`${LIST_BADGE} ${
+                                isPaid ? LIST_BADGE_APPROVED : LIST_BADGE_UNPAID
+                              }`}
+                              title={item.currentStage || undefined}
+                            >
+                              {isPaid ? 'Pago' : 'Não pago'}
+                            </span>
+                          </td>
+                        ) : null}
+                        <td
+                          className={`${cadastroListClasses.tdCenter} whitespace-nowrap tabular-nums text-gray-900 dark:text-gray-100`}
+                        >
+                          {formatWorkflowValorDisplay(item.valor)}
                         </td>
                         {showApprovalDateColumn ? (
                           <td
@@ -612,12 +803,6 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                             {isApproved ? formatWorkflowApprovalDateDisplay(item.approvedAt) : '—'}
                           </td>
                         ) : null}
-                        <td
-                          className={cadastroListClasses.tdCenter}
-                          title={item.filial ?? undefined}
-                        >
-                          {formatWorkflowFilialDisplay(item.filial, datasetId) ?? '—'}
-                        </td>
                         <td className={ACTIONS_COL_TD}>
                           <div className="flex justify-center">
                             <a
@@ -650,7 +835,7 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
       </CardContent>
 
       {isFiltersModalOpen ? (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setIsFiltersModalOpen(false)}
@@ -672,7 +857,21 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
               <div className="space-y-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Etapa
+                    Etapa atual
+                  </label>
+                  <StringSingleSelectDropdown
+                    value={currentStageFilter}
+                    onChange={setCurrentStageFilter}
+                    options={currentStageFilterOptions}
+                    allowEmpty
+                    emptyOptionLabel="Todas as etapas"
+                    placeholder="Todas as etapas"
+                    searchPlaceholder="Pesquisar..."
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Etapa de aprovação
                   </label>
                   <StringSingleSelectDropdown
                     value={stageFilter}
@@ -683,6 +882,21 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                     searchPlaceholder="Pesquisar..."
                   />
                 </div>
+                {showPaidColumn ? (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Pagamento
+                    </label>
+                    <StringSingleSelectDropdown
+                      value={paidFilter}
+                      onChange={(value) => setPaidFilter(value as ApproverPaidFilter)}
+                      options={PAID_FILTER_OPTIONS}
+                      allowEmpty={false}
+                      placeholder="Todas"
+                      searchPlaceholder="Pesquisar..."
+                    />
+                  </div>
+                ) : null}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Centro de custo
@@ -740,6 +954,8 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
                   setPeriodFrom('');
                   setPeriodTo('');
                   setStageFilter('all');
+                  setCurrentStageFilter('');
+                  setPaidFilter('all');
                   setFilterCentroCusto('');
                 }}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
@@ -756,7 +972,7 @@ export const FilteredApproverRequestList = React.memo(function FilteredApproverR
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       ) : null}
     </Card>
   );

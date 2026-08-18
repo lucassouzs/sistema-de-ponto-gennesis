@@ -38,6 +38,7 @@ import { CARGOS_LIST } from '@/constants/cargos';
 import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions, filterOptionsWithAll } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PointCorrectionRequest {
   id: string;
@@ -816,7 +817,7 @@ export default function GerenciarSolicitacoesPage() {
 
         {/* Modal de detalhes */}
         {selectedRequest && !showApprovalModal && !showRejectionModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedRequest(null)} />
             <div className="relative w-full max-w-3xl bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden max-h-[90vh]">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -888,12 +889,12 @@ export default function GerenciarSolicitacoesPage() {
                 )}
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de aprovação */}
         {showApprovalModal && selectedRequest && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => {
               setShowApprovalModal(false);
               setSelectedRequest(null);
@@ -937,12 +938,12 @@ export default function GerenciarSolicitacoesPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de rejeição */}
         {showRejectionModal && selectedRequest && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => {
               setShowRejectionModal(false);
               setSelectedRequest(null);
@@ -997,7 +998,7 @@ export default function GerenciarSolicitacoesPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
       </div>
     </MainLayout>

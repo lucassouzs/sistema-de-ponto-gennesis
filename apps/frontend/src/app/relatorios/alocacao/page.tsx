@@ -23,6 +23,7 @@ import {
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { CARGOS_LIST } from '@/constants/cargos';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const MONTH_FILTER_OPTIONS = labeledToSelectOptions([
   { value: '1', label: 'Janeiro' },
@@ -1191,7 +1192,7 @@ export default function AlocacaoPage() {
 
         {/* Modal de Centro de Custo */}
         {isModalOpen && selectedEmployee && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={requestCloseAllocationModal} />
             <div className="relative w-full max-w-4xl rounded-lg bg-white dark:bg-gray-800 p-6 shadow-lg max-h-[90vh] overflow-y-auto">
               <button
@@ -1290,7 +1291,7 @@ export default function AlocacaoPage() {
 
               {/* Legenda removida */}
             </div>
-          </div>
+          </AppModalOverlay>
         )}
         {allocationModalConfirmUi}
       </div>

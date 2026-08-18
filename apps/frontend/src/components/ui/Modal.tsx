@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { clsx } from 'clsx';
 import { X } from 'lucide-react';
 import { MODAL_OVERLAY_CLASS } from '@/lib/zIndex';
-import { syncModalOpenClass } from '@/lib/modalBodyLock';
+import { isEventInsideModalUi, syncModalOpenClass } from '@/lib/modalBodyLock';
 import { useOpenTransition } from '@/hooks/useOpenTransition';
 import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
 
@@ -24,11 +24,10 @@ function unregisterModalRoot(root: HTMLElement) {
 }
 
 function isEventInTopModal(target: EventTarget | null): boolean {
+  if (isEventInsideModalUi(target)) return true;
   if (!(target instanceof Node)) return false;
   const top = modalRootStack[modalRootStack.length - 1];
-  if (top?.contains(target)) return true;
-  const portal = document.getElementById('dropdown-portal-root');
-  return !!portal?.contains(target);
+  return !!top?.contains(target);
 }
 
 function lockPageScroll() {
@@ -112,15 +111,14 @@ export const Modal: React.FC<ModalProps> = ({
     if (!isOpen) setShowCloseConfirm(false);
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
+  useLayoutEffect(() => {
+    if (!isOpen || !present) return;
 
     const root = rootRef.current;
     if (root) registerModalRoot(root);
 
     const handleEscape = (e: KeyboardEvent) => {
       if (!closeOnEscape || e.key !== 'Escape') return;
-      // Se o confirm já está aberto, Escape só cancela o confirm (não fecha o modal pai).
       if (showCloseConfirm) {
         setShowCloseConfirm(false);
         return;
@@ -147,7 +145,7 @@ export const Modal: React.FC<ModalProps> = ({
       unlockPageScroll();
       syncModalOpenClass();
     };
-  }, [isOpen, closeOnEscape, requestClose, showCloseConfirm]);
+  }, [isOpen, present, closeOnEscape, requestClose, showCloseConfirm]);
 
   if (!present) return null;
 
@@ -159,10 +157,6 @@ export const Modal: React.FC<ModalProps> = ({
     '5xl': 'max-w-5xl',
     '2xl': 'max-w-6xl',
     full: 'max-w-full mx-2 sm:mx-4',
-  };
-
-  const stopScrollChain = (event: React.WheelEvent | React.TouchEvent) => {
-    event.preventDefault();
   };
 
   const modalContent = (
@@ -188,8 +182,6 @@ export const Modal: React.FC<ModalProps> = ({
           onMouseDown={(e) => {
             if (closeOnOverlayClick && isOpen && e.target === e.currentTarget) requestClose();
           }}
-          onWheel={stopScrollChain}
-          onTouchMove={stopScrollChain}
         />
 
         {/* Modal */}

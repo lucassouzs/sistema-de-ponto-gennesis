@@ -36,6 +36,7 @@ import {
   type GestaoOsDocumentKind
 } from '@/app/ponto/sistema-gestao-os/gestaoOsTypes';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 type EquipmentTab = 'equipamentos' | 'grupos' | 'subgrupos';
 
@@ -873,7 +874,7 @@ export default function GestaoOsEquipamentosPageClient() {
         </div>
 
         {showForm ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => requestCloseForm()} />
             <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-800">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -1120,13 +1121,13 @@ export default function GestaoOsEquipamentosPageClient() {
                 </div>
               </form>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
 
         {formConfirmUi}
 
         {viewing ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setViewing(null)} />
             <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white shadow-xl dark:bg-gray-800">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -1269,11 +1270,11 @@ export default function GestaoOsEquipamentosPageClient() {
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
 
         {deleteTarget ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteTarget(null)} />
             <div className="relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
@@ -1307,7 +1308,7 @@ export default function GestaoOsEquipamentosPageClient() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
       </MainLayout>
     </ProtectedRoute>

@@ -210,21 +210,13 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
                   : 'app-page-scroll app-thin-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
               }
             >
-              {isFullBleedRoute ? (
-                <div
-                  className={
-                    pageRevealReady
-                      ? `page-enter h-full min-h-0${pageFromReload ? ' page-enter--reload' : ''}`
-                      : 'page-enter page-enter--pending h-full min-h-0'
-                  }
-                >
-                  {children}
-                </div>
-              ) : (
-                <PageEnter ready={pageRevealReady} fromReload={pageFromReload}>
-                  {children}
-                </PageEnter>
-              )}
+              <PageEnter
+                ready={pageRevealReady}
+                fromReload={pageFromReload}
+                className={isFullBleedRoute ? 'h-full min-h-0' : ''}
+              >
+                {children}
+              </PageEnter>
             </main>
           </div>
 

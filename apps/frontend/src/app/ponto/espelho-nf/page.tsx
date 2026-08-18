@@ -66,6 +66,7 @@ import {
   type TaxCodeFormState,
   type TaxRule
 } from '@/components/espelho-nf/EspelhoNfTaxCodeContractFields';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 /** Campos opcionais que o usuário escolhe exibir no formulário (Constar na nota fiscal). */
 type NfConstarNaNotaFields = {
@@ -2193,7 +2194,7 @@ export default function EspelhoNfPage() {
 
 
           {showEspelhoForm && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex min-h-0 items-center justify-center overflow-hidden p-2 sm:p-4">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex min-h-0 items-center justify-center overflow-hidden p-2 sm:p-4">
               <div className="absolute inset-0 bg-black/50" aria-hidden />
               <div className="relative flex max-h-[calc(100dvh-1rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800 [&_button:focus]:outline-none [&_button:focus]:ring-0 [&_button:focus-visible]:outline-none [&_button:focus-visible]:ring-0 [&_input:not(.sr-only):focus]:outline-none [&_input:not(.sr-only):focus]:ring-0 [&_input:not(.sr-only):focus-visible]:outline-none [&_input:not(.sr-only):focus-visible]:ring-0 [&_select:focus]:outline-none [&_select:focus]:ring-0 [&_select:focus-visible]:outline-none [&_select:focus-visible]:ring-0 [&_textarea:focus]:outline-none [&_textarea:focus]:ring-0 [&_textarea:focus-visible]:outline-none [&_textarea:focus-visible]:ring-0">
                 <div className="z-10 flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5 py-4 dark:border-gray-700 dark:bg-gray-800">
@@ -2910,7 +2911,7 @@ export default function EspelhoNfPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
 
           {showEspelhoForm &&
@@ -3569,7 +3570,7 @@ export default function EspelhoNfPage() {
           ) : null}
 
           {detailMirror && (
-            <div
+            <AppModalOverlay
               className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-hidden bg-black/50 p-4"
               role="dialog"
               aria-modal="true"
@@ -3738,7 +3739,7 @@ export default function EspelhoNfPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
         </div>
       </MainLayout>

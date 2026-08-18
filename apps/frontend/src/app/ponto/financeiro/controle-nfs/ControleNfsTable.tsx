@@ -174,7 +174,7 @@ export function ControleNfsTable({
           {columnsPanelOpen ? (
             <>
               <div
-                className="app-modal-overlay fixed inset-0 z-20"
+                className="fixed inset-0 z-20"
                 aria-hidden
                 onClick={() => setColumnsPanelOpen(false)}
               />

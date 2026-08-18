@@ -41,6 +41,7 @@ export type ParsedWorkflowRow = {
   naturezaOrcamentaria: string | null;
   centroCusto: string | null;
   createdAt: string | null;
+  valor: string | null;
   currentStage: string | null;
   currentPendingWith: string | null;
   currentPendingSector: WorkflowSector | null;
@@ -285,6 +286,7 @@ export type WorkflowColumnMapping = {
   centroCustoCol: string | null;
   createdAtCol: string | null;
   stageCol: string | null;
+  valorCol: string | null;
   globalPendingCol: string | null;
   sectorCols: SectorColumnMap;
 };
@@ -603,6 +605,7 @@ function resolveWorkflowBudgetColumns(
     mapping.titleCol,
     mapping.filialCol,
     mapping.stageCol,
+    mapping.valorCol,
     mapping.globalPendingCol,
   ]) {
     if (col) skipKeys.add(col);
@@ -644,6 +647,7 @@ export function buildWorkflowColumnMapping(
     centroCustoCol: null,
     createdAtCol: null,
     stageCol: null,
+    valorCol: null,
     globalPendingCol: null,
     sectorCols: {},
   };
@@ -667,6 +671,9 @@ export function buildWorkflowColumnMapping(
       mapping.titleCol = col;
     }
     if (!mapping.filialCol && /^filial$/.test(norm)) mapping.filialCol = col;
+    if (!mapping.valorCol && isWorkflowValorColumnName(col)) {
+      mapping.valorCol = col;
+    }
 
     if (!mapping.naturezaOrcamentariaCol && isNaturezaCandidateColumnKey(col)) {
       mapping.naturezaOrcamentariaCol = col;
@@ -718,6 +725,15 @@ export function buildWorkflowColumnMapping(
       null;
   }
 
+  if (!mapping.valorCol) {
+    mapping.valorCol = pickWorkflowValorColumn(columns);
+  } else {
+    const preferred = pickWorkflowValorColumn(columns);
+    if (preferred && scoreWorkflowValorColumn(preferred) > scoreWorkflowValorColumn(mapping.valorCol)) {
+      mapping.valorCol = preferred;
+    }
+  }
+
   if (!mapping.titleCol) {
     mapping.titleCol =
       columns.find((c) => /historico/i.test(c)) ??
@@ -735,6 +751,87 @@ export function buildWorkflowColumnMapping(
 
 function isG5WorkflowDataset(datasetId?: string): boolean {
   return datasetId === FLUIG_WORKFLOW_APPROVAL_DATASET_G5;
+}
+
+function workflowValorColumnCompact(col: string): string {
+  return normalizeFluigColumnKey(col).replace(/\s/g, '');
+}
+
+function isWorkflowValorColumnName(col: string): boolean {
+  const compact = workflowValorColumnCompact(col);
+  return /^(valorliquido|vlrliquido|valortotal|valorsolicitado|valor|vlr|vlrtotal)$/.test(compact);
+}
+
+function scoreWorkflowValorColumn(col: string, datasetId?: string): number {
+  const compact = workflowValorColumnCompact(col);
+  let score = 0;
+  if (isG5WorkflowDataset(datasetId)) {
+    if (/^valor$/.test(compact)) score += 50;
+    if (/^valorliquido$|^vlrliquido$/.test(compact)) score += 16;
+  } else {
+    if (/^valorliquido$|^vlrliquido$/.test(compact)) score += 40;
+    if (/^valor$|^vlr$/.test(compact)) score += 18;
+  }
+  if (/^valortotal$|^vlrtotal$/.test(compact)) score += 25;
+  if (/^valorsolicitado$/.test(compact)) score += 22;
+  if (compact.includes('valor') && compact.includes('liquido')) score += 12;
+  if (compact.includes('valor')) score += 10;
+  if (compact.includes('liquido')) score += 8;
+  if (/orcamento|orcado|previsto|empenh/.test(compact)) score -= 5;
+  if (/quant|qtd|percent/.test(compact)) score -= 25;
+  if (/aprovad|pendente|etapa|filial|titulo|historico|centrocusto|codpagamento/.test(compact)) score -= 20;
+  return score;
+}
+
+function pickWorkflowValorColumn(columns: string[], datasetId?: string): string | null {
+  const scored = columns.map((key) => ({ key, score: scoreWorkflowValorColumn(key, datasetId) }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.find((item) => item.score >= 10)?.key ?? null;
+}
+
+function parseWorkflowMoneyAmount(raw: string): number | null {
+  const cleaned = raw.replace(/[R$\s]/gi, '').trim();
+  if (!cleaned) return null;
+  const parsed = raw.includes(',')
+    ? parseFloat(cleaned.replace(/\./g, '').replace(',', '.'))
+    : parseFloat(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isWorkflowValorZeroLike(raw: string): boolean {
+  const amount = parseWorkflowMoneyAmount(raw);
+  return amount === 0;
+}
+
+function resolveWorkflowValor(
+  row: Record<string, unknown>,
+  columns: string[],
+  mapping: WorkflowColumnMapping,
+  datasetId?: string
+): string | null {
+  const candidates = new Set<string>();
+  if (mapping.valorCol) candidates.add(mapping.valorCol);
+  for (const col of columns) {
+    if (scoreWorkflowValorColumn(col, datasetId) >= 10) candidates.add(col);
+  }
+  for (const key of Object.keys(row)) {
+    if (scoreWorkflowValorColumn(key, datasetId) >= 10) candidates.add(key);
+  }
+
+  const ranked = Array.from(candidates).sort(
+    (a, b) => scoreWorkflowValorColumn(b, datasetId) - scoreWorkflowValorColumn(a, datasetId)
+  );
+  let zeroFallback: string | null = null;
+  for (const col of ranked) {
+    const value = readCell(row, col).trim();
+    if (!value) continue;
+    if (isWorkflowValorZeroLike(value)) {
+      if (!zeroFallback) zeroFallback = value;
+      continue;
+    }
+    return value;
+  }
+  return zeroFallback;
 }
 
 function resolveCurrentStage(
@@ -802,6 +899,18 @@ function isStageFullyApproved(stage: string, datasetId?: string): boolean {
   }
 
   return /finaliz|conclu|encerr|complet|aprovad.*total|processo conclu/.test(s);
+}
+
+/** Pagamento concluído conforme a etapa atual do processo no Fluig. */
+export function isWorkflowStagePaid(stage: string | null | undefined, datasetId?: string): boolean {
+  if (!stage?.trim()) return false;
+  const s = normalizeFluigColumnKey(stage);
+  if ((/aguard/.test(s) && /pagament/.test(s)) || /\bnao\s+(pago|liquid|quitad)/.test(s)) {
+    return false;
+  }
+  if (/\bpago\b/.test(s) || /liquid|quitad/.test(s)) return true;
+  if (/\bpagamento\b/.test(s) && /\b(efetuad|realizad|conclu|finaliz|liberad)\b/.test(s)) return true;
+  return isStageFullyApproved(stage, datasetId);
 }
 
 function readCell(row: Record<string, unknown>, col: string | null | undefined): string {
@@ -944,6 +1053,7 @@ export function parseWorkflowApprovalRow(
   const naturezaOrcamentaria = resolveWorkflowNaturezaValue(row, mapping, columns);
   const centroCusto = mapping.centroCustoCol ? readCell(row, mapping.centroCustoCol).trim() || null : null;
   const createdAt = mapping.createdAtCol ? readCell(row, mapping.createdAtCol).trim() || null : null;
+  const valor = resolveWorkflowValor(row, columns, mapping, datasetId);
   const currentStage = resolveCurrentStage(row, columns, mapping);
   const globalPending = readCell(row, mapping.globalPendingCol) || null;
   const pendingSector = currentStage ? sectorFromStageText(currentStage, datasetId) : null;
@@ -1046,6 +1156,7 @@ export function parseWorkflowApprovalRow(
     naturezaOrcamentaria,
     centroCusto,
     createdAt,
+    valor,
     currentStage,
     currentPendingWith,
     currentPendingSector: fullyApproved ? null : pendingSector,
@@ -1088,9 +1199,11 @@ export type WorkflowApproverRequestRef = {
   title: string;
   centroCusto: string | null;
   filial: string | null;
+  valor: string | null;
   sector: WorkflowSector;
   sectorLabel: string;
   approvedAt: string | null;
+  currentStage: string | null;
 };
 
 export type WorkflowApproverBucket = {
@@ -1276,9 +1389,11 @@ export function aggregateWorkflowByApprover(
           title: row.title,
           centroCusto: row.centroCusto,
           filial: row.filial,
+          valor: row.valor,
           sector: step.sector,
           sectorLabel: SECTOR_LABELS[step.sector],
           approvedAt: readSectorApprovalDateFromRow(row, step.sector),
+          currentStage: row.currentStage,
         });
       }
       bucket.approvedCount += 1;
@@ -1304,9 +1419,11 @@ export function aggregateWorkflowByApprover(
         title: row.title,
         centroCusto: row.centroCusto,
         filial: row.filial,
+        valor: row.valor,
         sector: row.currentPendingSector,
         sectorLabel: SECTOR_LABELS[row.currentPendingSector],
         approvedAt: null,
+        currentStage: row.currentStage,
       });
     }
     bucket.pendingCount += 1;
@@ -1549,6 +1666,18 @@ export function formatFluigBudgetFieldDisplay(raw: string | null | undefined): s
     if (label && /^[\d.]+$/.test(head)) return label;
   }
   return value;
+}
+
+export function formatWorkflowValorDisplay(raw: string | null | undefined): string {
+  const value = raw?.trim();
+  if (!value) return '—';
+  const cleaned = value.replace(/[R$\s]/gi, '').trim();
+  if (!cleaned) return '—';
+  const parsed = value.includes(',')
+    ? parseFloat(cleaned.replace(/\./g, '').replace(',', '.'))
+    : parseFloat(cleaned);
+  if (!Number.isFinite(parsed)) return value;
+  return parsed.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 /** Exibe sigla da filial na listagem de aprovadores (G3: código 1/5; G5: Matriz / Filial GO). */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { syncModalOpenClass } from '@/lib/modalBodyLock';
+import { syncModalOpenClass, teardownModalScrollLock } from '@/lib/modalBodyLock';
 import { MODAL_OVERLAY_CLASS } from '@/lib/zIndex';
 
 /**
@@ -16,11 +16,14 @@ export function useModalOverlayObserver() {
     syncModalOpenClass();
 
     let rafId = 0;
+    let delayId = 0;
     const scheduleSync = () => {
       if (rafId) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = 0;
         syncModalOpenClass();
+        window.clearTimeout(delayId);
+        delayId = window.setTimeout(syncModalOpenClass, 220);
       });
     };
 
@@ -34,6 +37,8 @@ export function useModalOverlayObserver() {
     return () => {
       observer.disconnect();
       if (rafId) window.cancelAnimationFrame(rafId);
+      if (delayId) window.clearTimeout(delayId);
+      teardownModalScrollLock();
       document.documentElement.classList.remove('modal-open');
       document.body.classList.remove('modal-open');
     };

@@ -134,6 +134,7 @@ import {
   ApprovalPhaseStatCards,
   type ApprovalPhaseStatCard,
 } from '@/app/ponto/aprovacoes/_components/ApprovalPhaseStatCards';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const OC_APPROVAL_LIST_PHASE_OPTIONS = labeledToSelectOptions([
   { value: 'pending', label: 'Pendentes de aprovação' },
@@ -4959,7 +4960,7 @@ export function OcPurchaseOrdersPanel({
       </section>
 
       {rejectTarget && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => { setRejectTarget(null); setRejectReason(''); }} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Cancelar OC</h2>
@@ -4993,7 +4994,7 @@ export function OcPurchaseOrdersPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {returnItemTarget && (
@@ -5069,7 +5070,7 @@ export function OcPurchaseOrdersPanel({
       )}
 
       {correctionTarget && (
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => {
@@ -5116,12 +5117,12 @@ export function OcPurchaseOrdersPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {showEditOcModal && selectedOrder && editOcForm && (
         <>
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={requestCloseEditOc} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-start justify-between gap-3 mb-4">
@@ -5196,7 +5197,7 @@ export function OcPurchaseOrdersPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
         {editOcConfirmUi}
         </>
       )}
@@ -5204,7 +5205,7 @@ export function OcPurchaseOrdersPanel({
       {selectedOrder && !showEditOcModal && !correctionTarget && typeof document !== 'undefined'
         ? createPortal(
         <>
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
           <div className="absolute inset-0 bg-black/50" onClick={requestCloseSelectedOrder} />
           <div
             className={`relative my-auto flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl dark:bg-gray-800 ${
@@ -6414,7 +6415,7 @@ export function OcPurchaseOrdersPanel({
             </div>
             )}
           </div>
-        </div>
+        </AppModalOverlay>
         {selectedOrderConfirmUi}
         </>,
         document.body
@@ -6462,7 +6463,7 @@ export function OcPurchaseOrdersPanel({
       )}
 
       {isApprovalFiltersModalOpen && (
-        <div className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setIsApprovalFiltersModalOpen(false)}
@@ -6520,7 +6521,7 @@ export function OcPurchaseOrdersPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       <Modal
@@ -6575,7 +6576,7 @@ export function OcPurchaseOrdersPanel({
       </Modal>
 
       {isFinalizedFiltersModalOpen && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setIsFinalizedFiltersModalOpen(false)}
@@ -6673,7 +6674,7 @@ export function OcPurchaseOrdersPanel({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {ocActionMenu &&

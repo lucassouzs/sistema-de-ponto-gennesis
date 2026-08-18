@@ -33,6 +33,7 @@ import api from '@/lib/api';
 import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import toast from 'react-hot-toast';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const EMPLOYEE_ACTION_MENU_WIDTH_PX = 224; // w-56
 
@@ -1404,7 +1405,7 @@ export function EmployeeList({
         )}
 
         {isFiltersModalOpen && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setIsFiltersModalOpen(false)} />
             <div className="relative mx-4 w-full max-w-3xl rounded-xl bg-white shadow-2xl dark:bg-gray-800">
               <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
@@ -1526,12 +1527,12 @@ export function EmployeeList({
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de confirmação de exclusão */}
         {deleteConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setDeleteConfirm(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4">
               <div className="p-6">
@@ -1576,11 +1577,11 @@ export function EmployeeList({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {showBulkDeleteModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => !bulkDesligarMutation.isPending && setShowBulkDeleteModal(false)}
@@ -1634,11 +1635,11 @@ export function EmployeeList({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {showBulkReactivateModal && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => !bulkReactivateMutation.isPending && setShowBulkReactivateModal(false)}
@@ -1693,12 +1694,12 @@ export function EmployeeList({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de confirmação de admissão (reativar) */}
         {reactivateConfirm && (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/40" onClick={() => setReactivateConfirm(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full mx-4">
               <div className="p-6">
@@ -1741,13 +1742,13 @@ export function EmployeeList({
                 </div>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
       </CardContent>
 
         {showChangePasswordModal && selectedEmployee && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowChangePasswordModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700">
             <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -1822,7 +1823,7 @@ export function EmployeeList({
               </div>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </Card>
     </>

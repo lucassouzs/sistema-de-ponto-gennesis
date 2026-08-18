@@ -12,6 +12,7 @@ import { useWebcam } from '@/hooks/useWebcam';
 import { TimeRecordType } from '@/types';
 import api from '@/lib/api';
 import { APP_TITLE } from '@/lib/pageTitle';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PunchCardProps {
   onSuccess?: () => void;
@@ -705,7 +706,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
 
       {/* Modal de Confirmação de Ponto Batido - Renderizado via Portal */}
       {showSuccessModal && punchData && typeof window !== 'undefined' && createPortal(
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50">
           <div className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-2xl">
             <div className="p-6 space-y-4">
               {/* Ícone de sucesso */}
@@ -777,7 +778,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
               </div>
             </div>
           </div>
-        </div>,
+        </AppModalOverlay>,
         document.body
       )}
     </div>

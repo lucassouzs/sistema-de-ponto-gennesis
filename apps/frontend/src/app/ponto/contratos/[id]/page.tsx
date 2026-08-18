@@ -111,6 +111,7 @@ import {
 } from '@/app/ponto/contratos/controle-geral/tetoOrcamentario';
 import { resolveGastosPoloFromContractName } from '@/lib/extratoCaixaPolo';
 import { ContractGastosResumoModal } from '@/components/contract/ContractGastosResumoModal';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ContractBilling {
   id: string;
@@ -5705,7 +5706,7 @@ export default function ContractDetailPage() {
 
           {/* Modal de aditivos do contrato */}
           {showAddendumModal && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
               <div className="absolute inset-0" onClick={requestCloseAddendumModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -5817,13 +5818,13 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {addendumModalConfirmUi}
 
           {/* Modal ajuste valor anual (orçamento do órgão) */}
           {showValorAnualAdjustModal && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
               <div className="absolute inset-0" onClick={requestCloseValorAnualAdjustModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -5938,13 +5939,13 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {valorAnualAdjustModalConfirmUi}
 
           {/* Modal Cadastrar Produção Semanal */}
           {showProductionModal && !editingProduction && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
               <div className="absolute inset-0" onClick={requestCloseProductionModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -6025,13 +6026,13 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {productionModalConfirmUi}
 
           {/* Modal Editar Produção Semanal */}
           {editingProduction && selectedProduction && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
               <div className="absolute inset-0" onClick={requestCloseEditingProduction} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -6121,13 +6122,13 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {editingProductionConfirmUi}
 
           {/* Modal Cadastrar Faturamento */}
           {showBillingModal && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
               <div className="absolute inset-0" onClick={requestCloseBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -6277,7 +6278,7 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {billingModalConfirmUi}
 
@@ -6307,7 +6308,7 @@ export default function ContractDetailPage() {
 
           {/* Modal Informar Valores do Pleito */}
           {showPleitoValoresModal && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
               <div className="absolute inset-0" onClick={requestClosePleitoValoresModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -6421,13 +6422,13 @@ export default function ContractDetailPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {pleitoValoresModalConfirmUi}
 
           {/* Modal Resumo do Pleito */}
           {showPleitoResumoModal && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
               <div className="absolute inset-0" onClick={requestClosePleitoResumoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -6484,13 +6485,13 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {pleitoResumoModalConfirmUi}
 
           {/* Modal Detalhes do Faturamento */}
           {selectedBilling && (
-            <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
               <div className="absolute inset-0" onClick={requestCloseSelectedBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -6652,7 +6653,7 @@ export default function ContractDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </AppModalOverlay>
           )}
           {selectedBillingModalConfirmUi}
 

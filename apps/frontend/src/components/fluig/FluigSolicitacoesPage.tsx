@@ -42,6 +42,7 @@ import {
 } from '@/lib/fluigWorkflowApproval';
 import api from '@/lib/api';
 import * as XLSX from 'xlsx';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const FLUIG_LIST_PAGE_SIZE = 20;
 
@@ -1401,7 +1402,7 @@ export function FluigSolicitacoesPage({
 
         {/* Modal de filtros (padrão do sistema) */}
         {isFiltersModalOpen && !loadingData && !error && !isEmpty ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setIsFiltersModalOpen(false)}
@@ -1536,7 +1537,7 @@ export function FluigSolicitacoesPage({
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
 
         {hasError && (

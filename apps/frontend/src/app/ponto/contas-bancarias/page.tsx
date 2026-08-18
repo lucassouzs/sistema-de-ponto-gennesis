@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useEspelhoNfBootstrap } from '@/hooks/useEspelhoNfBootstrap';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface BankAccountRow {
   id: string;
@@ -314,7 +315,7 @@ export default function ContasBancariasEspelhoNfPage() {
         </div>
 
         {showForm ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={requestCloseBankForm}
@@ -388,13 +389,13 @@ export default function ContasBancariasEspelhoNfPage() {
                 </div>
               </form>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
 
         {bankFormConfirmUi}
 
         {showDeleteModal ? (
-          <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteModal(null)} />
             <div className="relative mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
@@ -424,7 +425,7 @@ export default function ContasBancariasEspelhoNfPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         ) : null}
       </MainLayout>
     </ProtectedRoute>

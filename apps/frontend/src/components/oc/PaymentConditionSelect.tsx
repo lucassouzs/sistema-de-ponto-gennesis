@@ -7,6 +7,7 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type PaymentConditionRow = {
   id: string;
@@ -227,7 +228,7 @@ export function PaymentConditionSelect({
       </div>
 
       {showModal && (
-        <div className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Nova condição de pagamento</h4>
@@ -312,7 +313,7 @@ export function PaymentConditionSelect({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </div>
   );

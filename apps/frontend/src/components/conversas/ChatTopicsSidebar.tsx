@@ -6,6 +6,7 @@ import { GripVertical, Hash, Loader2, Pencil, Pin, PinOff, Plus, Search, Trash2,
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type ChatTopicItem = {
   id: string;
@@ -510,13 +511,13 @@ export function ChatTopicsSidebar({
 
       {showCreateModal && (
         <>
-          <button
+          <AppModalOverlay
+            as="button"
             type="button"
             aria-label="Fechar"
             className="app-modal-overlay fixed inset-0 z-[2200] bg-black/50"
-            onClick={() => !createMutation.isPending && setShowCreateModal(false)}
-          />
-          <div className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
+            onClick={() => !createMutation.isPending && setShowCreateModal(false)} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
             <div
               role="dialog"
               aria-modal="true"
@@ -586,19 +587,19 @@ export function ChatTopicsSidebar({
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         </>
       )}
 
       {renameTopic && (
         <>
-          <button
+          <AppModalOverlay
+            as="button"
             type="button"
             aria-label="Fechar"
             className="app-modal-overlay fixed inset-0 z-[2200] bg-black/50"
-            onClick={() => !renameMutation.isPending && setRenameTopic(null)}
-          />
-          <div className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
+            onClick={() => !renameMutation.isPending && setRenameTopic(null)} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
             <div
               role="dialog"
               aria-modal="true"
@@ -659,19 +660,19 @@ export function ChatTopicsSidebar({
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         </>
       )}
 
       {deleteTopic && (
         <>
-          <button
+          <AppModalOverlay
+            as="button"
             type="button"
             aria-label="Fechar"
             className="app-modal-overlay fixed inset-0 z-[2200] bg-black/50"
-            onClick={() => !deleteMutation.isPending && setDeleteTopic(null)}
-          />
-          <div className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
+            onClick={() => !deleteMutation.isPending && setDeleteTopic(null)} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[1201] flex items-center justify-center p-4 pointer-events-none">
             <div
               role="dialog"
               aria-modal="true"
@@ -706,7 +707,7 @@ export function ChatTopicsSidebar({
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         </>
       )}
     </>
