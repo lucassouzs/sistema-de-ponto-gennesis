@@ -30,6 +30,7 @@ import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import api from '@/lib/api';
 import {
   GestaoOsReportsSummary,
+  type GestaoOsReportsGeo,
   ORIGIN_LABELS,
   STATUS_LABELS,
   type GestaoOsLocationTree,
@@ -42,6 +43,7 @@ import toast from 'react-hot-toast';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { GestaoOsReportsGeoMap } from './GestaoOsReportsGeoMap';
 
 type GestaoOsWorkloadRow = {
   assigneeId: string;
@@ -147,6 +149,8 @@ export default function GestaoOsRelatoriosPageClient() {
   const [buildingId, setBuildingId] = useState('');
   const [origin, setOrigin] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
+  const [mapShowAssets, setMapShowAssets] = useState(true);
+  const [mapShowWorkOrders, setMapShowWorkOrders] = useState(true);
   const reportParams = {
     from: from || undefined,
     to: to || undefined,
@@ -186,6 +190,18 @@ export default function GestaoOsRelatoriosPageClient() {
         { params: reportParams }
       );
       return res.data?.data;
+    }
+  });
+
+  const { data: geoData, isLoading: geoLoading } = useQuery<GestaoOsReportsGeo>({
+    queryKey: ['gestao-os-reports-geo', reportParams],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsReportsGeo }>(
+        '/gestao-os/reports/geo',
+        { params: reportParams }
+      );
+      return res.data?.data ?? { buildings: [] };
     }
   });
 
@@ -427,6 +443,73 @@ export default function GestaoOsRelatoriosPageClient() {
                   emptyTitle="Nenhum insumo lançado nas OS"
                 />
               </div>
+
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <div className={cadastroListClasses.cardHeaderIconRow}>
+                    <div className="rounded-lg bg-sky-100 p-2 dark:bg-sky-900/30 sm:p-3">
+                      <Building2 className="h-5 w-5 text-sky-600 dark:text-sky-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Mapa de prédios, ativos e chamados
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Usa as coordenadas do prédio (lat/lng) e o mesmo recorte do relatório.
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMapShowWorkOrders((v) => !v)}
+                          className={[
+                            'inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                            mapShowWorkOrders
+                              ? 'bg-red-600 text-white border-red-600 hover:bg-red-700'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-800'
+                          ].join(' ')}
+                        >
+                          Chamados
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMapShowAssets((v) => !v)}
+                          className={[
+                            'inline-flex items-center rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                            mapShowAssets
+                              ? 'bg-sky-600 text-white border-sky-600 hover:bg-sky-700'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 dark:bg-gray-900 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-800'
+                          ].join(' ')}
+                        >
+                          Ativos
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className={cadastroListClasses.cardContent}>
+                  {geoLoading ? (
+                    <CadastroListLoading message="Carregando mapa..." />
+                  ) : geoData?.buildings?.some(
+                      (b) =>
+                        b.latitude != null &&
+                        b.longitude != null &&
+                        Number.isFinite(b.latitude) &&
+                        Number.isFinite(b.longitude)
+                    ) ? (
+                    <GestaoOsReportsGeoMap
+                      buildings={geoData.buildings}
+                      showAssets={mapShowAssets}
+                      showWorkOrders={mapShowWorkOrders}
+                    />
+                  ) : (
+                    <CadastroListEmpty
+                      icon={Building2}
+                      title="Nenhum prédio com coordenadas no recorte"
+                      hint="Verifique se o prédio (localidade) possui lat/lng cadastrados."
+                    />
+                  )}
+                </CardContent>
+              </Card>
 
               <Card className={cadastroListClasses.card}>
                 <CardHeader className={cadastroListClasses.cardHeader}>

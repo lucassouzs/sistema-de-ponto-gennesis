@@ -209,6 +209,37 @@ export type GestaoOsReportsSummary = {
   }>;
 };
 
+export type GestaoOsReportsGeo = {
+  buildings: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    assetsCount: number;
+    workOrdersCount: number;
+    byStatus: Partial<Record<GestaoOsStatus, number>>;
+    workOrders: Array<{
+      id: string;
+      displayNumber: number;
+      osNumber: number | null;
+      status: GestaoOsStatus;
+      category: string;
+      locationLabel: string | null;
+      assigneeName: string | null;
+      openedAt: string;
+      dueAt: string | null;
+      overdue: boolean;
+    }>;
+    assets: Array<{
+      id: string;
+      name: string;
+      code: string | null;
+      category: string | null;
+    }>;
+  }>;
+};
+
 export const PLAN_TYPE_LABELS: Record<GestaoOsPlanType, string> = {
   PREVENTIVE: 'Preventiva',
   PMOC: 'PMOC',

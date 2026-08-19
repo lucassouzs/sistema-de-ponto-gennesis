@@ -45,6 +45,7 @@ import {
   serializeChecklistForSave,
   createUniqueChecklistItemId,
   buildChecklistResumo,
+  buildChecklistExportSections,
   LICITACAO_CHECKLIST,
   type ChecklistItemState,
   type ChecklistSectionDef,
@@ -930,12 +931,14 @@ export default function LicitacoesPage() {
     setExportingPdf(true);
     try {
       const manual = analiseManualRef.current;
-      const sections = buildChecklistResumo(checklistSections, manual.checklistState);
+      // Checklist completo (todos os itens, inclusive os não marcados).
+      const sections = buildChecklistExportSections(checklistSections, manual.checklistState);
       const responsavel =
         manual.responsavelAnalise.trim() || userData?.data?.name?.trim() || '';
 
       await exportLicitacaoAnalisePdf({
         titulo: tituloParaExibicao(display ?? selected, list),
+        sectionTitle: 'Checklist — Completo',
         responsavelAnalise: responsavel,
         linkNotebookLm: manual.linkNotebookLm,
         analiseUsuario: manual.analiseUsuario,
@@ -955,6 +958,46 @@ export default function LicitacoesPage() {
       });
 
       toast.success('Checklist exportado em PDF.');
+    } catch {
+      toast.error('Erro ao gerar o PDF. Tente novamente.');
+    } finally {
+      setExportingPdf(false);
+    }
+  }, [checklistSections, display, list, selected, userData?.data?.name]);
+
+  const handleExportAnalisePdf = useCallback(async () => {
+    if (!selected) return;
+
+    setExportingPdf(true);
+    try {
+      const manual = analiseManualRef.current;
+      // “Análise de Viabilidade” (resumo: só itens marcados ou comentados)
+      const sections = buildChecklistResumo(checklistSections, manual.checklistState);
+      const responsavel =
+        manual.responsavelAnalise.trim() || userData?.data?.name?.trim() || '';
+
+      await exportLicitacaoAnalisePdf({
+        titulo: tituloParaExibicao(display ?? selected, list),
+        sectionTitle: 'Checklist — Análise de Viabilidade',
+        responsavelAnalise: responsavel,
+        linkNotebookLm: manual.linkNotebookLm,
+        analiseUsuario: manual.analiseUsuario,
+        naoSeHabilita: manual.naoSeHabilita,
+        naoSeHabilitaItens: manual.naoSeHabilitaItens.map((item) => ({
+          title: item.title,
+          isDone: item.isDone,
+        })),
+        sections: sections.map((section) => ({
+          title: section.title,
+          items: section.items.map((item) => ({
+            label: item.label,
+            checked: item.checked,
+            comentario: item.comentario,
+          })),
+        })),
+      });
+
+      toast.success('Análise de viabilidade exportada em PDF.');
     } catch {
       toast.error('Erro ao gerar o PDF. Tente novamente.');
     } finally {
@@ -1310,8 +1353,8 @@ export default function LicitacoesPage() {
             {(
               [
                 { id: 'orcamento' as const, label: 'Orçamento' },
-                { id: 'analise' as const, label: 'Em Análise' },
                 { id: 'arquivadas' as const, label: 'Análise Final' },
+                { id: 'analise' as const, label: 'Em Análise' },
                 { id: 'regioes' as const, label: 'Por Região' },
                 { id: 'banco-cats' as const, label: 'Banco CATs' },
               ] as const
@@ -1623,7 +1666,10 @@ export default function LicitacoesPage() {
                     </p>
                   ) : (
                     <ul
-                      className="min-h-0 flex-1 divide-y divide-gray-200 overflow-y-auto pr-0.5 dark:divide-gray-700"
+                      className={[
+                        'min-h-0 flex-1 divide-y divide-gray-200 pr-0.5 dark:divide-gray-700',
+                        showAnaliseLayout ? 'overflow-hidden' : 'overflow-y-auto'
+                      ].join(' ')}
                       role="listbox"
                       aria-label="Licitações"
                     >
@@ -2052,7 +2098,7 @@ export default function LicitacoesPage() {
                           ) : (
                             <Download className="h-4 w-4" aria-hidden />
                           )}
-                          {exportingPdf ? 'Gerando PDF…' : 'Exportar checklist PDF'}
+                          {exportingPdf ? 'Gerando PDF…' : 'Exportar Checklist'}
                         </button>
                       </div>
                     </CardHeader>
@@ -2148,7 +2194,7 @@ export default function LicitacoesPage() {
                           </p>
                         ) : null}
                       </div>
-                      <div className="h-[min(68vh,720px)] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-3 dark:border-gray-700 dark:bg-gray-950/30">
+                      <div className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-3 dark:border-gray-700 dark:bg-gray-950/30">
                         <LicitacaoChecklistEditor
                           key={selectedId}
                           sections={checklistSections}
@@ -2259,7 +2305,7 @@ export default function LicitacoesPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => void handleExportChecklistPdf()}
+                          onClick={() => void handleExportAnalisePdf()}
                           disabled={exportingPdf || !selected}
                           className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
                         >
@@ -2268,7 +2314,7 @@ export default function LicitacoesPage() {
                           ) : (
                             <Download className="h-4 w-4" aria-hidden />
                           )}
-                          {exportingPdf ? 'Gerando PDF…' : 'Exportar checklist PDF'}
+                          {exportingPdf ? 'Gerando PDF…' : 'Exportar Análise'}
                         </button>
                       </div>
                     </CardHeader>

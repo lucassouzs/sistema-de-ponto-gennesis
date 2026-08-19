@@ -13,6 +13,7 @@ export type LicitacaoAnalisePdfChecklistSection = {
 
 export type ExportLicitacaoAnalisePdfInput = {
   titulo: string;
+  sectionTitle?: string;
   responsavelAnalise?: string;
   linkNotebookLm?: string;
   analiseUsuario?: string;
@@ -693,7 +694,12 @@ export async function exportLicitacaoAnalisePdf(input: ExportLicitacaoAnalisePdf
 
   y = drawAnaliseSection(doc, y, contentW, input.analiseUsuario);
 
-  y = drawSectionTitle(doc, y, contentW, 'Checklist — Análise de Viabilidade');
+  y = drawSectionTitle(
+    doc,
+    y,
+    contentW,
+    input.sectionTitle ?? 'Checklist — Análise de Viabilidade'
+  );
   y += 6;
 
   if (input.sections.length === 0) {

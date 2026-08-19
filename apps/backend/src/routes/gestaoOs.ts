@@ -143,6 +143,17 @@ router.get('/reports/summary', async (req: AuthRequest, res, next) => {
   }
 });
 
+router.get('/reports/geo', async (req: AuthRequest, res, next) => {
+  try {
+    const unitPortal = req.query.unitPortal === '1' || req.query.unitPortal === 'true';
+    const access = unitPortal ? await withPersonalAccess(req) : await withOpsAccess(req);
+    const data = await gestaoOsReportsService.geo(access, parseReportFilters(req));
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/reports/export.csv', async (req: AuthRequest, res, next) => {
   try {
     const unitPortal = req.query.unitPortal === '1' || req.query.unitPortal === 'true';

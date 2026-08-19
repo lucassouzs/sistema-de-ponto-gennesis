@@ -279,6 +279,173 @@ export class GestaoOsReportsService {
     }));
   }
 
+  async geo(
+    access: GestaoOsAccessContext,
+    filters: GestaoOsReportFilters = {}
+  ): Promise<{
+    buildings: Array<{
+      id: string;
+      name: string;
+      address: string | null;
+      latitude: number | null;
+      longitude: number | null;
+      assetsCount: number;
+      workOrdersCount: number;
+      byStatus: Partial<Record<GestaoOsStatus, number>>;
+      workOrders: Array<{
+        id: string;
+        displayNumber: number;
+        osNumber: number | null;
+        status: GestaoOsStatus;
+        category: string;
+        locationLabel: string | null;
+        assigneeName: string | null;
+        openedAt: string;
+        dueAt: string | null;
+        overdue: boolean;
+      }>;
+      assets: Array<{
+        id: string;
+        name: string;
+        code: string | null;
+        category: string | null;
+      }>;
+    }>;
+  }> {
+    const { loadUnitBuildingIds } = await import('../lib/gestaoOsEdital');
+    const unitIds = filters.unitPortal ? await loadUnitBuildingIds(access.userId) : undefined;
+    const visibility = applyReportFilters(
+      workOrderVisibilityWhere(access),
+      filters,
+      unitIds
+    ) as ReturnType<typeof workOrderVisibilityWhere>;
+
+    const now = new Date();
+    const woRows = await prisma.gestaoOsWorkOrder.findMany({
+      where: visibility,
+      select: {
+        id: true,
+        displayNumber: true,
+        osNumber: true,
+        status: true,
+        category: true,
+        locationLabel: true,
+        buildingId: true,
+        openedAt: true,
+        dueAt: true,
+        assignee: { select: { name: true } }
+      },
+      orderBy: { openedAt: 'desc' },
+      take: 4000
+    });
+
+    const buildingIds = [...new Set(woRows.map((r) => r.buildingId).filter(Boolean))] as string[];
+    if (!buildingIds.length) {
+      return { buildings: [] };
+    }
+
+    const [buildings, assetsRows] = await Promise.all([
+      prisma.gestaoOsBuilding.findMany({
+        where: { id: { in: buildingIds } },
+        select: { id: true, name: true, address: true, latitude: true, longitude: true }
+      }),
+      prisma.gestaoOsAsset.findMany({
+        where: {
+          isActive: true,
+          place: {
+            sector: { buildingId: { in: buildingIds } }
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          category: true,
+          place: { select: { sector: { select: { buildingId: true } } } }
+        }
+      })
+    ]);
+
+    const buildingById = new Map(buildings.map((b) => [b.id, b]));
+
+    const workOrdersByBuilding = new Map<
+      string,
+      Array<{
+        id: string;
+        displayNumber: number;
+        osNumber: number | null;
+        status: GestaoOsStatus;
+        category: string;
+        locationLabel: string | null;
+        assigneeName: string | null;
+        openedAt: string;
+        dueAt: string | null;
+        overdue: boolean;
+      }>
+    >();
+
+    const byStatusByBuilding = new Map<string, Partial<Record<GestaoOsStatus, number>>>();
+
+    for (const row of woRows) {
+      if (!row.buildingId) continue;
+      const bId = row.buildingId;
+
+      const list = workOrdersByBuilding.get(bId) || [];
+      list.push({
+        id: row.id,
+        displayNumber: row.displayNumber,
+        osNumber: row.osNumber,
+        status: row.status,
+        category: row.category,
+        locationLabel: row.locationLabel,
+        assigneeName: row.assignee?.name ?? null,
+        openedAt: row.openedAt.toISOString(),
+        dueAt: row.dueAt?.toISOString() ?? null,
+        overdue: Boolean(row.dueAt && row.dueAt < now)
+      });
+      workOrdersByBuilding.set(bId, list);
+
+      const cur = byStatusByBuilding.get(bId) || {};
+      cur[row.status] = (cur[row.status] ?? 0) + 1;
+      byStatusByBuilding.set(bId, cur);
+    }
+
+    const assetsByBuilding = new Map<
+      string,
+      Array<{ id: string; name: string; code: string | null; category: string | null }>
+    >();
+    for (const a of assetsRows) {
+      const bId = a.place?.sector?.buildingId;
+      if (!bId) continue;
+      const list = assetsByBuilding.get(bId) || [];
+      list.push({ id: a.id, name: a.name, code: a.code ?? null, category: a.category ?? null });
+      assetsByBuilding.set(bId, list);
+    }
+
+    // Para não estourar UI/API, limitamos listas completas por prédio.
+    const MAX_WORK_ORDERS_PER_BUILDING = 80;
+    const MAX_ASSETS_PER_BUILDING = 80;
+
+    return {
+      buildings: buildings.map((b) => {
+        const workOrders = workOrdersByBuilding.get(b.id) || [];
+        const assets = assetsByBuilding.get(b.id) || [];
+        return {
+          id: b.id,
+          name: b.name,
+          address: b.address ?? null,
+          latitude: b.latitude ?? null,
+          longitude: b.longitude ?? null,
+          assetsCount: assets.length,
+          workOrdersCount: workOrders.length,
+          byStatus: byStatusByBuilding.get(b.id) || {},
+          workOrders: workOrders.slice(0, MAX_WORK_ORDERS_PER_BUILDING),
+          assets: assets.slice(0, MAX_ASSETS_PER_BUILDING)
+        };
+      })
+    };
+  }
+
   async exportCsv(access: GestaoOsAccessContext, filters: GestaoOsReportFilters = {}) {
     const data = await this.summary(access, filters);
     const lines = [

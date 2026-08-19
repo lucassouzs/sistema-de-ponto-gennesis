@@ -20,6 +20,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { TabCountBadge } from '@/components/ui/TabCountBadge';
 import { AppTabButton } from '@/components/ui/AppTabButton';
 import {
