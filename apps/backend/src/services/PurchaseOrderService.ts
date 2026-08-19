@@ -847,6 +847,12 @@ export class PurchaseOrderService {
         throw new Error('Chave PIX é obrigatória para pagamento à vista');
       }
     }
+    if (data.paymentType === 'CARTAO') {
+      if (!data.paymentDetails?.trim()) {
+        throw new Error('Dados do pagamento são obrigatórios para pagamento por cartão');
+      }
+      // Cartão não exige PIX nem boletos: o backend só monta parcelas/arquivos quando paymentType === 'BOLETO'.
+    }
 
     let maxQtyByRmItem: Map<string, Decimal> | null = null;
     if (options && 'maxQtyByRmItem' in options) {

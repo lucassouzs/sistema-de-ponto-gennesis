@@ -11,7 +11,8 @@ import { buildOcPdfDownloadFileName } from '@/components/oc/ocListDisplay';
 
 const PAYMENT_TYPE: Record<string, string> = {
   AVISTA: 'À vista',
-  BOLETO: 'Boleto'
+  BOLETO: 'Boleto',
+  CARTAO: 'Cartão',
 };
 
 const PAYMENT_CONDITION: Record<string, string> = {

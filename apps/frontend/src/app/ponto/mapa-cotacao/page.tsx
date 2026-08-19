@@ -439,9 +439,10 @@ const mapLabelCls = 'mb-2 block text-sm font-medium text-gray-700 dark:text-gray
 
 const OC_TYPE_AVISTA = 'AVISTA';
 const OC_TYPE_BOLETO = 'BOLETO';
+const OC_TYPE_CARTAO = 'CARTAO';
 
 function paymentConditionDefault(paymentType: string): string {
-  if (paymentType === OC_TYPE_AVISTA) return 'AVISTA';
+  if (paymentType === OC_TYPE_AVISTA || paymentType === OC_TYPE_CARTAO) return 'AVISTA';
   return 'BOLETO_30';
 }
 
@@ -1127,6 +1128,11 @@ export default function MapaCotacaoPage() {
             );
           }
         }
+        if (paymentType === OC_TYPE_CARTAO) {
+          if (!draft.paymentDetails?.trim()) {
+            throw new Error(`Informe os dados do pagamento para "${supplierName}".`);
+          }
+        }
 
         const paymentBySupplierPayload = [
           {
@@ -1758,7 +1764,7 @@ export default function MapaCotacaoPage() {
                   <div
                     role="radiogroup"
                     aria-label="Tipo de pagamento"
-                    className="grid max-w-md grid-cols-2 gap-2"
+                    className="grid max-w-md grid-cols-3 gap-2"
                   >
                     <button
                       type="button"
@@ -1777,6 +1783,26 @@ export default function MapaCotacaoPage() {
                       className={mapPaymentSegmentCls(payType === OC_TYPE_AVISTA)}
                     >
                       À vista
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={payType === OC_TYPE_CARTAO}
+                      onClick={() => {
+                        setPaymentDraftBySupplier((prev) => ({
+                          ...prev,
+                          [sid]: {
+                            ...(prev[sid] ?? emptyPaymentDraft()),
+                            paymentType: OC_TYPE_CARTAO,
+                            paymentCondition: paymentConditionDefault(OC_TYPE_CARTAO),
+                            pixKeyType: '',
+                            pixKey: '',
+                          },
+                        }));
+                      }}
+                      className={mapPaymentSegmentCls(payType === OC_TYPE_CARTAO)}
+                    >
+                      Cartão
                     </button>
                     <button
                       type="button"
@@ -1801,7 +1827,7 @@ export default function MapaCotacaoPage() {
                   </div>
                 </div>
 
-                {payType !== OC_TYPE_AVISTA ? (
+                {payType === OC_TYPE_BOLETO ? (
                   <div>
                     <label htmlFor={`pc-modal-${sid}`} className={mapLabelCls}>
                       Condição de pagamento *
@@ -1867,7 +1893,9 @@ export default function MapaCotacaoPage() {
 
                 <div>
                   <label htmlFor={`pay-details-modal-${sid}`} className={mapLabelCls}>
-                    Dados do pagamento{payType === OC_TYPE_AVISTA ? ' *' : ''}
+                    Dados do pagamento{
+                      payType === OC_TYPE_AVISTA || payType === OC_TYPE_CARTAO ? ' *' : ''
+                    }
                   </label>
                   <textarea
                     id={`pay-details-modal-${sid}`}
@@ -1883,7 +1911,7 @@ export default function MapaCotacaoPage() {
                     }}
                     rows={3}
                     placeholder={
-                      payType === OC_TYPE_AVISTA
+                      payType === OC_TYPE_AVISTA || payType === OC_TYPE_CARTAO
                         ? 'Conta, agência, favorecido, etc.'
                         : 'Conta, PIX, agência, favorecido, etc.'
                     }
