@@ -2464,7 +2464,6 @@ export class KanbanService {
     const att = await prisma.kanbanCardAttachment.findUnique({ where: { id: attachmentId } });
     if (!att) throw new Error('Anexo não encontrado');
     await this.assertCardAccess(requesterId, att.cardId);
-    if (att.userId !== requesterId) throw new Error('Sem permissão para remover este anexo');
 
     await prisma.kanbanCardAttachment.delete({ where: { id: attachmentId } });
 

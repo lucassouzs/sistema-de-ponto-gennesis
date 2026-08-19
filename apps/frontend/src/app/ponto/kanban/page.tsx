@@ -4755,6 +4755,7 @@ function KanbanPage() {
           onCreateOpenDetail={openCreateCardDetail}
           showCompleteCheck
           completeCheckDisabled={boardReadOnly}
+          canDeleteAttachments={!boardReadOnly}
         />
       )}
 

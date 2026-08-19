@@ -67,6 +67,7 @@ export interface KanbanAttachmentsModalProps {
   draftLinks?: KanbanDraftLink[];
   onDraftLinksChange?: (links: KanbanDraftLink[]) => void;
   currentUserId?: string;
+  canDeleteAttachments?: boolean;
   onUpdated?: (detail: KanbanCardDetail) => void | Promise<void>;
   elevated?: boolean;
 }
@@ -81,6 +82,7 @@ export function KanbanAttachmentsModal({
   draftLinks = [],
   onDraftLinksChange,
   currentUserId,
+  canDeleteAttachments = true,
   onUpdated,
   elevated = true,
 }: KanbanAttachmentsModalProps) {
@@ -166,7 +168,7 @@ export function KanbanAttachmentsModal({
     }
   }
 
-  async function handleDelete(id: string, kind: 'file' | 'link') {
+  async function handleDelete(id: string, kind: 'file' | 'link', label?: string) {
     if (!isPersisted) {
       if (kind === 'file') {
         onDraftFilesChange?.(draftFiles.filter((f) => f.id !== id));
@@ -175,6 +177,9 @@ export function KanbanAttachmentsModal({
       }
       return;
     }
+    if (!canDeleteAttachments) return;
+    const name = label?.trim() || 'este anexo';
+    if (!window.confirm(`Remover o anexo "${name}"?`)) return;
     setDeletingId(id);
     try {
       const updated = await deleteKanbanAttachment(id);
@@ -539,10 +544,12 @@ export function KanbanAttachmentsModal({
                             )}
                           </button>
                         )}
-                        {currentUserId === att.uploader.id && (
+                        {canDeleteAttachments ? (
                           <button
                             type="button"
-                            onClick={() => handleDelete(att.id, isLink ? 'link' : 'file')}
+                            onClick={() =>
+                              handleDelete(att.id, isLink ? 'link' : 'file', att.fileName)
+                            }
                             disabled={deletingId === att.id}
                             className="rounded-md p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-50"
                             title="Remover"

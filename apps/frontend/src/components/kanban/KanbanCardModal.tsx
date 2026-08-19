@@ -237,6 +237,8 @@ export interface KanbanCardModalProps {
   showCompleteCheck?: boolean;
   /** Impede marcar concluído (quadro só leitura). */
   completeCheckDisabled?: boolean;
+  /** Permite remover anexos de outros usuários (quadro com escrita). */
+  canDeleteAttachments?: boolean;
 }
 
 export function KanbanCardModal({
@@ -259,6 +261,7 @@ export function KanbanCardModal({
   onCreateOpenDetail,
   showCompleteCheck = false,
   completeCheckDisabled = false,
+  canDeleteAttachments = true,
 }: KanbanCardModalProps) {
   const queryClient = useQueryClient();
   const { fire: firePaperConfetti, host: paperConfettiHost } = usePaperConfetti();
@@ -1542,6 +1545,7 @@ export function KanbanCardModal({
           draftLinks={draftLinks}
           onDraftLinksChange={setDraftLinks}
           currentUserId={currentUserId}
+          canDeleteAttachments={canDeleteAttachments}
           onUpdated={syncDetailFromApi}
         />
       )}
@@ -1900,6 +1904,7 @@ export function KanbanCardModal({
                   draftFiles={draftFiles}
                   draftLinks={draftLinks}
                   currentUserId={currentUserId}
+                  canDeleteAttachments={canDeleteAttachments}
                   onDraftFilesChange={setDraftFiles}
                   onDraftLinksChange={setDraftLinks}
                   onUpdated={syncDetailFromApi}

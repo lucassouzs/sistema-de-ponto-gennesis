@@ -53,6 +53,8 @@ export interface KanbanCardAttachmentsInlineProps {
   draftFiles?: KanbanDraftAttachment[];
   draftLinks?: KanbanDraftLink[];
   currentUserId?: string;
+  /** Quadro só leitura: oculta excluir em anexos de terceiros. */
+  canDeleteAttachments?: boolean;
   onAddClick: () => void;
   onDraftFilesChange?: (files: KanbanDraftAttachment[]) => void;
   onDraftLinksChange?: (links: KanbanDraftLink[]) => void;
@@ -65,6 +67,7 @@ export function KanbanCardAttachmentsInline({
   draftFiles = [],
   draftLinks = [],
   currentUserId,
+  canDeleteAttachments = true,
   onAddClick,
   onDraftFilesChange,
   onDraftLinksChange,
@@ -180,7 +183,10 @@ export function KanbanCardAttachmentsInline({
       }
       return;
     }
-    if (item.uploaderId && item.uploaderId !== currentUserId) return;
+    if (!canDelete(item)) return;
+
+    const label = item.title?.trim() || 'este anexo';
+    if (!window.confirm(`Remover o anexo "${label}"?`)) return;
 
     setDeletingId(item.id);
     try {
@@ -195,8 +201,10 @@ export function KanbanCardAttachmentsInline({
   }
 
   function canDelete(item: InlineItem) {
+    if (!canDeleteAttachments) return false;
     if (item.pending) return true;
-    return !item.uploaderId || item.uploaderId === currentUserId;
+    if (!item.uploaderId || !currentUserId) return canDeleteAttachments;
+    return canDeleteAttachments;
   }
 
   return (
@@ -229,27 +237,21 @@ export function KanbanCardAttachmentsInline({
           </span>
         </button>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="max-h-52 space-y-1.5 overflow-y-auto overscroll-contain pr-0.5">
           {items.map((item) => {
             const Icon = attachmentIcon(item.mimeType ?? 'application/octet-stream');
             const showDelete = canDelete(item);
 
-            const actionBusy =
-              downloadingId === item.id || deletingId === item.id;
-
             return (
               <li
                 key={item.id}
-                className="group relative flex items-center rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800/80"
+                className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800/80"
               >
                 <button
                   type="button"
                   onClick={() => openItem(item)}
                   title={item.tooltip}
-                  className={clsx(
-                    'flex min-w-0 flex-1 items-center gap-2 pr-2 text-left transition-colors',
-                    'group-hover:pr-14',
-                  )}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left transition-colors"
                 >
                   {item.isLink ? (
                     <KanbanLinkFavicon url={getItemLinkUrl(item)} size="sm" />
@@ -268,14 +270,7 @@ export function KanbanCardAttachmentsInline({
                   </span>
                 </button>
 
-                <div
-                  className={clsx(
-                    'absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 transition-opacity duration-150',
-                    actionBusy
-                      ? 'opacity-100'
-                      : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100',
-                  )}
-                >
+                <div className="flex shrink-0 items-center gap-0.5">
                   {item.isLink ? (
                     <button
                       type="button"
