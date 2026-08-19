@@ -143,6 +143,14 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
   usePageActivityTracker();
 
   useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('app-shell-locked');
+    return () => {
+      root.classList.remove('app-shell-locked');
+    };
+  }, []);
+
+  useEffect(() => {
     if (permissionsLoading || canAccessCollaborationTools) return;
     if (!isSociosBlockedCollaborationPath(pathname)) return;
     router.replace('/ponto/home');
@@ -183,6 +191,13 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
               ? 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-white dark:bg-gray-900'
               : 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-gray-50 dark:bg-gray-900'
           }
+          // Foco em elemento fora da área visível pode rolar este container mesmo com
+          // overflow hidden, escondendo a topbar e cortando a página.
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            if (el.scrollTop !== 0) el.scrollTop = 0;
+            if (el.scrollLeft !== 0) el.scrollLeft = 0;
+          }}
         >
           <Sidebar
             userRole={displayRole}

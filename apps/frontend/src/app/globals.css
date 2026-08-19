@@ -335,6 +335,17 @@
     padding: 0 !important;
   }
 
+  /* Shell autenticado: a área de conteúdo é o único scroll. Sem isto, qualquer
+     elemento que estoure a altura do documento cria um scroll de janela que
+     empurra o shell (100dvh) para fora da tela e corta o conteúdo. */
+  html.app-shell-locked,
+  html.app-shell-locked body {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden !important;
+    overscroll-behavior: none;
+  }
+
   /* Bloqueia scroll da página com modal aberto (sem position:fixed no body — quebra portais/dropdowns fixed) */
   html.modal-open,
   html:has(body.modal-open),

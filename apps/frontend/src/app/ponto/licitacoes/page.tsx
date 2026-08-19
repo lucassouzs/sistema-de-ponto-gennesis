@@ -1666,10 +1666,7 @@ export default function LicitacoesPage() {
                     </p>
                   ) : (
                     <ul
-                      className={[
-                        'min-h-0 flex-1 divide-y divide-gray-200 pr-0.5 dark:divide-gray-700',
-                        showAnaliseLayout ? 'overflow-hidden' : 'overflow-y-auto'
-                      ].join(' ')}
+                      className="min-h-0 flex-1 divide-y divide-gray-200 overflow-y-auto pr-0.5 dark:divide-gray-700"
                       role="listbox"
                       aria-label="Licitações"
                     >
