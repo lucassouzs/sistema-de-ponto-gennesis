@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { clsx } from 'clsx';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type ModalCloseConfirmProps = {
@@ -10,6 +11,8 @@ export type ModalCloseConfirmProps = {
   /** Texto do corpo. Default alinhado à RM. */
   message?: string;
   title?: string;
+  /** z-index acima de modais empilhados (ex.: etiquetas sobre o card). */
+  className?: string;
 };
 
 /**
@@ -22,11 +25,17 @@ export function ModalCloseConfirm({
   onConfirm,
   title = 'Deseja fechar?',
   message = 'Tem certeza que deseja fechar? Os dados preenchidos serão perdidos.',
+  className,
 }: ModalCloseConfirmProps) {
   if (!isOpen) return null;
 
   return (
-    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center">
+    <AppModalOverlay
+      className={clsx(
+        'app-modal-overlay fixed inset-0 z-[2010] flex items-center justify-center',
+        className,
+      )}
+    >
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} aria-hidden />
       <div
         role="dialog"

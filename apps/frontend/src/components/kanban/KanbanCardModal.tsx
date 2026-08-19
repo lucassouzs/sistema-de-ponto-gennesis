@@ -65,6 +65,10 @@ import { KanbanCardActionButton } from './KanbanCardActionButton';
 import { KanbanCardDatesPanel } from './KanbanCardDatesPopover';
 import { KanbanCardLabelsPanel, KanbanLabelChips } from './KanbanCardLabelsPopover';
 import type { KanbanLabelPreset } from './kanbanLabels';
+import {
+  LicitacaoCommentEditor,
+  LicitacaoCommentFormatted,
+} from '@/app/ponto/licitacoes/LicitacaoCommentEditor';
 import { KanbanMemberPickerModal, type KanbanPickerUser } from './KanbanMemberPickerModal';
 import { KanbanMemberChip } from './KanbanMemberChip';
 import {
@@ -1449,6 +1453,7 @@ export function KanbanCardModal({
         <Modal
           isOpen
           elevated
+          confirmBeforeClose={false}
           onClose={() => {
             setOpenMenu(null);
             setLabelsModalHeader({ title: 'Etiquetas', showBack: false });
@@ -1496,6 +1501,7 @@ export function KanbanCardModal({
         <Modal
           isOpen
           elevated
+          confirmBeforeClose={false}
           onClose={() => setOpenMenu(null)}
           size="md"
           title="Datas"
@@ -1839,26 +1845,28 @@ export function KanbanCardModal({
                 ) : null}
               </div>
               {isDetail && !isEditingDescription ? (
-                <div
-                  className={clsx(
-                    'text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words',
-                    !description.trim() && 'text-gray-400 dark:text-gray-500 italic',
-                  )}
-                >
-                  {description.trim()
-                    ? description
-                    : 'Sem descrição. Clique no lápis para adicionar.'}
-                </div>
+                description.trim() ? (
+                  <LicitacaoCommentFormatted
+                    text={description}
+                    className="text-sm text-gray-800 dark:text-gray-200"
+                  />
+                ) : (
+                  <p className="text-sm italic text-gray-400 dark:text-gray-500">
+                    Sem descrição. Clique no lápis para adicionar.
+                  </p>
+                )
               ) : (
                 <>
-                  <textarea
+                  <LicitacaoCommentEditor
                     value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={Math.min(20, Math.max(6, description.split('\n').length + 2))}
+                    onChange={setDescription}
+                    disabled={saving}
                     placeholder="Detalhes, links, observações..."
-                    className={clsx(kanbanTextarea, isDetail && 'resize-y min-h-[120px]')}
-                    autoFocus={isDetail && isEditingDescription}
+                    className="min-h-[7.5rem] text-sm leading-relaxed"
                   />
+                  <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    Ctrl+B negrito · Ctrl+I itálico · Ctrl+U sublinhado · - + espaço para lista
+                  </p>
                   {isDetail && isEditingDescription ? (
                     <div className="flex items-center justify-end gap-2 mt-2">
                       <Button

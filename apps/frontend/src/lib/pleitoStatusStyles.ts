@@ -16,6 +16,7 @@ const BUDGET_STATUS_CLASSES: Record<string, string> = {
 
 const EXECUTION_STATUS_CLASSES: Record<string, string> = {
   CONCLUÍDA: 'text-blue-700 dark:text-blue-300',
+  ANDAMENTO: 'text-indigo-700 dark:text-indigo-300',
   EXECUÇÃO: 'text-sky-700 dark:text-sky-300',
   FINALIZADA: 'text-green-700 dark:text-green-400',
   GARANTIA: 'text-cyan-700 dark:text-cyan-300',

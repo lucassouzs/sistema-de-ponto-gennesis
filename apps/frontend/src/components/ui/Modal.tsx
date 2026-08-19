@@ -258,6 +258,7 @@ export const Modal: React.FC<ModalProps> = ({
           onClose();
         }}
         message={confirmCloseMessage}
+        className={elevated ? '!z-[2200]' : undefined}
       />
     </div>
     </ModalRequestCloseContext.Provider>
