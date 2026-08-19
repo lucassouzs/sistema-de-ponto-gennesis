@@ -71,6 +71,7 @@ import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { isMaterialRequestEffectivelyCancelled } from '@/app/ponto/gerenciar-materiais/_lib/search';
 import {
+  canUserCancelMaterialRequest,
   getPriorityInfo,
   getStatusInfo
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
@@ -2290,16 +2291,27 @@ function SolicitarMateriaisPage() {
                         },
                         ...(rowForActionMenu.status === 'IN_REVIEW'
                           ? [
-                              {
-                                label: 'Cancelar RM',
-                                onClick: () => {
-                                  closeRowActionMenu();
-                                  setCancelTargetId(rowForActionMenu.id);
-                                },
-                                disabled: cancelRmMutation.isPending,
-                                disabledTitle: 'Cancelando...',
-                                icon: <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-                              },
+                              ...(canUserCancelMaterialRequest(
+                                rowForActionMenu as MaterialRequest,
+                                userId,
+                                isElevatedUser,
+                                { assumeCurrentUserIsOwner: true }
+                              )
+                                ? [
+                                    {
+                                      label: 'Cancelar RM',
+                                      onClick: () => {
+                                        closeRowActionMenu();
+                                        setCancelTargetId(rowForActionMenu.id);
+                                      },
+                                      disabled: cancelRmMutation.isPending,
+                                      disabledTitle: 'Cancelando...',
+                                      icon: (
+                                        <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                                      )
+                                    }
+                                  ]
+                                : []),
                               {
                                 label: 'Editar correção',
                                 onClick: () => setCorrectionEditId(rowForActionMenu.id),

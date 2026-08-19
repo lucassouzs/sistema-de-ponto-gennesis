@@ -831,6 +831,7 @@ export default function GerenciarMateriaisPage() {
             ordersByMaterialRequestId={ordersByMaterialRequestId}
             currentUserId={userData?.data?.id}
             isAdministrator={isAdministrator}
+            isElevatedUser={isElevatedUser}
             onDetails={async (request) => {
               try {
                 const res = await api.get(`/material-requests/${request.id}`);
