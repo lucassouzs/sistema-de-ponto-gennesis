@@ -71,6 +71,7 @@ export interface MaterialRequest {
     id: string;
     quantity: number;
     unit: string;
+    status?: string;
     observation?: string;
     notes?: string;
     attachmentUrl?: string;

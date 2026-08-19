@@ -3,6 +3,10 @@ import { type EngineeringMaterial, Prisma, PurchaseOrderStatus } from '@prisma/c
 import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
 import { resolveRmServiceOrderFields } from '../utils/materialRequestServiceOrder';
 import { fixMulterOriginalName } from '../lib/fixUploadFileName';
+import {
+  assertUserCanApproveMaterialRequestForCostCenter,
+} from '../lib/rmApprovalAccess';
+import { isOcStatusCoveringRmItems } from '../lib/rmProcurementCoverage';
 
 /** OCs já aprovadas (ou etapas posteriores) — entram na média paga das últimas compras. */
 const EFFECTIVE_PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = [
@@ -1451,6 +1455,87 @@ export class MaterialRequestService {
     }
 
     return item;
+  }
+
+  /**
+   * Cancela um item da RM que ainda não está em OC ativa.
+   * Solicitante, administrador ou aprovador de RM do contrato.
+   */
+  async cancelMaterialRequestItem(
+    requestId: string,
+    itemId: string,
+    userId: string,
+    isAdmin = false
+  ) {
+    const item = await prisma.materialRequestItem.findFirst({
+      where: { id: itemId, materialRequestId: requestId },
+      include: {
+        materialRequest: true,
+        material: { select: { name: true, description: true, sinapiCode: true } },
+      },
+    });
+
+    if (!item) {
+      throw new Error('Item não encontrado');
+    }
+
+    const rm = item.materialRequest;
+    if (rm.status === 'FULFILLED' || rm.status === 'CANCELLED') {
+      throw new Error('Não é possível cancelar itens de uma requisição já atendida ou cancelada');
+    }
+
+    if (item.status === 'CANCELLED') {
+      throw new Error('Este item já está cancelado');
+    }
+
+    if (item.status === 'DELIVERED' || item.status === 'PURCHASED') {
+      throw new Error('Não é possível cancelar um item já comprado ou entregue');
+    }
+
+    const activeOcRows = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialRequestItemId: itemId,
+        purchaseOrder: {
+          materialRequestId: requestId,
+        },
+      },
+      select: {
+        purchaseOrder: { select: { status: true } },
+      },
+    });
+    const inActiveOc = activeOcRows.some((row) =>
+      isOcStatusCoveringRmItems(row.purchaseOrder.status)
+    );
+    if (inActiveOc) {
+      throw new Error('Não é possível cancelar um item que já está em ordem de compra ativa');
+    }
+
+    const isRequester = rm.requestedBy === userId;
+    if (!isAdmin && !isRequester) {
+      await assertUserCanApproveMaterialRequestForCostCenter(
+        userId,
+        isAdmin,
+        rm.costCenterId
+      );
+    }
+
+    await this.updateItemStatus(itemId, 'CANCELLED');
+
+    const materialLabel =
+      item.material.description?.trim() ||
+      item.material.name?.trim() ||
+      item.material.sinapiCode?.trim() ||
+      'Material';
+
+    await prisma.materialRequestComment.create({
+      data: {
+        materialRequestId: requestId,
+        userId,
+        content: `Item cancelado: ${materialLabel}`,
+      },
+    });
+
+    return this.getMaterialRequestById(requestId);
   }
 
   /** Administrador: substitui a lista de anexos da ficha de demanda da RM. */

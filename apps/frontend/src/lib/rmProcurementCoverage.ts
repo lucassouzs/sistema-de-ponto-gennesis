@@ -9,10 +9,42 @@ export type OcCoverageOrder = {
 export type RmCoverageRequest = {
   id: string;
   status: string;
-  items?: Array<{ id: string }> | null;
+  items?: Array<{ id: string; status?: string | null }> | null;
   _count?: { items?: number } | null;
   purchaseOrders?: OcCoverageOrder[] | null;
 };
+
+export function isRmItemCancelled(item: { status?: string | null }): boolean {
+  return String(item.status || '') === 'CANCELLED';
+}
+
+export function canCancelRmItem(
+  item: { id: string; status?: string | null },
+  request: { status: string },
+  orders: Array<{
+    status: string;
+    items?: Array<{ materialRequestItemId?: string | null } | null> | null;
+  }>
+): boolean {
+  if (isRmItemCancelled(item)) return false;
+  if (request.status === 'FULFILLED' || request.status === 'CANCELLED') return false;
+  if (item.status === 'DELIVERED' || item.status === 'PURCHASED') return false;
+  if (getActiveOcForRmItem(item.id, orders)) return false;
+  return true;
+}
+
+export function canUserCancelRmItem(opts: {
+  userId?: string | null;
+  requestedBy?: string | null;
+  isAdministrator?: boolean;
+  isAdmin?: boolean;
+  canApproveMaterialRequests?: boolean;
+}): boolean {
+  if (opts.isAdministrator || opts.isAdmin) return true;
+  if (opts.userId && opts.requestedBy && opts.userId === opts.requestedBy) return true;
+  if (opts.canApproveMaterialRequests) return true;
+  return false;
+}
 
 export function isOcCoveringRmItems(status?: string | null): boolean {
   return !OC_CLOSED_STATUSES.has(String(status || ''));
@@ -47,7 +79,10 @@ export function getOpenRmItemIds(
   const covered = getCoveredRmItemIds(request, orders);
   const items = request.items ?? [];
   if (items.length > 0) {
-    return items.map((i) => i.id).filter((id) => !covered.has(id));
+    return items
+      .filter((i) => !isRmItemCancelled(i))
+      .map((i) => i.id)
+      .filter((id) => !covered.has(id));
   }
   return [];
 }
@@ -113,7 +148,7 @@ export function rmHasOpenItemsForProcurement(
   const items = request.items ?? [];
 
   if (items.length > 0) {
-    return items.some((i) => !covered.has(i.id));
+    return items.some((i) => !isRmItemCancelled(i) && !covered.has(i.id));
   }
 
   const total = request._count?.items;

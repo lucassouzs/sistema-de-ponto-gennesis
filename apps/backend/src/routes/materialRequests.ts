@@ -532,4 +532,36 @@ router.patch(
   }
 );
 
+/** Cancela um item da RM que ainda não está em OC ativa. */
+router.patch('/:id/items/:itemId/cancel', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+    const { id, itemId } = req.params;
+
+    const existing = await prisma.materialRequest.findUnique({ where: { id } });
+    if (!existing) throw createError('Requisição não encontrada', 404);
+
+    await assertCostCenterAllowedForUnbUser(
+      req.user.id,
+      !!req.user.isAdmin,
+      existing.costCenterId,
+    );
+
+    const request = await materialRequestService.cancelMaterialRequestItem(
+      id,
+      itemId,
+      req.user.id,
+      !!req.user.isAdmin
+    );
+    res.json({ success: true, data: request, message: 'Item cancelado' });
+  } catch (error) {
+    if (error instanceof Error && /não encontrad|Não é possível|já está|Sem permissão/.test(error.message)) {
+      const status = /Sem permissão/.test(error.message) ? 403 : 400;
+      res.status(status).json({ success: false, message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 export default router;

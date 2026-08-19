@@ -860,10 +860,14 @@ export class PurchaseOrderService {
     } else if (data.materialRequestId) {
       const rm = await prisma.materialRequest.findUnique({
         where: { id: data.materialRequestId },
-        select: { items: { select: { id: true, quantity: true } } },
+        select: { items: { select: { id: true, quantity: true, status: true } } },
       });
       if (rm?.items?.length) {
-        maxQtyByRmItem = new Map(rm.items.map((it) => [it.id, new Decimal(it.quantity)]));
+        maxQtyByRmItem = new Map(
+          rm.items
+            .filter((it) => it.status !== 'CANCELLED')
+            .map((it) => [it.id, new Decimal(it.quantity)])
+        );
       }
     }
 

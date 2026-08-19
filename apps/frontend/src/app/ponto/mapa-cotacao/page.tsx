@@ -43,6 +43,7 @@ import {
 
 type MaterialRequestItem = {
   id: string;
+  status?: string | null;
   quantity: number;
   unit: string;
   observation?: string;
@@ -762,7 +763,7 @@ export default function MapaCotacaoPage() {
   const selectedRequest = useMemo(() => {
     if (!selectedRequestRaw) return null;
     const openItems = (selectedRequestRaw.items ?? []).filter(
-      (i) => !coveredItemIdsForSelected.has(i.id)
+      (i) => !coveredItemIdsForSelected.has(i.id) && i.status !== 'CANCELLED'
     );
     return { ...selectedRequestRaw, items: openItems };
   }, [selectedRequestRaw, coveredItemIdsForSelected]);

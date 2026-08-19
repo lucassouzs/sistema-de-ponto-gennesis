@@ -65,7 +65,8 @@ import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
-import { getActiveOcForRmItem, getRmItemCoverageCounts } from '@/lib/rmProcurementCoverage';
+import { getRmItemCoverageCounts, canUserCancelRmItem } from '@/lib/rmProcurementCoverage';
+import { RmItemSituationCell } from '@/components/material-requests/RmItemSituationCell';
 import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { isMaterialRequestEffectivelyCancelled } from '@/app/ponto/gerenciar-materiais/_lib/search';
@@ -870,6 +871,11 @@ function SolicitarMateriaisPage() {
   const [showCloseNewRequestConfirm, setShowCloseNewRequestConfirm] = useState(false);
   const [showCloseDetailConfirm, setShowCloseDetailConfirm] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
+  const [cancelItemTarget, setCancelItemTarget] = useState<{
+    requestId: string;
+    itemId: string;
+    label: string;
+  } | null>(null);
   const [formData, setFormData] = useState(emptyNewFormData);
 
   const [correctionEditId, setCorrectionEditId] = useState<string | null>(null);
@@ -922,7 +928,7 @@ function SolicitarMateriaisPage() {
   });
 
   const { costCenters, isLoading: loadingCostCenters } = useCostCenters();
-  const { isUnbUser, unbCostCenterIds } = usePermissions();
+  const { isUnbUser, unbCostCenterIds, isElevatedUser, canApproveMaterialRequests } = usePermissions();
 
   const lockedUnbCostCenterId = useMemo(() => {
     if (!isUnbUser) return null;
@@ -1161,6 +1167,26 @@ function SolicitarMateriaisPage() {
     },
     onError: (error: { response?: { data?: { message?: string; error?: string } } }) => {
       toast.error(error.response?.data?.message || error.response?.data?.error || 'Não foi possível cancelar');
+    },
+  });
+
+  const cancelRmItemMutation = useMutation({
+    mutationFn: async ({ requestId, itemId }: { requestId: string; itemId: string }) => {
+      const res = await api.patch(`/material-requests/${requestId}/items/${itemId}/cancel`);
+      return res.data;
+    },
+    onSuccess: async (_data, { requestId }) => {
+      toast.success('Item cancelado.');
+      setCancelItemTarget(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-request-detail', requestId] }),
+        queryClient.invalidateQueries({ queryKey: ['approval-notification-counts'] }),
+      ]);
+    },
+    onError: (error: { response?: { data?: { message?: string; error?: string } } }) => {
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Não foi possível cancelar o item');
     },
   });
 
@@ -2831,6 +2857,7 @@ function SolicitarMateriaisPage() {
                       costCenter?: { code?: string; name?: string };
                       items?: Array<{
                         id?: string;
+                        status?: string | null;
                         quantity?: unknown;
                         unit?: string;
                         notes?: string | null;
@@ -2846,6 +2873,22 @@ function SolicitarMateriaisPage() {
                       purchaseOrders?: PurchaseOrder[];
                     };
                     const pos = Array.isArray(d.purchaseOrders) ? d.purchaseOrders : [];
+                    const requestedByRaw = (d as { requestedBy?: unknown; requester?: { id?: string } })
+                      .requestedBy;
+                    const requestedById =
+                      typeof requestedByRaw === 'string'
+                        ? requestedByRaw
+                        : requestedByRaw &&
+                            typeof requestedByRaw === 'object' &&
+                            'id' in requestedByRaw
+                          ? String((requestedByRaw as { id?: string }).id || '')
+                          : (d as { requester?: { id?: string } }).requester?.id ?? null;
+                    const userCanCancelItems = canUserCancelRmItem({
+                      userId: userData?.data?.id,
+                      requestedBy: requestedById,
+                      isAdministrator: isElevatedUser,
+                      canApproveMaterialRequests,
+                    });
                     const dateRaw = d.requestedAt || d.createdAt;
                     const requestedDate = dateRaw ? new Date(String(dateRaw)) : null;
                     const statusKey = d.status ? String(d.status) : '';
@@ -2981,16 +3024,6 @@ function SolicitarMateriaisPage() {
                                     const note = (item.notes || item.observation)?.trim();
                                     const unitPrice =
                                       (item as { unitPrice?: number | null }).unitPrice ?? null;
-                                    const activeOc = item.id
-                                      ? getActiveOcForRmItem(item.id, pos)
-                                      : null;
-                                    const pendingOc =
-                                      !activeOc &&
-                                      statusKey === 'APPROVED' &&
-                                      !isMaterialRequestEffectivelyCancelled(
-                                        { status: statusKey } as MaterialRequest,
-                                        pos
-                                      );
                                     return (
                                       <tr
                                         key={item.id || idx}
@@ -3017,31 +3050,30 @@ function SolicitarMateriaisPage() {
                                           {formatRmAvgPaid(unitPrice)}
                                         </td>
                                         <td className="whitespace-nowrap py-3 pl-2 text-center align-top">
-                                          {activeOc ? (
-                                            <span
-                                              className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
-                                              title={
-                                                activeOc.orderNumber
-                                                  ? `Vinculado à OC ${activeOc.orderNumber}`
-                                                  : 'Item em ordem de compra'
-                                              }
-                                            >
-                                              {activeOc.orderNumber
-                                                ? `OC ${formatOcListDisplayId(activeOc.orderNumber)}`
-                                                : 'Em OC'}
-                                            </span>
-                                          ) : pendingOc ? (
-                                            <span
-                                              className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
-                                              title="Aguardando mapa de cotação / nova OC"
-                                            >
-                                              Pendente
-                                            </span>
-                                          ) : (
-                                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                                              —
-                                            </span>
-                                          )}
+                                          <RmItemSituationCell
+                                            item={{ id: item.id || String(idx), status: item.status }}
+                                            requestStatus={statusKey}
+                                            requestEffectivelyCancelled={isMaterialRequestEffectivelyCancelled(
+                                              { status: statusKey } as MaterialRequest,
+                                              pos
+                                            )}
+                                            orders={pos}
+                                            canCancel={userCanCancelItems}
+                                            cancelling={
+                                              cancelRmItemMutation.isPending &&
+                                              cancelItemTarget?.itemId === item.id
+                                            }
+                                            onCancel={
+                                              item.id && detailViewId
+                                                ? () =>
+                                                    setCancelItemTarget({
+                                                      requestId: detailViewId,
+                                                      itemId: item.id!,
+                                                      label: line,
+                                                    })
+                                                : undefined
+                                            }
+                                          />
                                         </td>
                                       </tr>
                                     );
@@ -3145,6 +3177,38 @@ function SolicitarMateriaisPage() {
           onConfirm={closeDetailModal}
           message="Tem certeza que deseja fechar os detalhes da solicitação?"
         />
+
+        {cancelItemTarget && (
+          <Modal
+            isOpen
+            onClose={() => setCancelItemTarget(null)}
+            confirmBeforeClose={false}
+            title="Cancelar item"
+            size="md"
+          >
+            <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+              O item <strong>{cancelItemTarget.label}</strong> será marcado como{' '}
+              <strong>Cancelado</strong> e sairá do mapa de cotação. Confirma?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelItemTarget(null)}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700/40 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelRmItemMutation.mutate(cancelItemTarget)}
+                disabled={cancelRmItemMutation.isPending}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {cancelRmItemMutation.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </Modal>
+        )}
 
         {cancelTargetId && (
           <Modal
