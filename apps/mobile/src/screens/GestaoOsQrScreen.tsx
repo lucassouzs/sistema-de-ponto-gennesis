@@ -11,7 +11,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
-import { createWorkOrderFromQr, resolveAssetQr } from '../services/gestaoOs';
+import { createWorkOrderFromQr, resolveAssetQr, saveCloseQrToken } from '../services/gestaoOs';
 import type { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GestaoOsQr'>;
@@ -22,13 +22,16 @@ export default function GestaoOsQrScreen({ route, navigation }: Props) {
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [resolved, setResolved] = useState<{
-    id: string;
+    kind?: string;
+    id?: string;
     name: string;
     category?: string | null;
     buildingId?: string;
     sectorId?: string;
     placeId?: string;
     locationLabel?: string;
+    closeToken?: string;
+    qrToken?: string;
   } | null>(null);
 
   React.useEffect(() => {
@@ -49,7 +52,21 @@ export default function GestaoOsQrScreen({ route, navigation }: Props) {
     };
   }, [token]);
 
+  const onSaveClose = async () => {
+    const close = resolved?.closeToken || resolved?.qrToken || token.replace(/^gennesis-os-close:/, '');
+    await saveCloseQrToken(close);
+    Alert.alert(
+      'QR da localidade',
+      'Token salvo. Abra a OS e toque em Concluir serviço para encerrar com este QR.'
+    );
+    navigation.goBack();
+  };
+
   const onCreate = async () => {
+    if (resolved?.kind === 'building-close') {
+      await onSaveClose();
+      return;
+    }
     if (!resolved?.buildingId) {
       Alert.alert('Ativo sem prédio vinculado');
       return;
@@ -70,7 +87,8 @@ export default function GestaoOsQrScreen({ route, navigation }: Props) {
         buildingId: resolved.buildingId,
         sectorId: resolved.sectorId,
         placeId: resolved.placeId,
-        assetId: resolved.id
+        assetId: resolved.id,
+        origin: 'UNPLANNED'
       });
       Alert.alert('Chamado aberto', `Chamado #${wo.displayNumber}`);
       navigation.replace('GestaoOsDetail', { id: wo.id });
@@ -81,37 +99,53 @@ export default function GestaoOsQrScreen({ route, navigation }: Props) {
     }
   };
 
+  const isClose = resolved?.kind === 'building-close';
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <AppHeader title="QR do ativo" showBack />
+      <AppHeader title={isClose ? 'QR da localidade' : 'QR do ativo'} showBack />
       {loading && !resolved ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
       ) : (
         <View style={styles.body}>
           <Text style={[styles.title, { color: colors.text }]}>
-            {resolved?.name || 'Ativo'}
+            {resolved?.name || (isClose ? 'Localidade' : 'Ativo')}
           </Text>
           <Text style={{ color: colors.textSecondary, marginTop: 4 }}>
-            {resolved?.locationLabel || '—'}
+            {isClose
+              ? 'Use este QR para encerrar a OS no campo.'
+              : resolved?.locationLabel || '—'}
           </Text>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Descreva o problema encontrado"
-            placeholderTextColor={colors.textSecondary}
-            multiline
-            style={[
-              styles.input,
-              { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
-            ]}
-          />
-          <TouchableOpacity
-            style={[styles.btn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
-            disabled={loading}
-            onPress={onCreate}
-          >
-            <Text style={styles.btnText}>Abrir chamado</Text>
-          </TouchableOpacity>
+          {isClose ? (
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
+              disabled={loading}
+              onPress={() => void onSaveClose()}
+            >
+              <Text style={styles.btnText}>Usar para encerrar OS</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Descreva o problema encontrado"
+                placeholderTextColor={colors.textSecondary}
+                multiline
+                style={[
+                  styles.input,
+                  { color: colors.text, borderColor: colors.border, backgroundColor: colors.card }
+                ]}
+              />
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: colors.primary, opacity: loading ? 0.7 : 1 }]}
+                disabled={loading}
+                onPress={() => void onCreate()}
+              >
+                <Text style={styles.btnText}>Abrir chamado</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       )}
     </View>

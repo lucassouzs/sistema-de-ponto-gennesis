@@ -19,6 +19,7 @@ import { PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { resolveSlaDueAt } from '../lib/gestaoOsSla';
 import { notifyGestaoOsEvent } from '../lib/gestaoOsNotify';
 import { parseParts, parsePartsLoose } from '../lib/gestaoOsParts';
+import { deductGestaoOsPartsFromStock } from '../lib/gestaoOsStockLink';
 import { applyExecutionClock } from '../lib/gestaoOsExecution';
 import {
   isChecklistEmpty,
@@ -27,6 +28,15 @@ import {
   attachWarrantyToLocationTree,
   hydrateEmptyExecutionChecklist
 } from '../lib/gestaoOsChecklistCopy';
+import {
+  isExecutionChecklistEvidenceComplete,
+  loadBuildingEditalMap,
+  loadUnitBuildingIds,
+  parseCloseQrToken,
+  parseOrigin,
+  parseSacKind,
+  parseTeamUserIds
+} from '../lib/gestaoOsEdital';
 import {
   enrichWorkOrderWithExtras,
   gestaoOsOpsService,
@@ -227,6 +237,14 @@ async function persistWorkOrderExtras(
     endPhotoUrl?: string | null;
     executionMs?: number | null;
     lastExecutionResumeAt?: Date | null;
+    origin?: string | null;
+    sacKind?: string | null;
+    teamUserIds?: string[];
+    fiscalRating?: number | null;
+    fiscalRatingComment?: string | null;
+    fiscalUserId?: string | null;
+    attestedAt?: Date | null;
+    closeQrVerifiedAt?: Date | null;
   }
 ) {
   const sets: string[] = [];
@@ -277,6 +295,53 @@ async function persistWorkOrderExtras(
       extras.lastExecutionResumeAt
         ? `"lastExecutionResumeAt" = '${extras.lastExecutionResumeAt.toISOString()}'::timestamp`
         : `"lastExecutionResumeAt" = NULL`
+    );
+  }
+  if (extras.origin !== undefined) {
+    sets.push(`"origin" = '${String(extras.origin || 'REQUEST').replace(/'/g, "''")}'`);
+  }
+  if (extras.sacKind !== undefined) {
+    sets.push(
+      extras.sacKind
+        ? `"sacKind" = '${String(extras.sacKind).replace(/'/g, "''")}'`
+        : `"sacKind" = NULL`
+    );
+  }
+  if (extras.teamUserIds !== undefined) {
+    const json = JSON.stringify(extras.teamUserIds ?? []).replace(/'/g, "''");
+    sets.push(`"teamUserIds" = '${json}'::jsonb`);
+  }
+  if (extras.fiscalRating !== undefined) {
+    sets.push(
+      extras.fiscalRating == null ? `"fiscalRating" = NULL` : `"fiscalRating" = ${Number(extras.fiscalRating)}`
+    );
+  }
+  if (extras.fiscalRatingComment !== undefined) {
+    sets.push(
+      extras.fiscalRatingComment
+        ? `"fiscalRatingComment" = '${String(extras.fiscalRatingComment).replace(/'/g, "''")}'`
+        : `"fiscalRatingComment" = NULL`
+    );
+  }
+  if (extras.fiscalUserId !== undefined) {
+    sets.push(
+      extras.fiscalUserId
+        ? `"fiscalUserId" = '${String(extras.fiscalUserId).replace(/'/g, "''")}'`
+        : `"fiscalUserId" = NULL`
+    );
+  }
+  if (extras.attestedAt !== undefined) {
+    sets.push(
+      extras.attestedAt
+        ? `"attestedAt" = '${extras.attestedAt.toISOString()}'::timestamp`
+        : `"attestedAt" = NULL`
+    );
+  }
+  if (extras.closeQrVerifiedAt !== undefined) {
+    sets.push(
+      extras.closeQrVerifiedAt
+        ? `"closeQrVerifiedAt" = '${extras.closeQrVerifiedAt.toISOString()}'::timestamp`
+        : `"closeQrVerifiedAt" = NULL`
     );
   }
   if (!sets.length) return;
@@ -508,6 +573,7 @@ export class GestaoOsService {
       assigneeId?: string;
       involvedUserId?: string;
       buildingId?: string;
+      unitPortal?: boolean;
       overdue?: boolean;
       limit?: number;
     },
@@ -545,6 +611,16 @@ export class GestaoOsService {
       if (params.assigneeId) where.assigneeId = params.assigneeId;
     }
     if (params.buildingId) where.buildingId = params.buildingId;
+    if (params.unitPortal) {
+      const unitIds = await loadUnitBuildingIds(access.userId);
+      if (!unitIds.length) return [];
+      where.buildingId = params.buildingId
+        ? params.buildingId
+        : { in: unitIds };
+      if (params.buildingId && !unitIds.includes(params.buildingId) && !access.canViewAll) {
+        return [];
+      }
+    }
 
     const search = params.search?.trim();
     if (search) {
@@ -601,7 +677,12 @@ export class GestaoOsService {
         }
       });
     }
-    return { ...enriched, recurrence90dCount };
+    let buildingCloseQrRequired = false;
+    if (row.buildingId) {
+      const building = (await loadBuildingEditalMap([row.buildingId])).get(row.buildingId);
+      buildingCloseQrRequired = Boolean(building?.qrToken);
+    }
+    return { ...enriched, recurrence90dCount, buildingCloseQrRequired };
   }
 
   async listTechnicians(companyId?: string | null) {
@@ -698,6 +779,9 @@ export class GestaoOsService {
       maintenanceType?: unknown;
       relatedWorkOrderId?: string | null;
       autoAssign?: boolean;
+      origin?: unknown;
+      sacKind?: unknown;
+      teamUserIds?: unknown;
     },
     access: GestaoOsAccessContext
   ) {
@@ -705,25 +789,46 @@ export class GestaoOsService {
     const description = String(input.description ?? '').trim();
     if (!category) throw createError('Informe a categoria/tipo de serviço', 400);
     if (!description) throw createError('Informe a descrição do problema', 400);
-    if (!input.buildingId) throw createError('Selecione o prédio', 400);
-    if (!input.sectorId) throw createError('Selecione o andar', 400);
-    if (!input.placeId) throw createError('Selecione o local', 400);
+
+    let buildingId = input.buildingId || null;
+    let sectorId = input.sectorId || null;
+    let placeId = input.placeId || null;
+    if (input.assetId && (!sectorId || !placeId || !buildingId)) {
+      const asset = await prisma.gestaoOsAsset.findUnique({
+        where: { id: String(input.assetId) },
+        select: {
+          place: {
+            select: { id: true, sectorId: true, sector: { select: { buildingId: true } } }
+          }
+        }
+      });
+      if (asset?.place) {
+        placeId = placeId || asset.place.id;
+        sectorId = sectorId || asset.place.sectorId;
+        buildingId = buildingId || asset.place.sector.buildingId;
+      }
+    }
+    if (!buildingId) throw createError('Selecione o prédio', 400);
+    if (!sectorId) throw createError('Selecione o andar', 400);
+    if (!placeId) throw createError('Selecione o local', 400);
 
     const companyId = input.companyId || access.companyId || null;
     const priority = parsePriority(input.priority);
 
     const locationLabel = await buildLocationLabel({
-      buildingId: input.buildingId,
-      sectorId: input.sectorId,
-      placeId: input.placeId,
+      buildingId,
+      sectorId,
+      placeId,
       assetId: input.assetId
     });
 
     const attachments = parseAttachments(input.attachments) ?? [];
+    const origin = parseOrigin(input.origin);
     const sla = await resolveSlaDueAt({
       priority,
       assetId: input.assetId,
-      explicitDueAt: input.dueAt
+      explicitDueAt: input.dueAt,
+      origin
     });
     const checklistResponses = await resolveCategoryChecklistResponses(category, companyId);
 
@@ -749,13 +854,21 @@ export class GestaoOsService {
     }
 
     let assigneeId: string | null = null;
+    const buildingMeta = buildingId
+      ? (await loadBuildingEditalMap([buildingId])).get(buildingId)
+      : undefined;
     if (input.autoAssign) {
       const suggested = await gestaoOsOpsService.suggestAssignee(access, {
-        buildingId: input.buildingId,
+        buildingId,
         category
       });
       assigneeId = suggested?.id ?? null;
     }
+    if (!assigneeId) {
+      assigneeId = buildingMeta?.prepostoUserId || buildingMeta?.managerUserId || null;
+    }
+
+    const sacKind = origin === 'SAC' ? parseSacKind(input.sacKind) : null;
 
     const created = await prisma.$transaction(async (tx) => {
       const agg = await tx.gestaoOsWorkOrder.aggregate({ _max: { displayNumber: true } });
@@ -770,9 +883,9 @@ export class GestaoOsService {
           maintenanceType: parseMaintenanceType(input.maintenanceType),
           category,
           description,
-          buildingId: input.buildingId || null,
-          sectorId: input.sectorId || null,
-          placeId: input.placeId || null,
+          buildingId: buildingId || null,
+          sectorId: sectorId || null,
+          placeId: placeId || null,
           assetId: input.assetId || null,
           locationLabel,
           requesterId: input.requesterId,
@@ -796,7 +909,9 @@ export class GestaoOsService {
 
     await persistWorkOrderExtras(created.id, {
       slaHoursApplied: sla.slaHoursApplied,
-      relatedWorkOrderId
+      relatedWorkOrderId,
+      origin,
+      sacKind
     });
 
     const enriched = await this.getById(created.id, access);
@@ -819,10 +934,26 @@ export class GestaoOsService {
       select: { email: true, name: true },
       take: 40
     });
-    notifyGestaoOsEvent('opened', notifyPayloadFromWo(enriched), [
+    const openKind =
+      origin === 'UNPLANNED' ? 'unplanned' : origin === 'SAC' ? 'sac_opened' : 'opened';
+    notifyGestaoOsEvent(openKind, notifyPayloadFromWo(enriched), [
       ...(requester ? [requester] : []),
       ...analysts
     ]);
+    const routeIds = [
+      buildingMeta?.prepostoUserId,
+      buildingMeta?.managerUserId,
+      origin === 'SAC' || origin === 'UNPLANNED' ? buildingMeta?.responsibleUserId : null
+    ].filter((id): id is string => Boolean(id));
+    if (routeIds.length) {
+      const routed = await prisma.user.findMany({
+        where: { id: { in: routeIds } },
+        select: { email: true, name: true }
+      });
+      if (routed.length) {
+        notifyGestaoOsEvent(openKind, notifyPayloadFromWo(enriched), routed);
+      }
+    }
     if (assigneeId) {
       const assignee = await prisma.user.findUnique({
         where: { id: assigneeId },
@@ -859,6 +990,7 @@ export class GestaoOsService {
       startPhotoUrl?: string | null;
       endPhotoUrl?: string | null;
       autoAssign?: boolean;
+      teamUserIds?: unknown;
     },
     access: GestaoOsAccessContext
   ) {
@@ -960,6 +1092,7 @@ export class GestaoOsService {
     if (input.endPhotoUrl !== undefined) {
       extras.endPhotoUrl = input.endPhotoUrl ? String(input.endPhotoUrl).trim() : null;
     }
+    if (input.teamUserIds !== undefined) extras.teamUserIds = parseTeamUserIds(input.teamUserIds);
     if (Object.keys(extras).length) await persistWorkOrderExtras(id, extras);
 
     const enriched = await this.getById(id, access);
@@ -1013,6 +1146,10 @@ export class GestaoOsService {
       endPhotoUrl?: string | null;
       autoAssign?: boolean;
       relatedWorkOrderId?: string | null;
+      teamUserIds?: unknown;
+      fiscalRating?: number | null;
+      fiscalRatingComment?: string | null;
+      closeQrToken?: string | null;
     },
     access: GestaoOsAccessContext
   ) {
@@ -1111,6 +1248,24 @@ export class GestaoOsService {
           400
         );
       }
+      if (!isExecutionChecklistEvidenceComplete(executionChecklist)) {
+        throw createError(
+          'Cada item do checklist precisa de horário de início/fim e fotos de antes e depois',
+          400
+        );
+      }
+      if (current.buildingId) {
+        const building = (await loadBuildingEditalMap([current.buildingId])).get(current.buildingId);
+        if (building?.qrToken) {
+          const scanned = parseCloseQrToken(input.closeQrToken);
+          if (!scanned || scanned !== building.qrToken) {
+            throw createError(
+              'Leia o QR Code do responsável da localidade para encerrar a OS',
+              400
+            );
+          }
+        }
+      }
     }
 
     if (nextStatus === 'WAITING_PARTS') {
@@ -1130,6 +1285,28 @@ export class GestaoOsService {
       const rating = input.rating != null ? Number(input.rating) : current.rating;
       if (rating != null && (!Number.isFinite(rating) || rating < 1 || rating > 5)) {
         throw createError('Avaliação deve ser entre 1 e 5', 400);
+      }
+      const opsClose = access.canEncerrar || access.canAnalisar || access.isAdmin;
+      if (opsClose) {
+        const fiscal =
+          input.fiscalRating != null
+            ? Number(input.fiscalRating)
+            : (current as { fiscalRating?: number | null }).fiscalRating;
+        if (fiscal == null || !Number.isFinite(fiscal) || fiscal < 1 || fiscal > 5) {
+          throw createError('Informe a nota do fiscal (1 a 5) para atestar o faturamento', 400);
+        }
+        if (current.buildingId) {
+          const building = (await loadBuildingEditalMap([current.buildingId])).get(
+            current.buildingId
+          );
+          const fiscalId = building?.fiscalUserId;
+          if (fiscalId && actorId !== fiscalId && !access.isAdmin) {
+            throw createError(
+              'Só o fiscal da localidade (ou um administrador) pode atestar o encerramento',
+              403
+            );
+          }
+        }
       }
     }
 
@@ -1317,7 +1494,20 @@ export class GestaoOsService {
 
     const extras: Parameters<typeof persistWorkOrderExtras>[1] = {};
     if (slaHoursToPersist !== undefined) extras.slaHoursApplied = slaHoursToPersist;
-    if (input.parts !== undefined) extras.parts = parseParts(input.parts);
+    if (nextStatus === 'WAITING_PARTS') {
+      const parts =
+        input.parts !== undefined
+          ? parseParts(input.parts)
+          : parsePartsLoose((current as { parts?: unknown }).parts ?? []);
+      extras.parts = await deductGestaoOsPartsFromStock({
+        parts,
+        actorId,
+        osLabel:
+          current.osNumber != null ? `OS #${current.osNumber}` : `Chamado #${current.displayNumber}`
+      });
+    } else if (input.parts !== undefined) {
+      extras.parts = parseParts(input.parts);
+    }
     if (input.startPhotoUrl !== undefined || (nextStatus === 'IN_PROGRESS' && startPhoto)) {
       extras.startPhotoUrl = startPhoto || null;
     }
@@ -1331,6 +1521,18 @@ export class GestaoOsService {
     }
     extras.executionMs = clock.executionMs;
     extras.lastExecutionResumeAt = clock.lastExecutionResumeAt;
+    if (input.teamUserIds !== undefined) extras.teamUserIds = parseTeamUserIds(input.teamUserIds);
+    if (nextStatus === 'CLOSED' && input.fiscalRating != null) {
+      extras.fiscalRating = Number(input.fiscalRating);
+      extras.fiscalRatingComment = input.fiscalRatingComment
+        ? String(input.fiscalRatingComment).trim()
+        : null;
+      extras.fiscalUserId = actorId;
+      extras.attestedAt = now;
+    }
+    if (nextStatus === 'COMPLETED' && parseCloseQrToken(input.closeQrToken)) {
+      extras.closeQrVerifiedAt = now;
+    }
     if (Object.keys(extras).length) await persistWorkOrderExtras(id, extras);
 
     const enriched = await this.getById(id, access);
@@ -1515,6 +1717,44 @@ export class GestaoOsService {
       throw createError('Sem permissão para excluir este comentário', 403);
     }
     await prisma.gestaoOsWorkOrderComment.delete({ where: { id: commentId } });
+  }
+
+  async atteste(
+    id: string,
+    actorId: string,
+    input: { fiscalRating?: number | null; fiscalRatingComment?: string | null },
+    access: GestaoOsAccessContext
+  ) {
+    if (!access.canEncerrar && !access.canAnalisar && !access.isAdmin) {
+      throw createError('Sem permissão para atestar o faturamento', 403);
+    }
+    const current = await this.getById(id, access);
+    if (current.status !== 'COMPLETED' && current.status !== 'CLOSED') {
+      throw createError('Ateste só é permitido após a conclusão da OS', 400);
+    }
+    if (current.buildingId) {
+      const building = (await loadBuildingEditalMap([current.buildingId])).get(current.buildingId);
+      const fiscalId = building?.fiscalUserId;
+      if (fiscalId && actorId !== fiscalId && !access.isAdmin) {
+        throw createError(
+          'Só o fiscal da localidade (ou um administrador) pode atestar o faturamento',
+          403
+        );
+      }
+    }
+    const fiscal = Number(input.fiscalRating);
+    if (!Number.isFinite(fiscal) || fiscal < 1 || fiscal > 5) {
+      throw createError('Informe a nota do fiscal (1 a 5)', 400);
+    }
+    await persistWorkOrderExtras(id, {
+      fiscalRating: fiscal,
+      fiscalRatingComment: input.fiscalRatingComment
+        ? String(input.fiscalRatingComment).trim()
+        : null,
+      fiscalUserId: actorId,
+      attestedAt: new Date()
+    });
+    return this.getById(id, access);
   }
 }
 

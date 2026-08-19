@@ -58,6 +58,16 @@ export class GestaoOsCadastrosController {
     }
   }
 
+  async myUnitBuildings(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.listMyUnitBuildings(req.user.id);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Locais / ativos
   async locationTreeAdmin(req: AuthRequest, res: Response, next: NextFunction) {
     try {
@@ -321,6 +331,16 @@ export class GestaoOsCadastrosController {
       if (!req.user) throw createError('Usuário não autenticado', 401);
       const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
       const data = await gestaoOsCadastrosService.getAssetQrCodes(ids);
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async buildingCloseQr(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const data = await gestaoOsCadastrosService.getBuildingCloseQr(req.params.id);
       res.json({ success: true, data });
     } catch (error) {
       next(error);

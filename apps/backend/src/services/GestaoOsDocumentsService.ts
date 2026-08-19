@@ -8,8 +8,16 @@ import {
 
 function parseKind(value: unknown): GestaoOsDocumentKind {
   const raw = String(value ?? 'OTHER').toUpperCase();
-  if (raw === 'MANUAL' || raw === 'WARRANTY' || raw === 'LAUDO' || raw === 'ART' || raw === 'OTHER') {
-    return raw;
+  if (
+    raw === 'MANUAL' ||
+    raw === 'WARRANTY' ||
+    raw === 'LAUDO' ||
+    raw === 'ART' ||
+    raw === 'CHECKLIST_IFSP' ||
+    raw === 'MANUAL_PATRIMONIO' ||
+    raw === 'OTHER'
+  ) {
+    return raw as GestaoOsDocumentKind;
   }
   throw createError('Tipo de documento inválido', 400);
 }

@@ -91,11 +91,12 @@ export class GestaoOsController {
       const mine = req.query.mine === '1' || req.query.mine === 'true';
       const assignedToMe = req.query.assignedToMe === '1' || req.query.assignedToMe === 'true';
       const involved = req.query.involved === '1' || req.query.involved === 'true';
+      const unitPortal = req.query.unitPortal === '1' || req.query.unitPortal === 'true';
       const overdue = req.query.overdue === '1' || req.query.overdue === 'true';
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
 
       const access =
-        mine || assignedToMe || involved
+        mine || assignedToMe || involved || unitPortal
           ? await resolveGestaoOsAccessAllowPersonal({
               userId: req.user.id,
               isAdmin: !!req.user.isAdmin
@@ -105,8 +106,8 @@ export class GestaoOsController {
               isAdmin: !!req.user.isAdmin
             });
 
-      // Sem visão geral: só o que a pessoa abriu ou recebeu.
-      if (!access.canViewAll && !mine && !assignedToMe && !involved) {
+      // Sem visão geral: só o que a pessoa abriu, recebeu ou a unidade que gerencia.
+      if (!access.canViewAll && !mine && !assignedToMe && !involved && !unitPortal) {
         throw createError(
           'Sem permissão para listar todos os chamados. Use Meus Chamados (mine=1).',
           403
@@ -121,9 +122,10 @@ export class GestaoOsController {
           buildingId,
           limit,
           overdue,
-          requesterId: mine && !involved ? req.user.id : undefined,
-          assigneeId: assignedToMe && !involved ? req.user.id : undefined,
-          involvedUserId: involved ? req.user.id : undefined
+          unitPortal,
+          requesterId: mine && !involved && !unitPortal ? req.user.id : undefined,
+          assigneeId: assignedToMe && !involved && !unitPortal ? req.user.id : undefined,
+          involvedUserId: involved && !unitPortal ? req.user.id : undefined
         },
         access
       );
@@ -141,10 +143,17 @@ export class GestaoOsController {
         isAdmin: !!req.user.isAdmin
       });
       const data = await gestaoOsService.getById(req.params.id, access);
-      assertCanViewWorkOrder(access, {
-        requesterId: data.requesterId,
-        assigneeId: data.assigneeId
-      });
+      try {
+        assertCanViewWorkOrder(access, {
+          requesterId: data.requesterId,
+          assigneeId: data.assigneeId,
+          teamUserIds: (data as { teamUserIds?: unknown }).teamUserIds
+        });
+      } catch (err) {
+        const { loadUnitBuildingIds } = await import('../lib/gestaoOsEdital');
+        const unitIds = await loadUnitBuildingIds(access.userId);
+        if (!data.buildingId || !unitIds.includes(data.buildingId)) throw err;
+      }
       res.json({ success: true, data });
     } catch (error) {
       next(error);
@@ -177,7 +186,10 @@ export class GestaoOsController {
           dueAt: body.dueAt,
           maintenanceType: body.maintenanceType,
           relatedWorkOrderId: body.relatedWorkOrderId,
-          autoAssign: body.autoAssign === true
+          autoAssign: body.autoAssign === true,
+          origin: body.origin,
+          sacKind: body.sacKind,
+          teamUserIds: body.teamUserIds
         },
         access
       );
@@ -217,7 +229,8 @@ export class GestaoOsController {
           relatedWorkOrderId: body.relatedWorkOrderId,
           startPhotoUrl: body.startPhotoUrl,
           endPhotoUrl: body.endPhotoUrl,
-          autoAssign: body.autoAssign === true
+          autoAssign: body.autoAssign === true,
+          teamUserIds: body.teamUserIds
         },
         access
       );
@@ -260,7 +273,11 @@ export class GestaoOsController {
           startPhotoUrl: body.startPhotoUrl,
           endPhotoUrl: body.endPhotoUrl,
           autoAssign: body.autoAssign === true,
-          relatedWorkOrderId: body.relatedWorkOrderId
+          relatedWorkOrderId: body.relatedWorkOrderId,
+          teamUserIds: body.teamUserIds,
+          fiscalRating: body.fiscalRating,
+          fiscalRatingComment: body.fiscalRatingComment,
+          closeQrToken: body.closeQrToken
         },
         access
       );
@@ -308,6 +325,29 @@ export class GestaoOsController {
         !!req.user.isAdmin
       );
       res.json({ success: true, message: 'Comentário excluído' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async atteste(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const access = await resolveGestaoOsAccess({
+        userId: req.user.id,
+        isAdmin: !!req.user.isAdmin
+      });
+      const body = req.body ?? {};
+      const data = await gestaoOsService.atteste(
+        req.params.id,
+        req.user.id,
+        {
+          fiscalRating: body.fiscalRating,
+          fiscalRatingComment: body.fiscalRatingComment
+        },
+        access
+      );
+      res.json({ success: true, data });
     } catch (error) {
       next(error);
     }

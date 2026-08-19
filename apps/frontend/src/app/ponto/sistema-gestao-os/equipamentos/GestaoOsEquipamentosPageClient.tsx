@@ -76,6 +76,8 @@ const EQUIPMENT_DOC_KIND_OPTIONS = labeledToSelectOptions([
   { value: 'MANUAL', label: DOCUMENT_KIND_LABELS.MANUAL },
   { value: 'WARRANTY', label: DOCUMENT_KIND_LABELS.WARRANTY },
   { value: 'LAUDO', label: DOCUMENT_KIND_LABELS.LAUDO },
+  { value: 'CHECKLIST_IFSP', label: DOCUMENT_KIND_LABELS.CHECKLIST_IFSP },
+  { value: 'MANUAL_PATRIMONIO', label: DOCUMENT_KIND_LABELS.MANUAL_PATRIMONIO },
   { value: 'OTHER', label: DOCUMENT_KIND_LABELS.OTHER }
 ]);
 
@@ -97,7 +99,12 @@ function parseEquipmentAttachments(value: unknown): GestaoOsAttachment[] {
     if (!url) return [];
     const kindRaw = String(row.kind ?? '').toUpperCase();
     const kind: GestaoOsDocumentKind | undefined =
-      kindRaw === 'MANUAL' || kindRaw === 'WARRANTY' || kindRaw === 'LAUDO' || kindRaw === 'OTHER'
+      kindRaw === 'MANUAL' ||
+      kindRaw === 'WARRANTY' ||
+      kindRaw === 'LAUDO' ||
+      kindRaw === 'CHECKLIST_IFSP' ||
+      kindRaw === 'MANUAL_PATRIMONIO' ||
+      kindRaw === 'OTHER'
         ? kindRaw
         : undefined;
     return [

@@ -5,6 +5,8 @@ import { Activity, AlertTriangle, CalendarCheck, ClipboardList, Download, Eye, L
 import toast from 'react-hot-toast';
 import { exportGestaoOsPdf, gestaoOsPdfFileName, openGestaoOsPdf } from '@/lib/exportGestaoOsPdf';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { TimePickerField } from '@/components/ui/TimePickerField';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { useModalRequestClose } from '@/components/ui/Modal';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
@@ -25,6 +27,8 @@ import {
   GESTAO_OS_SLA_LABEL,
   PRIORITY_LABELS,
   MAINTENANCE_TYPE_LABELS,
+  ORIGIN_LABELS,
+  SAC_KIND_LABELS,
   STATUS_LABELS,
   formatGestaoOsLabel,
   formatGestaoOsDuration,
@@ -36,6 +40,38 @@ import {
 
 export const GESTAO_OS_FORM_LABEL_CLS =
   'mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300';
+
+function isoToYmd(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function isoToHm(value?: string | null): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function ymdHmToIso(ymd: string, hm: string): string | null {
+  if (!ymd) return null;
+  const [h, m] = (hm || '00:00').split(':').map(Number);
+  const d = new Date(
+    Number(ymd.slice(0, 4)),
+    Number(ymd.slice(5, 7)) - 1,
+    Number(ymd.slice(8, 10)),
+    Number.isFinite(h) ? h : 0,
+    Number.isFinite(m) ? m : 0,
+    0,
+    0
+  );
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 export type GestaoOsTechnicianOption = {
   id: string;
@@ -182,22 +218,56 @@ export function GestaoOsInfoList({
 export function GestaoOsChecklistField({
   items,
   onToggle,
+  onItemChange,
+  onUploadPhoto,
+  uploadingPhoto = false,
   readOnly = false,
-  allRequired = false
+  allRequired = false,
+  evidence = false
 }: {
   items: GestaoOsChecklistResponseItem[];
   onToggle?: (index: number, checked: boolean) => void;
+  onItemChange?: (index: number, patch: Partial<GestaoOsChecklistResponseItem>) => void;
+  onUploadPhoto?: (file: File) => Promise<string | null | undefined>;
+  uploadingPhoto?: boolean;
   readOnly?: boolean;
   allRequired?: boolean;
+  evidence?: boolean;
 }) {
   const done = items.filter((item) => item.checked).length;
   const locked = readOnly || !onToggle;
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const formatWhen = (value?: string | null) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const uploadFor = async (index: number, field: 'beforePhotoUrl' | 'afterPhotoUrl', file?: File) => {
+    if (!file || !onUploadPhoto || !onItemChange) return;
+    const key = `${index}-${field}`;
+    setBusyKey(key);
+    try {
+      const url = await onUploadPhoto(file);
+      if (url) onItemChange(index, { [field]: url });
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-gray-500 dark:text-gray-400">
         {done} de {items.length} {items.length === 1 ? 'item' : 'itens'}{' '}
         {done === 1 ? 'concluído' : 'concluídos'}
+        {evidence ? ' · foto antes/depois e horário por item' : ''}
       </p>
       <ul className="space-y-2">
         {items.map((item, idx) => (
@@ -231,6 +301,132 @@ export function GestaoOsChecklistField({
                 ) : null}
               </span>
             </label>
+            {evidence ? (
+              <div className="mt-3 space-y-3 pl-8">
+                {locked ? (
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Início {formatWhen(item.startedAt)} · Fim {formatWhen(item.completedAt)}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Início — data
+                      </label>
+                      <DatePickerField
+                        value={isoToYmd(item.startedAt)}
+                        onChange={(ymd) =>
+                          onItemChange?.(idx, {
+                            startedAt: ymdHmToIso(ymd, isoToHm(item.startedAt) || '08:00')
+                          })
+                        }
+                        noFocusRing
+                        aria-label="Data de início do item"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Início — hora
+                      </label>
+                      <TimePickerField
+                        value={isoToHm(item.startedAt)}
+                        onChange={(hm) =>
+                          onItemChange?.(idx, {
+                            startedAt: ymdHmToIso(
+                              isoToYmd(item.startedAt) || isoToYmd(new Date().toISOString()),
+                              hm
+                            )
+                          })
+                        }
+                        stepMinutes={5}
+                        allowEmpty
+                        noFocusRing
+                        aria-label="Hora de início do item"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Fim — data
+                      </label>
+                      <DatePickerField
+                        value={isoToYmd(item.completedAt)}
+                        onChange={(ymd) =>
+                          onItemChange?.(idx, {
+                            completedAt: ymdHmToIso(ymd, isoToHm(item.completedAt) || isoToHm(item.startedAt) || '18:00')
+                          })
+                        }
+                        noFocusRing
+                        aria-label="Data de fim do item"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+                        Fim — hora
+                      </label>
+                      <TimePickerField
+                        value={isoToHm(item.completedAt)}
+                        onChange={(hm) =>
+                          onItemChange?.(idx, {
+                            completedAt: ymdHmToIso(
+                              isoToYmd(item.completedAt) ||
+                                isoToYmd(item.startedAt) ||
+                                isoToYmd(new Date().toISOString()),
+                              hm
+                            )
+                          })
+                        }
+                        stepMinutes={5}
+                        allowEmpty
+                        noFocusRing
+                        aria-label="Hora de fim do item"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  {(['beforePhotoUrl', 'afterPhotoUrl'] as const).map((field) => {
+                    const url = item[field];
+                    const label = field === 'beforePhotoUrl' ? 'Antes' : 'Depois';
+                    const resolved = url ? resolveApiMediaUrl(url) : null;
+                    return (
+                      <div key={field} className="space-y-1">
+                        {resolved ? (
+                          <img
+                            src={resolved}
+                            alt={label}
+                            className="h-16 w-full rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-gray-300 text-[11px] text-gray-400 dark:border-gray-600">
+                            Foto {label.toLowerCase()}
+                          </div>
+                        )}
+                        {!locked && onUploadPhoto ? (
+                          <label className="block cursor-pointer text-center text-[11px] font-medium text-red-600 dark:text-red-400">
+                            {busyKey === `${idx}-${field}` || uploadingPhoto
+                              ? 'Enviando…'
+                              : url
+                                ? `Trocar ${label.toLowerCase()}`
+                                : `Enviar ${label.toLowerCase()}`}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={Boolean(busyKey) || uploadingPhoto}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                void uploadFor(idx, field, file);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -663,7 +859,7 @@ export function GestaoOsHistoryList({
 
 export function GestaoOsModalFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="-mx-6 -mb-6 mt-6 flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-700">
+    <div className="-mx-6 !-mb-6 mt-6 flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-700">
       {children}
     </div>
   );
@@ -1091,15 +1287,6 @@ export function GestaoOsChamadoResumo({
   const infoRows: Array<{ label: string; value: React.ReactNode; stacked?: boolean }> = [
     { label: 'Chamado', value: `#${detail.displayNumber}` },
     {
-      label: 'OS',
-      value:
-        detail.osNumber != null ? (
-          `#${detail.osNumber}`
-        ) : (
-          <span className="text-gray-500 dark:text-gray-400">Ainda não gerada</span>
-        )
-    },
-    {
       label: 'Status',
       value: (
         <span className={gestaoOsStatusBadgeClass(detail.status)}>
@@ -1117,6 +1304,16 @@ export function GestaoOsChamadoResumo({
     },
     { label: 'Categoria', value: detail.category || '—' }
   ];
+
+  if (detail.origin && detail.origin !== 'REQUEST') {
+    infoRows.push({
+      label: 'Canal',
+      value:
+        detail.origin === 'SAC' && detail.sacKind
+          ? `${ORIGIN_LABELS[detail.origin]} · ${SAC_KIND_LABELS[detail.sacKind]}`
+          : ORIGIN_LABELS[detail.origin]
+    });
+  }
 
   if (detail.maintenanceType) {
     infoRows.push({
@@ -1141,6 +1338,20 @@ export function GestaoOsChamadoResumo({
       )
     }
   );
+
+  if (detail.teamUserIds && detail.teamUserIds.length > 1) {
+    infoRows.push({
+      label: 'Equipe',
+      value: `${detail.teamUserIds.length} profissionais alocados`
+    });
+  }
+
+  if (detail.fiscalRating) {
+    infoRows.push({
+      label: 'Ateste do fiscal',
+      value: `Nota ${detail.fiscalRating}${detail.fiscalRatingComment ? ` · ${detail.fiscalRatingComment}` : ''}`
+    });
+  }
 
   if (detail.dueAt || slaState || detail.slaHoursApplied != null) {
     infoRows.push({

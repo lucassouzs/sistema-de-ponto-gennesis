@@ -9,6 +9,7 @@ import { computeSlaMeta, isOpenGestaoOsStatus } from '../lib/gestaoOsSla';
 import { parsePartsLoose, partsTotalCost } from '../lib/gestaoOsParts';
 import { liveExecutionMs } from '../lib/gestaoOsExecution';
 import { loadAssetWarrantyMap } from '../lib/gestaoOsChecklistCopy';
+import { loadBuildingEditalMap } from '../lib/gestaoOsEdital';
 import { isAssignableGestaoOsTechnician } from '../lib/gestaoOsTechnicians';
 
 const OPEN: GestaoOsStatus[] = [
@@ -31,6 +32,14 @@ type ExtrasRow = {
   endPhotoUrl: string | null;
   executionMs: number | null;
   lastExecutionResumeAt: Date | null;
+  origin?: string | null;
+  sacKind?: string | null;
+  teamUserIds?: unknown;
+  fiscalRating?: number | null;
+  fiscalRatingComment?: string | null;
+  fiscalUserId?: string | null;
+  attestedAt?: Date | null;
+  closeQrVerifiedAt?: Date | null;
 };
 
 export async function loadWorkOrderExtras(
@@ -40,7 +49,9 @@ export async function loadWorkOrderExtras(
   if (!ids.length) return map;
   const found = await prisma.$queryRawUnsafe<ExtrasRow[]>(
     `SELECT "id", "slaHoursApplied", "slaWarnedAt", "parts", "relatedWorkOrderId", "startPhotoUrl", "endPhotoUrl",
-            COALESCE("executionMs", 0) AS "executionMs", "lastExecutionResumeAt"
+            COALESCE("executionMs", 0) AS "executionMs", "lastExecutionResumeAt",
+            "origin", "sacKind", "teamUserIds", "fiscalRating", "fiscalRatingComment", "fiscalUserId",
+            "attestedAt", "closeQrVerifiedAt"
      FROM "gestao_os_work_orders"
      WHERE "id" IN (${ids.map((id) => `'${id.replace(/'/g, "''")}'`).join(',')})`
   );
@@ -85,7 +96,15 @@ export function enrichWorkOrderWithExtras<T extends { id: string; status: Gestao
       : null,
     slaOverdue: sla.overdue,
     slaWarning: sla.warning,
-    slaRemainingMs: sla.remainingMs
+    slaRemainingMs: sla.remainingMs,
+    origin: extras?.origin ?? 'REQUEST',
+    sacKind: extras?.sacKind ?? null,
+    teamUserIds: Array.isArray(extras?.teamUserIds) ? extras?.teamUserIds : [],
+    fiscalRating: extras?.fiscalRating ?? null,
+    fiscalRatingComment: extras?.fiscalRatingComment ?? null,
+    fiscalUserId: extras?.fiscalUserId ?? null,
+    attestedAt: extras?.attestedAt ? extras.attestedAt.toISOString() : null,
+    closeQrVerifiedAt: extras?.closeQrVerifiedAt ? extras.closeQrVerifiedAt.toISOString() : null
   };
 }
 
@@ -399,13 +418,16 @@ export class GestaoOsOpsService {
         dueAt: true,
         assigneeId: true,
         requesterId: true,
-        priority: true
+        priority: true,
+        buildingId: true
       },
       orderBy: { dueAt: 'asc' },
       take: 400
     });
     const osMap = await loadOsNumbers(woRows.map((r) => r.id));
     const extras = await loadWorkOrderExtras(woRows.map((r) => r.id));
+    const buildingIds = [...new Set(woRows.map((r) => r.buildingId).filter(Boolean))] as string[];
+    const buildings = await loadBuildingEditalMap(buildingIds);
 
     const workOrders = woRows.map((row) => {
       const osNumber = osMap.get(row.id) ?? null;
@@ -419,6 +441,7 @@ export class GestaoOsOpsService {
       const href = access.canViewAll
         ? `/ponto/sistema-gestao-os?id=${row.id}`
         : `/ponto/meus-chamados?id=${row.id}`;
+      const geo = row.buildingId ? buildings.get(row.buildingId) : undefined;
       return {
         id: `wo:${row.id}`,
         kind: 'work_order' as const,
@@ -431,7 +454,10 @@ export class GestaoOsOpsService {
         endAt: end.toISOString(),
         color: meta.slaOverdue ? '#EF4444' : meta.slaWarning ? '#F59E0B' : '#DC2626',
         href,
-        overdue: meta.slaOverdue
+        overdue: meta.slaOverdue,
+        latitude: geo?.latitude ?? null,
+        longitude: geo?.longitude ?? null,
+        address: geo?.address ?? null
       };
     });
 
@@ -588,6 +614,20 @@ export class GestaoOsOpsService {
       }
     }
 
+    let unplannedOpenCount = 0;
+    let sacOpenCount = 0;
+    try {
+      unplannedOpenCount = await prisma.gestaoOsWorkOrder.count({
+        where: { ...visibility, origin: 'UNPLANNED', status: { in: OPEN } }
+      });
+      sacOpenCount = await prisma.gestaoOsWorkOrder.count({
+        where: { ...visibility, origin: 'SAC', status: { in: OPEN } }
+      });
+    } catch {
+      unplannedOpenCount = 0;
+      sacOpenCount = 0;
+    }
+
     return {
       assignedCount: assigned.length,
       slaOverdueCount,
@@ -595,6 +635,8 @@ export class GestaoOsOpsService {
       overduePlansCount,
       warrantyExpiringCount,
       warrantyExpiredCount,
+      unplannedOpenCount,
+      sacOpenCount,
       preview: assigned.slice(0, 5).map((row) => ({
         id: row.id,
         displayNumber: row.displayNumber,

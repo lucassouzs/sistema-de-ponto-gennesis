@@ -147,10 +147,18 @@ export function assertCanViewAllWorkOrders(ctx: GestaoOsAccessContext) {
 /** Ver um chamado: visão geral ou solicitante/responsável do próprio registro. */
 export function assertCanViewWorkOrder(
   ctx: GestaoOsAccessContext,
-  workOrder: { requesterId: string; assigneeId: string | null }
+  workOrder: {
+    requesterId: string;
+    assigneeId: string | null;
+    teamUserIds?: unknown;
+  }
 ) {
   if (ctx.isAdmin || ctx.canViewAll) return;
   if (workOrder.requesterId === ctx.userId || workOrder.assigneeId === ctx.userId) return;
+  const team = Array.isArray(workOrder.teamUserIds)
+    ? workOrder.teamUserIds.map((id) => String(id))
+    : [];
+  if (team.includes(ctx.userId)) return;
   throw createError('Sem permissão para ver este chamado', 403);
 }
 
@@ -196,6 +204,7 @@ export function assertCanTransition(
     (from === 'REWORK' && to === 'IN_PROGRESS')
   ) {
     if (ctx.canExecutar || ctx.canAnalisar) return;
+    if (_workOrder.assigneeId === ctx.userId) return;
     throw createError('Sem permissão para executar. Libere «Executar OS» em Controle.', 403);
   }
 

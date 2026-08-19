@@ -575,4 +575,71 @@ export async function ensureGestaoOsSchema(prisma: PrismaClient): Promise<void> 
   } catch {
     /* enum/tabela ainda não prontos */
   }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TYPE "GestaoOsDocumentKind" ADD VALUE IF NOT EXISTS 'CHECKLIST_IFSP'`
+    );
+  } catch {
+    /* valor já existe */
+  }
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TYPE "GestaoOsDocumentKind" ADD VALUE IF NOT EXISTS 'MANUAL_PATRIMONIO'`
+    );
+  } catch {
+    /* valor já existe */
+  }
+
+  if (await columnExists(prisma, 'gestao_os_assets', 'id')) {
+    if (!(await columnExists(prisma, 'gestao_os_assets', 'serialNumber'))) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "gestao_os_assets" ADD COLUMN "serialNumber" TEXT;`
+      );
+    }
+  }
+
+  if (await columnExists(prisma, 'gestao_os_buildings', 'id')) {
+    for (const col of [
+      ['address', 'TEXT'],
+      ['latitude', 'DOUBLE PRECISION'],
+      ['longitude', 'DOUBLE PRECISION'],
+      ['responsibleUserId', 'TEXT'],
+      ['prepostoUserId', 'TEXT'],
+      ['managerUserId', 'TEXT'],
+      ['fiscalUserId', 'TEXT'],
+      ['qrToken', 'TEXT']
+    ] as const) {
+      if (!(await columnExists(prisma, 'gestao_os_buildings', col[0]))) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "gestao_os_buildings" ADD COLUMN "${col[0]}" ${col[1]};`
+        );
+      }
+    }
+    await prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "gestao_os_buildings_qrToken_key" ON "gestao_os_buildings"("qrToken") WHERE "qrToken" IS NOT NULL;`
+    );
+  }
+
+  if (await columnExists(prisma, 'gestao_os_work_orders', 'id')) {
+    for (const col of [
+      ['origin', `TEXT NOT NULL DEFAULT 'REQUEST'`],
+      ['sacKind', 'TEXT'],
+      ['teamUserIds', `JSONB NOT NULL DEFAULT '[]'::jsonb`],
+      ['fiscalRating', 'INTEGER'],
+      ['fiscalRatingComment', 'TEXT'],
+      ['fiscalUserId', 'TEXT'],
+      ['attestedAt', 'TIMESTAMP(3)'],
+      ['closeQrVerifiedAt', 'TIMESTAMP(3)']
+    ] as const) {
+      if (!(await columnExists(prisma, 'gestao_os_work_orders', col[0]))) {
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "gestao_os_work_orders" ADD COLUMN "${col[0]}" ${col[1]};`
+        );
+      }
+    }
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "gestao_os_work_orders_origin_idx" ON "gestao_os_work_orders"("origin");`
+    );
+  }
 }

@@ -19,11 +19,28 @@ import {
   GESTAO_OS_SAFETY_CHECKLIST_ITEMS,
   fetchWorkOrder,
   transitionWorkOrder,
-  uploadGestaoOsAttachment
+  patchWorkOrder,
+  uploadGestaoOsAttachment,
+  readCloseQrToken,
+  clearCloseQrToken,
+  syncGestaoOsOfflineQueue,
+  loadGestaoOsLocalDraft,
+  saveGestaoOsLocalDraft,
+  clearGestaoOsLocalDraft
 } from '../services/gestaoOs';
 import type { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GestaoOsDetail'>;
+
+type ChecklistItem = {
+  id: string;
+  label: string;
+  checked: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  beforePhotoUrl?: string | null;
+  afterPhotoUrl?: string | null;
+};
 
 type SafetyItem = {
   id: string;
@@ -59,9 +76,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
   const [note, setNote] = useState('');
-  const [checklist, setChecklist] = useState<
-    Array<{ id: string; label: string; checked: boolean }>
-  >([]);
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [safetyChecklist, setSafetyChecklist] = useState<SafetyItem[]>([]);
   const [safetyPhotoUrl, setSafetyPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -78,31 +93,55 @@ export default function GestaoOsDetailScreen({ route }: Props) {
   });
 
   useEffect(() => {
+    void syncGestaoOsOfflineQueue().then(() => {
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', id] });
+    });
+  }, [id, queryClient]);
+
+  useEffect(() => {
     const data = query.data;
     if (!data) return;
-    if (Array.isArray(data.checklistResponses)) {
-      setChecklist(data.checklistResponses);
-    }
-    if (
-      data.status === 'APPROVED' ||
-      data.status === 'SAFETY_CHECK' ||
-      (Array.isArray(data.safetyChecklistResponses) && data.safetyChecklistResponses.length > 0)
-    ) {
-      setSafetyChecklist(mergeSafetyChecklist(data.safetyChecklistResponses));
-    }
-    setSafetyPhotoUrl(data.safetyPhotoUrl ?? null);
-    setStartPhotoUrl(data.startPhotoUrl ?? null);
-    setEndPhotoUrl(data.endPhotoUrl ?? null);
-    setParts(
-      Array.isArray(data.parts)
-        ? data.parts.map((p) => ({ id: p.id, name: p.name, quantity: p.quantity || 1 }))
-        : []
-    );
-  }, [query.data]);
+    let cancelled = false;
+    void loadGestaoOsLocalDraft(id).then((draft) => {
+      if (cancelled) return;
+      const nextChecklist: ChecklistItem[] = Array.isArray(draft?.checklist)
+        ? (draft.checklist as ChecklistItem[])
+        : Array.isArray(data.checklistResponses)
+          ? data.checklistResponses
+          : [];
+      setChecklist(nextChecklist);
+      if (
+        data.status === 'APPROVED' ||
+        data.status === 'SAFETY_CHECK' ||
+        (Array.isArray(data.safetyChecklistResponses) && data.safetyChecklistResponses.length > 0) ||
+        (draft?.safetyChecklist && draft.safetyChecklist.length > 0)
+      ) {
+        setSafetyChecklist(
+          mergeSafetyChecklist(draft?.safetyChecklist ?? data.safetyChecklistResponses)
+        );
+      }
+      setSafetyPhotoUrl(draft?.safetyPhotoUrl ?? data.safetyPhotoUrl ?? null);
+      setStartPhotoUrl(draft?.startPhotoUrl ?? data.startPhotoUrl ?? null);
+      setEndPhotoUrl(draft?.endPhotoUrl ?? data.endPhotoUrl ?? null);
+      setParts(
+        Array.isArray(draft?.parts)
+          ? draft.parts.map((p) => ({ id: p.id, name: p.name, quantity: p.quantity || 1 }))
+          : Array.isArray(data.parts)
+            ? data.parts.map((p) => ({ id: p.id, name: p.name, quantity: p.quantity || 1 }))
+            : []
+      );
+      if (draft?.note) setNote(draft.note);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [query.data, id]);
 
   const mutation = useMutation({
-    mutationFn: (status: string) =>
-      transitionWorkOrder(id, {
+    mutationFn: async (status: string) => {
+      const closeQrToken =
+        status === 'COMPLETED' ? (await readCloseQrToken()) || undefined : undefined;
+      const result = await transitionWorkOrder(id, {
         status,
         note: note.trim() || undefined,
         completionNote: status === 'COMPLETED' ? note.trim() || 'Concluído em campo' : undefined,
@@ -111,6 +150,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
         safetyPhotoUrl: safetyPhotoUrl || undefined,
         startPhotoUrl: startPhotoUrl || undefined,
         endPhotoUrl: endPhotoUrl || undefined,
+        closeQrToken,
         parts:
           status === 'WAITING_PARTS' || parts.length
             ? parts.map((p) => ({
@@ -124,7 +164,10 @@ export default function GestaoOsDetailScreen({ route }: Props) {
               }))
             : undefined,
         signatureTechnicianUrl: status === 'COMPLETED' ? 'mobile:assinatura-tecnico' : undefined
-      }),
+      });
+      if (status === 'COMPLETED') await clearCloseQrToken();
+      return result;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', id] });
       queryClient.invalidateQueries({ queryKey: ['gestao-os-assigned'] });
@@ -133,6 +176,55 @@ export default function GestaoOsDetailScreen({ route }: Props) {
     },
     onError: (err: Error) => Alert.alert('Erro', err.message)
   });
+
+  const persistProgress = async (next?: {
+    checklist?: ChecklistItem[];
+    safetyChecklist?: SafetyItem[];
+    safetyPhotoUrl?: string | null;
+    startPhotoUrl?: string | null;
+    endPhotoUrl?: string | null;
+    parts?: Array<{ id: string; name: string; quantity: number }>;
+    note?: string;
+  }) => {
+    const payload = {
+      checklist: next?.checklist ?? checklist,
+      safetyChecklist: next?.safetyChecklist ?? safetyChecklist,
+      safetyPhotoUrl: next?.safetyPhotoUrl !== undefined ? next.safetyPhotoUrl : safetyPhotoUrl,
+      startPhotoUrl: next?.startPhotoUrl !== undefined ? next.startPhotoUrl : startPhotoUrl,
+      endPhotoUrl: next?.endPhotoUrl !== undefined ? next.endPhotoUrl : endPhotoUrl,
+      parts: next?.parts ?? parts,
+      note: next?.note ?? note
+    };
+    await saveGestaoOsLocalDraft(id, payload);
+    try {
+      await patchWorkOrder(id, {
+        checklistResponses: payload.checklist.length ? payload.checklist : undefined,
+        safetyChecklistResponses: payload.safetyChecklist.length
+          ? payload.safetyChecklist
+          : undefined,
+        safetyPhotoUrl: payload.safetyPhotoUrl || undefined,
+        startPhotoUrl: payload.startPhotoUrl || undefined,
+        endPhotoUrl: payload.endPhotoUrl || undefined,
+        parts: payload.parts.length
+          ? payload.parts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              supplier: null,
+              quantity: p.quantity || 1,
+              unitCost: null,
+              expectedAt: null,
+              notes: null
+            }))
+          : undefined
+      });
+      await clearGestaoOsLocalDraft(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (!/sem rede/i.test(msg)) {
+        Alert.alert('Aviso', msg || 'Não foi possível gravar o progresso agora.');
+      }
+    }
+  };
 
   const takeSafetyPhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -155,6 +247,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
       });
       if (!uploaded?.url) throw new Error('URL da foto não retornada');
       setSafetyPhotoUrl(uploaded.url);
+      await persistProgress({ safetyPhotoUrl: uploaded.url });
     } catch (err) {
       Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao enviar a foto');
     } finally {
@@ -164,7 +257,8 @@ export default function GestaoOsDetailScreen({ route }: Props) {
 
   const capturePhoto = async (
     setUrl: (url: string) => void,
-    setBusy: (busy: boolean) => void
+    setBusy: (busy: boolean) => void,
+    field: 'startPhotoUrl' | 'endPhotoUrl'
   ) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -186,10 +280,41 @@ export default function GestaoOsDetailScreen({ route }: Props) {
       });
       if (!uploaded?.url) throw new Error('URL da foto não retornada');
       setUrl(uploaded.url);
+      await persistProgress({ [field]: uploaded.url });
     } catch (err) {
       Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao enviar a foto');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const captureChecklistPhoto = async (index: number, field: 'beforePhotoUrl' | 'afterPhotoUrl') => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permissão', 'Precisamos da câmera para registrar a foto.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7
+    });
+    if (result.canceled || !result.assets[0]?.uri) return;
+    const asset = result.assets[0];
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadGestaoOsAttachment({
+        uri: asset.uri,
+        name: asset.fileName || `foto-${Date.now()}.jpg`,
+        type: asset.mimeType || 'image/jpeg'
+      });
+      if (!uploaded?.url) throw new Error('URL da foto não retornada');
+      const next = checklist.map((row, i) => (i === index ? { ...row, [field]: uploaded.url } : row));
+      setChecklist(next);
+      await persistProgress({ checklist: next });
+    } catch (err) {
+      Alert.alert('Erro', err instanceof Error ? err.message : 'Falha ao enviar a foto');
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -210,7 +335,15 @@ export default function GestaoOsDetailScreen({ route }: Props) {
     safetyChecklist.every((item) => item.required === false || item.checked) &&
     Boolean(safetyPhotoUrl);
   const executionReady =
-    checklist.length === 0 || checklist.every((item) => !!item.checked);
+    checklist.length === 0 ||
+    checklist.every(
+      (item) =>
+        !!item.checked &&
+        !!item.startedAt &&
+        !!item.completedAt &&
+        !!item.beforePhotoUrl &&
+        !!item.afterPhotoUrl
+    );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -242,11 +375,15 @@ export default function GestaoOsDetailScreen({ route }: Props) {
                 <TouchableOpacity
                   key={item.id}
                   style={styles.checkRow}
-                  onPress={() =>
-                    setSafetyChecklist((prev) =>
-                      prev.map((row, i) => (i === idx ? { ...row, checked: !row.checked } : row))
-                    )
-                  }
+                  onPress={() => {
+                    setSafetyChecklist((prev) => {
+                      const next = prev.map((row, i) =>
+                        i === idx ? { ...row, checked: !row.checked } : row
+                      );
+                      void persistProgress({ safetyChecklist: next });
+                      return next;
+                    });
+                  }}
                 >
                   <View
                     style={[
@@ -278,27 +415,69 @@ export default function GestaoOsDetailScreen({ route }: Props) {
           {checklist.length > 0 ? (
             <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
               <Text style={[styles.boxTitle, { color: colors.text }]}>Checklist</Text>
+              <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
+                Marque o item, registre o horário e tire foto de antes e depois. Sem rede, o
+                progresso fica no aparelho e sincroniza depois.
+              </Text>
               {checklist.map((item, idx) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.checkRow}
-                  onPress={() =>
-                    setChecklist((prev) =>
-                      prev.map((row, i) => (i === idx ? { ...row, checked: !row.checked } : row))
-                    )
-                  }
-                >
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: colors.border,
-                        backgroundColor: item.checked ? colors.primary : 'transparent'
-                      }
-                    ]}
-                  />
-                  <Text style={{ color: colors.text, flex: 1 }}>{item.label}</Text>
-                </TouchableOpacity>
+                <View key={item.id} style={{ marginBottom: 12 }}>
+                  <TouchableOpacity
+                    style={styles.checkRow}
+                    onPress={() => {
+                      const now = new Date().toISOString();
+                      setChecklist((prev) => {
+                        const next = prev.map((row, i) => {
+                          if (i !== idx) return row;
+                          const checked = !row.checked;
+                          if (!checked) return { ...row, checked: false, completedAt: null };
+                          return {
+                            ...row,
+                            checked: true,
+                            startedAt: row.startedAt || now,
+                            completedAt: now
+                          };
+                        });
+                        void persistProgress({ checklist: next });
+                        return next;
+                      });
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          borderColor: colors.border,
+                          backgroundColor: item.checked ? colors.primary : 'transparent'
+                        }
+                      ]}
+                    />
+                    <Text style={{ color: colors.text, flex: 1 }}>{item.label}</Text>
+                  </TouchableOpacity>
+                  {item.beforePhotoUrl ? (
+                    <Image source={{ uri: item.beforePhotoUrl }} style={styles.photo} />
+                  ) : null}
+                  {item.afterPhotoUrl ? (
+                    <Image source={{ uri: item.afterPhotoUrl }} style={styles.photo} />
+                  ) : null}
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      style={[styles.btn, { flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+                      onPress={() => void captureChecklistPhoto(idx, 'beforePhotoUrl')}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '700', textAlign: 'center' }}>
+                        Foto antes
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btn, { flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+                      onPress={() => void captureChecklistPhoto(idx, 'afterPhotoUrl')}
+                    >
+                      <Text style={{ color: colors.text, fontWeight: '700', textAlign: 'center' }}>
+                        Foto depois
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ))}
             </View>
           ) : null}
@@ -313,7 +492,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
               <TouchableOpacity
                 style={[styles.btn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
                 disabled={uploadingStart}
-                onPress={() => void capturePhoto(setStartPhotoUrl, setUploadingStart)}
+                onPress={() => void capturePhoto(setStartPhotoUrl, setUploadingStart, 'startPhotoUrl')}
               >
                 <Text style={{ color: colors.text, fontWeight: '700' }}>
                   {uploadingStart ? 'Enviando foto...' : startPhotoUrl ? 'Tirar outra foto' : 'Tirar foto de início'}
@@ -358,24 +537,30 @@ export default function GestaoOsDetailScreen({ route }: Props) {
           ) : null}
 
           {actions.includes('COMPLETED') ? (
-            <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
-              <Text style={[styles.boxTitle, { color: colors.text }]}>Foto de conclusão</Text>
-              <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
-                {executionReady
-                  ? 'Registre uma foto antes de concluir o serviço.'
-                  : 'Marque todos os itens do checklist de execução antes de concluir.'}
+            <>
+              <Text style={{ color: colors.textSecondary, marginBottom: 8, fontSize: 13 }}>
+                Para concluir, leia o QR do responsável da localidade (scanner na lista) e envie
+                foto de antes/depois de cada item.
               </Text>
-              {endPhotoUrl ? <Image source={{ uri: endPhotoUrl }} style={styles.photo} /> : null}
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
-                disabled={uploadingEnd}
-                onPress={() => void capturePhoto(setEndPhotoUrl, setUploadingEnd)}
-              >
-                <Text style={{ color: colors.text, fontWeight: '700' }}>
-                  {uploadingEnd ? 'Enviando foto...' : endPhotoUrl ? 'Tirar outra foto' : 'Tirar foto de conclusão'}
+              <View style={[styles.box, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <Text style={[styles.boxTitle, { color: colors.text }]}>Foto de conclusão</Text>
+                <Text style={{ color: colors.textSecondary, marginBottom: 10, fontSize: 13 }}>
+                  {executionReady
+                    ? 'Registre uma foto antes de concluir o serviço.'
+                    : 'Marque todos os itens do checklist de execução antes de concluir.'}
                 </Text>
-              </TouchableOpacity>
-            </View>
+                {endPhotoUrl ? <Image source={{ uri: endPhotoUrl }} style={styles.photo} /> : null}
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border }]}
+                  disabled={uploadingEnd}
+                  onPress={() => void capturePhoto(setEndPhotoUrl, setUploadingEnd, 'endPhotoUrl')}
+                >
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>
+                    {uploadingEnd ? 'Enviando foto...' : endPhotoUrl ? 'Tirar outra foto' : 'Tirar foto de conclusão'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : null}
 
           <TextInput

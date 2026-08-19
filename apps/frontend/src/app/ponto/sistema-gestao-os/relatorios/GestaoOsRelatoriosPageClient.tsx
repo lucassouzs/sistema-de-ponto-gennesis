@@ -1,14 +1,17 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   BarChart3,
   Building2,
+  CheckCircle2,
   Clock3,
+  Download,
   FolderKanban,
+  Package,
   Timer,
   Users,
   Wrench
@@ -25,8 +28,20 @@ import {
 } from '@/components/ui/CadastroListSummary';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import api from '@/lib/api';
-import { GestaoOsReportsSummary, STATUS_LABELS, type GestaoOsStatus } from '../gestaoOsTypes';
+import {
+  GestaoOsReportsSummary,
+  ORIGIN_LABELS,
+  STATUS_LABELS,
+  type GestaoOsLocationTree,
+  type GestaoOsOrigin,
+  type GestaoOsStatus
+} from '../gestaoOsTypes';
 import { useGestaoOsCompany } from '../useGestaoOsCompany';
+import { exportGestaoOsReportsPdf } from '@/lib/exportGestaoOsReportsPdf';
+import toast from 'react-hot-toast';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 type GestaoOsWorkloadRow = {
   assigneeId: string;
@@ -127,13 +142,48 @@ export default function GestaoOsRelatoriosPageClient() {
     }
   });
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [buildingId, setBuildingId] = useState('');
+  const [origin, setOrigin] = useState('');
+  const [assigneeId, setAssigneeId] = useState('');
+  const reportParams = {
+    from: from || undefined,
+    to: to || undefined,
+    buildingId: buildingId || undefined,
+    origin: origin || undefined,
+    assigneeId: assigneeId || undefined,
+    teamUserId: assigneeId || undefined
+  };
+
+  const { data: locationTree = [] } = useQuery({
+    queryKey: ['gestao-os-locations'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsLocationTree }>(
+        '/gestao-os/locations'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+  const { data: technicians = [] } = useQuery({
+    queryKey: ['gestao-os-technicians'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+        '/gestao-os/technicians'
+      );
+      return res.data?.data ?? [];
+    }
+  });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['gestao-os-reports-summary'],
+    queryKey: ['gestao-os-reports-summary', reportParams],
     enabled: !loadingCompany,
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsReportsSummary }>(
-        '/gestao-os/reports/summary'
+        '/gestao-os/reports/summary',
+        { params: reportParams }
       );
       return res.data?.data;
     }
@@ -172,8 +222,71 @@ export default function GestaoOsRelatoriosPageClient() {
               Relatórios de Chamados
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Indicadores de backlog, atraso, MTTR e distribuição.
+              Indicadores de backlog, atraso, MTTR, volume mensal, insumos e pendências.
             </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                De
+              </label>
+              <DatePickerField value={from} onChange={setFrom} noFocusRing aria-label="Data inicial" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Até
+              </label>
+              <DatePickerField value={to} onChange={setTo} noFocusRing aria-label="Data final" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Localidade
+              </label>
+              <StringSingleSelectDropdown
+                value={buildingId}
+                onChange={setBuildingId}
+                options={labeledToSelectOptions(
+                  locationTree.map((b) => ({ value: b.id, label: b.name }))
+                )}
+                placeholder="Todas"
+                emptyOptionLabel="Todas"
+                allowEmpty
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Canal
+              </label>
+              <StringSingleSelectDropdown
+                value={origin}
+                onChange={setOrigin}
+                options={labeledToSelectOptions(
+                  (Object.keys(ORIGIN_LABELS) as GestaoOsOrigin[]).map((key) => ({
+                    value: key,
+                    label: ORIGIN_LABELS[key]
+                  }))
+                )}
+                placeholder="Todos"
+                emptyOptionLabel="Todos"
+                allowEmpty
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Técnico / equipe
+              </label>
+              <StringSingleSelectDropdown
+                value={assigneeId}
+                onChange={setAssigneeId}
+                options={labeledToSelectOptions(
+                  technicians.map((t) => ({ value: t.id, label: t.name }))
+                )}
+                placeholder="Todos"
+                emptyOptionLabel="Todos"
+                allowEmpty
+              />
+            </div>
           </div>
 
           {isLoading || !data ? (
@@ -184,7 +297,41 @@ export default function GestaoOsRelatoriosPageClient() {
             </Card>
           ) : (
             <div className="flex flex-col gap-6">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
+                  onClick={async () => {
+                    try {
+                      const res = await api.get('/gestao-os/reports/export.csv', {
+                        responseType: 'blob',
+                        params: reportParams
+                      });
+                      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'relatorio-os.csv';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      toast.error('Não foi possível exportar o CSV.');
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  CSV gerencial
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                  onClick={() => void exportGestaoOsReportsPdf(data)}
+                >
+                  <Download className="h-4 w-4" />
+                  PDF gerencial
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                 <FilterStatCard
                   label="Em aberto"
                   count={data.openLike}
@@ -192,6 +339,14 @@ export default function GestaoOsRelatoriosPageClient() {
                   icon={FolderKanban}
                   iconBg="bg-red-100 dark:bg-red-900/30"
                   iconColor="text-red-600 dark:text-red-400"
+                />
+                <FilterStatCard
+                  label="Resolvidas"
+                  count={data.resolved ?? 0}
+                  subtitle="Concluídas ou encerradas"
+                  icon={CheckCircle2}
+                  iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+                  iconColor="text-emerald-600 dark:text-emerald-400"
                 />
                 <FilterStatCard
                   label="Atrasadas"
@@ -247,6 +402,29 @@ export default function GestaoOsRelatoriosPageClient() {
                     count: r.count
                   }))}
                   emptyTitle="Nenhum técnico atribuído"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <DistributionCard
+                  title="Volume mensal por tipo"
+                  icon={BarChart3}
+                  rows={(data.monthlyByCategory || []).map((m) => ({
+                    key: m.month,
+                    label: m.month,
+                    count: m.total
+                  }))}
+                  emptyTitle="Sem série mensal ainda"
+                />
+                <DistributionCard
+                  title="Materiais / insumos"
+                  icon={Package}
+                  rows={(data.materials || []).map((r) => ({
+                    key: r.name,
+                    label: r.name,
+                    count: r.quantity
+                  }))}
+                  emptyTitle="Nenhum insumo lançado nas OS"
                 />
               </div>
 
@@ -331,6 +509,72 @@ export default function GestaoOsRelatoriosPageClient() {
                                   {row.warningCount}
                                 </span>
                               </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <div className={cadastroListClasses.cardHeaderIconRow}>
+                    <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                      <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        Relatório de pendências
+                      </h3>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        OS não atendidas, atrasadas ou sem solução (retrabalho / aguardando peça)
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className={cadastroListClasses.cardContent}>
+                  {(data.pendencias || []).length === 0 ? (
+                    <CadastroListEmpty
+                      icon={CheckCircle2}
+                      title="Nenhuma pendência persistente"
+                      hint="Quando houver OS abertas ou sem solução, elas aparecem aqui."
+                    />
+                  ) : (
+                    <div className={cadastroListClasses.tableScroll}>
+                      <table className={`${cadastroListClasses.table} min-w-[40rem]`}>
+                        <thead className="border-b border-gray-200 dark:border-gray-700">
+                          <tr>
+                            <th className={cadastroListClasses.th}>OS</th>
+                            <th className={cadastroListClasses.th}>Status</th>
+                            <th className={cadastroListClasses.th}>Tipo</th>
+                            <th className={cadastroListClasses.th}>Local</th>
+                            <th className={cadastroListClasses.th}>Técnico</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                          {(data.pendencias || []).map((row) => (
+                            <tr key={row.id}>
+                              <td className={cadastroListClasses.td}>
+                                <span className="font-medium">{row.label}</span>
+                                {row.overdue ? (
+                                  <span className="ml-2 text-xs font-semibold text-rose-600">
+                                    Atrasada
+                                  </span>
+                                ) : null}
+                                {row.unsolved ? (
+                                  <span className="ml-2 text-xs font-semibold text-amber-700">
+                                    Sem solução
+                                  </span>
+                                ) : null}
+                              </td>
+                              <td className={cadastroListClasses.td}>
+                                {STATUS_LABELS[row.status]}
+                              </td>
+                              <td className={cadastroListClasses.td}>{row.category}</td>
+                              <td className={cadastroListClasses.td}>{row.locationLabel || '—'}</td>
+                              <td className={cadastroListClasses.td}>{row.assigneeName || '—'}</td>
                             </tr>
                           ))}
                         </tbody>

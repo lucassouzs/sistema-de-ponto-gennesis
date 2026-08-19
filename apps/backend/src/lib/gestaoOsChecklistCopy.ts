@@ -6,6 +6,10 @@ export type GestaoOsChecklistCopyItem = {
   label: string;
   checked: boolean;
   required?: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  beforePhotoUrl?: string | null;
+  afterPhotoUrl?: string | null;
 };
 
 export function parseChecklistLabels(value: unknown): string[] {
@@ -68,6 +72,10 @@ export function parseChecklistResponses(value: unknown): GestaoOsChecklistCopyIt
         label?: unknown;
         checked?: unknown;
         required?: unknown;
+        startedAt?: unknown;
+        completedAt?: unknown;
+        beforePhotoUrl?: unknown;
+        afterPhotoUrl?: unknown;
       };
       const label = String(row.label ?? '').trim();
       if (!label) return null;
@@ -75,7 +83,11 @@ export function parseChecklistResponses(value: unknown): GestaoOsChecklistCopyIt
         id: String(row.id ?? `item-${idx + 1}`),
         label,
         checked: Boolean(row.checked),
-        required: !!row.required
+        required: !!row.required,
+        startedAt: row.startedAt ? String(row.startedAt) : null,
+        completedAt: row.completedAt ? String(row.completedAt) : null,
+        beforePhotoUrl: row.beforePhotoUrl ? String(row.beforePhotoUrl) : null,
+        afterPhotoUrl: row.afterPhotoUrl ? String(row.afterPhotoUrl) : null
       };
     })
     .filter(Boolean) as GestaoOsChecklistCopyItem[];
@@ -152,6 +164,33 @@ export async function upsertChecklistTemplate(input: {
     }
   });
   return created.id;
+}
+
+export async function loadIfspChecklistLabels(input: {
+  buildingId?: string | null;
+  assetId?: string | null;
+}): Promise<string[]> {
+  const where: Prisma.GestaoOsDocumentWhereInput = {
+    kind: { in: ['CHECKLIST_IFSP', 'MANUAL_PATRIMONIO'] },
+    notes: { not: null }
+  };
+  const or: Prisma.GestaoOsDocumentWhereInput[] = [];
+  if (input.assetId) or.push({ assetId: input.assetId });
+  if (input.buildingId) or.push({ buildingId: input.buildingId });
+  if (or.length) where.OR = or;
+  const docs = await prisma.gestaoOsDocument.findMany({
+    where,
+    select: { notes: true, kind: true },
+    orderBy: { createdAt: 'desc' },
+    take: 8
+  });
+  const labels: string[] = [];
+  for (const doc of docs) {
+    for (const line of parseChecklistLabels(doc.notes)) {
+      if (!labels.includes(line)) labels.push(line);
+    }
+  }
+  return labels;
 }
 
 export async function resolveCategoryChecklistResponses(

@@ -9,6 +9,8 @@ export type GestaoOsPartLine = {
   unitCost: number | null;
   expectedAt: string | null;
   notes: string | null;
+  materialId: string | null;
+  stockDeductedAt: string | null;
 };
 
 export function parseParts(value: unknown): GestaoOsPartLine[] {
@@ -44,7 +46,9 @@ export function parseParts(value: unknown): GestaoOsPartLine[] {
       quantity,
       unitCost,
       expectedAt,
-      notes: row.notes ? String(row.notes).trim() || null : null
+      notes: row.notes ? String(row.notes).trim() || null : null,
+      materialId: row.materialId ? String(row.materialId).trim() || null : null,
+      stockDeductedAt: row.stockDeductedAt ? String(row.stockDeductedAt) : null
     });
   }
   return out;

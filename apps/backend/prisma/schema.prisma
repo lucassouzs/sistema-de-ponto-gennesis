@@ -4015,6 +4015,14 @@ model GestaoOsBuilding {
   branchId  String?
   name      String
   code      String?
+  address   String?
+  latitude  Float?
+  longitude Float?
+  responsibleUserId String?
+  prepostoUserId    String?
+  managerUserId     String?
+  fiscalUserId      String?
+  qrToken   String?  @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4077,6 +4085,7 @@ model GestaoOsAsset {
   name      String
   code      String?
   category  String?
+  serialNumber String?
   /// Token estável usado no QR Code do ativo.
   qrToken   String   @unique
   /// Fim da garantia do ativo (alerta no sino antes de vencer).
@@ -4198,6 +4207,16 @@ model GestaoOsWorkOrder {
   completionNote String? @db.Text
   rating         Int?
   ratingComment  String? @db.Text
+  /// REQUEST | SAC | UNPLANNED | PLANTAO
+  origin         String  @default("REQUEST")
+  /// CHAMADO | DUVIDA | RECLAMACAO (quando origin = SAC)
+  sacKind        String?
+  teamUserIds    Json?
+  fiscalRating        Int?
+  fiscalRatingComment String? @db.Text
+  fiscalUserId        String?
+  attestedAt          DateTime?
+  closeQrVerifiedAt   DateTime?
 
   /// Prazo / SLA da OS.
   dueAt DateTime?
@@ -4375,6 +4394,8 @@ enum GestaoOsDocumentKind {
   WARRANTY
   LAUDO
   ART
+  CHECKLIST_IFSP
+  MANUAL_PATRIMONIO
   OTHER
 }
 

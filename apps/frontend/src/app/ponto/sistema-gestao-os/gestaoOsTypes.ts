@@ -14,7 +14,17 @@ export type GestaoOsPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type GestaoOsMaintenanceType = 'CORRECTIVE' | 'PREVENTIVE' | 'PREDICTIVE';
 export type GestaoOsProfile = 'REQUESTER' | 'MANAGER' | 'TECHNICIAN' | 'ADMIN';
 
-export type GestaoOsDocumentKind = 'MANUAL' | 'WARRANTY' | 'LAUDO' | 'ART' | 'OTHER';
+export type GestaoOsDocumentKind =
+  | 'MANUAL'
+  | 'WARRANTY'
+  | 'LAUDO'
+  | 'ART'
+  | 'CHECKLIST_IFSP'
+  | 'MANUAL_PATRIMONIO'
+  | 'OTHER';
+
+export type GestaoOsOrigin = 'REQUEST' | 'SAC' | 'UNPLANNED' | 'PLANTAO';
+export type GestaoOsSacKind = 'CHAMADO' | 'DUVIDA' | 'RECLAMACAO';
 
 export type GestaoOsAttachment = {
   url: string;
@@ -36,6 +46,10 @@ export type GestaoOsChecklistResponseItem = {
   label: string;
   checked?: boolean;
   required?: boolean;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  beforePhotoUrl?: string | null;
+  afterPhotoUrl?: string | null;
 };
 
 export type GestaoOsPartLine = {
@@ -46,6 +60,8 @@ export type GestaoOsPartLine = {
   unitCost: number | null;
   expectedAt: string | null;
   notes: string | null;
+  materialId?: string | null;
+  stockDeductedAt?: string | null;
 };
 
 export type GestaoOsWorkOrder = {
@@ -68,6 +84,15 @@ export type GestaoOsWorkOrder = {
   requester: GestaoOsUserRef;
   assigneeId: string | null;
   assignee: GestaoOsUserRef | null;
+  teamUserIds?: string[];
+  origin?: GestaoOsOrigin | null;
+  sacKind?: GestaoOsSacKind | null;
+  fiscalRating?: number | null;
+  fiscalRatingComment?: string | null;
+  fiscalUserId?: string | null;
+  attestedAt?: string | null;
+  closeQrVerifiedAt?: string | null;
+  buildingCloseQrRequired?: boolean;
   providerName: string | null;
   attachments: GestaoOsAttachment[] | null;
   cancelReason: string | null;
@@ -158,10 +183,30 @@ export type GestaoOsReportsSummary = {
   openLike: number;
   overdue: number;
   mttrHours: number | null;
+  resolved?: number;
+  pending?: number;
   byStatus: Partial<Record<GestaoOsStatus, number>>;
   byCategory: Array<{ category: string; count: number }>;
   byBuilding: Array<{ buildingId: string | null; name: string; count: number }>;
   byTechnician: Array<{ assigneeId: string | null; name: string; count: number }>;
+  monthlyByCategory?: Array<{
+    month: string;
+    total: number;
+    byCategory: Array<{ category: string; count: number }>;
+  }>;
+  materials?: Array<{ name: string; quantity: number; cost: number; osCount: number }>;
+  pendencias?: Array<{
+    id: string;
+    label: string;
+    status: GestaoOsStatus;
+    category: string;
+    locationLabel: string | null;
+    assigneeName: string | null;
+    openedAt: string;
+    dueAt: string | null;
+    overdue: boolean;
+    unsolved: boolean;
+  }>;
 };
 
 export const PLAN_TYPE_LABELS: Record<GestaoOsPlanType, string> = {
@@ -175,13 +220,36 @@ export const DOCUMENT_KIND_LABELS: Record<GestaoOsDocumentKind, string> = {
   WARRANTY: 'Garantia',
   LAUDO: 'Laudo',
   ART: 'ART',
+  CHECKLIST_IFSP: 'Check-list IFSP',
+  MANUAL_PATRIMONIO: 'Manual de Patrimônio IFSP',
   OTHER: 'Outro'
+};
+
+export const ORIGIN_LABELS: Record<GestaoOsOrigin, string> = {
+  REQUEST: 'Chamado',
+  SAC: 'SAC da localidade',
+  UNPLANNED: 'Ocorrência não planejada',
+  PLANTAO: 'Plantão 24h'
+};
+
+export const SAC_KIND_LABELS: Record<GestaoOsSacKind, string> = {
+  CHAMADO: 'Chamado',
+  DUVIDA: 'Dúvida',
+  RECLAMACAO: 'Reclamação'
 };
 
 export type GestaoOsLocationTree = Array<{
   id: string;
   name: string;
   code?: string | null;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  responsibleUserId?: string | null;
+  prepostoUserId?: string | null;
+  managerUserId?: string | null;
+  fiscalUserId?: string | null;
+  qrToken?: string | null;
   sectors: Array<{
     id: string;
     name: string;
@@ -195,6 +263,7 @@ export type GestaoOsLocationTree = Array<{
         name: string;
         code?: string | null;
         category: string | null;
+        serialNumber?: string | null;
         qrToken?: string;
         warrantyEndsAt?: string | null;
       }>;
@@ -403,6 +472,38 @@ export function isGestaoOsExecutionChecklistComplete(
   return items.every((item) => !!item.checked);
 }
 
+export function isGestaoOsExecutionChecklistEvidenceComplete(
+  items: GestaoOsChecklistResponseItem[] | null | undefined
+): boolean {
+  if (!items?.length) return true;
+  return items.every(
+    (item) =>
+      !!item.checked &&
+      !!item.startedAt &&
+      !!item.completedAt &&
+      !!item.beforePhotoUrl &&
+      !!item.afterPhotoUrl
+  );
+}
+
+export function stampGestaoOsChecklistToggle(
+  items: GestaoOsChecklistResponseItem[],
+  index: number,
+  checked: boolean
+): GestaoOsChecklistResponseItem[] {
+  const now = new Date().toISOString();
+  return items.map((item, i) => {
+    if (i !== index) return item;
+    if (!checked) return { ...item, checked: false, completedAt: null };
+    return {
+      ...item,
+      checked: true,
+      startedAt: item.startedAt || now,
+      completedAt: now
+    };
+  });
+}
+
 export const SERVICE_CATEGORIES = [
   'Elétrica',
   'Energia elétrica',
@@ -414,6 +515,7 @@ export const SERVICE_CATEGORIES = [
   'Elevadores',
   'Bombas e motores',
   'Civil / Alvenaria',
+  'Pintura',
   'Marcenaria',
   'Limpeza / Conservação',
   'TI / Telefonia',

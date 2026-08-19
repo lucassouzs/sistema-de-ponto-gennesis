@@ -9,6 +9,9 @@ export const PRIORITY_SLA_HOURS: Record<GestaoOsPriority, number> = {
   LOW: 72
 };
 
+/** SLA de plantão / fora do expediente (America/Sao_Paulo). */
+export const PLANTAO_SLA_HOURS = 4;
+
 /** Aviso quando resta ≤ 25% do prazo ou ≤ 2h (o que for maior entre os critérios). */
 export const SLA_WARNING_RATIO = 0.25;
 export const SLA_WARNING_MIN_HOURS = 2;
@@ -79,15 +82,37 @@ export function computeSlaMeta(input: {
   };
 }
 
+/** Expediente: seg–sex 07:00–18:00 no fuso de Brasília. */
+export function isGestaoOsAfterHours(from: Date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit'
+  }).formatToParts(from);
+  const weekday = parts.find((p) => p.type === 'weekday')?.value || '';
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 12);
+  const weekend = weekday === 'Sat' || weekday === 'Sun';
+  return weekend || hour < 7 || hour >= 18;
+}
+
 /**
- * Resolve horas de SLA: equipamento (match por nome/categoria do ativo) → prioridade.
+ * Resolve horas de SLA: plantão/fora do expediente → equipamento → prioridade.
  */
 export async function resolveSlaHours(input: {
   priority: GestaoOsPriority;
   assetId?: string | null;
   assetCategory?: string | null;
   assetName?: string | null;
-}): Promise<{ hours: number; source: 'equipment' | 'priority' }> {
+  origin?: string | null;
+  from?: Date;
+}): Promise<{ hours: number; source: 'equipment' | 'priority' | 'plantao' }> {
+  const origin = String(input.origin || '').toUpperCase();
+  if (origin === 'PLANTAO' || isGestaoOsAfterHours(input.from ?? new Date())) {
+    const priorityHours = PRIORITY_SLA_HOURS[input.priority] ?? PRIORITY_SLA_HOURS.MEDIUM;
+    return { hours: Math.min(priorityHours, PLANTAO_SLA_HOURS), source: 'plantao' };
+  }
   const priorityHours = PRIORITY_SLA_HOURS[input.priority] ?? PRIORITY_SLA_HOURS.MEDIUM;
 
   let category = input.assetCategory?.trim() || null;
@@ -128,7 +153,12 @@ export async function resolveSlaDueAt(input: {
   assetId?: string | null;
   from?: Date;
   explicitDueAt?: Date | string | null;
-}): Promise<{ dueAt: Date; slaHoursApplied: number; source: 'explicit' | 'equipment' | 'priority' }> {
+  origin?: string | null;
+}): Promise<{
+  dueAt: Date;
+  slaHoursApplied: number;
+  source: 'explicit' | 'equipment' | 'priority' | 'plantao';
+}> {
   if (input.explicitDueAt) {
     const d =
       input.explicitDueAt instanceof Date
@@ -137,7 +167,9 @@ export async function resolveSlaDueAt(input: {
     if (!Number.isNaN(d.getTime())) {
       const { hours } = await resolveSlaHours({
         priority: input.priority,
-        assetId: input.assetId
+        assetId: input.assetId,
+        origin: input.origin,
+        from: input.from
       });
       return { dueAt: d, slaHoursApplied: hours, source: 'explicit' };
     }
@@ -145,7 +177,9 @@ export async function resolveSlaDueAt(input: {
   const from = input.from ?? new Date();
   const resolved = await resolveSlaHours({
     priority: input.priority,
-    assetId: input.assetId
+    assetId: input.assetId,
+    origin: input.origin,
+    from
   });
   return {
     dueAt: computeDueAtFromHours(from, resolved.hours),

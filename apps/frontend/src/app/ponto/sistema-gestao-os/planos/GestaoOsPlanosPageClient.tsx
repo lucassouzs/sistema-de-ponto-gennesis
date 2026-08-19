@@ -39,6 +39,8 @@ import {
   GestaoOsLocationTree,
   GestaoOsMaintenancePlan,
   GestaoOsPlanType,
+  GestaoOsDocument,
+  DOCUMENT_KIND_LABELS,
   PLAN_TYPE_LABELS,
   checklistItemsToText
 } from '../gestaoOsTypes';
@@ -275,6 +277,19 @@ export default function GestaoOsPlanosPageClient() {
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: Technician[] }>('/gestao-os/technicians');
       return res.data?.data ?? [];
+    }
+  });
+
+  const { data: ifspDocs = [] } = useQuery({
+    queryKey: ['gestao-os-ifsp-docs'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsDocument[] }>(
+        '/gestao-os/documents'
+      );
+      return (res.data?.data ?? []).filter(
+        (d) => d.kind === 'CHECKLIST_IFSP' || d.kind === 'MANUAL_PATRIMONIO'
+      );
     }
   });
 
@@ -532,9 +547,51 @@ export default function GestaoOsPlanosPageClient() {
               Planos de Manutenção
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Programe as manutenções e gere os chamados automaticamente na data.
+              Programe as manutenções com o Check-List e o Manual de Patrimônio do IFSP e gere os
+              chamados automaticamente na data.
             </p>
           </div>
+
+          {ifspDocs.length > 0 ? (
+            <Card className={cadastroListClasses.card}>
+              <CardContent className={cadastroListClasses.cardContent}>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Documentos IFSP para programação
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                  {ifspDocs.map((doc) => (
+                    <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="underline">
+                        {DOCUMENT_KIND_LABELS[doc.kind] || doc.kind} — {doc.title}
+                      </a>
+                      {doc.notes?.trim() ? (
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                          onClick={() =>
+                            setForm((s) => ({
+                              ...s,
+                              checklistText: [s.checklistText, doc.notes]
+                                .filter(Boolean)
+                                .join('\n')
+                                .trim()
+                            }))
+                          }
+                        >
+                          Usar como checklist
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : (
+            <p className="text-center text-xs text-gray-500">
+              Cadastre o Check-List IFSP e o Manual de Patrimônio em Documentos (tipo correspondente)
+              para amarrar a programação.
+            </p>
+          )}
 
           {compliance ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">

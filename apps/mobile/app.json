@@ -53,6 +53,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "react-native-maps",
       [
         "@react-native-community/datetimepicker",
         {

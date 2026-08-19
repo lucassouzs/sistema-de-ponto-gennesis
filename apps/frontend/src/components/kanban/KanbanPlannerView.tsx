@@ -1298,11 +1298,7 @@ export function KanbanPlannerView({
             <span className="text-base font-medium tracking-tight text-gray-900 dark:text-gray-100 sm:text-lg">
               {periodLabel}
             </span>
-            {gestaoOsAgenda.length > 0 ? (
-              <span className="hidden text-xs text-gray-500 sm:inline dark:text-gray-400">
-                Inclui prazos de OS e planos de manutenção
-              </span>
-            ) : null}
+            {/* Removido: texto informativo “Inclui prazos de OS e planos de manutenção” */}
             {agendas.length > 1 && (
               <label className="ml-0.5 inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <span className="sr-only sm:not-sr-only">Agenda</span>

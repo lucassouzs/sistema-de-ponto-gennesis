@@ -38,6 +38,7 @@ import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
@@ -53,6 +54,14 @@ type LocationAdminTree = Array<{
   name: string;
   code: string | null;
   isActive: boolean;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  responsibleUserId?: string | null;
+  prepostoUserId?: string | null;
+  managerUserId?: string | null;
+  fiscalUserId?: string | null;
+  qrToken?: string | null;
   sectors: Array<{
     id: string;
     name: string;
@@ -68,6 +77,7 @@ type LocationAdminTree = Array<{
         name: string;
         code: string | null;
         category: string | null;
+        serialNumber?: string | null;
         qrToken: string;
         isActive: boolean;
         warrantyEndsAt?: string | null;
@@ -85,7 +95,40 @@ const TABS: ReadonlyArray<{ id: LocaisTab; label: string }> = [
   { id: 'locais', label: 'Locais' }
 ];
 
-type BuildingRow = { id: string; name: string; code: string | null; isActive: boolean };
+const EMPTY_BUILDING_FORM = {
+  name: '',
+  code: '',
+  address: '',
+  latitude: '',
+  longitude: '',
+  responsibleUserId: '',
+  prepostoUserId: '',
+  managerUserId: '',
+  fiscalUserId: ''
+};
+
+const EMPTY_ASSET_FORM = {
+  placeId: '',
+  name: '',
+  code: '',
+  category: '',
+  serialNumber: '',
+  warrantyEndsAt: ''
+};
+
+type BuildingRow = {
+  id: string;
+  name: string;
+  code: string | null;
+  isActive: boolean;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  responsibleUserId?: string | null;
+  prepostoUserId?: string | null;
+  managerUserId?: string | null;
+  fiscalUserId?: string | null;
+};
 type SectorRow = {
   id: string;
   name: string;
@@ -114,6 +157,7 @@ type AssetRow = {
   sectorName: string;
   buildingName: string;
   warrantyEndsAt?: string | null;
+  serialNumber?: string | null;
 };
 
 function flattenTree(tree: LocationAdminTree) {
@@ -122,7 +166,19 @@ function flattenTree(tree: LocationAdminTree) {
   const places: PlaceRow[] = [];
   const assets: AssetRow[] = [];
   for (const b of tree) {
-    buildings.push({ id: b.id, name: b.name, code: b.code, isActive: b.isActive });
+    buildings.push({
+      id: b.id,
+      name: b.name,
+      code: b.code,
+      isActive: b.isActive,
+      address: b.address ?? null,
+      latitude: b.latitude ?? null,
+      longitude: b.longitude ?? null,
+      responsibleUserId: b.responsibleUserId ?? null,
+      prepostoUserId: b.prepostoUserId ?? null,
+      managerUserId: b.managerUserId ?? null,
+      fiscalUserId: b.fiscalUserId ?? null
+    });
     for (const s of b.sectors ?? []) {
       sectors.push({
         id: s.id,
@@ -153,7 +209,8 @@ function flattenTree(tree: LocationAdminTree) {
             placeName: p.name,
             sectorName: s.name,
             buildingName: b.name,
-            warrantyEndsAt: a.warrantyEndsAt ?? null
+            warrantyEndsAt: a.warrantyEndsAt ?? null,
+            serialNumber: a.serialNumber ?? null
           });
         }
       }
@@ -171,7 +228,17 @@ export default function GestaoOsLocaisPageClient() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [buildingForm, setBuildingForm] = useState({ name: '', code: '' });
+  const [buildingForm, setBuildingForm] = useState({
+    name: '',
+    code: '',
+    address: '',
+    latitude: '',
+    longitude: '',
+    responsibleUserId: '',
+    prepostoUserId: '',
+    managerUserId: '',
+    fiscalUserId: ''
+  });
   const [sectorForm, setSectorForm] = useState({ buildingId: '', name: '', code: '' });
   const [placeForm, setPlaceForm] = useState({ sectorId: '', name: '', code: '' });
   const [assetForm, setAssetForm] = useState({
@@ -179,9 +246,15 @@ export default function GestaoOsLocaisPageClient() {
     name: '',
     code: '',
     category: '',
+    serialNumber: '',
     warrantyEndsAt: ''
   });
   const [qrPreview, setQrPreview] = useState<GestaoOsAssetQr | null>(null);
+  const [buildingCloseQr, setBuildingCloseQr] = useState<{
+    name: string;
+    dataUrl: string;
+    payload: string;
+  } | null>(null);
   const [printingLabels, setPrintingLabels] = useState(false);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [labelPickerInitialIds, setLabelPickerInitialIds] = useState<string[]>([]);
@@ -236,6 +309,24 @@ export default function GestaoOsLocaisPageClient() {
       return res.data?.data ?? [];
     }
   });
+
+  const { data: technicians = [] } = useQuery({
+    queryKey: ['gestao-os-technicians'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+        '/gestao-os/technicians'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+
+  const personOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        technicians.map((t) => ({ value: t.id, label: t.name, searchText: t.name }))
+      ),
+    [technicians]
+  );
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['gestao-os-cadastros', 'locations'] });
@@ -335,13 +426,18 @@ export default function GestaoOsLocaisPageClient() {
       await api.post('/gestao-os/cadastros/buildings', {
         name: buildingForm.name.trim(),
         code: buildingForm.code.trim() || null,
-        companyId: null,
-        branchId: null
+        address: buildingForm.address.trim() || null,
+        latitude: buildingForm.latitude ? Number(buildingForm.latitude) : null,
+        longitude: buildingForm.longitude ? Number(buildingForm.longitude) : null,
+        responsibleUserId: buildingForm.responsibleUserId || null,
+        prepostoUserId: buildingForm.prepostoUserId || null,
+        managerUserId: buildingForm.managerUserId || null,
+        fiscalUserId: buildingForm.fiscalUserId || null
       });
     },
     onSuccess: () => {
       toast.success('Prédio cadastrado.');
-      setBuildingForm({ name: '', code: '' });
+      setBuildingForm(EMPTY_BUILDING_FORM);
       closeForm();
       invalidate();
     },
@@ -354,12 +450,19 @@ export default function GestaoOsLocaisPageClient() {
     mutationFn: async (id: string) => {
       await api.patch(`/gestao-os/cadastros/buildings/${id}`, {
         name: buildingForm.name.trim(),
-        code: buildingForm.code.trim() || null
+        code: buildingForm.code.trim() || null,
+        address: buildingForm.address.trim() || null,
+        latitude: buildingForm.latitude ? Number(buildingForm.latitude) : null,
+        longitude: buildingForm.longitude ? Number(buildingForm.longitude) : null,
+        responsibleUserId: buildingForm.responsibleUserId || null,
+        prepostoUserId: buildingForm.prepostoUserId || null,
+        managerUserId: buildingForm.managerUserId || null,
+        fiscalUserId: buildingForm.fiscalUserId || null
       });
     },
     onSuccess: () => {
       toast.success('Prédio atualizado.');
-      setBuildingForm({ name: '', code: '' });
+      setBuildingForm(EMPTY_BUILDING_FORM);
       closeForm();
       invalidate();
     },
@@ -449,12 +552,13 @@ export default function GestaoOsLocaisPageClient() {
         name: assetForm.name.trim(),
         code: assetForm.code.trim() || null,
         category: assetForm.category.trim() || null,
+        serialNumber: assetForm.serialNumber.trim() || null,
         warrantyEndsAt: assetForm.warrantyEndsAt || null
       });
     },
     onSuccess: () => {
       toast.success('Ativo cadastrado (QR gerado).');
-      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
+      setAssetForm(EMPTY_ASSET_FORM);
       closeForm();
       invalidate();
     },
@@ -469,12 +573,13 @@ export default function GestaoOsLocaisPageClient() {
         name: assetForm.name.trim(),
         code: assetForm.code.trim() || null,
         category: assetForm.category.trim() || null,
+        serialNumber: assetForm.serialNumber.trim() || null,
         warrantyEndsAt: assetForm.warrantyEndsAt || null
       });
     },
     onSuccess: () => {
       toast.success('Ativo atualizado.');
-      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
+      setAssetForm(EMPTY_ASSET_FORM);
       closeForm();
       invalidate();
     },
@@ -581,6 +686,21 @@ export default function GestaoOsLocaisPageClient() {
     }
   };
 
+  const openBuildingCloseQr = async (buildingId: string) => {
+    try {
+      const res = await api.get<{
+        success: boolean;
+        data: { name: string; dataUrl: string; payload: string };
+      }>(`/gestao-os/cadastros/buildings/${buildingId}/close-qr`);
+      setBuildingCloseQr(res.data?.data ?? null);
+    } catch (err: unknown) {
+      toast.error(
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+          'Erro ao gerar QR de encerramento.'
+      );
+    }
+  };
+
   const regenerateQr = async (assetId: string) => {
     try {
       await api.patch(`/gestao-os/cadastros/assets/${assetId}`, { regenerateQr: true });
@@ -597,11 +717,10 @@ export default function GestaoOsLocaisPageClient() {
 
   const openNew = () => {
     setEditingId(null);
-    if (tab === 'predios') setBuildingForm({ name: '', code: '' });
+    if (tab === 'predios') setBuildingForm(EMPTY_BUILDING_FORM);
     if (tab === 'setores') setSectorForm({ buildingId: '', name: '', code: '' });
     if (tab === 'locais') setPlaceForm({ sectorId: '', name: '', code: '' });
-    if (tab === 'ativos')
-      setAssetForm({ placeId: '', name: '', code: '', category: '', warrantyEndsAt: '' });
+    if (tab === 'ativos') setAssetForm(EMPTY_ASSET_FORM);
     setShowForm(true);
   };
 
@@ -613,7 +732,17 @@ export default function GestaoOsLocaisPageClient() {
   const openEditBuilding = (r: BuildingRow) => {
     setViewing(null);
     setEditingId(r.id);
-    setBuildingForm({ name: r.name, code: r.code ?? '' });
+    setBuildingForm({
+      name: r.name,
+      code: r.code ?? '',
+      address: r.address ?? '',
+      latitude: r.latitude != null ? String(r.latitude) : '',
+      longitude: r.longitude != null ? String(r.longitude) : '',
+      responsibleUserId: r.responsibleUserId ?? '',
+      prepostoUserId: r.prepostoUserId ?? '',
+      managerUserId: r.managerUserId ?? '',
+      fiscalUserId: r.fiscalUserId ?? ''
+    });
     setShowForm(true);
   };
 
@@ -639,6 +768,7 @@ export default function GestaoOsLocaisPageClient() {
       name: r.name,
       code: r.code ?? '',
       category: r.category ?? '',
+      serialNumber: r.serialNumber ?? '',
       warrantyEndsAt: r.warrantyEndsAt ? String(r.warrantyEndsAt).slice(0, 10) : ''
     });
     setShowForm(true);
@@ -1106,7 +1236,18 @@ export default function GestaoOsLocaisPageClient() {
                             }
                           }
                         ]
-                      : []
+                      : tab === 'predios'
+                        ? [
+                            {
+                              label: 'QR para encerrar OS',
+                              icon: <QrCode className="h-4 w-4" />,
+                              onClick: () => {
+                                void openBuildingCloseQr(rowForActionMenu.id);
+                                closeRowActionMenu();
+                              }
+                            }
+                          ]
+                        : []
                   }
                 />
               ) : null}
@@ -1159,6 +1300,118 @@ export default function GestaoOsLocaisPageClient() {
                         placeholder="Ex.: SEDE"
                         className={FORM_FIELD_INPUT_CLS}
                       />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Endereço
+                      </label>
+                      <input
+                        value={buildingForm.address}
+                        onChange={(e) =>
+                          setBuildingForm((s) => ({ ...s, address: e.target.value }))
+                        }
+                        placeholder="Rua, número, cidade"
+                        className={FORM_FIELD_INPUT_CLS}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Latitude
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          value={buildingForm.latitude}
+                          onChange={(e) =>
+                            setBuildingForm((s) => ({ ...s, latitude: e.target.value }))
+                          }
+                          placeholder="-23.55"
+                          className={FORM_FIELD_INPUT_CLS}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Longitude
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          inputMode="decimal"
+                          value={buildingForm.longitude}
+                          onChange={(e) =>
+                            setBuildingForm((s) => ({ ...s, longitude: e.target.value }))
+                          }
+                          placeholder="-46.63"
+                          className={FORM_FIELD_INPUT_CLS}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Preposto da localidade
+                        </label>
+                        <StringSingleSelectDropdown
+                          value={buildingForm.prepostoUserId}
+                          onChange={(v) =>
+                            setBuildingForm((s) => ({ ...s, prepostoUserId: v }))
+                          }
+                          options={personOptions}
+                          placeholder="Selecione o preposto"
+                          emptyOptionLabel="Nenhum"
+                          allowEmpty
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Gestor de facilities
+                        </label>
+                        <StringSingleSelectDropdown
+                          value={buildingForm.managerUserId}
+                          onChange={(v) =>
+                            setBuildingForm((s) => ({ ...s, managerUserId: v }))
+                          }
+                          options={personOptions}
+                          placeholder="Selecione o gestor"
+                          emptyOptionLabel="Nenhum"
+                          allowEmpty
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Responsável da localidade
+                        </label>
+                        <StringSingleSelectDropdown
+                          value={buildingForm.responsibleUserId}
+                          onChange={(v) =>
+                            setBuildingForm((s) => ({ ...s, responsibleUserId: v }))
+                          }
+                          options={personOptions}
+                          placeholder="Selecione o responsável"
+                          emptyOptionLabel="Nenhum"
+                          allowEmpty
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Fiscal da localidade
+                        </label>
+                        <StringSingleSelectDropdown
+                          value={buildingForm.fiscalUserId}
+                          onChange={(v) =>
+                            setBuildingForm((s) => ({ ...s, fiscalUserId: v }))
+                          }
+                          options={personOptions}
+                          placeholder="Selecione o fiscal"
+                          emptyOptionLabel="Nenhum"
+                          allowEmpty
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Só este fiscal (ou um administrador) atesta o faturamento no encerramento.
+                        </p>
+                      </div>
                     </div>
                   </>
                 ) : null}
@@ -1299,21 +1552,36 @@ export default function GestaoOsLocaisPageClient() {
                         className={FORM_FIELD_INPUT_CLS}
                       />
                     </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Fim da garantia
-                      </label>
-                      <input
-                        type="date"
-                        value={assetForm.warrantyEndsAt}
-                        onChange={(e) =>
-                          setAssetForm((s) => ({ ...s, warrantyEndsAt: e.target.value }))
-                        }
-                        className={FORM_FIELD_INPUT_CLS}
-                      />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        O sino avisa 30 dias antes e quando vencer.
-                      </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Número de série
+                        </label>
+                        <input
+                          value={assetForm.serialNumber}
+                          onChange={(e) =>
+                            setAssetForm((s) => ({ ...s, serialNumber: e.target.value }))
+                          }
+                          placeholder="Ex.: SN-000123"
+                          className={FORM_FIELD_INPUT_CLS}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Fim da garantia
+                        </label>
+                        <DatePickerField
+                          value={assetForm.warrantyEndsAt}
+                          onChange={(v) =>
+                            setAssetForm((s) => ({ ...s, warrantyEndsAt: v }))
+                          }
+                          noFocusRing
+                          aria-label="Fim da garantia"
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          O sino avisa 30 dias antes e quando vencer.
+                        </p>
+                      </div>
                     </div>
                   </>
                 ) : null}
@@ -1376,6 +1644,28 @@ export default function GestaoOsLocaisPageClient() {
                     {viewing.row.code || '—'}
                   </p>
                 </div>
+                {viewing.kind === 'predios' ? (
+                  <>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Endereço
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.address || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Coordenadas
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.latitude != null && viewing.row.longitude != null
+                          ? `${viewing.row.latitude}, ${viewing.row.longitude}`
+                          : '—'}
+                      </p>
+                    </div>
+                  </>
+                ) : null}
                 {viewing.kind === 'setores' ? (
                   <div>
                     <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -1414,6 +1704,14 @@ export default function GestaoOsLocaisPageClient() {
                       </p>
                       <p className="text-sm text-gray-900 dark:text-gray-100">
                         {viewing.row.category || '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Número de série
+                      </p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100">
+                        {viewing.row.serialNumber || '—'}
                       </p>
                     </div>
                     <div>
@@ -1569,6 +1867,33 @@ export default function GestaoOsLocaisPageClient() {
                   Regenerar QR
                 </button>
               </div>
+            </div>
+          ) : null}
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(buildingCloseQr)}
+          onClose={() => setBuildingCloseQr(null)}
+          title={buildingCloseQr ? `QR de encerrar — ${buildingCloseQr.name}` : 'QR de encerrar'}
+        >
+          {buildingCloseQr ? (
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                O técnico lê este QR no app para concluir a OS na localidade.
+              </p>
+              <img
+                src={buildingCloseQr.dataUrl}
+                alt="QR de encerramento"
+                className="mx-auto h-56 w-56 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700"
+              />
+              <p className="break-all font-mono text-xs text-gray-500">{buildingCloseQr.payload}</p>
+              <a
+                href={buildingCloseQr.dataUrl}
+                download={`qr-encerrar-${buildingCloseQr.name.replace(/\s+/g, '-').toLowerCase()}.png`}
+                className="inline-flex rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Baixar PNG
+              </a>
             </div>
           ) : null}
         </Modal>

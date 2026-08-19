@@ -21,6 +21,7 @@ import {
   fetchAssignedWorkOrders,
   fetchGestaoOsMe,
   setGestaoOsCompanyId,
+  syncGestaoOsOfflineQueue,
   type GestaoOsWorkOrderMobile
 } from '../services/gestaoOs';
 import type { RootStackParamList } from '../../App';
@@ -89,8 +90,10 @@ export default function GestaoOsListScreen() {
   });
 
   const onRefresh = useCallback(() => {
-    meQuery.refetch();
-    listQuery.refetch();
+    void syncGestaoOsOfflineQueue().then(() => {
+      meQuery.refetch();
+      listQuery.refetch();
+    });
   }, [meQuery, listQuery]);
 
   const memberships = meQuery.data?.memberships ?? [];

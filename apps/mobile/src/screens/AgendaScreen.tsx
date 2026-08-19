@@ -15,6 +15,7 @@ import {
   Animated,
   LayoutChangeEvent,
   Linking,
+  Image,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -73,6 +74,7 @@ import {
 } from '../services/plannerTasks';
 import { resolveMediaUrl } from '../utils/resolveMediaUrl';
 import type { RootStackParamList } from '../../App';
+import MapView, { Marker } from 'react-native-maps';
 
 type Mode = 'agenda' | 'tasks';
 
@@ -225,6 +227,76 @@ function AnimatedModeSwitcher({
   );
 }
 
+function AgendaDayMap({
+  events,
+  colors,
+}: {
+  events: PlannerEvent[];
+  colors: { textSecondary: string; border: string };
+}) {
+  const pins = events.filter(
+    (ev) => ev.latitude != null && ev.longitude != null && Number.isFinite(Number(ev.latitude))
+  );
+  if (pins.length === 0) return null;
+  const latitudes = pins.map((ev) => Number(ev.latitude));
+  const longitudes = pins.map((ev) => Number(ev.longitude));
+  const latitude = latitudes.reduce((sum, n) => sum + n, 0) / latitudes.length;
+  const longitude = longitudes.reduce((sum, n) => sum + n, 0) / longitudes.length;
+  const latSpan = Math.max(0.02, Math.max(...latitudes) - Math.min(...latitudes) + 0.01);
+  const lngSpan = Math.max(0.02, Math.max(...longitudes) - Math.min(...longitudes) + 0.01);
+  const osm = `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=14&size=640x280&maptype=mapnik&markers=${latitudes[0]},${longitudes[0]},red-pushpin`;
+
+  const openMaps = () => {
+    const q = `${latitude},${longitude}`;
+    void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`);
+  };
+
+  return (
+    <View style={{ marginBottom: 12 }}>
+      {Platform.OS === 'web' ? (
+        <TouchableOpacity onPress={openMaps} activeOpacity={0.9}>
+          <Image source={{ uri: osm }} style={{ width: '100%', height: 180, borderRadius: 14 }} />
+        </TouchableOpacity>
+      ) : (
+        <MapView
+          style={{
+            width: '100%',
+            height: 180,
+            borderRadius: 14,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: colors.border,
+            overflow: 'hidden',
+          }}
+          initialRegion={{
+            latitude,
+            longitude,
+            latitudeDelta: latSpan,
+            longitudeDelta: lngSpan,
+          }}
+          scrollEnabled={false}
+          zoomEnabled
+          onPress={openMaps}
+        >
+          {pins.map((ev) => (
+            <Marker
+              key={ev.id}
+              coordinate={{
+                latitude: Number(ev.latitude),
+                longitude: Number(ev.longitude),
+              }}
+              title={ev.title}
+              description={ev.address || undefined}
+            />
+          ))}
+        </MapView>
+      )}
+      <Text style={{ marginTop: 6, fontSize: 12, color: colors.textSecondary }}>
+        Mapa das OS do dia · toque para abrir o Google Maps
+      </Text>
+    </View>
+  );
+}
+
 export default function AgendaScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
@@ -310,6 +382,9 @@ export default function AgendaScreen() {
       source: item.kind === 'plan' ? 'gestao-os-plan' : 'gestao-os',
       workOrderId: item.workOrderId,
       planId: item.planId,
+      latitude: item.latitude,
+      longitude: item.longitude,
+      address: item.address,
     }));
     return [...plannerEvents, ...linked];
   }, [plannerEvents, gestaoOsQuery.data, meUser?.id]);
@@ -762,6 +837,8 @@ export default function AgendaScreen() {
             ) : null}
           </View>
 
+          {dayEvents.length > 0 ? <AgendaDayMap events={dayEvents} colors={colors} /> : null}
+
           {eventsQuery.isLoading || gestaoOsQuery.isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
           ) : dayEvents.length === 0 ? (
@@ -822,7 +899,20 @@ export default function AgendaScreen() {
                           : ''}
                       </Text>
                     </View>
-
+                    {ev.workOrderId && (ev.latitude != null || ev.address) ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          const q =
+                            ev.latitude != null && ev.longitude != null
+                              ? `${ev.latitude},${ev.longitude}`
+                              : encodeURIComponent(ev.address || '');
+                          void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${q}`);
+                        }}
+                        style={{ padding: 6 }}
+                      >
+                        <MapPin size={16} color={accent} />
+                      </TouchableOpacity>
+                    ) : null}
                     <View style={[styles.eventColorDot, { backgroundColor: accent }]} />
                   </TouchableOpacity>
                 );

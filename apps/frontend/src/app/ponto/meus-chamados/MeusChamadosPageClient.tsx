@@ -3,13 +3,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClipboardList, Eye, Plus, Search, Star, Wrench, X } from 'lucide-react';
+import { ClipboardList, Eye, Plus, Search, Star, Wrench, X, Building2, AlertTriangle, CheckCircle2, FolderKanban } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -52,9 +53,14 @@ import {
   GESTAO_OS_SLA_DOT,
   GESTAO_OS_SLA_LABEL,
   GestaoOsWorkOrder,
+  GestaoOsReportsSummary,
   PRIORITY_LABELS,
   SERVICE_CATEGORIES,
   STATUS_LABELS,
+  ORIGIN_LABELS,
+  SAC_KIND_LABELS,
+  type GestaoOsOrigin,
+  type GestaoOsSacKind,
   formatGestaoOsLabel,
   formatGestaoOsNumber,
   gestaoOsSlaState,
@@ -122,6 +128,9 @@ export default function MeusChamadosPageClient() {
   const [ratingValue, setRatingValue] = useState(5);
   const [ratingComment, setRatingComment] = useState('');
   const [qrHandled, setQrHandled] = useState(false);
+  const [origin, setOrigin] = useState<GestaoOsOrigin>('REQUEST');
+  const [sacKind, setSacKind] = useState<GestaoOsSacKind>('CHAMADO');
+  const [listScope, setListScope] = useState<'mine' | 'unit'>('mine');
   const [openedAtLabel, setOpenedAtLabel] = useState(() =>
     formatDateTime(new Date().toISOString())
   );
@@ -142,19 +151,44 @@ export default function MeusChamadosPageClient() {
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE', id: '' };
 
+  const { data: unitBuildings = [] } = useQuery({
+    queryKey: ['gestao-os-my-unit-buildings'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+        '/gestao-os/cadastros/my-unit-buildings'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+
+  const { data: unitSummary } = useQuery({
+    queryKey: ['gestao-os-unit-summary'],
+    enabled: unitBuildings.length > 0 && listScope === 'unit',
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsReportsSummary }>(
+        '/gestao-os/reports/summary',
+        { params: { unitPortal: 1 } }
+      );
+      return res.data?.data;
+    }
+  });
+
   const {
     data: rows = [],
     isLoading: loadingRows
   } = useQuery({
-    queryKey: ['gestao-os-mine', search],
+    queryKey: ['gestao-os-mine', search, listScope],
     queryFn: async () => {
       const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder[] }>('/gestao-os', {
-        params: {
-          mine: 1,
-          involved: 1,
-          search: search || undefined,
-          limit: 200
-        }
+        params:
+          listScope === 'unit'
+            ? { unitPortal: 1, search: search || undefined, limit: 200 }
+            : {
+                mine: 1,
+                involved: 1,
+                search: search || undefined,
+                limit: 200
+              }
       });
       return res.data?.data ?? [];
     }
@@ -319,6 +353,26 @@ export default function MeusChamadosPageClient() {
       ),
     []
   );
+  const originFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(ORIGIN_LABELS) as GestaoOsOrigin[]).map((key) => ({
+          value: key,
+          label: ORIGIN_LABELS[key]
+        }))
+      ),
+    []
+  );
+  const sacKindFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(SAC_KIND_LABELS) as GestaoOsSacKind[]).map((key) => ({
+          value: key,
+          label: SAC_KIND_LABELS[key]
+        }))
+      ),
+    []
+  );
 
   const openDetail = (row: GestaoOsWorkOrder) => {
     setDetailId(row.id);
@@ -341,6 +395,8 @@ export default function MeusChamadosPageClient() {
         category,
         description,
         priority,
+        origin,
+        sacKind: origin === 'SAC' ? sacKind : undefined,
         buildingId: buildingId || null,
         sectorId: sectorId || null,
         placeId: placeId || null,
@@ -434,9 +490,64 @@ export default function MeusChamadosPageClient() {
               Meus Chamados
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Abra solicitações de manutenção e acompanhe o andamento dos seus chamados.
+              Canal eletrônico 24h: abra chamados, reclamações do SAC, plantão e ocorrências não
+              planejadas a qualquer hora.
             </p>
           </div>
+
+          {unitBuildings.length > 0 ? (
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setListScope('mine')}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  listScope === 'mine'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                }`}
+              >
+                Meus chamados
+              </button>
+              <button
+                type="button"
+                onClick={() => setListScope('unit')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+                  listScope === 'unit'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                }`}
+              >
+                <Building2 className="h-4 w-4" />
+                Portal da unidade
+              </button>
+            </div>
+          ) : null}
+
+          {listScope === 'unit' && unitSummary ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <FilterStatCard
+                label="Em aberto na unidade"
+                count={unitSummary.openLike}
+                icon={FolderKanban}
+                iconBg="bg-red-100 dark:bg-red-900/30"
+                iconColor="text-red-600 dark:text-red-400"
+              />
+              <FilterStatCard
+                label="Resolvidas"
+                count={unitSummary.resolved ?? 0}
+                icon={CheckCircle2}
+                iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+                iconColor="text-emerald-600 dark:text-emerald-400"
+              />
+              <FilterStatCard
+                label="Atrasadas"
+                count={unitSummary.overdue}
+                icon={AlertTriangle}
+                iconBg="bg-rose-100 dark:bg-rose-900/30"
+                iconColor="text-rose-600 dark:text-rose-400"
+              />
+            </div>
+          ) : null}
 
           <Card className={cadastroListClasses.card}>
             <CardHeader className={cadastroListClasses.cardHeader}>
@@ -633,7 +744,7 @@ export default function MeusChamadosPageClient() {
           title="Novo chamado"
           size="lg"
         >
-          <div className="space-y-5">
+          <div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>Nome do solicitante</label>
@@ -769,6 +880,28 @@ export default function MeusChamadosPageClient() {
                   allowEmpty={false}
                 />
               </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Canal</label>
+                <StringSingleSelectDropdown
+                  value={origin}
+                  onChange={(v) => setOrigin((v as GestaoOsOrigin) || 'REQUEST')}
+                  options={originFormOptions}
+                  placeholder="Selecione..."
+                  allowEmpty={false}
+                />
+              </div>
+              {origin === 'SAC' ? (
+                <div>
+                  <label className={GESTAO_OS_FORM_LABEL_CLS}>Tipo de SAC</label>
+                  <StringSingleSelectDropdown
+                    value={sacKind}
+                    onChange={(v) => setSacKind((v as GestaoOsSacKind) || 'CHAMADO')}
+                    options={sacKindFormOptions}
+                    placeholder="Selecione..."
+                    allowEmpty={false}
+                  />
+                </div>
+              ) : null}
               <div className="sm:col-span-2">
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>
                   Descrição
@@ -983,7 +1116,7 @@ export default function MeusChamadosPageClient() {
                         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
                           Checklist da execução
                         </p>
-                        <GestaoOsChecklistField items={detail.checklistResponses} allRequired readOnly />
+                        <GestaoOsChecklistField items={detail.checklistResponses} allRequired readOnly evidence />
                       </div>
                     </GestaoOsChecklistScrollPane>
                   ) : (

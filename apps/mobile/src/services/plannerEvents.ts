@@ -42,6 +42,9 @@ export type PlannerEvent = {
   source?: 'planner' | 'gestao-os' | 'gestao-os-plan';
   workOrderId?: string;
   planId?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  address?: string | null;
 };
 
 export type PlannerEventInput = {

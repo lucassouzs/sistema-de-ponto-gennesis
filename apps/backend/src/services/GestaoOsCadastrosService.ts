@@ -12,6 +12,13 @@ import {
   parseOptionalDate,
   upsertChecklistTemplate
 } from '../lib/gestaoOsChecklistCopy';
+import {
+  persistAssetSerial,
+  persistBuildingEdital,
+  loadAssetSerialMap,
+  loadBuildingEditalMap,
+  loadUnitBuildingIds
+} from '../lib/gestaoOsEdital';
 import { gestaoOsService } from './GestaoOsService';
 
 async function qrCodeToDataUrl(
@@ -40,7 +47,14 @@ function parseOptionalNonNegativeInt(value: unknown): number | null {
   return Math.round(n);
 }
 
-const EQUIPMENT_DOC_KINDS = new Set(['MANUAL', 'WARRANTY', 'LAUDO', 'OTHER']);
+const EQUIPMENT_DOC_KINDS = new Set([
+  'MANUAL',
+  'WARRANTY',
+  'LAUDO',
+  'CHECKLIST_IFSP',
+  'MANUAL_PATRIMONIO',
+  'OTHER'
+]);
 
 function parseEquipmentAttachments(value: unknown): Prisma.InputJsonValue | undefined {
   if (value == null) return undefined;
@@ -87,12 +101,17 @@ function assetQrPayloadUrl(qrToken: string): string {
   return `${frontendBaseUrl()}/ponto/meus-chamados?qr=${encodeURIComponent(qrToken)}`;
 }
 
+function buildingCloseQrPayload(qrToken: string): string {
+  return `gennesis-os-close:${qrToken}`;
+}
+
 const DEFAULT_CATEGORIES = [
   { name: 'Elétrica', code: 'ELE' },
   { name: 'Hidráulica', code: 'HID' },
   { name: 'Climatização / Refrigeração', code: 'CLI' },
   { name: 'TI / Telefonia', code: 'TI' },
   { name: 'Civil / Alvenaria', code: 'CIV' },
+  { name: 'Pintura', code: 'PIN' },
   { name: 'Marcenaria', code: 'MAR' },
   { name: 'Limpeza / Conservação', code: 'LIM' },
   { name: 'Segurança / Acesso', code: 'SEG' },
@@ -245,7 +264,43 @@ export class GestaoOsCadastrosService {
         }
       }
     });
-    return attachWarrantyToLocationTree(tree);
+    return attachWarrantyToLocationTree(tree).then(async (withWarranty) => {
+      const ids: string[] = [];
+      const buildingIds: string[] = [];
+      for (const b of withWarranty as Array<{
+        id: string;
+        sectors?: Array<{ places?: Array<{ assets?: Array<{ id: string }> }> }>;
+      }>) {
+        buildingIds.push(b.id);
+        for (const s of b.sectors ?? []) {
+          for (const p of s.places ?? []) {
+            for (const a of p.assets ?? []) ids.push(a.id);
+          }
+        }
+      }
+      const [serials, buildings] = await Promise.all([
+        loadAssetSerialMap(ids),
+        loadBuildingEditalMap(buildingIds)
+      ]);
+      return (withWarranty as Array<Record<string, unknown> & { id: string; sectors?: unknown }>).map(
+        (building) => ({
+          ...building,
+          ...(buildings.get(building.id) || {}),
+          sectors: ((building.sectors as Array<{ places?: Array<{ assets?: Array<{ id: string }> }> }>) ?? []).map(
+            (sector) => ({
+              ...sector,
+              places: (sector.places ?? []).map((place) => ({
+                ...place,
+                assets: (place.assets ?? []).map((asset) => ({
+                  ...asset,
+                  serialNumber: serials.get(asset.id) ?? null
+                }))
+              }))
+            })
+          )
+        })
+      );
+    });
   }
 
   async createBuilding(input: {
@@ -253,10 +308,17 @@ export class GestaoOsCadastrosService {
     code?: string | null;
     companyId?: string | null;
     branchId?: string | null;
+    address?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+    responsibleUserId?: string | null;
+    prepostoUserId?: string | null;
+    managerUserId?: string | null;
+    fiscalUserId?: string | null;
   }) {
     const name = String(input.name ?? '').trim();
     if (!name) throw createError('Informe o nome do prédio', 400);
-    return prisma.gestaoOsBuilding.create({
+    const created = await prisma.gestaoOsBuilding.create({
       data: {
         name,
         code: input.code?.trim() || null,
@@ -264,6 +326,17 @@ export class GestaoOsCadastrosService {
         branchId: input.branchId?.trim() || null
       }
     });
+    await persistBuildingEdital(created.id, {
+      address: input.address?.trim() || null,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
+      responsibleUserId: input.responsibleUserId?.trim() || null,
+      prepostoUserId: input.prepostoUserId?.trim() || null,
+      managerUserId: input.managerUserId?.trim() || null,
+      fiscalUserId: input.fiscalUserId?.trim() || null,
+      qrToken: newQrToken()
+    });
+    return created;
   }
 
   async updateBuilding(
@@ -274,11 +347,19 @@ export class GestaoOsCadastrosService {
       companyId?: string | null;
       branchId?: string | null;
       isActive?: boolean;
+      address?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      responsibleUserId?: string | null;
+      prepostoUserId?: string | null;
+      managerUserId?: string | null;
+      fiscalUserId?: string | null;
+      regenerateQr?: boolean;
     }
   ) {
     const existing = await prisma.gestaoOsBuilding.findUnique({ where: { id } });
     if (!existing) throw createError('Prédio não encontrado', 404);
-    return prisma.gestaoOsBuilding.update({
+    const updated = await prisma.gestaoOsBuilding.update({
       where: { id },
       data: {
         ...(input.name != null ? { name: String(input.name).trim() || existing.name } : {}),
@@ -288,6 +369,25 @@ export class GestaoOsCadastrosService {
         ...(input.isActive !== undefined ? { isActive: Boolean(input.isActive) } : {})
       }
     });
+    await persistBuildingEdital(id, {
+      ...(input.address !== undefined ? { address: input.address?.trim() || null } : {}),
+      ...(input.latitude !== undefined ? { latitude: input.latitude } : {}),
+      ...(input.longitude !== undefined ? { longitude: input.longitude } : {}),
+      ...(input.responsibleUserId !== undefined
+        ? { responsibleUserId: input.responsibleUserId?.trim() || null }
+        : {}),
+      ...(input.prepostoUserId !== undefined
+        ? { prepostoUserId: input.prepostoUserId?.trim() || null }
+        : {}),
+      ...(input.managerUserId !== undefined
+        ? { managerUserId: input.managerUserId?.trim() || null }
+        : {}),
+      ...(input.fiscalUserId !== undefined
+        ? { fiscalUserId: input.fiscalUserId?.trim() || null }
+        : {}),
+      ...(input.regenerateQr ? { qrToken: newQrToken() } : {})
+    });
+    return updated;
   }
 
   async createSector(input: { buildingId?: string; name?: string; code?: string | null }) {
@@ -352,6 +452,7 @@ export class GestaoOsCadastrosService {
     code?: string | null;
     category?: string | null;
     warrantyEndsAt?: unknown;
+    serialNumber?: string | null;
   }) {
     const placeId = String(input.placeId ?? '').trim();
     const name = String(input.name ?? '').trim();
@@ -370,7 +471,12 @@ export class GestaoOsCadastrosService {
     });
     const warrantyEndsAt = parseOptionalDate(input.warrantyEndsAt);
     await persistAssetWarranty(created.id, warrantyEndsAt);
-    return { ...created, warrantyEndsAt: warrantyEndsAt ? warrantyEndsAt.toISOString() : null };
+    await persistAssetSerial(created.id, input.serialNumber?.trim() || null);
+    return {
+      ...created,
+      warrantyEndsAt: warrantyEndsAt ? warrantyEndsAt.toISOString() : null,
+      serialNumber: input.serialNumber?.trim() || null
+    };
   }
 
   async updateAsset(
@@ -382,6 +488,7 @@ export class GestaoOsCadastrosService {
       isActive?: boolean;
       regenerateQr?: boolean;
       warrantyEndsAt?: unknown;
+      serialNumber?: string | null;
     }
   ) {
     const existing = await prisma.gestaoOsAsset.findUnique({ where: { id } });
@@ -398,6 +505,9 @@ export class GestaoOsCadastrosService {
     });
     const warrantyEndsAt = parseOptionalDate(input.warrantyEndsAt);
     await persistAssetWarranty(id, warrantyEndsAt);
+    if (input.serialNumber !== undefined) {
+      await persistAssetSerial(id, input.serialNumber?.trim() || null);
+    }
     const map = warrantyEndsAt === undefined ? await loadAssetWarrantyMap([id]) : null;
     return {
       ...updated,
@@ -586,7 +696,7 @@ export class GestaoOsCadastrosService {
   }
 
   async getAssetByQrToken(qrToken: string) {
-    const token = String(qrToken ?? '').trim();
+    const token = String(qrToken ?? '').trim().replace(/^gennesis-os-close:/, '');
     if (!token) throw createError('Token do QR inválido', 400);
     const asset = await prisma.gestaoOsAsset.findUnique({
       where: { qrToken: token },
@@ -607,16 +717,60 @@ export class GestaoOsCadastrosService {
         }
       }
     });
-    if (!asset || !asset.isActive) throw createError('Ativo não encontrado para este QR', 404);
-    const building = asset.place.sector.building;
-    const sector = asset.place.sector;
+    if (asset?.isActive) {
+      const building = asset.place.sector.building;
+      const sector = asset.place.sector;
+      return {
+        kind: 'asset' as const,
+        ...asset,
+        locationLabel: [building.name, sector.name, asset.place.name, asset.name].join(' › '),
+        buildingId: building.id,
+        sectorId: sector.id,
+        placeId: asset.placeId,
+        companyId: building.companyId
+      };
+    }
+    const buildings = await prisma.$queryRawUnsafe<
+      Array<{ id: string; name: string; qrToken: string | null }>
+    >(
+      `SELECT "id", "name", "qrToken" FROM "gestao_os_buildings" WHERE "qrToken" = '${token.replace(
+        /'/g,
+        "''"
+      )}' AND "isActive" = true LIMIT 1`
+    );
+    const building = buildings[0];
+    if (!building) throw createError('QR não encontrado', 404);
     return {
-      ...asset,
-      locationLabel: [building.name, sector.name, asset.place.name, asset.name].join(' › '),
+      kind: 'building-close' as const,
       buildingId: building.id,
-      sectorId: sector.id,
-      placeId: asset.placeId,
-      companyId: building.companyId
+      name: building.name,
+      qrToken: building.qrToken,
+      closeToken: token
+    };
+  }
+
+  async getBuildingCloseQr(buildingId: string) {
+    const map = await loadBuildingEditalMap([buildingId]);
+    const meta = map.get(buildingId);
+    const building = await prisma.gestaoOsBuilding.findUnique({ where: { id: buildingId } });
+    if (!building) throw createError('Prédio não encontrado', 404);
+    let token = meta?.qrToken;
+    if (!token) {
+      token = newQrToken();
+      await persistBuildingEdital(buildingId, { qrToken: token });
+    }
+    const payload = buildingCloseQrPayload(token);
+    const dataUrl = await qrCodeToDataUrl(payload, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 480
+    });
+    return {
+      buildingId,
+      name: building.name,
+      qrToken: token,
+      payload,
+      dataUrl
     };
   }
 
@@ -1047,6 +1201,20 @@ export class GestaoOsCadastrosService {
       orderBy: { name: 'asc' },
       take: 500
     });
+  }
+
+  async listMyUnitBuildings(userId: string) {
+    const ids = await loadUnitBuildingIds(userId);
+    if (!ids.length) return [];
+    const map = await loadBuildingEditalMap(ids);
+    const rows = await prisma.gestaoOsBuilding.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, code: true }
+    });
+    return rows.map((row) => ({
+      ...row,
+      ...(map.get(row.id) || {})
+    }));
   }
 }
 

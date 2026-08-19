@@ -77,7 +77,9 @@ export function notifyGestaoOsEvent(
     | 'status'
     | 'sla_warning'
     | 'sla_overdue'
-    | 'parts',
+    | 'parts'
+    | 'unplanned'
+    | 'sac_opened',
   payload: GestaoOsNotifyPayload,
   recipients: NotifyUser[]
 ): void {
@@ -90,7 +92,9 @@ export function notifyGestaoOsEvent(
     status: 'Atualização de status do chamado',
     sla_warning: 'Atenção: prazo (SLA) perto de estourar',
     sla_overdue: 'Chamado atrasado (SLA estourado)',
-    parts: 'Atualização de peças / aguardando material'
+    parts: 'Atualização de peças / aguardando material',
+    unplanned: 'Ocorrência não planejada no campo',
+    sac_opened: 'Novo registro no SAC da localidade'
   };
 
   const subject = `[${APP_NAME}] ${titles[kind]} — ${formatRef(payload)}`;

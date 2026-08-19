@@ -37,7 +37,7 @@ import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
-import { Checkbox } from '@/components/ui/Checkbox';
+import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { SignaturePad } from '@/components/gestao-os/SignaturePad';
 import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
 import { GestaoOsCommentsSection } from '@/components/gestao-os/GestaoOsCommentsSection';
@@ -82,8 +82,11 @@ import {
   formatGestaoOsLabel,
   formatGestaoOsNumber,
   gestaoOsSlaState,
+  GestaoOsDocument,
   isGestaoOsExecutionChecklistComplete,
-  isGestaoOsSafetyChecklistComplete
+  isGestaoOsExecutionChecklistEvidenceComplete,
+  isGestaoOsSafetyChecklistComplete,
+  stampGestaoOsChecklistToggle
 } from './gestaoOsTypes';
 import { useGestaoOsCompany } from './useGestaoOsCompany';
 
@@ -234,6 +237,11 @@ export default function SistemaGestaoOsPageClient() {
   const [relatedWorkOrderId, setRelatedWorkOrderId] = useState('');
   const [autoAssign, setAutoAssign] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [teamUserIds, setTeamUserIds] = useState<string[]>([]);
+  const [fiscalRating, setFiscalRating] = useState('5');
+  const [fiscalRatingComment, setFiscalRatingComment] = useState('');
+  const [closeQrToken, setCloseQrToken] = useState('');
+  const [uploadingChecklistPhoto, setUploadingChecklistPhoto] = useState(false);
   const slaCheckedRef = useRef(false);
 
   const handleLogout = () => {
@@ -375,6 +383,19 @@ export default function SistemaGestaoOsPageClient() {
     }
   });
 
+  const { data: ifspDocs = [] } = useQuery({
+    queryKey: ['gestao-os-ifsp-docs'],
+    enabled: !loadingCompany,
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsDocument[] }>(
+        '/gestao-os/documents'
+      );
+      return (res.data?.data ?? []).filter(
+        (d) => d.kind === 'CHECKLIST_IFSP' || d.kind === 'MANUAL_PATRIMONIO'
+      );
+    }
+  });
+
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ['gestao-os-detail', detailId],
     enabled: Boolean(detailId),
@@ -428,6 +449,10 @@ export default function SistemaGestaoOsPageClient() {
     setEndPhotoUrl(detail.endPhotoUrl ?? null);
     setRelatedWorkOrderId(detail.relatedWorkOrderId ?? '');
     setAutoAssign(false);
+    setTeamUserIds(Array.isArray(detail.teamUserIds) ? detail.teamUserIds.map(String) : []);
+    setFiscalRating(detail.fiscalRating ? String(detail.fiscalRating) : '5');
+    setFiscalRatingComment(detail.fiscalRatingComment ?? '');
+    setCloseQrToken('');
     setActivePhase(detail.status);
     if (detail.status === 'APPROVED' || detail.status === 'SAFETY_CHECK') {
       setTransitionStatus('IN_PROGRESS');
@@ -615,7 +640,15 @@ export default function SistemaGestaoOsPageClient() {
         startPhotoUrl: startPhotoUrl || undefined,
         endPhotoUrl: endPhotoUrl || undefined,
         relatedWorkOrderId: relatedWorkOrderId.trim() || undefined,
-        autoAssign: transitionStatus === 'APPROVED' ? autoAssign || undefined : undefined
+        autoAssign: transitionStatus === 'APPROVED' ? autoAssign || undefined : undefined,
+        teamUserIds:
+          transitionStatus === 'APPROVED' || teamUserIds.length
+            ? teamUserIds
+            : undefined,
+        fiscalRating: transitionStatus === 'CLOSED' ? Number(fiscalRating) : undefined,
+        fiscalRatingComment:
+          transitionStatus === 'CLOSED' ? fiscalRatingComment || undefined : undefined,
+        closeQrToken: transitionStatus === 'COMPLETED' ? closeQrToken.trim() || undefined : undefined
       });
       return res.data?.data as GestaoOsWorkOrder;
     },
@@ -833,7 +866,9 @@ export default function SistemaGestaoOsPageClient() {
   );
 
   const safetyReady = isGestaoOsSafetyChecklistComplete(safetyChecklistDraft) && Boolean(safetyPhotoUrl);
-  const executionReady = isGestaoOsExecutionChecklistComplete(checklistDraft);
+  const executionReady =
+    isGestaoOsExecutionChecklistComplete(checklistDraft) &&
+    isGestaoOsExecutionChecklistEvidenceComplete(checklistDraft);
 
   const assetHistoryCard = assetHistory ? (
     <GestaoOsAssetHistoryCard
@@ -1188,7 +1223,7 @@ export default function SistemaGestaoOsPageClient() {
           title="Novo chamado"
           size="lg"
         >
-          <div className="space-y-5">
+          <div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={GESTAO_OS_FORM_LABEL_CLS}>Nome do solicitante</label>
@@ -1409,7 +1444,18 @@ export default function SistemaGestaoOsPageClient() {
                 }
               >
                 {detailTab === 'resumo' ? (
-                  <GestaoOsChamadoResumo detail={detail} formatDateTime={formatDateTime} />
+                  <div className="space-y-4">
+                    {ifspDocs.length > 0 ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                        Programação IFSP:{' '}
+                        {ifspDocs
+                          .slice(0, 4)
+                          .map((d) => d.title)
+                          .join(' · ')}
+                      </div>
+                    ) : null}
+                    <GestaoOsChamadoResumo detail={detail} formatDateTime={formatDateTime} />
+                  </div>
                 ) : null}
 
                 {detailTab === 'fluxo' ? (
@@ -1517,6 +1563,21 @@ export default function SistemaGestaoOsPageClient() {
                                 />
                               </div>
                             </div>
+                            <div className="sm:col-span-2">
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Equipe executora
+                              </label>
+                              <MultiSelectSearchDropdown
+                                options={technicianOptions}
+                                selected={teamUserIds}
+                                onChange={(ids) => setTeamUserIds(ids)}
+                                placeholder="Selecione os técnicos da equipe"
+                                searchPlaceholder="Buscar técnico..."
+                                emptyOptionsMessage="Nenhum técnico disponível."
+                                emptySearchMessage="Nenhum técnico encontrado."
+                                noFocusRing
+                              />
+                            </div>
                           </>
                         ) : null}
 
@@ -1538,7 +1599,9 @@ export default function SistemaGestaoOsPageClient() {
                         {transitionStatus === 'CLOSED' ? (
                           <>
                             <div>
-                              <label className={GESTAO_OS_FORM_LABEL_CLS}>Avaliação (1–5)</label>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Avaliação do solicitante (1–5)
+                              </label>
                               <StringSingleSelectDropdown
                                 value={rating}
                                 onChange={setRating}
@@ -1549,12 +1612,37 @@ export default function SistemaGestaoOsPageClient() {
                             </div>
                             <div>
                               <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Nota do fiscal / ateste
+                                <GestaoOsRequiredMark />
+                              </label>
+                              <StringSingleSelectDropdown
+                                value={fiscalRating}
+                                onChange={setFiscalRating}
+                                options={ratingOptions}
+                                placeholder="Selecione..."
+                                allowEmpty={false}
+                              />
+                            </div>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
                                 Comentário da avaliação
                               </label>
-                              <input
-                                className={FORM_FIELD_INPUT_CLS}
+                              <textarea
+                                className={FORM_FIELD_TEXTAREA_CLS}
+                                rows={2}
                                 value={ratingComment}
                                 onChange={(e) => setRatingComment(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                Comentário do ateste
+                              </label>
+                              <textarea
+                                className={FORM_FIELD_TEXTAREA_CLS}
+                                rows={2}
+                                value={fiscalRatingComment}
+                                onChange={(e) => setFiscalRatingComment(e.target.value)}
                               />
                             </div>
                             <div className="sm:col-span-2">
@@ -1639,7 +1727,7 @@ export default function SistemaGestaoOsPageClient() {
                                 >
                                   Execução
                                 </button>{' '}
-                                antes de concluir a OS.
+                                com horário e fotos de antes/depois antes de concluir a OS.
                               </p>
                             ) : null}
                             <label className={GESTAO_OS_FORM_LABEL_CLS}>
@@ -1662,6 +1750,20 @@ export default function SistemaGestaoOsPageClient() {
                               accept="image/*"
                               multiple={false}
                             />
+                            {detail.buildingCloseQrRequired ? (
+                              <div className="mt-3">
+                                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                                  QR do responsável da localidade
+                                  <GestaoOsRequiredMark />
+                                </label>
+                                <input
+                                  className={FORM_FIELD_INPUT_CLS}
+                                  value={closeQrToken}
+                                  onChange={(e) => setCloseQrToken(e.target.value)}
+                                  placeholder="Leia no app ou cole o token do QR"
+                                />
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
 
@@ -1713,12 +1815,15 @@ export default function SistemaGestaoOsPageClient() {
                             (transitionStatus === 'APPROVED' &&
                               (!maintenanceType || (!assigneeId && !autoAssign))) ||
                             (transitionStatus === 'WAITING_PARTS' && parts.length === 0) ||
+                            (transitionStatus === 'CLOSED' && !fiscalRating) ||
                             (transitionStatus === 'IN_PROGRESS' &&
                               (detail.status === 'APPROVED' ||
                                 detail.status === 'SAFETY_CHECK') &&
                               !startPhotoUrl) ||
                             (transitionStatus === 'COMPLETED' &&
-                              (!endPhotoUrl || !executionReady)) ||
+                              (!endPhotoUrl ||
+                                !executionReady ||
+                                (Boolean(detail.buildingCloseQrRequired) && !closeQrToken.trim()))) ||
                             (transitionStatus === 'IN_PROGRESS' &&
                               (detail.status === 'APPROVED' ||
                                 detail.status === 'SAFETY_CHECK') &&
@@ -1827,21 +1932,55 @@ export default function SistemaGestaoOsPageClient() {
                         </p>
                         {checklistEditable ? (
                           <p className="text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                            Marque os itens conforme a execução. Itens com * são obrigatórios.
+                            Marque os itens, registre o horário e envie foto de antes e depois. Itens
+                            com * são obrigatórios.
                           </p>
                         ) : null}
                         <GestaoOsChecklistField
                           items={checklistDraft}
                           allRequired
+                          evidence
                           readOnly={!checklistEditable}
+                          uploadingPhoto={uploadingChecklistPhoto}
                           onToggle={
                             checklistEditable
                               ? (index, checked) =>
                                   setChecklistDraft((prev) =>
-                                    prev.map((item, i) =>
-                                      i === index ? { ...item, checked } : item
-                                    )
+                                    stampGestaoOsChecklistToggle(prev, index, checked)
                                   )
+                              : undefined
+                          }
+                          onItemChange={
+                            checklistEditable
+                              ? (index, patch) =>
+                                  setChecklistDraft((prev) =>
+                                    prev.map((item, i) => (i === index ? { ...item, ...patch } : item))
+                                  )
+                              : undefined
+                          }
+                          onUploadPhoto={
+                            checklistEditable
+                              ? async (file) => {
+                                  setUploadingChecklistPhoto(true);
+                                  try {
+                                    const form = new FormData();
+                                    form.append('file', file);
+                                    const res = await api.post('/gestao-os/upload-attachment', form, {
+                                      headers: { 'Content-Type': 'multipart/form-data' }
+                                    });
+                                    const url = res.data?.data?.url as string | undefined;
+                                    if (!url) throw new Error('URL da foto não retornada');
+                                    toast.success('Foto enviada');
+                                    return url;
+                                  } catch (err: any) {
+                                    toast.error(
+                                      err?.response?.data?.message ?? 'Falha no upload da foto'
+                                    );
+                                    return null;
+                                  } finally {
+                                    setUploadingChecklistPhoto(false);
+                                  }
+                                }
                               : undefined
                           }
                         />

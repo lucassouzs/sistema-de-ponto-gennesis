@@ -9,7 +9,8 @@ import {
 import { gestaoOsService } from './GestaoOsService';
 import {
   parseChecklistLabels,
-  upsertChecklistTemplate
+  upsertChecklistTemplate,
+  loadIfspChecklistLabels
 } from '../lib/gestaoOsChecklistCopy';
 
 function parsePlanType(value: unknown): GestaoOsPlanType {
@@ -92,12 +93,20 @@ async function resolvePlanChecklistId(
   existingId?: string | null
 ): Promise<string | null | undefined> {
   const labels = parseChecklistLabels(body.checklistItems ?? body.checklistText);
-  if (labels.length) {
+  const ifspLabels =
+    labels.length > 0
+      ? []
+      : await loadIfspChecklistLabels({
+          buildingId: typeof body.buildingId === 'string' ? body.buildingId : null,
+          assetId: typeof body.assetId === 'string' ? body.assetId : null
+        });
+  const resolved = labels.length ? labels : ifspLabels;
+  if (resolved.length) {
     return upsertChecklistTemplate({
       companyId: access.companyId,
       name: `Plano: ${planName}`,
       planType,
-      labels,
+      labels: resolved,
       existingId: existingId || (body.checklistId ? String(body.checklistId) : null)
     });
   }
@@ -365,13 +374,24 @@ export class GestaoOsPlansService {
       }
       if (!requesterId) continue;
 
-      const checklistItems = Array.isArray(plan.checklist?.items)
+      let checklistItems = Array.isArray(plan.checklist?.items)
         ? (plan.checklist!.items as Array<{ id: string; label: string }>).map((i) => ({
             id: i.id || randomUUID(),
             label: i.label,
             checked: false
           }))
         : [];
+      if (!checklistItems.length) {
+        const ifsp = await loadIfspChecklistLabels({
+          buildingId: plan.buildingId,
+          assetId: plan.assetId
+        });
+        checklistItems = ifsp.map((label, idx) => ({
+          id: `ifsp-${idx + 1}`,
+          label,
+          checked: false
+        }));
+      }
 
       const maintenanceType =
         plan.planType === 'PMOC' || plan.planType === 'PREVENTIVE' ? 'PREVENTIVE' : 'CORRECTIVE';

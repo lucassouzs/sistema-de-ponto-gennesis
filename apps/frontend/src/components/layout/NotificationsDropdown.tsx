@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link';
 import { createPortal } from 'react-dom';
 import {
+  AlertTriangle,
   Bell,
   CalendarClock,
   CalendarRange,
@@ -93,6 +94,8 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         overduePlansCount: number;
         warrantyExpiringCount: number;
         warrantyExpiredCount: number;
+        unplannedOpenCount?: number;
+        sacOpenCount?: number;
       } | null;
     },
     enabled: !permissionsLoading,
@@ -313,6 +316,8 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     const overduePlansCount = gestaoOsInbox?.overduePlansCount ?? 0;
     const warrantyCount =
       (gestaoOsInbox?.warrantyExpiredCount ?? 0) + (gestaoOsInbox?.warrantyExpiringCount ?? 0);
+    const unplannedOpenCount = gestaoOsInbox?.unplannedOpenCount ?? 0;
+    const sacOpenCount = gestaoOsInbox?.sacOpenCount ?? 0;
     const osHomeHref = canSeeGestaoOs
       ? '/ponto/sistema-gestao-os'
       : '/ponto/meus-chamados';
@@ -354,6 +359,26 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
         count: overduePlansCount,
         href: '/ponto/sistema-gestao-os/planos',
         Icon: CalendarClock,
+      });
+    }
+    if (unplannedOpenCount > 0) {
+      list.push({
+        id: 'gestao-os-unplanned',
+        title: 'Ocorrência não planejada',
+        description: 'Registros abertos no campo',
+        count: unplannedOpenCount,
+        href: canSeeGestaoOs ? '/ponto/sistema-gestao-os' : '/ponto/meus-chamados',
+        Icon: AlertTriangle,
+      });
+    }
+    if (sacOpenCount > 0) {
+      list.push({
+        id: 'gestao-os-sac',
+        title: 'SAC da localidade',
+        description: 'Chamados, dúvidas e reclamações',
+        count: sacOpenCount,
+        href: '/ponto/meus-chamados',
+        Icon: Wrench,
       });
     }
     if (warrantyCount > 0) {

@@ -48,10 +48,53 @@ async function withOpsAccess(req: AuthRequest) {
   return access;
 }
 
+function parseReportFilters(req: AuthRequest) {
+  const fromRaw = typeof req.query.from === 'string' ? req.query.from : '';
+  const toRaw = typeof req.query.to === 'string' ? req.query.to : '';
+  const from = fromRaw ? new Date(`${fromRaw}T00:00:00`) : undefined;
+  const to = toRaw ? new Date(`${toRaw}T23:59:59`) : undefined;
+  return {
+    from: from && !Number.isNaN(from.getTime()) ? from : null,
+    to: to && !Number.isNaN(to.getTime()) ? to : null,
+    buildingId: typeof req.query.buildingId === 'string' ? req.query.buildingId : null,
+    origin: typeof req.query.origin === 'string' ? req.query.origin : null,
+    assigneeId: typeof req.query.assigneeId === 'string' ? req.query.assigneeId : null,
+    teamUserId: typeof req.query.teamUserId === 'string' ? req.query.teamUserId : null,
+    unitPortal: req.query.unitPortal === '1' || req.query.unitPortal === 'true'
+  };
+}
+
 router.get('/me', (req, res, next) => gestaoOsController.myAccess(req, res, next));
 router.get('/summary', (req, res, next) => gestaoOsController.summary(req, res, next));
 router.get('/locations', (req, res, next) => gestaoOsController.locationTree(req, res, next));
 router.get('/technicians', (req, res, next) => gestaoOsController.technicians(req, res, next));
+
+router.get('/stock-materials', async (req: AuthRequest, res, next) => {
+  try {
+    await withPersonalAccess(req);
+    const { prisma } = await import('../lib/prisma');
+    const q = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const data = await prisma.constructionMaterial.findMany({
+      where: {
+        isActive: true,
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' } },
+                { code: { contains: q, mode: 'insensitive' } }
+              ]
+            }
+          : {})
+      },
+      select: { id: true, name: true, code: true, unit: true },
+      orderBy: { name: 'asc' },
+      take: 80
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/inbox', async (req: AuthRequest, res, next) => {
   try {
@@ -88,9 +131,26 @@ router.get('/agenda', async (req: AuthRequest, res, next) => {
 
 router.get('/reports/summary', async (req: AuthRequest, res, next) => {
   try {
-    const access = await withOpsAccess(req);
-    const data = await gestaoOsReportsService.summary(access);
+    const unitPortal = req.query.unitPortal === '1' || req.query.unitPortal === 'true';
+    const access = unitPortal ? await withPersonalAccess(req) : await withOpsAccess(req);
+    if (unitPortal && access.canViewAll) {
+      /* ops also can open unit view */
+    }
+    const data = await gestaoOsReportsService.summary(access, parseReportFilters(req));
     res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/reports/export.csv', async (req: AuthRequest, res, next) => {
+  try {
+    const unitPortal = req.query.unitPortal === '1' || req.query.unitPortal === 'true';
+    const access = unitPortal ? await withPersonalAccess(req) : await withOpsAccess(req);
+    const csv = await gestaoOsReportsService.exportCsv(access, parseReportFilters(req));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="relatorio-os.csv"');
+    res.send(`\uFEFF${csv}`);
   } catch (error) {
     next(error);
   }
@@ -254,7 +314,7 @@ router.post('/checklists', async (req: AuthRequest, res, next) => {
 
 router.get('/documents', async (req: AuthRequest, res, next) => {
   try {
-    const access = await withOpsAccess(req);
+    const access = await withAccess(req);
     const data = await gestaoOsDocumentsService.list(access, {
       buildingId: typeof req.query.buildingId === 'string' ? req.query.buildingId : undefined,
       assetId: typeof req.query.assetId === 'string' ? req.query.assetId : undefined,
@@ -302,6 +362,9 @@ router.patch('/cadastros/branches/:id', (req, res, next) =>
   gestaoOsCadastrosController.updateBranch(req, res, next)
 );
 
+router.get('/cadastros/my-unit-buildings', (req, res, next) =>
+  gestaoOsCadastrosController.myUnitBuildings(req, res, next)
+);
 router.get('/cadastros/locations', (req, res, next) =>
   gestaoOsCadastrosController.locationTreeAdmin(req, res, next)
 );
@@ -343,6 +406,9 @@ router.delete('/cadastros/assets/:id', (req, res, next) =>
 );
 router.post('/cadastros/assets/qr-labels', (req, res, next) =>
   gestaoOsCadastrosController.assetQrLabels(req, res, next)
+);
+router.get('/cadastros/buildings/:id/close-qr', (req, res, next) =>
+  gestaoOsCadastrosController.buildingCloseQr(req, res, next)
 );
 router.get('/cadastros/assets/:id/qr', (req, res, next) =>
   gestaoOsCadastrosController.assetQr(req, res, next)
@@ -466,5 +532,6 @@ router.delete('/comments/:commentId', (req, res, next) =>
 router.get('/:id', (req, res, next) => gestaoOsController.getById(req, res, next));
 router.patch('/:id', (req, res, next) => gestaoOsController.update(req, res, next));
 router.post('/:id/transition', (req, res, next) => gestaoOsController.transition(req, res, next));
+router.post('/:id/atteste', (req, res, next) => gestaoOsController.atteste(req, res, next));
 
 export default router;
