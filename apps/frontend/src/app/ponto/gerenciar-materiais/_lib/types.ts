@@ -77,6 +77,7 @@ export interface MaterialRequest {
     attachmentUrl?: string;
     attachmentName?: string;
     unitPrice?: number;
+    totalPrice?: number;
     material: {
       id: string;
       name?: string | null;

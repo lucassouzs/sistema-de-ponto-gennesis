@@ -41,7 +41,15 @@ import {
   rmSolicitante,
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
-import { matchesMaterialRequestSearch, normalizeFluxSearch } from '@/app/ponto/gerenciar-materiais/_lib/search';
+import {
+  matchesMaterialRequestSearch,
+  normalizeFluxSearch,
+} from '@/app/ponto/gerenciar-materiais/_lib/search';
+import { formatCurrency } from '@/lib/financialControlEntry';
+import {
+  formatRmItemProductKindShortLabel,
+  rmItemLineTotal,
+} from '@/lib/rmItemProductKinds';
 import {
   ApprovalPhaseStatCards,
   type ApprovalPhaseStatCard,
@@ -104,11 +112,14 @@ const RM_PHASE_SUBTITLE: Record<RmPhaseFilter, string> = {
 const cellPad = 'px-2 sm:px-3 py-3';
 const cellPadTh = 'px-2 sm:px-3 py-4';
 const rmColCls = 'w-[4%] min-w-[3rem] max-w-[4.5rem]';
+const tipoColCls = 'w-[9%] min-w-[5.5rem]';
 const actionColCls = 'w-[4%] min-w-[3rem] max-w-[4.5rem]';
 const thTextCls = `${cellPadTh} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider`;
 const thCenterCls = `${cellPadTh} text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap`;
 const rmThCls = `${thCenterCls} ${rmColCls} !pl-2 sm:!pl-3 !pr-1`;
 const rmTdCls = `${cadastroListClasses.tdMono} ${rmColCls} text-center !pl-2 sm:!pl-3 !pr-1`;
+const tipoThCls = `${thCenterCls} ${tipoColCls}`;
+const tipoTdCls = `${cellPad} ${tipoColCls} text-center align-middle text-sm text-gray-700 dark:text-gray-300`;
 const tdTextCls = `${cellPad} text-center text-sm text-gray-700 dark:text-gray-300 min-w-0`;
 const tdMutedCls = `${cellPad} text-center text-sm text-gray-600 dark:text-gray-400 min-w-0`;
 const tdCenterCls = `${cellPad} text-center text-sm min-w-0`;
@@ -118,6 +129,12 @@ const RM_ACTION_MENU_WIDTH_PX = 224;
 const MENU_ITEM_CLASS =
   'w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700';
 const MENU_ITEM_BORDER_CLASS = `${MENU_ITEM_CLASS} border-t border-gray-200 dark:border-gray-700`;
+
+function formatRmItemUnitPrice(value: number | null | undefined): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  return formatCurrency(n);
+}
 
 export function RmApprovalsSection() {
   const queryClient = useQueryClient();
@@ -395,12 +412,13 @@ export function RmApprovalsSection() {
               <table className={`${cadastroListClasses.table} text-sm`}>
                 <colgroup>
                   <col className="w-[4%]" />
-                  <col className="w-[14%]" />
                   <col className="w-[12%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[32%]" />
                   <col className="w-[10%]" />
                   <col className="w-[12%]" />
+                  <col className="w-[24%]" />
+                  <col className={tipoColCls} />
+                  <col className="w-[8%]" />
+                  <col className="w-[10%]" />
                   <col className="w-[4%]" />
                 </colgroup>
                 <thead className="border-b border-gray-200 dark:border-gray-700">
@@ -412,6 +430,7 @@ export function RmApprovalsSection() {
                     <th className={thCenterCls}>OS</th>
                     <th className={thTextCls}>Contrato</th>
                     <th className={thTextCls}>Descrição</th>
+                    <th className={tipoThCls}>Tipo</th>
                     <th className={thCenterCls}>Prioridade</th>
                     <th className={thCenterCls}>{APPROVAL_STATUS_COLUMN_TITLE}</th>
                     <th scope="col" className={actionThCls}>
@@ -422,6 +441,7 @@ export function RmApprovalsSection() {
                 <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                   {filteredRequests.map((request) => {
                     const priorityInfo = getPriorityInfo(request.priority);
+                    const tipoLabel = formatRmItemProductKindShortLabel(request.itemProductKinds);
 
                     return (
                       <tr
@@ -452,6 +472,9 @@ export function RmApprovalsSection() {
                           <span className="line-clamp-2" title={request.description || ''}>
                             {request.description || '—'}
                           </span>
+                        </td>
+                        <td className={tipoTdCls} title={tipoLabel}>
+                          <span className="block truncate text-xs font-medium">{tipoLabel}</span>
                         </td>
                         <td className={tdCenterCls}>
                           <span className={`text-xs font-medium whitespace-nowrap ${priorityInfo.color}`}>
@@ -534,12 +557,37 @@ export function RmApprovalsSection() {
             </div>
             <div>
               <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">Itens</p>
-              <ul className="space-y-1 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                {detailRequest.items?.map((item) => (
-                  <li key={item.id} className="text-gray-800 dark:text-gray-200">
-                    {materialItemLabel(item)} — {item.quantity} {item.unit}
-                  </li>
-                ))}
+              <ul className="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                {detailRequest.items?.map((item) => {
+                  const lineTotal = rmItemLineTotal(item);
+                  return (
+                    <li
+                      key={item.id}
+                      className="rounded-md border border-gray-100 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40"
+                    >
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        {materialItemLabel(item)}
+                      </p>
+                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        {Number(item.quantity)} {item.unit || '—'}
+                      </p>
+                      <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-gray-500 dark:text-gray-400">Valor unitário</p>
+                          <p className="mt-0.5 font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                            {formatRmItemUnitPrice(item.unitPrice)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 dark:text-gray-400">Valor total</p>
+                          <p className="mt-0.5 font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                            {lineTotal != null ? formatCurrency(lineTotal) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
                 {(!detailRequest.items || detailRequest.items.length === 0) &&
                   (isFetchingDetail ? (
                     <li className="inline-flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
