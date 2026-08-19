@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { computeRowActionMenuPosition } from '@/lib/computeRowActionMenuPosition';
 
 export const ROW_ACTION_MENU_WIDTH_PX = 224;
 
@@ -6,6 +7,8 @@ export type RowActionMenuState = {
   rowId: string;
   top: number;
   left: number;
+  maxHeight: number;
+  placement: 'below' | 'above';
 } | null;
 
 export function useRowActionMenu<T extends { id: string }>(rows: T[]) {
@@ -19,9 +22,8 @@ export function useRowActionMenu<T extends { id: string }>(rows: T[]) {
     const rect = button.getBoundingClientRect();
     setRowActionMenu((prev) => {
       if (prev?.rowId === rowId) return null;
-      let left = rect.right - ROW_ACTION_MENU_WIDTH_PX;
-      left = Math.max(8, Math.min(left, window.innerWidth - ROW_ACTION_MENU_WIDTH_PX - 8));
-      return { rowId, top: rect.bottom + 4, left };
+      const coords = computeRowActionMenuPosition(rect, ROW_ACTION_MENU_WIDTH_PX);
+      return { rowId, ...coords };
     });
   };
 

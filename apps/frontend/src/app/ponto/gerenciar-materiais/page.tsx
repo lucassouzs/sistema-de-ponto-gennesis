@@ -1030,6 +1030,7 @@ export default function GerenciarMateriaisPage() {
                       materialRequestStatus={selectedRequest.status}
                       orders={detailOrders}
                       enabled={rmDetailTab === 'ocs'}
+                      rmItems={selectedRequest.items}
                     />
                   ) : null}
 

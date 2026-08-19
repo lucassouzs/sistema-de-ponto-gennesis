@@ -1356,6 +1356,7 @@ export class PurchaseOrderService {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id },
       include: {
+        items: { select: { materialRequestItemId: true } },
         materialRequest: {
           select: { costCenter: { select: { name: true, code: true } } },
         },
@@ -1698,21 +1699,16 @@ export class PurchaseOrderService {
       });
 
       if (status === 'REJECTED' && order.materialRequestId) {
-        const rm = await tx.materialRequest.findUnique({
-          where: { id: order.materialRequestId },
-          select: { id: true, status: true }
-        });
-        if (rm && rm.status === 'APPROVED') {
-          await tx.materialRequest.update({
-            where: { id: rm.id },
+        const rmItemIds = order.items
+          .map((i) => i.materialRequestItemId)
+          .filter((id): id is string => Boolean(id));
+        if (rmItemIds.length > 0) {
+          await tx.materialRequestItem.updateMany({
+            where: { id: { in: rmItemIds } },
             data: {
               status: 'CANCELLED',
-              rejectedBy: userId ?? null,
-              rejectedAt: new Date(),
-              rejectionReason:
-                options?.rejectionReason?.trim() || 'Reprovada no fluxo de aprovação da ordem de compra',
-              updatedAt: new Date()
-            }
+              updatedAt: new Date(),
+            },
           });
         }
       }
@@ -3370,7 +3366,8 @@ export class PurchaseOrderService {
     purchaseOrderItemId: string,
     userId: string,
     isAdmin: boolean,
-    reason: string
+    reason: string,
+    options?: { cancelItem?: boolean }
   ) {
     const reasonText = reason.trim();
     if (!reasonText) throw new Error('Informe o motivo da retirada do item');
@@ -3422,6 +3419,7 @@ export class PurchaseOrderService {
     if (!line) throw new Error('Item não encontrado nesta ordem de compra');
 
     const isLastItem = order.items.length <= 1;
+    const cancelItem = options?.cancelItem === true;
 
     const materialLabel =
       line.material?.name?.trim() ||
@@ -3432,11 +3430,15 @@ export class PurchaseOrderService {
     const actorName = await resolveUserDisplayName(userId);
     const at = new Date().toLocaleString('pt-BR');
     const noteHeader = actorName
-      ? `[Item devolvido à RM — ${at} — ${actorName}]`
-      : `[Item devolvido à RM — ${at}]`;
+      ? cancelItem
+        ? `[Item cancelado — ${at} — ${actorName}]`
+        : `[Item devolvido à RM — ${at} — ${actorName}]`
+      : cancelItem
+        ? `[Item cancelado — ${at}]`
+        : `[Item devolvido à RM — ${at}]`;
     const noteBody = `${materialLabel} (qtd ${Number(line.quantity)} ${line.unit || ''}). Motivo: ${reasonText}`;
     const cancelNote = isLastItem
-      ? `\n\n[OC cancelada — último item devolvido à RM em ${at}]`
+      ? `\n\n[OC cancelada — ${cancelItem ? 'item cancelado' : 'último item devolvido à RM'} em ${at}]`
       : '';
     const note = `${noteHeader}\n${noteBody}${cancelNote}`;
     const nextNotes = order.notes?.trim() ? `${order.notes.trim()}\n\n${note}` : note;
@@ -3444,12 +3446,16 @@ export class PurchaseOrderService {
     const rmItemId = line.materialRequestItemId;
 
     await prisma.$transaction(async (tx) => {
-      await tx.purchaseOrderItem.delete({ where: { id: line.id } });
+      if (!isLastItem) {
+        await tx.purchaseOrderItem.delete({ where: { id: line.id } });
+      }
 
-      const remaining = await tx.purchaseOrderItem.findMany({
-        where: { purchaseOrderId },
-        select: { totalPrice: true },
-      });
+      const remaining = isLastItem
+        ? order.items
+        : await tx.purchaseOrderItem.findMany({
+            where: { purchaseOrderId },
+            select: { totalPrice: true },
+          });
       const itemsSum = remaining.reduce(
         (acc, i) => acc.plus(new Decimal(i.totalPrice)),
         new Decimal(0)
@@ -3463,8 +3469,7 @@ export class PurchaseOrderService {
         data: {
           amountToPay,
           notes: nextNotes,
-          // Último item: cancela só a OC (não a RM) para o item voltar ao mapa.
-          ...(remaining.length === 0 ? { status: 'CANCELLED' as const } : {}),
+          ...(isLastItem ? { status: 'CANCELLED' as const } : {}),
           updatedAt: new Date(),
         },
       });
@@ -3473,26 +3478,31 @@ export class PurchaseOrderService {
         await tx.materialRequestItem.update({
           where: { id: rmItemId },
           data: {
-            status: 'APPROVED',
+            status: cancelItem ? 'CANCELLED' : 'APPROVED',
             fulfilledQuantity: null,
             updatedAt: new Date(),
           },
         });
 
-        // Remove vencedores/preços do item em mapas antigos para não travar nova cotação.
-        await tx.quoteMapWinnerItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
-        await tx.quoteMapSupplierItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+        if (!cancelItem) {
+          // Remove vencedores/preços do item em mapas antigos para não travar nova cotação.
+          await tx.quoteMapWinnerItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+          await tx.quoteMapSupplierItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+        }
       }
 
       if (order.materialRequestId && order.materialRequest?.status === 'APPROVED') {
-        // Mantém RM APPROVED; comentário para auditoria.
         await tx.materialRequestComment.create({
           data: {
             materialRequestId: order.materialRequestId,
             userId,
             content: isLastItem
-              ? `Último item devolvido da OC ${order.orderNumber} (OC cancelada) para nova cotação: ${noteBody}`
-              : `Item devolvido da OC ${order.orderNumber} para nova cotação: ${noteBody}`,
+              ? cancelItem
+                ? `Item cancelado na OC ${order.orderNumber} (OC cancelada): ${noteBody}`
+                : `Último item devolvido da OC ${order.orderNumber} (OC cancelada) para nova cotação: ${noteBody}`
+              : cancelItem
+                ? `Item cancelado e retirado da OC ${order.orderNumber}: ${noteBody}`
+                : `Item devolvido da OC ${order.orderNumber} para nova cotação: ${noteBody}`,
           },
         });
       }
@@ -3502,8 +3512,12 @@ export class PurchaseOrderService {
           purchaseOrderId,
           userId,
           content: isLastItem
-            ? `Último item retirado e devolvido à RM (OC cancelada): ${noteBody}`
-            : `Item retirado e devolvido à RM: ${noteBody}`,
+            ? cancelItem
+              ? `Item cancelado (OC cancelada): ${noteBody}`
+              : `Último item retirado e devolvido à RM (OC cancelada): ${noteBody}`
+            : cancelItem
+              ? `Item cancelado e retirado da OC: ${noteBody}`
+              : `Item retirado e devolvido à RM: ${noteBody}`,
         },
       });
     });

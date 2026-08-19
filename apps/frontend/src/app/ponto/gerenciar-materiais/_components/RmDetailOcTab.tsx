@@ -18,11 +18,23 @@ import {
   buildPaymentConditionLabelMap,
   type PaymentConditionRow
 } from '@/components/oc/PaymentConditionSelect';
+import { isOcCoveringRmItems, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 
 const FALLBACK_PAYMENT_CONDITION_LABELS: Record<string, string> = {
   AVISTA: 'À vista',
   BOLETO_30: 'Boleto 30 dias',
   BOLETO_28: 'Boleto 28 dias'
+};
+
+type RmItemFallback = {
+  id: string;
+  quantity?: number | string | null;
+  unit?: string | null;
+  unitPrice?: number | string | null;
+  totalPrice?: number | string | null;
+  notes?: string | null;
+  observation?: string | null;
+  material?: NonNullable<PurchaseOrder['items']>[number]['material'] | null;
 };
 
 function paymentConditionDisplay(
@@ -86,15 +98,91 @@ export function purchaseOrderGrandTotal(
   return Math.round((items + freight) * 100) / 100;
 }
 
+function lineHasDisplayData(line: NonNullable<PurchaseOrder['items']>[number]): boolean {
+  return Boolean(
+    line.material ||
+      line.quantity != null ||
+      line.unitPrice != null ||
+      line.totalPrice != null
+  );
+}
+
+function buildLineFromRmItem(rm: RmItemFallback, rmItemId: string) {
+  const qty = Number(rm.quantity);
+  const unitPrice = Number(rm.unitPrice);
+  const totalRaw = rm.totalPrice != null ? Number(rm.totalPrice) : NaN;
+  const totalPrice = Number.isFinite(totalRaw)
+    ? totalRaw
+    : Number.isFinite(qty) && Number.isFinite(unitPrice)
+      ? qty * unitPrice
+      : 0;
+  return {
+    id: rmItemId,
+    materialRequestItemId: rmItemId,
+    quantity: Number.isFinite(qty) ? qty : 0,
+    unit: rm.unit || '—',
+    unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+    totalPrice,
+    material: rm.material ?? undefined,
+    materialRequestItem: {
+      notes: (rm.notes || rm.observation || '').trim() || undefined,
+    },
+  } as NonNullable<PurchaseOrder['items']>[number];
+}
+
+/** Monta linhas exibíveis: detalhe da OC ou fallback pelos vínculos / itens da RM. */
+export function resolvePurchaseOrderDisplayLines(
+  order: PurchaseOrder,
+  rmItems?: RmItemFallback[] | null,
+  orphanCancelledItems?: RmItemFallback[] | null,
+  orphanIndex?: number
+): NonNullable<PurchaseOrder['items']> {
+  const raw = order.items ?? [];
+  if (raw.some(lineHasDisplayData)) return raw;
+
+  const linkedIds = raw
+    .map((line) => line.materialRequestItemId)
+    .filter((id): id is string => Boolean(id));
+
+  if (linkedIds.length > 0 && rmItems?.length) {
+    return linkedIds
+      .map((rmItemId) => {
+        const rm = rmItems.find((i) => i.id === rmItemId);
+        return rm ? buildLineFromRmItem(rm, rmItemId) : null;
+      })
+      .filter(Boolean) as NonNullable<PurchaseOrder['items']>;
+  }
+
+  const orderClosed = order.status === 'REJECTED' || order.status === 'CANCELLED';
+  if (
+    orderClosed &&
+    orphanCancelledItems?.length &&
+    typeof orphanIndex === 'number' &&
+    orphanIndex >= 0 &&
+    orphanCancelledItems[orphanIndex]
+  ) {
+    const rm = orphanCancelledItems[orphanIndex];
+    return [buildLineFromRmItem(rm, rm.id)];
+  }
+
+  return raw;
+}
+
 function OcCard({
   order,
   paymentLabelMap,
   budgetTotal,
+  rmItems,
+  orphanCancelledItems,
+  orphanIndex,
 }: {
   order: PurchaseOrder;
   paymentLabelMap: Record<string, string>;
   /** Orçamento da OS — quando informado, exibe % desta OC. */
   budgetTotal?: number | null;
+  rmItems?: RmItemFallback[] | null;
+  orphanCancelledItems?: RmItemFallback[] | null;
+  orphanIndex?: number;
 }) {
   const ocNo =
     order.orderNumber && String(order.orderNumber).trim()
@@ -107,12 +195,18 @@ function OcCard({
     orderDate && !Number.isNaN(orderDate.getTime())
       ? orderDate.toLocaleDateString('pt-BR')
       : null;
-  const lines = order.items ?? [];
+  const lines = resolvePurchaseOrderDisplayLines(
+    order,
+    rmItems,
+    orphanCancelledItems,
+    orphanIndex
+  );
   const subtotal = itemsSubtotal(lines);
-  const freight = orderFreightValue(order);
-  const total = purchaseOrderGrandTotal(order);
+  const freight = orderFreightValue({ ...order, items: lines });
+  const total = purchaseOrderGrandTotal({ ...order, items: lines });
   const showBudgetPct = budgetTotal != null && budgetTotal > 0;
   const budgetPct = showBudgetPct ? (total / budgetTotal) * 100 : null;
+  const orderClosed = order.status === 'REJECTED' || order.status === 'CANCELLED';
 
   return (
     <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
@@ -181,12 +275,20 @@ function OcCard({
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {lines.map((line, idx) => (
-                  <tr key={`${order.id}-${idx}`} className="text-gray-900 dark:text-gray-100">
+                  <tr
+                    key={`${order.id}-${line.id || idx}`}
+                    className={`text-gray-900 dark:text-gray-100 ${orderClosed ? 'opacity-80' : ''}`}
+                  >
                     <td className="py-2.5 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
                       {idx + 1}
                     </td>
                     <td className="max-w-[200px] px-2 py-2.5 align-top sm:max-w-none">
                       {materialLineLabel(line.material)}
+                      {orderClosed ? (
+                        <p className="mt-0.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                          Item cancelado nesta OC
+                        </p>
+                      ) : null}
                       {(() => {
                         const detail =
                           line.notes?.trim() ||
@@ -270,6 +372,8 @@ type Props = {
   emptyMessage?: string;
   /** Orçamento da OS para exibir % de cada OC. */
   budgetTotal?: number | null;
+  /** Itens da RM — fallback para exibir linhas em OCs canceladas sem detalhe persistido. */
+  rmItems?: RmItemFallback[] | null;
 };
 
 export function RmDetailOcTab({
@@ -278,6 +382,7 @@ export function RmDetailOcTab({
   enabled = true,
   emptyMessage,
   budgetTotal,
+  rmItems,
 }: Props) {
   const sorted = useMemo(() => sortMaterialRequestPurchaseOrders(orders), [orders]);
   const ids = useMemo(() => sorted.map((o) => o.id), [sorted]);
@@ -312,9 +417,32 @@ export function RmDetailOcTab({
   const detailedOrders = useMemo(() => {
     return sorted.map((summary, i) => {
       const detail = detailQueries[i]?.data;
-      return detail?.items?.length ? detail : { ...summary, ...(detail || {}) };
+      return { ...summary, ...(detail || {}) } as PurchaseOrder;
     });
   }, [sorted, detailQueries]);
+
+  const orphanCancelledItems = useMemo(() => {
+    if (!rmItems?.length) return [];
+    const coveredByActive = new Set<string>();
+    for (const order of detailedOrders) {
+      if (!isOcCoveringRmItems(order.status)) continue;
+      for (const line of order.items ?? []) {
+        if (line.materialRequestItemId) coveredByActive.add(line.materialRequestItemId);
+      }
+    }
+    return rmItems.filter(
+      (item) => isRmItemCancelled((item as { status?: string | null }).status) && !coveredByActive.has(item.id)
+    );
+  }, [rmItems, detailedOrders]);
+
+  const emptyClosedOrderIds = useMemo(() => {
+    return detailedOrders
+      .filter((order) => {
+        const closed = order.status === 'REJECTED' || order.status === 'CANCELLED';
+        return closed && resolvePurchaseOrderDisplayLines(order, rmItems).length === 0;
+      })
+      .map((order) => order.id);
+  }, [detailedOrders, rmItems]);
 
   const loading = enabled && ids.length > 0 && detailQueries.some((q) => q.isLoading && !q.data);
 
@@ -354,6 +482,9 @@ export function RmDetailOcTab({
           order={order}
           paymentLabelMap={paymentLabelMap}
           budgetTotal={budgetTotal}
+          rmItems={rmItems}
+          orphanCancelledItems={orphanCancelledItems}
+          orphanIndex={emptyClosedOrderIds.indexOf(order.id)}
         />
       ))}
     </div>

@@ -2121,7 +2121,7 @@ function SolicitarMateriaisPage() {
                               ? request.purchaseOrders
                               : [];
                             const ocRows = materialRequestOcListRows(request, pos);
-                            const { total: itemTotal, pending: itemPending } =
+                            const { total: itemTotal, pending: itemPending, cancelled: itemCancelled } =
                               getRmItemCoverageCounts(
                                 {
                                   id: request.id,
@@ -2140,6 +2140,15 @@ function SolicitarMateriaisPage() {
                               ) &&
                               itemPending != null &&
                               itemPending > 0;
+                            const showCancelledLine =
+                              request.status === 'APPROVED' &&
+                              !isMaterialRequestEffectivelyCancelled(
+                                { status: String(request.status || '') } as MaterialRequest,
+                                pos as Parameters<typeof isMaterialRequestEffectivelyCancelled>[1]
+                              ) &&
+                              itemCancelled != null &&
+                              itemCancelled > 0 &&
+                              (itemPending == null || itemPending === 0);
                             const tipoLabel = formatRmItemProductKinds(request.itemProductKinds);
                             return (
                             <tr
@@ -2206,6 +2215,13 @@ function SolicitarMateriaisPage() {
                                         title={`${itemPending} item(ns) ainda sem ordem de compra`}
                                       >
                                         {itemPending} pendente{itemPending === 1 ? '' : 's'}
+                                      </span>
+                                    ) : showCancelledLine ? (
+                                      <span
+                                        className="text-[11px] font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap"
+                                        title={`${itemCancelled} item(ns) cancelado(s) nesta RM`}
+                                      >
+                                        {itemCancelled} cancelado{itemCancelled === 1 ? '' : 's'}
                                       </span>
                                     ) : null}
                                   </div>

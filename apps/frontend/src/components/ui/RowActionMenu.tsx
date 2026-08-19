@@ -104,8 +104,13 @@ export function RowActionMenuPortal({
     >
       <div
         role="menu"
-        className="absolute w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-        style={{ top: menu.top, left: menu.left }}
+        className="absolute w-56 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+        style={{
+          top: menu.top,
+          left: menu.left,
+          maxHeight: menu.maxHeight,
+          transform: menu.placement === 'above' ? 'translateY(-100%)' : undefined,
+        }}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
       >

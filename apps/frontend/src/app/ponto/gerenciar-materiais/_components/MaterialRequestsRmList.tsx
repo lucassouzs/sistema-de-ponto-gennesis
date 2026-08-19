@@ -45,6 +45,7 @@ import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import {
   Z_ACTION_MENU,
 } from '@/lib/zIndex';
+import { computeRowActionMenuPosition } from '@/lib/computeRowActionMenuPosition';
 const cellPad = 'px-2 sm:px-3 py-3';
 const cellPadTh = 'px-2 sm:px-3 py-4';
 const rmColCls = 'w-[4%] min-w-[3rem] max-w-[4.5rem]';
@@ -149,6 +150,8 @@ export function MaterialRequestsRmList({
     requestId: string;
     top: number;
     left: number;
+    maxHeight: number;
+    placement: 'below' | 'above';
   } | null>(null);
 
   const meta = RM_CARD_LIST_CONFIG[cardFilter];
@@ -336,7 +339,7 @@ export function MaterialRequestsRmList({
                     const ocRows = materialRequestOcListRows(request, ocs);
                     const displayStatus = getMaterialRequestDisplayStatus(request, ocs);
                     const statusInfo = getStatusInfo(displayStatus);
-                    const { total: itemTotal, pending: itemPending } = getRmItemCoverageCounts(
+                    const { total: itemTotal, pending: itemPending, cancelled: itemCancelled } = getRmItemCoverageCounts(
                       request,
                       ocs
                     );
@@ -345,6 +348,12 @@ export function MaterialRequestsRmList({
                       !isMaterialRequestEffectivelyCancelled(request, ocs) &&
                       itemPending != null &&
                       itemPending > 0;
+                    const showCancelledLine =
+                      request.status === 'APPROVED' &&
+                      !isMaterialRequestEffectivelyCancelled(request, ocs) &&
+                      itemCancelled != null &&
+                      itemCancelled > 0 &&
+                      (itemPending == null || itemPending === 0);
                     const tipoLabel = formatRmItemProductKinds(request.itemProductKinds);
 
                     return (
@@ -398,6 +407,13 @@ export function MaterialRequestsRmList({
                                   title={`${itemPending} item(ns) ainda sem ordem de compra`}
                                 >
                                   {itemPending} pendente{itemPending === 1 ? '' : 's'}
+                                </span>
+                              ) : showCancelledLine ? (
+                                <span
+                                  className="text-[11px] font-medium text-gray-600 dark:text-gray-400 whitespace-nowrap"
+                                  title={`${itemCancelled} item(ns) cancelado(s) nesta RM`}
+                                >
+                                  {itemCancelled} cancelado{itemCancelled === 1 ? '' : 's'}
                                 </span>
                               ) : null}
                             </div>
@@ -455,12 +471,11 @@ export function MaterialRequestsRmList({
                                 const rect = e.currentTarget.getBoundingClientRect();
                                 setActionMenu((prev) => {
                                   if (prev?.requestId === request.id) return null;
-                                  let left = rect.right - RM_ACTION_MENU_WIDTH_PX;
-                                  left = Math.max(
-                                    8,
-                                    Math.min(left, window.innerWidth - RM_ACTION_MENU_WIDTH_PX - 8)
+                                  const coords = computeRowActionMenuPosition(
+                                    rect,
+                                    RM_ACTION_MENU_WIDTH_PX
                                   );
-                                  return { requestId: request.id, top: rect.bottom + 4, left };
+                                  return { requestId: request.id, ...coords };
                                 });
                               }}
                               className={rowActionMenuButtonClass(actionMenu?.requestId === request.id)}
@@ -498,10 +513,12 @@ export function MaterialRequestsRmList({
           >
             <div
               role="menu"
-              className="absolute w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+              className="absolute w-56 overflow-y-auto overflow-x-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
               style={{
                 top: actionMenu.top,
                 left: actionMenu.left,
+                maxHeight: actionMenu.maxHeight,
+                transform: actionMenu.placement === 'above' ? 'translateY(-100%)' : undefined,
               }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}

@@ -813,12 +813,17 @@ router.post(
           : typeof req.body?.rejectionReason === 'string'
             ? req.body.rejectionReason
             : '';
+      const cancelItem =
+        req.body?.cancelItem === true ||
+        req.body?.intent === 'cancel' ||
+        req.body?.markItemCancelled === true;
       const order = await service.returnItemToMaterialRequest(
         req.params.id,
         req.params.itemId,
         req.user.id,
         !!req.user.isAdmin,
-        reason
+        reason,
+        { cancelItem }
       );
       res.json({
         success: true,

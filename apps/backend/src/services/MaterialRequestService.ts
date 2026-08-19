@@ -915,6 +915,7 @@ export class MaterialRequestService {
               items: {
                 select: {
                   id: true,
+                  status: true,
                   material: {
                     select: {
                       sinapiCode: true,

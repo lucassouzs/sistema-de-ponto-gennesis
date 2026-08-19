@@ -6,16 +6,27 @@ export type OcCoverageOrder = {
   items?: Array<{ materialRequestItemId?: string | null } | null> | null;
 };
 
+export type RmCoverageItem = {
+  id: string;
+  status?: string | null;
+};
+
 export type RmCoverageRequest = {
   id: string;
   status: string;
-  items?: Array<{ id: string; status?: string | null }> | null;
+  items?: RmCoverageItem[] | null;
   _count?: { items?: number } | null;
   purchaseOrders?: OcCoverageOrder[] | null;
 };
 
-export function isRmItemCancelled(item: { status?: string | null }): boolean {
-  return String(item.status || '') === 'CANCELLED';
+export function isRmItemCancelled(
+  itemOrStatus: { status?: string | null } | string | null | undefined
+): boolean {
+  const status =
+    typeof itemOrStatus === 'object' && itemOrStatus != null
+      ? itemOrStatus.status
+      : itemOrStatus;
+  return String(status || '').toUpperCase() === 'CANCELLED';
 }
 
 export function canCancelRmItem(
@@ -80,9 +91,8 @@ export function getOpenRmItemIds(
   const items = request.items ?? [];
   if (items.length > 0) {
     return items
-      .filter((i) => !isRmItemCancelled(i))
-      .map((i) => i.id)
-      .filter((id) => !covered.has(id));
+      .filter((i) => !isRmItemCancelled(i) && !covered.has(i.id))
+      .map((i) => i.id);
   }
   return [];
 }
@@ -109,12 +119,12 @@ export function getActiveOcForRmItem(
 }
 
 /**
- * Contagens para listagem: total de itens da RM e quantos ainda sem OC ativa.
+ * Contagens para listagem: total, pendentes (sem OC ativa) e cancelados.
  */
 export function getRmItemCoverageCounts(
   request: RmCoverageRequest,
   orders?: OcCoverageOrder[]
-): { total: number | null; pending: number | null } {
+): { total: number | null; pending: number | null; cancelled: number | null } {
   const items = request.items ?? [];
   const countTotal = request._count?.items;
   const total =
@@ -123,18 +133,26 @@ export function getRmItemCoverageCounts(
       : typeof countTotal === 'number'
         ? countTotal
         : null;
-  if (total == null) return { total: null, pending: null };
+  if (total == null) return { total: null, pending: null, cancelled: null };
 
   if (items.length > 0) {
-    return { total, pending: getOpenRmItemIds(request, orders).length };
+    const hasItemStatus = items.some((i) => i.status != null && String(i.status).trim() !== '');
+    const cancelled = hasItemStatus
+      ? items.filter((i) => isRmItemCancelled(i)).length
+      : null;
+    return {
+      total,
+      pending: getOpenRmItemIds(request, orders).length,
+      cancelled,
+    };
   }
 
   const covered = getCoveredRmItemIds(request, orders).size;
-  return { total, pending: Math.max(0, total - covered) };
+  return { total, pending: Math.max(0, total - covered), cancelled: null };
 }
 
 /**
- * RM aprovada com pelo menos um item ainda sem OC ativa.
+ * RM aprovada com pelo menos um item ainda sem OC ativa e não cancelado.
  * Se a listagem não trouxer itens, cai no legado: sem OCs ativas.
  */
 export function rmHasOpenItemsForProcurement(
@@ -153,13 +171,10 @@ export function rmHasOpenItemsForProcurement(
 
   const total = request._count?.items;
   if (typeof total === 'number' && total > 0) {
-    // Sem ids: se há cobertura parcial desconhecida, assume aberto se covered < total
-    // (covered só conta itens com materialRequestItemId).
     if (covered.size > 0 && covered.size < total) return true;
     if (covered.size >= total) return false;
   }
 
-  // Legado: nenhuma OC ativa → ainda aguarda OC
   return !source.some((o) => isOcCoveringRmItems(o.status));
 }
 

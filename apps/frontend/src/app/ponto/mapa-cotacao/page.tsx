@@ -37,7 +37,7 @@ import { formatRmListDisplayId } from '../gerenciar-materiais/_lib/rmListDisplay
 import type { MaterialRequest as MaterialRequestBase } from '../gerenciar-materiais/_lib/types';
 import {
   getCoveredRmItemIdsFromOrders,
-  getOpenRmItemIds,
+  getRmItemCoverageCounts,
   rmHasOpenItemsForProcurement,
 } from '@/lib/rmProcurementCoverage';
 
@@ -659,30 +659,34 @@ export default function MapaCotacaoPage() {
       const costCenter = r.costCenter?.name?.trim() || '';
       const date = r.createdAt ? formatDateTimeBR(r.createdAt) : '';
       const orders = ordersByRm.get(r.id) ?? [];
-      const summaryItemCount = (r as unknown as { _count?: { items?: number } })._count?.items;
-
-      const totalCount =
-        Array.isArray(r.items) && r.items.length > 0
-          ? r.items.length
-          : typeof summaryItemCount === 'number'
-            ? summaryItemCount
-            : null;
-
-      let pendingCount: number | null = null;
-      if (Array.isArray(r.items) && r.items.length > 0) {
-        pendingCount = getOpenRmItemIds(r, orders).length;
-      } else if (typeof summaryItemCount === 'number') {
-        const covered = getCoveredRmItemIdsFromOrders(orders).size;
-        pendingCount = Math.max(0, summaryItemCount - covered);
-      }
+      const counts = getRmItemCoverageCounts(
+        {
+          id: r.id,
+          status: String(r.status || ''),
+          items: r.items,
+          _count: (r as unknown as { _count?: { items?: number } })._count,
+        },
+        orders
+      );
+      const { total: totalCount, pending: pendingCount, cancelled: cancelledCount } = counts;
 
       let qtyText: string | null = null;
       if (totalCount != null && pendingCount != null) {
-        qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${pendingCount} pendente${
-          pendingCount === 1 ? '' : 's'
-        }`;
-      } else if (pendingCount != null) {
+        if (pendingCount > 0) {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${pendingCount} pendente${
+            pendingCount === 1 ? '' : 's'
+          }`;
+        } else if (cancelledCount != null && cancelledCount > 0) {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${cancelledCount} cancelado${
+            cancelledCount === 1 ? '' : 's'
+          }`;
+        } else {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'}`;
+        }
+      } else if (pendingCount != null && pendingCount > 0) {
         qtyText = `${pendingCount} ${pendingCount === 1 ? 'item pendente' : 'itens pendentes'}`;
+      } else if (cancelledCount != null && cancelledCount > 0) {
+        qtyText = `${cancelledCount} ${cancelledCount === 1 ? 'item cancelado' : 'itens cancelados'}`;
       } else if (totalCount != null) {
         qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'}`;
       }
