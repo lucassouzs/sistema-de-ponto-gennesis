@@ -332,7 +332,8 @@ type StockMovementAttachmentBundle = {
 
 const OC_PAYMENT_TYPE_LABELS: Record<string, string> = {
   AVISTA: 'À vista',
-  BOLETO: 'Boleto'
+  BOLETO: 'Boleto',
+  CARTAO: 'Cartão',
 };
 
 function extractOcCorrectionBlocks(notes?: string | null): string {
@@ -1565,8 +1566,8 @@ function formatOcListPaymentCondition(
   order: Pick<PurchaseOrder, 'paymentType' | 'paymentCondition'>,
   labelMap: Record<string, string>
 ): string {
-  if (order.paymentType === 'AVISTA') {
-    return labelMap.AVISTA ?? 'À vista';
+  if (order.paymentType === 'AVISTA' || order.paymentType === 'CARTAO') {
+    return labelMap[order.paymentType] ?? 'À vista';
   }
   const code = (order.paymentCondition || '').trim();
   if (!code) return '—';

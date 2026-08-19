@@ -34,6 +34,7 @@ import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
+import { Modal } from '@/components/ui/Modal';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import {
@@ -868,6 +869,7 @@ function SolicitarMateriaisPage() {
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
   const [showCloseNewRequestConfirm, setShowCloseNewRequestConfirm] = useState(false);
   const [showCloseDetailConfirm, setShowCloseDetailConfirm] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [formData, setFormData] = useState(emptyNewFormData);
 
   const [correctionEditId, setCorrectionEditId] = useState<string | null>(null);
@@ -1140,6 +1142,26 @@ function SolicitarMateriaisPage() {
     onError: (error: { response?: { data?: { message?: string; error?: string } } }) => {
       toast.error(error.response?.data?.message || error.response?.data?.error || 'Não foi possível salvar');
     }
+  });
+
+  const cancelRmMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.patch(`/material-requests/${id}/status`, { status: 'CANCELLED' });
+      return res.data;
+    },
+    onSuccess: async () => {
+      toast.success('Requisição cancelada.');
+      setCancelTargetId(null);
+      setDetailViewId(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['approval-notification-counts'] }),
+      ]);
+    },
+    onError: (error: { response?: { data?: { message?: string; error?: string } } }) => {
+      toast.error(error.response?.data?.message || error.response?.data?.error || 'Não foi possível cancelar');
+    },
   });
 
   const closeNewRequestModal = () => {
@@ -2243,6 +2265,16 @@ function SolicitarMateriaisPage() {
                         ...(rowForActionMenu.status === 'IN_REVIEW'
                           ? [
                               {
+                                label: 'Cancelar RM',
+                                onClick: () => {
+                                  closeRowActionMenu();
+                                  setCancelTargetId(rowForActionMenu.id);
+                                },
+                                disabled: cancelRmMutation.isPending,
+                                disabledTitle: 'Cancelando...',
+                                icon: <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                              },
+                              {
                                 label: 'Editar correção',
                                 onClick: () => setCorrectionEditId(rowForActionMenu.id),
                                 icon: (
@@ -3114,6 +3146,37 @@ function SolicitarMateriaisPage() {
           message="Tem certeza que deseja fechar os detalhes da solicitação?"
         />
 
+        {cancelTargetId && (
+          <Modal
+            isOpen
+            onClose={() => setCancelTargetId(null)}
+            confirmBeforeClose={false}
+            title="Cancelar Requisição"
+            size="md"
+          >
+            <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+              A RM ficará como <strong>Cancelada</strong> e sairá do fluxo de análise. Confirma?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setCancelTargetId(null)}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700/40 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelRmMutation.mutate(cancelTargetId!)}
+                disabled={cancelRmMutation.isPending}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              >
+                {cancelRmMutation.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
+              </button>
+            </div>
+          </Modal>
+        )}
+
         {correctionEditId && (
           <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
@@ -3277,16 +3340,14 @@ function SolicitarMateriaisPage() {
                           <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             Item {index + 1}
                           </span>
-                          {editFormData.items.length > 1 ? (
-                            <button
-                              type="button"
-                              onClick={() => handleEditRemoveItem(index)}
-                              className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                              aria-label={`Remover item ${index + 1}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => handleEditRemoveItem(index)}
+                            className="rounded-md p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                            aria-label={`Excluir item ${index + 1}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
                         </div>
                         <div className="space-y-3">
                           <div>

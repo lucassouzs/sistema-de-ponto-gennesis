@@ -508,6 +508,7 @@ function formatOcPaymentTypeLabel(
     return parcels > 1 ? `Boleto (${parcels}x)` : 'Boleto';
   }
   if (paymentType === 'AVISTA') return 'À vista';
+  if (paymentType === 'CARTAO') return 'Cartão';
   if (paymentType?.trim()) return paymentType.trim();
   return 'Pagamento não informado';
 }

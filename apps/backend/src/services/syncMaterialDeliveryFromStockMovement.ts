@@ -63,7 +63,7 @@ function derivePaymentStatus(order: {
   if (order.paymentProofUrl) return MaterialDeliveryPaymentStatus.OK;
   const paymentType = (order.paymentType || '').trim().toUpperCase();
   if (paymentType === 'BOLETO') return MaterialDeliveryPaymentStatus.BOLETO;
-  if (paymentType === 'AVISTA') return MaterialDeliveryPaymentStatus.A_VISTA;
+  if (paymentType === 'AVISTA' || paymentType === 'CARTAO') return MaterialDeliveryPaymentStatus.A_VISTA;
   return MaterialDeliveryPaymentStatus.AGUARDANDO_PAGAMENTO;
 }
 

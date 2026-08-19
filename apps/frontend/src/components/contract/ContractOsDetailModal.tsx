@@ -330,6 +330,7 @@ export function ContractOsDetailModal({
     push('Status orçamento', pleito.budgetStatus);
     push('Status execução', pleito.executionStatus);
     push('Orçamento', pleito.budget ? formatOsCurrency(orcamento) : null);
+    push('Total OCs vinculadas', ocTotalVinculado != null ? formatOsCurrency(ocTotalVinculado) : null);
     push(
       '% OCs / Orçamento',
       ocOrcamentoPct != null ? `${ocOrcamentoPct.toFixed(1)}%` : null
