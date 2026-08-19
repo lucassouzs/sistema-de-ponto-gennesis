@@ -400,7 +400,7 @@ export default function GerenciarMateriaisPage() {
   };
   const [rmCardFilter, setRmCardFilter] = useState<RmCardFilter>(DEFAULT_RM_CARD_FILTER);
   const [searchTerm, setSearchTerm] = useState('');
-  const { isUnbUser, unbCostCenterIds, isAdministrator } = usePermissions();
+  const { isUnbUser, unbCostCenterIds, isAdministrator, isElevatedUser } = usePermissions();
   const [adminAttachmentBusy, setAdminAttachmentBusy] = useState(false);
 
   const uploadRmAttachmentFile = async (file: File) => {
@@ -798,6 +798,7 @@ export default function GerenciarMateriaisPage() {
             ordersByMaterialRequestId={ordersByMaterialRequestId}
             currentUserId={userData?.data?.id}
             isAdministrator={isAdministrator}
+            isElevatedUser={isElevatedUser}
             onDetails={async (request) => {
               try {
                 const res = await api.get(`/material-requests/${request.id}`);

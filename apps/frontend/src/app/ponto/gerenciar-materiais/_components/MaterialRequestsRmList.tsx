@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle,
   ClipboardList,
@@ -16,14 +17,18 @@ import {
   XCircle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { Loading } from '@/components/ui/Loading';
+import api from '@/lib/api';
+import toast from 'react-hot-toast';
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
 import type { MaterialRequest } from '../_lib/types';
 import type { RmCardFilter } from '../_lib/rmCardFilter';
 import {
+  canUserCancelMaterialRequest,
   getPriorityInfo,
   getStatusInfo,
   rmContractDisplay,
@@ -119,6 +124,7 @@ export function MaterialRequestsRmList({
   ordersByMaterialRequestId,
   currentUserId,
   isAdministrator = false,
+  isElevatedUser = false,
   onDetails,
   flushInCard = false,
   hideSearch = false
@@ -133,9 +139,12 @@ export function MaterialRequestsRmList({
   ordersByMaterialRequestId: Map<string, PurchaseOrder[]>;
   currentUserId?: string;
   isAdministrator?: boolean;
+  isElevatedUser?: boolean;
   onDetails: (r: MaterialRequest) => void;
 }) {
+  const queryClient = useQueryClient();
   const [listCurrentPage, setListCurrentPage] = useState(1);
+  const [cancelTarget, setCancelTarget] = useState<MaterialRequest | null>(null);
   const [actionMenu, setActionMenu] = useState<{
     requestId: string;
     top: number;
@@ -180,6 +189,26 @@ export function MaterialRequestsRmList({
       setActionMenu(null);
     }
   }, [actionMenu, requestForMenu]);
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.patch(`/material-requests/${id}/status`, { status: 'CANCELLED' });
+      return res.data;
+    },
+    onSuccess: async () => {
+      toast.success('Requisição cancelada.');
+      setCancelTarget(null);
+      setActionMenu(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['approval-notification-counts'] }),
+      ]);
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message || 'Erro ao cancelar requisição');
+    },
+  });
 
   return (
     <Card
@@ -491,7 +520,11 @@ export function MaterialRequestsRmList({
                 <span>Ver detalhes</span>
               </button>
               {requestForMenu.status === 'IN_REVIEW' &&
-                (isAdministrator || currentUserId === rmSolicitante(requestForMenu)?.id) && (
+                canUserCancelMaterialRequest(
+                  requestForMenu,
+                  currentUserId,
+                  isElevatedUser || isAdministrator
+                ) && (
                   <Link
                     href={`/ponto/solicitar-materiais?editRm=${requestForMenu.id}`}
                     role="menuitem"
@@ -502,10 +535,60 @@ export function MaterialRequestsRmList({
                     <span>Editar RM</span>
                   </Link>
                 )}
+              {requestForMenu.status === 'IN_REVIEW' &&
+                canUserCancelMaterialRequest(
+                  requestForMenu,
+                  currentUserId,
+                  isElevatedUser || isAdministrator
+                ) && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActionMenu(null);
+                      setCancelTarget(requestForMenu);
+                    }}
+                    className={MENU_ITEM_BORDER_CLASS}
+                  >
+                    <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>Cancelar RM</span>
+                  </button>
+                )}
             </div>
           </div>,
           document.body
         )}
+
+      {cancelTarget && (
+        <Modal
+          isOpen
+          onClose={() => setCancelTarget(null)}
+          confirmBeforeClose={false}
+          title="Cancelar Requisição"
+          size="md"
+        >
+          <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+            A RM ficará como <strong>Cancelada</strong> e sairá do fluxo de análise. Confirma?
+          </p>
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setCancelTarget(null)}
+              className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300"
+            >
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={() => cancelMutation.mutate(cancelTarget.id)}
+              disabled={cancelMutation.isPending}
+              className="rounded-lg bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {cancelMutation.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 }

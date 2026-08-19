@@ -1119,14 +1119,13 @@ export class MaterialRequestService {
     }
 
     if (nextStatus === 'CANCELLED') {
-      if (existing.requestedBy === userId) {
+      const canCancelAsOwnerOrAdmin = existing.requestedBy === userId || isAdmin;
+      if (canCancelAsOwnerOrAdmin) {
         if (existing.status === 'FULFILLED' || existing.status === 'CANCELLED') {
           throw new Error('Não é possível cancelar uma requisição já atendida ou cancelada');
         }
-      } else {
-        if (existing.status !== 'PENDING' && existing.status !== 'IN_REVIEW') {
-          throw new Error('Apenas requisições pendentes ou em correção podem ser canceladas pelo compras');
-        }
+      } else if (existing.status !== 'PENDING' && existing.status !== 'IN_REVIEW') {
+        throw new Error('Apenas requisições pendentes ou em correção podem ser canceladas pelo compras');
       }
     }
 
@@ -1346,9 +1345,9 @@ export class MaterialRequestService {
   }
 
   /**
-   * Cancela uma requisição (apenas quem criou pode cancelar)
+   * Cancela uma requisição (solicitante ou administrador).
    */
-  async cancelMaterialRequest(id: string, userId: string) {
+  async cancelMaterialRequest(id: string, userId: string, isAdmin = false) {
     const request = await prisma.materialRequest.findUnique({
       where: { id }
     });
@@ -1357,8 +1356,8 @@ export class MaterialRequestService {
       throw new Error('Requisição não encontrada');
     }
 
-    if (request.requestedBy !== userId) {
-      throw new Error('Apenas o solicitante pode cancelar a requisição');
+    if (request.requestedBy !== userId && !isAdmin) {
+      throw new Error('Apenas o solicitante ou o administrador pode cancelar a requisição');
     }
 
     if (request.status === 'FULFILLED' || request.status === 'CANCELLED') {

@@ -292,6 +292,16 @@ router.patch('/:id/status', async (req: AuthRequest, res: Response, next: NextFu
     if (status === 'IN_REVIEW') {
       // Correção: aprovador de RM ou quem tem acesso ao mapa de cotação (Compras).
       await assertUserCanSendRmToCorrection(req.user.id, req.user.isAdmin);
+    } else if (status === 'CANCELLED') {
+      const isCreator = existing.requestedBy === req.user.id;
+      if (!isCreator && !req.user.isAdmin) {
+        await assertUserCanApproveMaterialRequests(req.user.id, req.user.isAdmin);
+        await assertUserCanApproveMaterialRequestForCostCenter(
+          req.user.id,
+          !!req.user.isAdmin,
+          existing.costCenterId,
+        );
+      }
     } else if (isRmApproverStatusChange(status, existing.requestedBy, req.user.id)) {
       await assertUserCanApproveMaterialRequests(req.user.id, req.user.isAdmin);
       await assertUserCanApproveMaterialRequestForCostCenter(

@@ -65,6 +65,29 @@ export function rmSolicitante(r: MaterialRequest): { id: string; name: string; e
   return r.requester;
 }
 
+export function rmSolicitanteId(r: MaterialRequest): string | undefined {
+  const rb = r.requestedBy as unknown;
+  if (typeof rb === 'string') return rb;
+  if (rb && typeof rb === 'object' && 'id' in (rb as Record<string, unknown>)) {
+    return String((rb as { id?: string }).id || '').trim() || undefined;
+  }
+  return r.requester?.id;
+}
+
+export function canUserCancelMaterialRequest(
+  request: MaterialRequest,
+  userId?: string | null,
+  isElevatedUser = false,
+  options?: { assumeCurrentUserIsOwner?: boolean }
+): boolean {
+  if (isElevatedUser) return true;
+  if (!userId) return false;
+  if (options?.assumeCurrentUserIsOwner) return true;
+  const creatorId = rmSolicitanteId(request);
+  if (!creatorId) return false;
+  return creatorId === userId;
+}
+
 export function rmTitulo(r: MaterialRequest): string {
   const os = (r.serviceOrder || '').trim();
   if (os) return ensureOsSePrefix(os);
