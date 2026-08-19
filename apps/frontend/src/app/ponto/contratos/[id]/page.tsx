@@ -61,6 +61,7 @@ import { listTableRowClasses } from '@/components/ui/listTableUi';
 import { CadastroListSummary, getCadastroListRange } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { ROW_ACTION_MENU_WIDTH_PX, type RowActionMenuState, useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { computeRowActionMenuPosition } from '@/lib/computeRowActionMenuPosition';
 import {
   isBudgetStatusInValorOrcadoSum,
   type PleitoFormData
@@ -2714,10 +2715,11 @@ export default function ContractDetailPage() {
   const toggleBillingSelectionMenu = (button: HTMLButtonElement) => {
     setBillingSelectionMenu((prev) => {
       if (prev) return null;
-      const rect = button.getBoundingClientRect();
-      let left = rect.right - ROW_ACTION_MENU_WIDTH_PX;
-      left = Math.max(8, Math.min(left, window.innerWidth - ROW_ACTION_MENU_WIDTH_PX - 8));
-      return { rowId: 'billing-selection-toolbar', top: rect.bottom + 4, left };
+      const coords = computeRowActionMenuPosition(
+        button.getBoundingClientRect(),
+        ROW_ACTION_MENU_WIDTH_PX
+      );
+      return { rowId: 'billing-selection-toolbar', ...coords };
     });
   };
 
@@ -2972,10 +2974,11 @@ export default function ContractDetailPage() {
   const toggleOsSelectionMenu = (button: HTMLButtonElement) => {
     setOsSelectionMenu((prev) => {
       if (prev) return null;
-      const rect = button.getBoundingClientRect();
-      let left = rect.right - ROW_ACTION_MENU_WIDTH_PX;
-      left = Math.max(8, Math.min(left, window.innerWidth - ROW_ACTION_MENU_WIDTH_PX - 8));
-      return { rowId: 'os-selection-toolbar', top: rect.bottom + 4, left };
+      const coords = computeRowActionMenuPosition(
+        button.getBoundingClientRect(),
+        ROW_ACTION_MENU_WIDTH_PX
+      );
+      return { rowId: 'os-selection-toolbar', ...coords };
     });
   };
 

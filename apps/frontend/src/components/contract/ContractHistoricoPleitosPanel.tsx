@@ -41,6 +41,7 @@ import { listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/l
 import { CadastroListSummary, getCadastroListRange } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { ROW_ACTION_MENU_WIDTH_PX, type RowActionMenuState, useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { computeRowActionMenuPosition } from '@/lib/computeRowActionMenuPosition';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 const LIST_DISPLAY_LIMIT = 10;
@@ -254,10 +255,11 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
   const toggleSelectionMenu = (button: HTMLButtonElement) => {
     setSelectionMenu((prev) => {
       if (prev) return null;
-      const rect = button.getBoundingClientRect();
-      let left = rect.right - ROW_ACTION_MENU_WIDTH_PX;
-      left = Math.max(8, Math.min(left, window.innerWidth - ROW_ACTION_MENU_WIDTH_PX - 8));
-      return { rowId: 'pleito-selection-toolbar', top: rect.bottom + 4, left };
+      const coords = computeRowActionMenuPosition(
+        button.getBoundingClientRect(),
+        ROW_ACTION_MENU_WIDTH_PX
+      );
+      return { rowId: 'pleito-selection-toolbar', ...coords };
     });
   };
 
