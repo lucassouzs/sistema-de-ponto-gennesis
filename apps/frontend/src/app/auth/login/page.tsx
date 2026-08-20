@@ -31,8 +31,44 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [enterAnim, setEnterAnim] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      if (!authService.isAuthenticated()) {
+        if (!cancelled) setCheckingSession(false);
+        return;
+      }
+
+      try {
+        const user = await authService.getProfile();
+        if (cancelled) return;
+        const remember = Boolean(
+          typeof window !== 'undefined' && localStorage.getItem('token')
+        );
+        authService.setUser(user, remember);
+        queryClient.setQueryData(['user'], { success: true, data: user });
+        persistUnbBranding(user?.employee?.costCenter);
+        router.replace('/ponto/home');
+        // Mantém loading até a navegação; evita flash do formulário
+      } catch {
+        if (!cancelled) {
+          authService.clearAuth();
+          setCheckingSession(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, router]);
+
+  useEffect(() => {
+    if (checkingSession) return;
+
     let cancelled = false;
     const safety = window.setTimeout(() => {
       if (!cancelled) setEnterAnim(true);
@@ -52,7 +88,7 @@ export default function LoginPage() {
       cancelled = true;
       window.clearTimeout(safety);
     };
-  }, []);
+  }, [checkingSession]);
 
   const supportWhatsAppDigits = '5561981622021';
   const supportWhatsAppUrl = `https://wa.me/${supportWhatsAppDigits}?text=${encodeURIComponent(
@@ -107,6 +143,10 @@ export default function LoginPage() {
       setError('');
     }
   };
+
+  if (checkingSession) {
+    return <Loading message="Restaurando sessão..." fullScreen size="lg" />;
+  }
 
   return (
     <div

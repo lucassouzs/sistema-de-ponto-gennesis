@@ -72,6 +72,7 @@ import {
   Boxes,
   Workflow,
   ChevronDown,
+  HelpCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
@@ -666,6 +667,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Truck,
             description: 'Finalizar solicitações de entrega logística',
             permission: isAdministrator || can(pk('/ponto/entrega-logistica'))
+          },
+          {
+            name: 'Central de Ajuda',
+            href: '/ponto/central-de-ajuda',
+            icon: HelpCircle,
+            description: 'Guias e tutoriais passo a passo do sistema',
+            permission: true,
           },
         ]
       },

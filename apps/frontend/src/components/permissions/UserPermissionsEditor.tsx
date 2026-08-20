@@ -213,6 +213,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/reserva-veiculos',
       '/ponto/solicitar-combustivel',
       '/ponto/entrega-logistica',
+      '/ponto/central-de-ajuda',
     ].some((p) => h === p)
   ) {
     return 'Principal';

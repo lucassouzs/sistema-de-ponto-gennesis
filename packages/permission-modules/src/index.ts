@@ -57,6 +57,7 @@ export const PERMISSION_MODULE_KEYS_OPEN_ACCESS: readonly string[] = [
   pathToModuleKey('/ponto/drive'),
   pathToModuleKey('/ponto/kanban'),
   pathToModuleKey('/ponto/flow'),
+  pathToModuleKey('/ponto/central-de-ajuda'),
 ];
 
 /**
@@ -74,6 +75,8 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Solicitar Combustível', href: '/ponto/solicitar-combustivel', category: 'Principal' },
   { key: pathToModuleKey('/ponto/meus-chamados'), name: 'Meus Chamados', href: '/ponto/meus-chamados', category: 'Principal' },
   { key: pathToModuleKey('/ponto/entrega-logistica'), name: 'Entrega da Logística', href: '/ponto/entrega-logistica', category: 'Principal' },
+  /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */
+  { key: pathToModuleKey('/ponto/central-de-ajuda'), name: 'Central de Ajuda', href: '/ponto/central-de-ajuda', category: 'Principal' },
   /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */
   { key: pathToModuleKey('/ponto/flow'), name: 'Flow', href: '/ponto/flow', category: 'Principal' },
   /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */

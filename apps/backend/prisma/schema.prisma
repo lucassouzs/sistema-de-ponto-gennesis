@@ -130,6 +130,7 @@ model User {
   gestaoOsMemberships                     GestaoOsMembership[] @relation("GestaoOsMembershipUser")
   gestaoOsPlansAssigned                   GestaoOsMaintenancePlan[] @relation("GestaoOsPlanAssignee")
   gestaoOsDocumentsUploaded               GestaoOsDocument[] @relation("GestaoOsDocumentUploader")
+  helpTutorialsCreated                    HelpTutorial[]     @relation("HelpTutorialCreator")
 
   @@map("users")
 }
@@ -3415,6 +3416,37 @@ model FlowDiagram {
 
   @@index([userId])
   @@map("flow_diagrams")
+}
+
+/// Tutorial da Central de Ajuda (passos, markdown, rich text ou Google Docs).
+model HelpTutorial {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  summary     String   @db.Text
+  /// Alinhado a Employee.department / DEPARTMENTS_LIST, ou "Geral"
+  setor       String
+  keywords    String[] @default([])
+  href        String?
+  /// STEPS | MARKDOWN | DOCS | RICH
+  contentType String   @default("STEPS") @map("content_type")
+  /// [{ title, body, hint? }] — usado quando contentType = STEPS
+  steps       Json     @default("[]")
+  /// Conteúdo markdown — usado quando contentType = MARKDOWN
+  markdown    String?  @db.Text
+  /// URL do Google Docs — usado quando contentType = DOCS
+  docsUrl     String?  @map("docs_url") @db.Text
+  /// HTML do editor visual — usado quando contentType = RICH
+  richHtml    String?  @map("rich_html") @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation("HelpTutorialCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([setor])
+  @@index([createdAt])
+  @@map("help_tutorials")
 }
 
 /// Processo de licitação com documentos e análise por IA.
