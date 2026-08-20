@@ -8,7 +8,9 @@ import {
   CheckCircle,
   ClipboardList,
   Clock,
+  Download,
   Eye,
+  Loader2,
   MoreVertical,
   Pencil,
   Search,
@@ -32,8 +34,8 @@ import {
   getPriorityInfo,
   getStatusInfo,
   rmContractDisplay,
+  rmOsDisplay,
   rmSolicitante,
-  rmTitulo
 } from '../_lib/display';
 import { getMaterialRequestDisplayStatus, isMaterialRequestEffectivelyCancelled } from '../_lib/search';
 import { formatRmListDisplayId } from '../_lib/rmListDisplay';
@@ -145,6 +147,7 @@ export function MaterialRequestsRmList({
 }) {
   const queryClient = useQueryClient();
   const [listCurrentPage, setListCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<MaterialRequest | null>(null);
   const [actionMenu, setActionMenu] = useState<{
     requestId: string;
@@ -213,6 +216,73 @@ export function MaterialRequestsRmList({
     },
   });
 
+  const handleExportExcel = async () => {
+    if (filteredRequests.length === 0) {
+      toast.error('Nenhuma requisição para exportar');
+      return;
+    }
+    try {
+      setIsExporting(true);
+      const XLSX = await import('xlsx');
+      const rows = filteredRequests.map((request) => {
+        const priorityInfo = getPriorityInfo(request.priority);
+        const ocs = ordersByMaterialRequestId.get(request.id) ?? [];
+        const ocRows = materialRequestOcListRows(request, ocs);
+        const displayStatus = getMaterialRequestDisplayStatus(request, ocs);
+        const statusInfo = getStatusInfo(displayStatus);
+        const { total: itemTotal, pending: itemPending, cancelled: itemCancelled } =
+          getRmItemCoverageCounts(request, ocs);
+        const showPendingLine =
+          request.status === 'APPROVED' &&
+          !isMaterialRequestEffectivelyCancelled(request, ocs) &&
+          itemPending != null &&
+          itemPending > 0;
+        const showCancelledLine =
+          request.status === 'APPROVED' &&
+          !isMaterialRequestEffectivelyCancelled(request, ocs) &&
+          itemCancelled != null &&
+          itemCancelled > 0 &&
+          (itemPending == null || itemPending === 0);
+
+        let itens = itemTotal == null ? '—' : String(itemTotal);
+        if (showPendingLine) itens += ` (${itemPending} pendente${itemPending === 1 ? '' : 's'})`;
+        else if (showCancelledLine) {
+          itens += ` (${itemCancelled} cancelado${itemCancelled === 1 ? '' : 's'})`;
+        }
+
+        const row: Record<string, string | number> = {
+          RM: formatRmListDisplayId(request.requestNumber) || '—',
+          Solicitante: rmSolicitante(request)?.name || '—',
+          OS: rmOsDisplay(request),
+          Contrato: rmContractDisplay(request),
+          Prioridade: priorityInfo.label,
+        };
+        if (showStatusColumn) row.Status = statusInfo.label;
+        row.Itens = itens;
+        row.Tipo = formatRmItemProductKinds(request.itemProductKinds);
+        row.OC = ocRows.length ? ocRows.map((r) => r.id).join('; ') : '—';
+        row['Status OC'] = ocRows.length ? ocRows.map((r) => r.status).join('; ') : '—';
+        return row;
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Requisições');
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const hh = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      XLSX.writeFile(workbook, `requisicoes-materiais-${yyyy}-${mm}-${dd}-${hh}${min}.xlsx`);
+      toast.success('Requisições exportadas para Excel');
+    } catch {
+      toast.error('Erro ao exportar para Excel');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <Card
       className={`w-full ${flushInCard ? 'rounded-none border-0 border-t-0 shadow-none' : ''}`}
@@ -235,27 +305,43 @@ export function MaterialRequestsRmList({
             </div>
           </div>
           {!hideSearch ? (
-            <div className="relative min-w-[240px] flex-1 sm:w-[300px] sm:flex-none sm:max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-              <input
-                type="text"
-                inputMode="search"
-                autoComplete="off"
-                value={searchTerm}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Buscar por nome, OS ou contrato..."
-                className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-              {searchTerm ? (
-                <button
-                  type="button"
-                  onClick={() => onSearchChange('')}
-                  aria-label="Limpar busca"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+              <div className="relative min-w-[240px] flex-1 sm:w-[300px] sm:flex-none sm:max-w-md">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  inputMode="search"
+                  autoComplete="off"
+                  value={searchTerm}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="Buscar por nome, OS ou contrato..."
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+                {searchTerm ? (
+                  <button
+                    type="button"
+                    onClick={() => onSearchChange('')}
+                    aria-label="Limpar busca"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleExportExcel()}
+                disabled={listTotal === 0 || isExporting || loadingRequests}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                aria-label="Exportar requisições para Excel"
+                title="Exportar Excel"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </button>
             </div>
           ) : null}
         </div>
@@ -373,8 +459,8 @@ export function MaterialRequestsRmList({
                         <td className={tdTextCls}>
                           <span className="block truncate">{rmSolicitante(request)?.name || '—'}</span>
                         </td>
-                        <td className={tdCenterCls} title={rmTitulo(request)}>
-                          <span className="line-clamp-2">{rmTitulo(request)}</span>
+                        <td className={tdCenterCls} title={rmOsDisplay(request)}>
+                          <span className="line-clamp-2">{rmOsDisplay(request)}</span>
                         </td>
                         <td className={tdCenterCls} title={rmContractDisplay(request)}>
                           <span className="line-clamp-2">{rmContractDisplay(request)}</span>
