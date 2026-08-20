@@ -50,6 +50,8 @@ import {
   formatRmItemProductKindShortLabel,
   rmItemLineTotal,
 } from '@/lib/rmItemProductKinds';
+import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
+import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import {
   ApprovalPhaseStatCards,
   type ApprovalPhaseStatCard,
@@ -599,6 +601,51 @@ export function RmApprovalsSection() {
                   ))}
               </ul>
             </div>
+            {(() => {
+              const fdFiles = parseRmDemandSheetAttachments(detailRequest);
+              return (
+                <div>
+                  <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+                    Documentos — Ficha de Demanda
+                  </p>
+                  <ul className="space-y-2 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    {fdFiles.length === 0 ? (
+                      <li className="text-gray-500 dark:text-gray-400">
+                        {isFetchingDetail ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Carregando documentos…
+                          </span>
+                        ) : (
+                          'Nenhum arquivo anexado'
+                        )}
+                      </li>
+                    ) : (
+                      fdFiles.map((file, index) => (
+                        <li
+                          key={`${file.url}-${index}`}
+                          className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-900/40"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {fdFiles.length > 1 ? `Arquivo ${index + 1}` : 'Arquivo'}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
+                              {file.name}
+                            </p>
+                          </div>
+                          <OcAttachmentActions
+                            url={file.url}
+                            fileName={file.name}
+                            variant="buttons"
+                          />
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
         </Modal>
       )}

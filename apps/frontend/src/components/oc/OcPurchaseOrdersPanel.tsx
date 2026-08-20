@@ -42,6 +42,7 @@ import {
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
+import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -219,6 +220,10 @@ export interface PurchaseOrder {
     requestNumber: string;
     serviceOrder?: string | null;
     description?: string | null;
+    demandSheet?: string | null;
+    demandSheetAttachmentUrl?: string | null;
+    demandSheetAttachmentName?: string | null;
+    demandSheetAttachments?: Array<{ url?: string; name?: string }> | null;
     costCenter?: { id: string; code?: string | null; name?: string | null };
     quoteMaps?: Array<{ id: string; createdAt: string }>;
   };
@@ -6281,11 +6286,36 @@ export function OcPurchaseOrdersPanel({
                 );
                 const documentBlocks = groupOcDocumentBlocks(documentEntries, selectedOrder);
                 const quoteMap = selectedOrder.quoteMap;
+                const demandSheetFiles = parseRmDemandSheetAttachments(selectedOrder.materialRequest);
                 const blockCls =
                   'rounded-xl border border-gray-200 p-4 dark:border-gray-700 space-y-0';
 
                 return (
                   <div id="oc-quote-map" className="scroll-mt-4 space-y-4">
+                    <OcDetailSection title="Ficha de Demanda" className={blockCls}>
+                      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                        {demandSheetFiles.length === 0 ? (
+                          <OcDetailDocumentItem
+                            label="Arquivo"
+                            subtitle="Não anexado na RM"
+                            pending
+                          />
+                        ) : (
+                          demandSheetFiles.map((file, index) => (
+                            <OcDetailDocumentItem
+                              key={`${file.url}-${index}`}
+                              label={
+                                demandSheetFiles.length > 1 ? `Arquivo ${index + 1}` : 'Arquivo'
+                              }
+                              subtitle={file.name}
+                              url={file.url}
+                              fileName={file.name}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </OcDetailSection>
+
                     <OcDetailSection title="Mapa de Cotação" className={blockCls}>
                       <div className="divide-y divide-gray-200 dark:divide-gray-700">
                         {quoteMap ? (
