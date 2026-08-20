@@ -112,7 +112,7 @@ export function TableCheckbox({
   return (
     <label
       className={clsx(
-        'inline-flex size-5 shrink-0 items-center justify-center group',
+        'relative inline-flex size-5 shrink-0 items-center justify-center group',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
       )}
       onClick={onClick}
@@ -124,7 +124,7 @@ export function TableCheckbox({
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
         aria-label={ariaLabel}
-        className="sr-only"
+        className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
       />
       <CheckboxIndicator checked={checked} indeterminate={indeterminate} disabled={disabled} />
     </label>
@@ -141,14 +141,16 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
         className,
       )}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only"
-      />
-      <CheckboxIndicator checked={checked} />
+      <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
+        />
+        <CheckboxIndicator checked={checked} />
+      </span>
       <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
         {label}
       </span>

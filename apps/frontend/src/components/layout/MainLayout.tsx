@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
 } from 'react';
 import dynamic from 'next/dynamic';
@@ -113,6 +114,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [pageRevealReady, setPageRevealReady] = useState(false);
   const [pageFromReload, setPageFromReload] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
   const { user, canAccessCollaborationTools, isLoading: permissionsLoading } = usePermissions();
   const displayName = userName || user?.name || '';
   const displayRole = (userRole || user?.role || 'EMPLOYEE') as MainLayoutProps['userRole'];
@@ -163,6 +165,24 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     syncModalOpenClass();
   }, [pathname]);
 
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    const resetShellScroll = () => {
+      if (shell.scrollTop !== 0) shell.scrollTop = 0;
+      if (shell.scrollLeft !== 0) shell.scrollLeft = 0;
+    };
+
+    const onFocusIn = () => {
+      resetShellScroll();
+      requestAnimationFrame(resetShellScroll);
+    };
+
+    shell.addEventListener('focusin', onFocusIn, true);
+    return () => shell.removeEventListener('focusin', onFocusIn, true);
+  }, []);
+
   const handleMenuToggle = useCallback((collapsed: boolean) => {
     setIsCollapsed((prev) => (prev === collapsed ? prev : collapsed));
   }, []);
@@ -186,6 +206,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     <MainLayoutShellContext.Provider value={true}>
       <NativeCallProvider value={nativeCall}>
         <div
+          ref={shellRef}
           className={
             isKanbanRoute
               ? 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-white dark:bg-gray-900'

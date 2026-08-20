@@ -122,18 +122,16 @@ export function LicitacaoChecklistEditor({
                         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                       }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={row.checked}
-                        disabled={disabled}
-                        onChange={(e) => onChange(key, { checked: e.target.checked })}
-                        className="sr-only"
-                      />
-                      <CheckboxIndicator
-                        checked={row.checked}
-                        disabled={disabled}
-                        className="mt-0.5"
-                      />
+                      <span className="relative mt-0.5 inline-flex size-5 shrink-0 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={row.checked}
+                          disabled={disabled}
+                          onChange={(e) => onChange(key, { checked: e.target.checked })}
+                          className="absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                        <CheckboxIndicator checked={row.checked} disabled={disabled} />
+                      </span>
                       <span className="text-xs leading-snug text-gray-800 dark:text-gray-200">
                         {item.label}
                       </span>
