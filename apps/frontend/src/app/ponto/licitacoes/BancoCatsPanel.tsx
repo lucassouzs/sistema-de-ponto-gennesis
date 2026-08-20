@@ -1003,7 +1003,7 @@ export function BancoCatsPanel() {
             onChange={(e) => setHabilitacaoDraft(e.target.value)}
             rows={3}
             placeholder="Um serviço por linha…"
-            className="min-h-[4.75rem] w-full resize-y rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+            className="min-h-[4.75rem] w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm leading-normal text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           />
           {matchingActive && activeServicoQuadrante ? (
             <div className="space-y-4">
@@ -1197,7 +1197,7 @@ export function BancoCatsPanel() {
                       />
                     ) : (
                       <>
-                        <div className="table-scroll">
+                        <div className="table-scroll max-h-[min(60vh,640px)] overflow-y-auto overscroll-contain app-thin-scroll">
                           <table className="w-full min-w-[48rem] text-sm">
                             <thead>
                               <tr className="border-b border-gray-200 dark:border-gray-700">

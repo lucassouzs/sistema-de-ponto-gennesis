@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -27,6 +27,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import api from '@/lib/api';
 import { exportLicitacaoAnalisePdf } from '@/lib/exportLicitacaoAnalisePdf';
 import { LicitacaoChecklistEditor } from './LicitacaoChecklistEditor';
@@ -384,6 +385,7 @@ export default function LicitacoesPage() {
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [regiaoKey, setRegiaoKey] = useState('');
@@ -436,12 +438,7 @@ export default function LicitacoesPage() {
       if (e.key === 'Escape') setListPanelExpanded(false);
     };
     window.addEventListener('keydown', onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, [listPanelExpanded]);
 
   const setSelectedId = useCallback((id: string | null) => {
@@ -519,7 +516,7 @@ export default function LicitacoesPage() {
     queryKey: [
       'licitacoes',
       isArquivadasView ? 'arquivadas' : 'ativas',
-      search,
+      deferredSearch,
       dataInicio,
       dataFim,
       regiaoKey,
@@ -530,7 +527,7 @@ export default function LicitacoesPage() {
       const params: Record<string, string> = {
         arquivada: isArquivadasView ? 'true' : 'false',
       };
-      if (search.trim()) params.search = search.trim();
+      if (deferredSearch.trim()) params.search = deferredSearch.trim();
       if (dataInicio) params.dataInicio = dataInicio;
       if (dataFim) params.dataFim = dataFim;
       if (regiaoKey) params.regiaoKey = regiaoKey;
@@ -1301,6 +1298,316 @@ export default function LicitacoesPage() {
     (isClaimedByMe || (isAdminUser && isClaimed));
   const canLiberarAnalise = isClaimed && (isClaimedByMe || isAdminUser);
 
+  const renderLicitacaoListPanelContent = (expanded: boolean) => (
+    <>
+      <CardHeader className="shrink-0 space-y-2.5 border-b border-gray-100 px-4 pb-3 pt-4 dark:border-gray-800">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Licitações
+            </h2>
+            {expanded && list.length > 0 ? (
+              <p className="mt-0.5 text-xs text-gray-400">
+                {list.length} {list.length === 1 ? 'licitação' : 'licitações'}
+                {hasActiveFilters ? ' (filtradas)' : ''}
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              title={expanded ? 'Recolher lista' : 'Expandir lista'}
+              aria-label={expanded ? 'Recolher lista' : 'Expandir lista'}
+              aria-expanded={expanded}
+              onClick={() => setListPanelExpanded((v) => !v)}
+              className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+            >
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            {expanded ? (
+              <button
+                type="button"
+                title="Fechar"
+                aria-label="Fechar lista expandida"
+                onClick={() => setListPanelExpanded(false)}
+                className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <div
+          className={
+            expanded ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3' : 'space-y-2.5'
+          }
+        >
+          <div className={expanded ? 'relative sm:col-span-2 lg:col-span-3' : 'relative'}>
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm dark:border-gray-700 dark:bg-gray-900"
+            />
+          </div>
+          <div
+            className={
+              expanded ? 'grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-3' : 'grid grid-cols-2 gap-2'
+            }
+          >
+            <input
+              type="date"
+              aria-label="De"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+            />
+            <input
+              type="date"
+              aria-label="Até"
+              value={dataFim}
+              min={dataInicio || undefined}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+            />
+          </div>
+          <select
+            aria-label="Região"
+            value={regiaoKey}
+            onChange={(e) => setRegiaoKey(e.target.value)}
+            className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+          >
+            <option value="">Todas as regiões</option>
+            {regiaoTabs.map((tab) => (
+              <option key={tab.key} value={tab.key}>
+                {tab.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Estado"
+            value={estado}
+            onChange={(e) => setEstado(e.target.value)}
+            className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+          >
+            <option value="">Todos os estados</option>
+            {BRASIL_UFS.map((uf) => (
+              <option key={uf} value={uf}>
+                {uf}
+              </option>
+            ))}
+          </select>
+          {isArquivadasView ? (
+            <select
+              aria-label="Categoria do arquivamento"
+              value={arquivadaMotivoFilter}
+              onChange={(e) =>
+                setArquivadaMotivoFilter(e.target.value as LicitacaoArquivadaMotivo | '')
+              }
+              className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+            >
+              <option value="">Todas as categorias</option>
+              {ANALISE_FINAL_MOTIVO_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {isArquivadasView ? (
+            <select
+              aria-label="Decisão de participação"
+              value={decisaoAnaliseFinalFilter}
+              onChange={(e) =>
+                setDecisaoAnaliseFinalFilter(e.target.value as LicitacaoDecisaoAnaliseFinal | '')
+              }
+              className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+            >
+              <option value="">Todas as decisões</option>
+              {DECISAO_ANALISE_FINAL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setDataInicio('');
+              setDataFim('');
+              setRegiaoKey('');
+              setEstado('');
+              setArquivadaMotivoFilter('');
+              setDecisaoAnaliseFinalFilter('');
+            }}
+            className="text-left text-xs text-red-600 hover:text-red-700 dark:text-red-400"
+          >
+            Limpar filtros
+          </button>
+        ) : null}
+      </CardHeader>
+
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2">
+        {loadingList ? (
+          <div className="flex flex-1 items-center justify-center py-10">
+            <Loader2 className="h-5 w-5 animate-spin text-red-600" />
+          </div>
+        ) : list.length === 0 ? (
+          <p className="py-10 text-center text-sm text-gray-500">
+            {hasSearchOrFilters
+              ? 'Nenhum resultado.'
+              : isArquivadasView
+                ? arquivadaMotivoFilter || decisaoAnaliseFinalFilter
+                  ? 'Nenhuma análise com os filtros selecionados.'
+                  : 'Nenhuma análise em Análise final.'
+                : 'Nenhum processo com aceite. Aceite licitações na aba Por região.'}
+          </p>
+        ) : (
+          <ul
+            className="min-h-0 flex-1 divide-y divide-gray-200 overflow-y-auto pr-0.5 dark:divide-gray-700"
+            role="listbox"
+            aria-label="Licitações"
+          >
+            {list.map((item) => {
+              const active = selectedId === item.id;
+              const statusLabel = licitacaoStatusLabel(item, isArquivadasView);
+              const decisao = isArquivadasView ? resolveDecisaoAnaliseFinal(item) : null;
+              const decisaoLabel = decisaoAnaliseFinalLabel(decisao);
+              const statusDate =
+                isArquivadasView && item.arquivadaEm
+                  ? formatDateOnly(item.arquivadaEm)
+                  : formatDateOnly(item.createdAt);
+              const titulo = tituloParaExibicao(item, list);
+              const responsavelLabel =
+                !isArquivadasView && item.analiseJson?.responsavelAnaliseId?.trim()
+                  ? item.analiseJson.responsavelAnalise?.trim() || 'Assumida'
+                  : !isArquivadasView
+                    ? 'Disponível'
+                    : null;
+              return (
+                <li key={item.id} className="group relative py-0.5 first:pt-0 last:pb-0">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={active}
+                    onClick={() => {
+                      setSelectedId(item.id);
+                      if (expanded) setListPanelExpanded(false);
+                    }}
+                    className={`w-full rounded-lg text-left transition-colors ${
+                      expanded ? 'px-4 py-3 pr-10' : 'px-3 py-2.5 pr-9'
+                    } ${
+                      active
+                        ? 'bg-red-600 text-white shadow-sm'
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <div
+                      className={`flex gap-3 ${
+                        expanded
+                          ? 'flex-col sm:flex-row sm:items-start sm:justify-between'
+                          : 'items-start justify-between'
+                      }`}
+                    >
+                      <p
+                        className={`min-w-0 text-sm font-medium ${
+                          expanded ? 'whitespace-normal break-words' : 'truncate'
+                        }`}
+                        title={titulo}
+                      >
+                        {titulo}
+                      </p>
+                      <div
+                        className={`flex shrink-0 gap-1 ${
+                          expanded ? 'flex-row flex-wrap items-center' : 'flex-col items-end'
+                        }`}
+                      >
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight ${licitacaoStatusBadgeClass(item, active, isArquivadasView)}`}
+                        >
+                          {statusLabel}
+                        </span>
+                        {decisaoLabel ? (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight ${decisaoAnaliseFinalBadgeClass(decisao!, active)}`}
+                          >
+                            {decisaoLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className={`mt-1 text-xs ${active ? 'text-red-100' : 'text-gray-500'}`}>
+                      {expanded ? (
+                        <>
+                          <span>{statusDate}</span>
+                          {item.estado ? (
+                            <>
+                              {' · '}
+                              <span>{item.estado}</span>
+                            </>
+                          ) : null}
+                          {item.regiaoKey ? (
+                            <>
+                              {' · '}
+                              <span>
+                                {regiaoTabs.find((t) => t.key === item.regiaoKey)?.label ??
+                                  item.regiaoKey}
+                              </span>
+                            </>
+                          ) : null}
+                          {responsavelLabel ? (
+                            <>
+                              {' · '}
+                              <span>{responsavelLabel}</span>
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          {statusLabel}
+                          {decisaoLabel ? ` · ${decisaoLabel}` : ''} · {statusDate}
+                          {responsavelLabel ? ` · ${responsavelLabel}` : ''}
+                        </>
+                      )}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    title="Excluir processo"
+                    disabled={deleteMutation.isPending}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (
+                        window.confirm(
+                          'Excluir este processo da análise? O aceite na planilha será mantido.'
+                        )
+                      ) {
+                        deleteMutation.mutate(item.id);
+                      }
+                    }}
+                    className={`absolute right-1.5 top-1.5 rounded-md p-1.5 opacity-80 transition-opacity hover:opacity-100 disabled:opacity-40 ${
+                      active
+                        ? 'text-white hover:bg-white/20'
+                        : 'text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40'
+                    }`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </>
+  );
+
   if (loadingUser) {
     return <Loading message="Carregando..." fullScreen size="lg" />;
   }
@@ -1308,7 +1615,7 @@ export default function LicitacoesPage() {
   return (
     <ProtectedRoute route="/ponto/licitacoes">
       <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-        <div className="flex flex-col gap-5">
+        <div className="space-y-5">
           <header className="flex flex-col gap-4">
             <div className="grid items-center gap-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
               <div className="text-center lg:col-start-2">
@@ -1460,354 +1767,36 @@ export default function LicitacoesPage() {
             <LicitacaoOrcamentoPanel />
           ) : (
             <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-            {/* Sidebar */}
+            {/* Sidebar — modal em portal quando expandida (evita bug de transform do PageEnter) */}
             {listPanelExpanded ? (
-              <div
-                className="fixed inset-0 z-40 bg-black/50"
-                aria-hidden
-                onClick={() => setListPanelExpanded(false)}
-              />
-            ) : null}
-            <aside
-              className={
-                listPanelExpanded
-                  ? 'fixed left-1/2 top-1/2 z-50 w-[min(100%-1.5rem,56rem)] -translate-x-1/2 -translate-y-1/2'
-                  : 'w-full shrink-0 lg:w-72 xl:w-80'
-              }
-            >
-              <Card
-                padding="none"
-                className={
-                  listPanelExpanded
-                    ? 'flex h-[min(900px,92vh)] flex-col overflow-hidden shadow-2xl'
-                    : 'flex max-h-[min(380px,45vh)] flex-col overflow-hidden shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]'
-                }
-              >
-                <CardHeader className="shrink-0 space-y-2.5 border-b border-gray-100 px-4 pb-3 pt-4 dark:border-gray-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        Licitações
-                      </h2>
-                      {listPanelExpanded && list.length > 0 ? (
-                        <p className="mt-0.5 text-xs text-gray-400">
-                          {list.length}{' '}
-                          {list.length === 1 ? 'licitação' : 'licitações'}
-                          {hasActiveFilters ? ' (filtradas)' : ''}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        title={listPanelExpanded ? 'Recolher lista' : 'Expandir lista'}
-                        aria-label={listPanelExpanded ? 'Recolher lista' : 'Expandir lista'}
-                        aria-expanded={listPanelExpanded}
-                        onClick={() => setListPanelExpanded((v) => !v)}
-                        className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                      >
-                        {listPanelExpanded ? (
-                          <Minimize2 className="h-4 w-4" />
-                        ) : (
-                          <Maximize2 className="h-4 w-4" />
-                        )}
-                      </button>
-                      {listPanelExpanded ? (
-                        <button
-                          type="button"
-                          title="Fechar"
-                          aria-label="Fechar lista expandida"
-                          onClick={() => setListPanelExpanded(false)}
-                          className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div
-                    className={
-                      listPanelExpanded
-                        ? 'grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3'
-                        : 'space-y-2.5'
-                    }
+              <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2100] flex items-center justify-center p-3">
+                <div
+                  className="absolute inset-0 bg-black/50"
+                  onClick={() => setListPanelExpanded(false)}
+                  aria-hidden
+                />
+                <aside
+                  className="relative z-10 w-[min(100%,56rem)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Card
+                    padding="none"
+                    className="flex h-[min(900px,92vh)] flex-col overflow-hidden shadow-2xl"
                   >
-                    <div className={listPanelExpanded ? 'relative sm:col-span-2 lg:col-span-3' : 'relative'}>
-                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Buscar..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="h-9 w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm dark:border-gray-700 dark:bg-gray-900"
-                      />
-                    </div>
-                    <div
-                      className={
-                        listPanelExpanded
-                          ? 'contents'
-                          : 'grid grid-cols-2 gap-2'
-                      }
-                    >
-                      <input
-                        type="date"
-                        aria-label="De"
-                        value={dataInicio}
-                        onChange={(e) => setDataInicio(e.target.value)}
-                        className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                      />
-                      <input
-                        type="date"
-                        aria-label="Até"
-                        value={dataFim}
-                        min={dataInicio || undefined}
-                        onChange={(e) => setDataFim(e.target.value)}
-                        className="h-8 rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                      />
-                    </div>
-                    <select
-                      aria-label="Região"
-                      value={regiaoKey}
-                      onChange={(e) => setRegiaoKey(e.target.value)}
-                      className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                    >
-                      <option value="">Todas as regiões</option>
-                      {regiaoTabs.map((tab) => (
-                        <option key={tab.key} value={tab.key}>
-                          {tab.label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      aria-label="Estado"
-                      value={estado}
-                      onChange={(e) => setEstado(e.target.value)}
-                      className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                    >
-                      <option value="">Todos os estados</option>
-                      {BRASIL_UFS.map((uf) => (
-                        <option key={uf} value={uf}>
-                          {uf}
-                        </option>
-                      ))}
-                    </select>
-                    {isArquivadasView ? (
-                      <select
-                        aria-label="Categoria do arquivamento"
-                        value={arquivadaMotivoFilter}
-                        onChange={(e) =>
-                          setArquivadaMotivoFilter(
-                            e.target.value as LicitacaoArquivadaMotivo | ''
-                          )
-                        }
-                        className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                      >
-                        <option value="">Todas as categorias</option>
-                        {ANALISE_FINAL_MOTIVO_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                    {isArquivadasView ? (
-                      <select
-                        aria-label="Decisão de participação"
-                        value={decisaoAnaliseFinalFilter}
-                        onChange={(e) =>
-                          setDecisaoAnaliseFinalFilter(
-                            e.target.value as LicitacaoDecisaoAnaliseFinal | ''
-                          )
-                        }
-                        className="h-8 w-full rounded-md border border-gray-300 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900"
-                      >
-                        <option value="">Todas as decisões</option>
-                        {DECISAO_ANALISE_FINAL_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </div>
-                  {hasActiveFilters ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearch('');
-                        setDataInicio('');
-                        setDataFim('');
-                        setRegiaoKey('');
-                        setEstado('');
-                        setArquivadaMotivoFilter('');
-                        setDecisaoAnaliseFinalFilter('');
-                      }}
-                      className="text-left text-xs text-red-600 hover:text-red-700 dark:text-red-400"
-                    >
-                      Limpar filtros
-                    </button>
-                  ) : null}
-                </CardHeader>
-
-                <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2">
-                  {loadingList ? (
-                    <div className="flex flex-1 items-center justify-center py-10">
-                      <Loader2 className="h-5 w-5 animate-spin text-red-600" />
-                    </div>
-                  ) : list.length === 0 ? (
-                    <p className="py-10 text-center text-sm text-gray-500">
-                      {hasSearchOrFilters
-                        ? 'Nenhum resultado.'
-                        : isArquivadasView
-                          ? arquivadaMotivoFilter || decisaoAnaliseFinalFilter
-                            ? 'Nenhuma análise com os filtros selecionados.'
-                            : 'Nenhuma análise em Análise final.'
-                          : 'Nenhum processo com aceite. Aceite licitações na aba Por região.'}
-                    </p>
-                  ) : (
-                    <ul
-                      className="min-h-0 flex-1 divide-y divide-gray-200 overflow-y-auto pr-0.5 dark:divide-gray-700"
-                      role="listbox"
-                      aria-label="Licitações"
-                    >
-                      {list.map((item) => {
-                        const active = selectedId === item.id;
-                        const statusLabel = licitacaoStatusLabel(item, isArquivadasView);
-                        const decisao = isArquivadasView ? resolveDecisaoAnaliseFinal(item) : null;
-                        const decisaoLabel = decisaoAnaliseFinalLabel(decisao);
-                        const statusDate = isArquivadasView && item.arquivadaEm
-                          ? formatDateOnly(item.arquivadaEm)
-                          : formatDateOnly(item.createdAt);
-                        const titulo = tituloParaExibicao(item, list);
-                        const responsavelLabel =
-                          !isArquivadasView && item.analiseJson?.responsavelAnaliseId?.trim()
-                            ? item.analiseJson.responsavelAnalise?.trim() || 'Assumida'
-                            : !isArquivadasView
-                              ? 'Disponível'
-                              : null;
-                        return (
-                          <li key={item.id} className="group relative py-0.5 first:pt-0 last:pb-0">
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected={active}
-                              onClick={() => {
-                                setSelectedId(item.id);
-                                if (listPanelExpanded) setListPanelExpanded(false);
-                              }}
-                              className={`w-full rounded-lg text-left transition-colors ${
-                                listPanelExpanded ? 'px-4 py-3 pr-10' : 'px-3 py-2.5 pr-9'
-                              } ${
-                                active
-                                  ? 'bg-red-600 text-white shadow-sm'
-                                  : 'hover:bg-gray-100 dark:hover:bg-gray-800'
-                              }`}
-                            >
-                              <div
-                                className={`flex gap-3 ${
-                                  listPanelExpanded
-                                    ? 'flex-col sm:flex-row sm:items-start sm:justify-between'
-                                    : 'items-start justify-between'
-                                }`}
-                              >
-                                <p
-                                  className={`min-w-0 text-sm font-medium ${
-                                    listPanelExpanded
-                                      ? 'whitespace-normal break-words'
-                                      : 'truncate'
-                                  }`}
-                                  title={titulo}
-                                >
-                                  {titulo}
-                                </p>
-                                <div
-                                  className={`flex shrink-0 gap-1 ${
-                                    listPanelExpanded
-                                      ? 'flex-row flex-wrap items-center'
-                                      : 'flex-col items-end'
-                                  }`}
-                                >
-                                  <span
-                                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight ${licitacaoStatusBadgeClass(item, active, isArquivadasView)}`}
-                                  >
-                                    {statusLabel}
-                                  </span>
-                                  {decisaoLabel ? (
-                                    <span
-                                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium leading-tight ${decisaoAnaliseFinalBadgeClass(decisao!, active)}`}
-                                    >
-                                      {decisaoLabel}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <p
-                                className={`mt-1 text-xs ${active ? 'text-red-100' : 'text-gray-500'}`}
-                              >
-                                {listPanelExpanded ? (
-                                  <>
-                                    <span>{statusDate}</span>
-                                    {item.estado ? (
-                                      <>
-                                        {' · '}
-                                        <span>{item.estado}</span>
-                                      </>
-                                    ) : null}
-                                    {item.regiaoKey ? (
-                                      <>
-                                        {' · '}
-                                        <span>
-                                          {regiaoTabs.find((t) => t.key === item.regiaoKey)
-                                            ?.label ?? item.regiaoKey}
-                                        </span>
-                                      </>
-                                    ) : null}
-                                    {responsavelLabel ? (
-                                      <>
-                                        {' · '}
-                                        <span>{responsavelLabel}</span>
-                                      </>
-                                    ) : null}
-                                  </>
-                                ) : (
-                                  <>
-                                    {statusLabel}
-                                    {decisaoLabel ? ` · ${decisaoLabel}` : ''} · {statusDate}
-                                    {responsavelLabel ? ` · ${responsavelLabel}` : ''}
-                                  </>
-                                )}
-                              </p>
-                            </button>
-                            <button
-                              type="button"
-                              title="Excluir processo"
-                              disabled={deleteMutation.isPending}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (
-                                  window.confirm(
-                                    'Excluir este processo da análise? O aceite na planilha será mantido.'
-                                  )
-                                ) {
-                                  deleteMutation.mutate(item.id);
-                                }
-                              }}
-                              className={`absolute right-1.5 top-1.5 rounded-md p-1.5 opacity-80 transition-opacity hover:opacity-100 disabled:opacity-40 ${
-                                active
-                                  ? 'text-white hover:bg-white/20'
-                                  : 'text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40'
-                              }`}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            </aside>
+                    {renderLicitacaoListPanelContent(true)}
+                  </Card>
+                </aside>
+              </AppModalOverlay>
+            ) : (
+              <aside className="w-full shrink-0 lg:w-72 xl:w-80">
+                <Card
+                  padding="none"
+                  className="flex h-[min(380px,45vh)] flex-col overflow-hidden shadow-sm lg:sticky lg:top-4 lg:h-[calc(100vh-8rem)] lg:max-h-[calc(100vh-8rem)]"
+                >
+                  {renderLicitacaoListPanelContent(false)}
+                </Card>
+              </aside>
+            )}
 
             {/* Conteúdo principal */}
             <main className="min-w-0 flex-1 space-y-5">
