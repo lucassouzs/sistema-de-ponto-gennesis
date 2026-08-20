@@ -80,6 +80,7 @@ function buildNomeToPoloMap(): Record<string, string> {
     ['TJ MANUTENCAO RIO VERDE - CORRETIVA', 'GO'],
     ['TJGO RETROFIT', 'GO'],
     ['TJGO RETROFIT PARCEIROS - LOTE 5', 'GO'],
+    ['TJGO RETROFIT PARCEIROS - LOTES 5', 'GO'],
     ['TJGO RETROFIT R5 - LOTE 4', 'GO'],
     ['TJGO RETROFIT R5 - LOTE 5', 'GO'],
     ['UFG', 'GO'],

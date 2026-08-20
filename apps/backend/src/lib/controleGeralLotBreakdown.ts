@@ -59,7 +59,8 @@ export const NFS_TAB_LOT_BREAKDOWN: readonly LotBreakdownTabConfig[] = [
         lotKey: 'lote-5',
         label: 'Lote 5',
         nfsMatchValues: ['5'],
-        gastosCostCenters: ['TJGO RETROFIT PARCEIROS - LOTES 5', 'TJGO RETROFIT R5 - LOTE 5']
+        // Faturamento/líquido/recebido do lote 5 pertencem só ao R5 — Parceiros é outro contrato.
+        gastosCostCenters: ['TJGO RETROFIT R5 - LOTE 5']
       }
     ]
   },
