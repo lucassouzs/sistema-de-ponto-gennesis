@@ -1173,7 +1173,8 @@ export default function ContractDetailPage() {
     data: gastosOperacionaisModuleData,
     isLoading: gastosOperacionaisModuleLoading,
     isFetching: gastosOperacionaisModuleFetching,
-    isError: gastosOperacionaisModuleIsError
+    isError: gastosOperacionaisModuleIsError,
+    error: gastosOperacionaisModuleError
   } = useQuery({
     queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
     queryFn: fetchGastosOperacionaisTotvs,
@@ -1184,6 +1185,14 @@ export default function ContractDetailPage() {
 
   const gastosOperacionaisCarregando =
     gastosOperacionaisModuleLoading || gastosOperacionaisModuleFetching;
+
+  const gastosOperacionaisNaoConfigurado =
+    gastosOperacionaisModuleIsError &&
+    /não configurada|nao configurada/i.test(
+      gastosOperacionaisModuleError instanceof Error
+        ? gastosOperacionaisModuleError.message
+        : String(gastosOperacionaisModuleError ?? '')
+    );
 
   /** RM ainda sem resposta definitiva (1ª carga ou refetch). */
   const totvsRmCarregando =
@@ -3859,7 +3868,7 @@ export default function ContractDetailPage() {
               ) : null}
               {!isAllYears &&
               !gastosOperacionaisCarregando &&
-              gastosOperacionaisModuleData?.configured === false ? (
+              gastosOperacionaisNaoConfigurado ? (
                 <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
                   <span className="font-medium">Gastos Operacionais:</span> integração TOTVS RM não
                   configurada no servidor (
@@ -3869,7 +3878,7 @@ export default function ContractDetailPage() {
               {!isAllYears &&
               !gastosOperacionaisCarregando &&
               !gastosOperacionaisModuleIsError &&
-              gastosOperacionaisModuleData?.configured === true &&
+              Boolean(gastosOperacionaisModuleData) &&
               !gastosOperacionaisTemDados ? (
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                   Nenhum gasto operacional encontrado no RM para este contrato/centro de custo (
