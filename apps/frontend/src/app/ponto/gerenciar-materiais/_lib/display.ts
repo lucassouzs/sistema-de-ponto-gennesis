@@ -103,9 +103,9 @@ function rmLinkedContract(r: MaterialRequest) {
 
 export function rmOsDisplay(r: MaterialRequest): string {
   const os = (r.serviceOrder || '').trim();
-  if (os) return ensureOsSePrefix(os);
+  if (os) return os.replace(/^(OS|SE)\s+/i, '').trim() || '—';
   const so = r.service_orders;
-  if (so) return `OS ${so.numero}/${so.ano}`;
+  if (so) return `${so.numero}/${so.ano}`;
   return '—';
 }
 

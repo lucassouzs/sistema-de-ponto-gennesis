@@ -39,6 +39,22 @@ export class QuoteMapService {
     return `${date}, ${time}`;
   }
 
+  /** Rótulo da OS no PDF do mapa — sem prefixo "OS" (ex.: "AD-725"). */
+  private formatRmOsLabel(mr?: {
+    serviceOrder?: string | null;
+    service_orders?: { numero?: number | null; ano?: number | null } | null;
+  } | null): string {
+    const os = (mr?.serviceOrder || '').trim();
+    if (os) {
+      return os.replace(/^(OS|SE)\s+/i, '').trim();
+    }
+    const so = mr?.service_orders;
+    if (so?.numero != null && so?.ano != null) {
+      return `${so.numero}/${so.ano}`;
+    }
+    return '';
+  }
+
   private formatOcDisplayNumber(orderNumber: string): string {
     const trimmed = (orderNumber || '').trim();
     if (!trimmed) return '';
@@ -116,6 +132,7 @@ export class QuoteMapService {
             description: true,
             demandSheet: true,
             costCenter: { select: { name: true, code: true } },
+            service_orders: { select: { numero: true, ano: true } },
             items: {
               include: { material: true },
             },
@@ -282,7 +299,12 @@ export class QuoteMapService {
     }
 
     const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      // bottom menor que a altura do rodapé → evita página em branco ao desenhar o footer
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 36, left: 40, right: 40, bottom: 28 },
+        bufferPages: true,
+      });
       const stream = new PassThrough();
       const chunks: Buffer[] = [];
       stream.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -296,10 +318,11 @@ export class QuoteMapService {
       const left = 40;
       const right = pageWidth - 40;
       const contentWidth = right - left;
+      const footerReserve = 42;
       let y = 36;
 
       const ensureSpace = (needed: number) => {
-        if (y + needed <= pageHeight - 48) return;
+        if (y + needed <= pageHeight - footerReserve) return;
         doc.addPage();
         y = 40;
       };
@@ -590,6 +613,36 @@ export class QuoteMapService {
         );
         y += 6;
 
+        // Solicitação de compra (SC) — SC nº + Ordem de serviço (ex.: OS AD-725)
+        {
+          const osLabel = this.formatRmOsLabel(mr);
+          const scNumber = (mr?.requestNumber || '').trim();
+          const posto =
+            (mr?.costCenter?.name || '').trim() || (mr?.costCenter?.code || '').trim();
+          const scDesc = (mr?.description || '').trim();
+          const hasScBlock = Boolean(osLabel || scNumber || posto || scDesc);
+          if (hasScBlock) {
+            ensureSpace(scDesc ? 70 : 48);
+            doc
+              .fillColor('#0F172A')
+              .font('Helvetica-Bold')
+              .fontSize(11)
+              .text('Solicitação de compra (SC)', left, y);
+            y += 20;
+            drawTwoColRow(
+              { label: 'SC nº: ', value: scNumber || '—' },
+              { label: 'Ordem de serviço: ', value: osLabel || '—' }
+            );
+            if (posto) {
+              drawLabeledLine('Posto: ', posto);
+            }
+            if (scDesc) {
+              drawLabeledLine('Solicitação: ', scDesc);
+            }
+            y += 6;
+          }
+        }
+
         // Pagamento e entrega — só campos preenchidos
         const payCond = [
           this.paymentConditionLabel(section.paymentCondition),
@@ -687,7 +740,7 @@ export class QuoteMapService {
             doc.fontSize(8);
           }
           const rowH = Math.max(18, descHeight + (detail ? 2 + detailHeight : 0) + 8);
-          if (y + rowH > pageHeight - 70) {
+          if (y + rowH > pageHeight - footerReserve - 8) {
             doc.addPage();
             y = 40;
             drawItemsHeader();
@@ -785,17 +838,22 @@ export class QuoteMapService {
         }
       });
 
-      // Rodapé na margem inferior — lineBreak:false evita o PDFKit criar página em branco
-      // (texto em y > pageHeight - margin dispara addPage automático).
-      doc
-        .font('Helvetica')
-        .fontSize(8)
-        .fillColor('#64748B')
-        .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, pageHeight - 36, {
-          width: contentWidth,
-          align: 'center',
-          lineBreak: false,
-        });
+      // Rodapé em cada página real (bufferPages). Baixa a margem inferior só no
+      // desenho do footer — senão o PDFKit cria uma página em branco.
+      const range = doc.bufferedPageRange();
+      for (let i = 0; i < range.count; i++) {
+        doc.switchToPage(range.start + i);
+        doc.page.margins.bottom = 10;
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#64748B')
+          .text('Documento gerado automaticamente pelo Sistema Gennesis.', left, pageHeight - 22, {
+            width: contentWidth,
+            align: 'center',
+            lineBreak: false,
+          });
+      }
 
       doc.end();
     });
