@@ -1,5 +1,64 @@
 import { prisma } from '../lib/prisma';
 import { entityLabel, resolveTimelineRef } from '../lib/auditLog';
+import { buildRmOcInsights, type RmOcInsights } from './RmOcInsightsService';
+
+const EMPTY_RM_OC_INSIGHTS: RmOcInsights = {
+  sla: {
+    ocAvgAgeDays: 0,
+    rmAvgAgeDays: 0,
+    ocStuckOver7Days: 0,
+    ocStuckOver14Days: 0,
+    rmStuckOver7Days: 0,
+    rmStuckOver14Days: 0,
+    ocAgeByApprovalStage: [],
+  },
+  bottlenecks: [],
+  rmByPriority: [],
+  finance: {
+    openAmount: 0,
+    totalAmount: 0,
+    openSharePct: 0,
+    byStatus: [],
+    topSuppliers: [],
+  },
+  demandByCostCenter: [],
+  demandByServiceOrder: [],
+  rmToOc: {
+    totalRms: 0,
+    withOc: 0,
+    withoutOc: 0,
+    conversionPct: 0,
+    approvedWithoutOc: 0,
+  },
+  postApproval: [],
+  overdueDeliveries: 0,
+  inReview: { oc: 0, rm: 0, total: 0 },
+  leadTime: {
+    rmToOcApprovedDays: 0,
+    rmToOcApprovedSample: 0,
+    ocApprovedToClosedDays: 0,
+    ocApprovedToClosedSample: 0,
+  },
+  trends: {
+    days7: {
+      ocCreated: 0,
+      ocApproved: 0,
+      ocClosed: 0,
+      rmCreated: 0,
+      rmApproved: 0,
+      rmClosed: 0,
+    },
+    days30: {
+      ocCreated: 0,
+      ocApproved: 0,
+      ocClosed: 0,
+      rmCreated: 0,
+      rmApproved: 0,
+      rmClosed: 0,
+    },
+    daily: [],
+  },
+};
 
 const SAO_PAULO_TZ = 'America/Sao_Paulo';
 
@@ -215,6 +274,7 @@ export interface SystemDashboardOverview {
     userName: string | null;
     at: string;
   }>;
+  rmOcInsights: RmOcInsights;
 }
 
 export class SystemDashboardService {
@@ -244,6 +304,7 @@ export class SystemDashboardService {
       activityRows,
       topAuditEntitiesRaw,
       recentAuditRows,
+      rmOcInsights,
     ] = await Promise.all([
       safe(
         () => prisma.purchaseOrder.groupBy({ by: ['status'], _count: { status: true } }),
@@ -424,6 +485,7 @@ export class SystemDashboardService {
         }>,
         'recentActions'
       ),
+      safe(() => buildRmOcInsights(now), EMPTY_RM_OC_INSIGHTS, 'rmOcInsights'),
     ]);
 
     const purchaseOrdersByStatus = toStatusCounts(purchaseOrdersByStatusRaw, PURCHASE_ORDER_STATUS_LABELS);
@@ -568,6 +630,7 @@ export class SystemDashboardService {
       activityByDay,
       topAuditEntities,
       recentActions,
+      rmOcInsights,
     };
   }
 }

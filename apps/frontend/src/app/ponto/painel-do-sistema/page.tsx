@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
-import { SystemOverviewDashboard } from '@/components/dashboard/SystemOverviewDashboard';
+import { RmOcDashboard } from '@/components/dashboard/RmOcDashboard';
 import api from '@/lib/api';
 
 export default function PainelDoSistemaPage() {
@@ -18,7 +18,7 @@ export default function PainelDoSistemaPage() {
     queryFn: async () => {
       const res = await api.get('/auth/me');
       return res.data;
-    },
+    }
   });
 
   const handleLogout = () => {
@@ -42,12 +42,23 @@ export default function PainelDoSistemaPage() {
   const user = userData?.data || {
     name: 'Usuário',
     cpf: '000.000.000-00',
-    role: 'EMPLOYEE',
+    role: 'EMPLOYEE'
   };
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <SystemOverviewDashboard />
+      <div className="space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+            Painel do Sistema
+          </h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+            Visão operacional de requisições de materiais (RMs) e ordens de compra (OCs)
+          </p>
+        </div>
+
+        <RmOcDashboard />
+      </div>
 
       <ChangePasswordModal
         isOpen={isChangePasswordOpen}
