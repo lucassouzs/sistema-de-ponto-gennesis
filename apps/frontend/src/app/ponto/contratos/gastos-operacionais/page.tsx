@@ -46,6 +46,7 @@ export default function GastosOperacionaisPage() {
 
   const gastosDetailRows = gastosData?.detailRows ?? [];
   const gastosNaturezaDetailRows = gastosData?.naturezaDetailRows ?? [];
+  const gastosTotvsNaturezaCatalog = gastosData?.totvsNaturezaCatalog ?? [];
   const gastosErrorMessage = (() => {
     const err = gastosErrorObj as {
       response?: { data?: { message?: string } };
@@ -86,6 +87,7 @@ export default function GastosOperacionaisPage() {
           <ControleGeralGastosOperacionaisPanel
             detailRows={gastosDetailRows}
             naturezaDetailRows={gastosNaturezaDetailRows}
+            totvsNaturezaCatalog={gastosTotvsNaturezaCatalog}
             isLoading={loadingGastos || fetchingGastos}
             isError={gastosError}
             errorMessage={gastosErrorMessage}
@@ -98,6 +100,7 @@ export default function GastosOperacionaisPage() {
             panelDescription="Totais mensais e anuais integrados ao TOTVS RM."
             readOnlyPoloColumn
             showPdfExport
+            showNaturezasCatalogButton
           />
         </div>
       </MainLayout>

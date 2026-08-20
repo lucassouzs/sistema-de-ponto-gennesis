@@ -8,7 +8,8 @@ import https from 'https';
 import { isNaturezaExcludedFromContractPaidTotal, shouldCountInGastosOperacionaisTotal } from '../constants/contractPaidNaturezaExclusions';
 import {
   gastosNaturezaTotalContribution,
-  getGastosOperacionaisNaturezaAggKey
+  getGastosOperacionaisNaturezaAggKey,
+  normalizeGastosOperacionaisNaturezaKey
 } from '../constants/gastosOperacionaisDfcBlocks';
 import {
   gastosContractLookupKey,
@@ -1542,6 +1543,14 @@ export class TotvsRmRelatorioFinService {
       natureza: string;
       total: number;
     }>;
+    totvsNaturezaCatalog: Array<{
+      label: string;
+      /** Soma líquida com sinal do TOTVS (positivo = crédito/entrada, negativo = débito/saída). */
+      total: number;
+      totalAbs: number;
+      isConfigured: boolean;
+      byContract: Array<{ contract: string; total: number }>;
+    }>;
     ccColumn: string | null;
     valueColumn: string | null;
     dateColumn: string | null;
@@ -1554,6 +1563,7 @@ export class TotvsRmRelatorioFinService {
       return {
         detailRows: [],
         naturezaDetailRows: [],
+        totvsNaturezaCatalog: [],
         ccColumn: null,
         valueColumn: null,
         dateColumn: null,
@@ -1649,6 +1659,16 @@ export class TotvsRmRelatorioFinService {
 
     const byCcDate = new Map<string, Map<string, number>>();
     const byCcDateNat = new Map<string, Map<string, Map<string, number>>>();
+    const totvsNaturezaTotals = new Map<
+      string,
+      {
+        label: string;
+        total: number;
+        totalAbs: number;
+        isConfigured: boolean;
+        byContract: Map<string, number>;
+      }
+    >();
     const poloByCc = new Map<string, string>();
     const costCenters = new Set<string>();
 
@@ -1680,6 +1700,25 @@ export class TotvsRmRelatorioFinService {
 
       const v = parseMoneyBr(row[solValCol]);
       if (v === 0) continue;
+
+      if (natLabel !== '—') {
+        const natKey = normalizeGastosOperacionaisNaturezaKey(natLabel);
+        if (natKey) {
+          const existingNat = totvsNaturezaTotals.get(natKey) ?? {
+            label: natLabel,
+            total: 0,
+            totalAbs: 0,
+            isConfigured: false,
+            byContract: new Map<string, number>()
+          };
+          existingNat.total += v;
+          existingNat.totalAbs += Math.abs(v);
+          existingNat.byContract.set(cc, (existingNat.byContract.get(cc) ?? 0) + v);
+          existingNat.isConfigured =
+            existingNat.isConfigured || shouldCountInGastosOperacionaisTotal(natLabel);
+          totvsNaturezaTotals.set(natKey, existingNat);
+        }
+      }
 
       costCenters.add(cc);
       if (shouldCountInGastosOperacionaisTotal(natLabel)) {
@@ -1757,9 +1796,23 @@ export class TotvsRmRelatorioFinService {
       return a.natureza.localeCompare(b.natureza, 'pt-BR');
     });
 
+    const totvsNaturezaCatalog = Array.from(totvsNaturezaTotals.values())
+      .map((row) => ({
+        label: row.label,
+        total: row.total,
+        totalAbs: row.totalAbs,
+        isConfigured: row.isConfigured,
+        byContract: Array.from(row.byContract.entries())
+          .map(([contract, total]) => ({ contract, total }))
+          .filter((entry) => entry.total !== 0)
+          .sort((a, b) => a.contract.localeCompare(b.contract, 'pt-BR'))
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+
     return {
       detailRows,
       naturezaDetailRows,
+      totvsNaturezaCatalog,
       ccColumn: solCcNameCol ?? solCcCodeCol,
       valueColumn: solValCol,
       dateColumn: solDateCol,

@@ -17,6 +17,7 @@ import {
   RefreshCw,
   RotateCcw,
   Settings2,
+  Tags,
   Wallet,
   X
 } from 'lucide-react';
@@ -92,6 +93,14 @@ import {
 } from './gastosOperacionaisLocalitiesStore';
 import { GastosLocalitiesManageModal } from './GastosLocalitiesManageModal';
 import {
+  GastosNaturezasManageModal,
+  type GastosTotvsNaturezaCatalogRow
+} from './GastosNaturezasManageModal';
+import {
+  countNewTotvsNaturezas,
+  loadGastosNaturezasConfigStore
+} from './gastosOperacionaisNaturezasStore';
+import {
   addControleGeralExcludedContracts,
   clearControleGeralExcludedContracts,
   isContractExcludedFromControleGeralView,
@@ -161,6 +170,8 @@ type ControleGeralGastosOperacionaisPanelProps = {
   detailRows: QueryGastosDetailRow[];
   /** Detalhe por natureza (TOTVS RM) para drill-down ao clicar na linha. */
   naturezaDetailRows?: QueryGastosNaturezaDetailRow[];
+  /** Catálogo bruto de naturezas vindas do TOTVS RM (mapeadas ou não). */
+  totvsNaturezaCatalog?: readonly GastosTotvsNaturezaCatalogRow[];
   isLoading: boolean;
   fetchedAt?: string;
   isError?: boolean;
@@ -170,6 +181,8 @@ type ControleGeralGastosOperacionaisPanelProps = {
   visibleLocalities?: readonly string[];
   /** Exibe botão de exportação em PDF (módulo Gastos Operacionais). */
   showPdfExport?: boolean;
+  /** Exibe botão para gerenciar o catálogo de naturezas (módulo Gastos Operacionais). */
+  showNaturezasCatalogButton?: boolean;
   /** Permite ocultar linhas da visualização (somente Controle Geral de Contratos). */
   enableRowExclusion?: boolean;
   /** Oculta a coluna de localidade na tabela. */
@@ -659,10 +672,12 @@ function RowSelectCheckbox({
 // Referência estável para o valor padrão: evitar `= []` inline, que cria um novo array
 // a cada render e faz memos/efeitos derivados dispararem re-render em loop.
 const EMPTY_NATUREZA_DETAIL_ROWS: QueryGastosNaturezaDetailRow[] = [];
+const EMPTY_TOTVS_NATUREZA_CATALOG: GastosTotvsNaturezaCatalogRow[] = [];
 
 export function ControleGeralGastosOperacionaisPanel({
   detailRows,
   naturezaDetailRows = EMPTY_NATUREZA_DETAIL_ROWS,
+  totvsNaturezaCatalog = EMPTY_TOTVS_NATUREZA_CATALOG,
   isLoading,
   fetchedAt,
   isError = false,
@@ -670,6 +685,7 @@ export function ControleGeralGastosOperacionaisPanel({
   onRetry,
   visibleLocalities,
   showPdfExport = false,
+  showNaturezasCatalogButton = false,
   enableRowExclusion = false,
   hideLocalityColumn = false,
   hideContractFilter = false,
@@ -723,6 +739,17 @@ export function ControleGeralGastosOperacionaisPanel({
     loadGastosLocalitiesCatalog()
   );
   const [localitiesModalOpen, setLocalitiesModalOpen] = useState(false);
+  const [naturezasModalOpen, setNaturezasModalOpen] = useState(false);
+  const [naturezasConfigVersion, setNaturezasConfigVersion] = useState(0);
+
+  const refreshNaturezasConfig = useCallback(() => {
+    setNaturezasConfigVersion((value) => value + 1);
+  }, []);
+
+  const newTotvsNaturezasCount = useMemo(() => {
+    void naturezasConfigVersion;
+    return countNewTotvsNaturezas(totvsNaturezaCatalog, loadGastosNaturezasConfigStore());
+  }, [totvsNaturezaCatalog, naturezasConfigVersion]);
 
   const refreshLocalitiesCatalog = useCallback(() => {
     const nextCatalog = loadGastosLocalitiesCatalog();
@@ -1978,7 +2005,11 @@ export function ControleGeralGastosOperacionaisPanel({
             </div>
           </div>
 
-          {(showPdfExport || showFaturamentoColumn || Boolean(onRetry) || showTetoOrcamentarioColumn) ? (
+          {(showPdfExport ||
+          showNaturezasCatalogButton ||
+          showFaturamentoColumn ||
+          Boolean(onRetry) ||
+          showTetoOrcamentarioColumn) ? (
             <div className={cadastroListClasses.cardToolbar}>
               <button
                 type="button"
@@ -1996,6 +2027,27 @@ export function ControleGeralGastosOperacionaisPanel({
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
               </button>
+
+              {showNaturezasCatalogButton ? (
+                <button
+                  type="button"
+                  onClick={() => setNaturezasModalOpen(true)}
+                  className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  aria-label="Gerenciar naturezas"
+                  title={
+                    newTotvsNaturezasCount > 0
+                      ? `Naturezas (${newTotvsNaturezasCount} nova(s))`
+                      : 'Naturezas'
+                  }
+                >
+                  <Tags className="h-4 w-4" aria-hidden />
+                  {newTotvsNaturezasCount > 0 ? (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white dark:ring-gray-900">
+                      {newTotvsNaturezasCount > 9 ? '9+' : newTotvsNaturezasCount}
+                    </span>
+                  ) : null}
+                </button>
+              ) : null}
 
               {showTetoOrcamentarioColumn ? (
                 <button
@@ -2838,6 +2890,15 @@ export function ControleGeralGastosOperacionaisPanel({
           isOpen={localitiesModalOpen}
           onClose={() => setLocalitiesModalOpen(false)}
           onCatalogChanged={refreshLocalitiesCatalog}
+        />
+      ) : null}
+
+      {showNaturezasCatalogButton ? (
+        <GastosNaturezasManageModal
+          isOpen={naturezasModalOpen}
+          onClose={() => setNaturezasModalOpen(false)}
+          totvsNaturezas={totvsNaturezaCatalog}
+          onConfigChanged={refreshNaturezasConfig}
         />
       ) : null}
     </Card>

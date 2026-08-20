@@ -5,6 +5,7 @@ import {
   gastosNaturezaTotalContribution,
   isGastosOperacionaisPositiveCreditNatureza
 } from './gastosOperacionaisDfcBlocks';
+import { isCustomGastosOperacionaisAllowedNatureza, isUnlinkedConfiguredNatureza } from './gastosOperacionaisNaturezasStore';
 
 export {
   normalizeGastosOperacionaisNaturezaKey,
@@ -50,5 +51,10 @@ const GASTOS_OPERACIONAIS_DFC_ALLOWED_KEYS = getGastosOperacionaisDfcAllowedKeys
 export function isGastosOperacionaisAllowedNatureza(natureza: string): boolean {
   const key = normalizeGastosOperacionaisNaturezaKey(natureza);
   if (!key || key === '—' || key === '-') return false;
-  return GASTOS_OPERACIONAIS_DFC_ALLOWED_KEYS.has(key) || GASTOS_OPERACIONAIS_LEGACY_ALLOWED_KEYS.has(key);
+  if (isUnlinkedConfiguredNatureza(natureza)) return false;
+  return (
+    GASTOS_OPERACIONAIS_DFC_ALLOWED_KEYS.has(key) ||
+    GASTOS_OPERACIONAIS_LEGACY_ALLOWED_KEYS.has(key) ||
+    isCustomGastosOperacionaisAllowedNatureza(natureza)
+  );
 }

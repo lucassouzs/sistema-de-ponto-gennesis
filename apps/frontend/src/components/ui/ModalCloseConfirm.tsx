@@ -11,6 +11,8 @@ export type ModalCloseConfirmProps = {
   /** Texto do corpo. Default alinhado à RM. */
   message?: string;
   title?: string;
+  /** Rótulo do botão de confirmação. Default: Fechar. */
+  confirmLabel?: string;
   /** z-index acima de modais empilhados (ex.: etiquetas sobre o card). */
   className?: string;
 };
@@ -25,6 +27,7 @@ export function ModalCloseConfirm({
   onConfirm,
   title = 'Deseja fechar?',
   message = 'Tem certeza que deseja fechar? Os dados preenchidos serão perdidos.',
+  confirmLabel = 'Fechar',
   className,
 }: ModalCloseConfirmProps) {
   if (!isOpen) return null;
@@ -63,7 +66,7 @@ export function ModalCloseConfirm({
             onClick={onConfirm}
             className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-800"
           >
-            Fechar
+            {confirmLabel}
           </button>
         </div>
       </div>

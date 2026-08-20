@@ -585,6 +585,13 @@ export class ContractController {
             configured: false,
             detailRows: [] as GastosOperacionaisDetailRow[],
             naturezaDetailRows: [] as GastosOperacionaisNaturezaDetailRow[],
+            totvsNaturezaCatalog: [] as Array<{
+              label: string;
+              total: number;
+              totalAbs: number;
+              isConfigured: boolean;
+              byContract: Array<{ contract: string; total: number }>;
+            }>,
             fetchedAt: new Date().toISOString(),
             message:
               'Integração TOTVS RM não configurada. Defina TOTVS_RM_BASE_URL e TOTVS_RM_USER + TOTVS_RM_PASSWORD (Basic) ou TOTVS_RM_BEARER_TOKEN.'
@@ -602,6 +609,7 @@ export class ContractController {
             configured: true,
             detailRows,
             naturezaDetailRows: result.naturezaDetailRows,
+            totvsNaturezaCatalog: result.totvsNaturezaCatalog,
             fetchedAt: new Date().toISOString(),
             costCenterCount: result.costCenterCount,
             totalRowCount: result.totalRowCount,
@@ -621,6 +629,13 @@ export class ContractController {
             configured: true,
             detailRows: [] as GastosOperacionaisDetailRow[],
             naturezaDetailRows: [] as GastosOperacionaisNaturezaDetailRow[],
+            totvsNaturezaCatalog: [] as Array<{
+              label: string;
+              total: number;
+              totalAbs: number;
+              isConfigured: boolean;
+              byContract: Array<{ contract: string; total: number }>;
+            }>,
             fetchedAt: new Date().toISOString()
           }
         });

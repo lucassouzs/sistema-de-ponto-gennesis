@@ -10,6 +10,13 @@ export type GastosOperacionaisTotvsApi = {
     configured: boolean;
     detailRows?: QueryGastosDetailRow[];
     naturezaDetailRows?: QueryGastosNaturezaDetailRow[];
+    totvsNaturezaCatalog?: Array<{
+      label: string;
+      total?: number;
+      totalAbs: number;
+      isConfigured: boolean;
+      byContract?: Array<{ contract: string; total: number }>;
+    }>;
     fetchedAt?: string;
     message?: string;
   };
@@ -18,12 +25,19 @@ export type GastosOperacionaisTotvsApi = {
 export type GastosOperacionaisTotvsQueryData = {
   detailRows: QueryGastosDetailRow[];
   naturezaDetailRows: QueryGastosNaturezaDetailRow[];
+  totvsNaturezaCatalog: Array<{
+    label: string;
+    total: number;
+    totalAbs: number;
+    isConfigured: boolean;
+    byContract: Array<{ contract: string; total: number }>;
+  }>;
   fetchedAt: string;
 };
 
 /** Query key compartilhada entre Controle Geral e o módulo Gastos Operacionais. */
 export const GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY = [
-  'gastos-operacionais-module-totvs-v38-jfgo-de-goias-alias'
+  'gastos-operacionais-module-totvs-v41-natureza-by-contract'
 ] as const;
 
 /**
@@ -58,9 +72,31 @@ export async function fetchGastosOperacionaisTotvs(): Promise<GastosOperacionais
     contract: resolveCanonicalGastosContractName(row.contract)
   }));
 
+  const totvsNaturezaCatalog = (payload.data?.totvsNaturezaCatalog ?? []).map((row) => ({
+    label: row.label,
+    total: typeof row.total === 'number' ? row.total : 0,
+    totalAbs: typeof row.totalAbs === 'number' ? row.totalAbs : Math.abs(row.total ?? 0),
+    isConfigured: Boolean(row.isConfigured),
+    byContract: Array.isArray(row.byContract)
+      ? row.byContract
+          .filter(
+            (entry): entry is { contract: string; total: number } =>
+              !!entry &&
+              typeof entry.contract === 'string' &&
+              typeof entry.total === 'number' &&
+              entry.total !== 0
+          )
+          .map((entry) => ({
+            contract: resolveCanonicalGastosContractName(entry.contract),
+            total: entry.total
+          }))
+      : []
+  }));
+
   return {
     detailRows,
     naturezaDetailRows,
+    totvsNaturezaCatalog,
     fetchedAt: payload.data?.fetchedAt ?? new Date().toISOString()
   };
 }
