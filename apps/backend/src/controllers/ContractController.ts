@@ -645,6 +645,58 @@ export class ContractController {
     }
   }
 
+  /** Catálogo editável de naturezas (mappings / unlinked) usado nos totais TOTVS. */
+  async getGastosOperacionaisNaturezasConfig(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const {
+        loadGastosNaturezasConfigStore
+      } = await import('../services/gastosOperacionaisNaturezasConfigStore');
+
+      res.json({
+        success: true,
+        data: loadGastosNaturezasConfigStore()
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async putGastosOperacionaisNaturezasConfig(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const {
+        saveGastosNaturezasConfigStore
+      } = await import('../services/gastosOperacionaisNaturezasConfigStore');
+
+      const saved = saveGastosNaturezasConfigStore(req.body ?? {});
+      res.json({
+        success: true,
+        data: saved
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** Solicitações RM de uma natureza (drill-down do modal Gastos Operacionais). */
   async getGastosOperacionaisNaturezaSolicitacoes(
     req: AuthRequest,

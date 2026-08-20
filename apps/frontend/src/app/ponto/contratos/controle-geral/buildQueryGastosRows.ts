@@ -23,7 +23,7 @@ import {
 } from './gastosOperacionaisNaturezaModal';
 import {
   normalizeGastosOperacionaisNaturezaKey,
-  resolveGastosOperacionaisDfcEntry,
+  resolveGastosNaturezaModalEntry,
   gastosNaturezaTotalContribution,
   isGastosOperacionaisPositiveCreditNatureza
 } from './gastosOperacionaisAllowedNaturezas';
@@ -55,7 +55,7 @@ export type GastosNaturezaAggRow = {
 };
 
 export function getGastosNaturezaAggRowKey(row: Pick<GastosNaturezaAggRow, 'natureza'>): string {
-  const dfcEntry = resolveGastosOperacionaisDfcEntry(row.natureza);
+  const dfcEntry = resolveGastosNaturezaModalEntry(row.natureza);
   return dfcEntry
     ? `${dfcEntry.leafBlockId}:${normalizeGastosOperacionaisNaturezaKey(dfcEntry.canonicalLabel)}`
     : normalizeGastosOperacionaisNaturezaKey(row.natureza) || '—';
@@ -300,7 +300,7 @@ export function aggregateGastosNaturezaRows(
     if (!rowPaymentDateIntersectsGastosPeriod(row, periodFrom, periodTo)) continue;
     if (!shouldShowInGastosNaturezaModal(row.natureza)) continue;
 
-    const dfcEntry = resolveGastosOperacionaisDfcEntry(row.natureza);
+    const dfcEntry = resolveGastosNaturezaModalEntry(row.natureza);
     const key = dfcEntry
       ? `${dfcEntry.leafBlockId}:${normalizeGastosOperacionaisNaturezaKey(dfcEntry.canonicalLabel)}`
       : normalizeGastosOperacionaisNaturezaKey(row.natureza) || '—';
@@ -333,7 +333,7 @@ export function groupGastosNaturezaModalRows(rows: readonly GastosNaturezaAggRow
       ungrouped.push(row);
       continue;
     }
-    const dfcEntry = resolveGastosOperacionaisDfcEntry(row.natureza);
+    const dfcEntry = resolveGastosNaturezaModalEntry(row.natureza);
     const pathLabels = dfcEntry?.pathLabels ? [...dfcEntry.pathLabels] : [row.dfcLeafBlockId];
     const parentPathLabels = pathLabels.slice(0, -1);
     const leafLabel = pathLabels[pathLabels.length - 1] ?? row.dfcLeafBlockId;

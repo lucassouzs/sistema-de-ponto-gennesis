@@ -7,10 +7,10 @@ import axios, { AxiosError } from 'axios';
 import https from 'https';
 import { isNaturezaExcludedFromContractPaidTotal, shouldCountInGastosOperacionaisTotal } from '../constants/contractPaidNaturezaExclusions';
 import {
-  gastosNaturezaTotalContribution,
   getGastosOperacionaisNaturezaAggKey,
   normalizeGastosOperacionaisNaturezaKey
 } from '../constants/gastosOperacionaisDfcBlocks';
+import { gastosNaturezaTotalContribution } from '../constants/gastosOperacionaisAllowedNaturezas';
 import {
   gastosContractLookupKey,
   normalizeGastosOperacionaisContractName

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -15,6 +15,7 @@ import {
 
 export default function GastosOperacionaisPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -101,6 +102,9 @@ export default function GastosOperacionaisPage() {
             readOnlyPoloColumn
             showPdfExport
             showNaturezasCatalogButton
+            onNaturezasTotalsRefresh={() => {
+              void queryClient.invalidateQueries({ queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY });
+            }}
           />
         </div>
       </MainLayout>

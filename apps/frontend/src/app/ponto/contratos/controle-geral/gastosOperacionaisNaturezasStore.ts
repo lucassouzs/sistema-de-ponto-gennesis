@@ -1,5 +1,6 @@
 import {
   GASTOS_OPERACIONAIS_DFC_LEAF_BLOCKS,
+  isGastosOperacionaisPositiveCreditNatureza,
   normalizeGastosOperacionaisNaturezaKey,
   resolveGastosOperacionaisDfcEntry,
   type GastosOperacionaisDfcLeafBlock
@@ -125,6 +126,24 @@ export function loadGastosNaturezasConfigStore(): GastosNaturezasConfigStore {
   return readStore();
 }
 
+/** Substitui o store local (ex.: sync com o servidor). */
+export function replaceGastosNaturezasConfigStore(
+  store: GastosNaturezasConfigStore
+): GastosNaturezasConfigStore {
+  const next: GastosNaturezasConfigStore = {
+    mappings: Array.isArray(store.mappings) ? store.mappings : [],
+    dismissedTotvsKeys: Array.isArray(store.dismissedTotvsKeys) ? store.dismissedTotvsKeys : [],
+    acknowledgedTotvsKeys: Array.isArray(store.acknowledgedTotvsKeys)
+      ? store.acknowledgedTotvsKeys
+      : [],
+    unlinkedConfiguredKeys: Array.isArray(store.unlinkedConfiguredKeys)
+      ? store.unlinkedConfiguredKeys
+      : []
+  };
+  writeStore(next);
+  return next;
+}
+
 function saveStore(store: GastosNaturezasConfigStore): void {
   writeStore(store);
 }
@@ -174,6 +193,79 @@ export function isUnlinkedConfiguredNatureza(
 
 function getBlockById(blockId: string): GastosOperacionaisDfcLeafBlock | undefined {
   return GASTOS_OPERACIONAIS_DFC_LEAF_BLOCKS.find((block) => block.id === blockId);
+}
+
+export function findNaturezaCustomMapping(
+  natureza: string,
+  store: GastosNaturezasConfigStore = loadGastosNaturezasConfigStore()
+): GastosNaturezaCustomMapping | null {
+  const key = normalizeGastosOperacionaisNaturezaKey(natureza);
+  if (!key) return null;
+  return (
+    store.mappings.find((mapping) => {
+      const totvsKey = normalizeGastosOperacionaisNaturezaKey(mapping.totvsLabel);
+      if (totvsKey === key) return true;
+      if (!mapping.asAlias) {
+        return normalizeGastosOperacionaisNaturezaKey(mapping.targetCanonicalLabel) === key;
+      }
+      return false;
+    }) ?? null
+  );
+}
+
+/**
+ * Resolve bloco DFC também para mappings customizados (senão caem em "Outras naturezas").
+ */
+export function resolveGastosNaturezaModalEntry(natureza: string): {
+  leafBlockId: string;
+  canonicalLabel: string;
+  pathLabels: readonly string[];
+} | null {
+  const builtIn = resolveGastosOperacionaisDfcEntry(natureza);
+  if (builtIn) {
+    return {
+      leafBlockId: builtIn.leafBlockId,
+      canonicalLabel: builtIn.canonicalLabel,
+      pathLabels: builtIn.pathLabels
+    };
+  }
+
+  const store = loadGastosNaturezasConfigStore();
+  const mapping = findNaturezaCustomMapping(natureza, store);
+  if (!mapping) return null;
+
+  if (mapping.asAlias) {
+    const target = resolveGastosOperacionaisDfcEntry(mapping.targetCanonicalLabel);
+    if (target) {
+      return {
+        leafBlockId: target.leafBlockId,
+        canonicalLabel: target.canonicalLabel,
+        pathLabels: target.pathLabels
+      };
+    }
+  }
+
+  const block = getBlockById(mapping.blockId);
+  if (!block) return null;
+
+  return {
+    leafBlockId: block.id,
+    canonicalLabel: mapping.targetCanonicalLabel.trim() || mapping.totvsLabel.trim(),
+    pathLabels: [...block.parentLabels, `${block.code} ${block.label}`]
+  };
+}
+
+export function isCustomPositiveCreditNatureza(
+  natureza: string,
+  store: GastosNaturezasConfigStore = loadGastosNaturezasConfigStore()
+): boolean {
+  const mapping = findNaturezaCustomMapping(natureza, store);
+  if (!mapping) return false;
+  if (mapping.sumAsPositiveCredit) return true;
+  if (mapping.asAlias) {
+    return isGastosOperacionaisPositiveCreditNatureza(mapping.targetCanonicalLabel);
+  }
+  return false;
 }
 
 export function buildConfiguredNaturezaCatalog(

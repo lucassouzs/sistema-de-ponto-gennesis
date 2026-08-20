@@ -29,6 +29,14 @@ router.get('/gastos-operacionais', (req, res, next) =>
   contractController.getGastosOperacionais(req, res, next)
 );
 
+router.get('/gastos-operacionais/naturezas-config', (req, res, next) =>
+  contractController.getGastosOperacionaisNaturezasConfig(req, res, next)
+);
+
+router.put('/gastos-operacionais/naturezas-config', (req, res, next) =>
+  contractController.putGastosOperacionaisNaturezasConfig(req, res, next)
+);
+
 router.get('/gastos-operacionais/natureza-solicitacoes', (req, res, next) =>
   contractController.getGastosOperacionaisNaturezaSolicitacoes(req, res, next)
 );

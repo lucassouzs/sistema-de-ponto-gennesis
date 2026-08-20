@@ -183,6 +183,8 @@ type ControleGeralGastosOperacionaisPanelProps = {
   showPdfExport?: boolean;
   /** Exibe botão para gerenciar o catálogo de naturezas (módulo Gastos Operacionais). */
   showNaturezasCatalogButton?: boolean;
+  /** Após alterar naturezas no servidor, refetch dos gastos. */
+  onNaturezasTotalsRefresh?: () => void;
   /** Permite ocultar linhas da visualização (somente Controle Geral de Contratos). */
   enableRowExclusion?: boolean;
   /** Oculta a coluna de localidade na tabela. */
@@ -686,6 +688,7 @@ export function ControleGeralGastosOperacionaisPanel({
   visibleLocalities,
   showPdfExport = false,
   showNaturezasCatalogButton = false,
+  onNaturezasTotalsRefresh,
   enableRowExclusion = false,
   hideLocalityColumn = false,
   hideContractFilter = false,
@@ -1295,6 +1298,7 @@ export function ControleGeralGastosOperacionaisPanel({
 
   const naturezaModalRows = useMemo(() => {
     if (!naturezaModalContract) return [];
+    void naturezasConfigVersion;
     return aggregateGastosNaturezaForContract(
       scopedNaturezaDetailRows,
       naturezaModalContract.contract,
@@ -1305,13 +1309,18 @@ export function ControleGeralGastosOperacionaisPanel({
     scopedNaturezaDetailRows,
     naturezaModalContract,
     filters.periodFrom,
-    filters.periodTo
+    filters.periodTo,
+    naturezasConfigVersion
   ]);
 
   const naturezaModalTotal = useMemo(
     () => naturezaModalRows.reduce((sum, row) => sum + row.total, 0),
     [naturezaModalRows]
   );
+
+  const naturezaModalTableTotal = naturezaModalContract?.totalAcumulado ?? naturezaModalTotal;
+  const naturezaModalResidual = naturezaModalTableTotal - naturezaModalTotal;
+  const hasNaturezaModalResidual = Math.abs(naturezaModalResidual) > 0.009;
 
   const naturezaModalGrouped = useMemo(
     () => groupGastosNaturezaModalRows(naturezaModalRows),
@@ -2760,10 +2769,22 @@ export function ControleGeralGastosOperacionaisPanel({
                     ) : null}
                   </tbody>
                   <tfoot>
+                    {hasNaturezaModalResidual ? (
+                      <tr className="border-t border-gray-200 dark:border-gray-700">
+                        <td className="px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400">
+                          Outros (planilha / fora do breakdown por natureza)
+                        </td>
+                        <td
+                          className={`px-4 py-2.5 text-right text-sm tabular-nums whitespace-nowrap ${gastosNaturezaModalValueClassName(naturezaModalResidual)}`}
+                        >
+                          {formatCurrency(naturezaModalResidual)}
+                        </td>
+                      </tr>
+                    ) : null}
                     <tr className="border-t border-gray-200 bg-gray-50 font-semibold dark:border-gray-700 dark:bg-gray-800/80">
                       <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">Total</td>
-                      <td className={`px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap ${gastosNaturezaModalValueClassName(naturezaModalTotal)}`}>
-                        {formatCurrency(naturezaModalTotal)}
+                      <td className={`px-4 py-3 text-right text-sm tabular-nums whitespace-nowrap ${gastosNaturezaModalValueClassName(naturezaModalTableTotal)}`}>
+                        {formatCurrency(naturezaModalTableTotal)}
                       </td>
                     </tr>
                   </tfoot>
@@ -2899,6 +2920,7 @@ export function ControleGeralGastosOperacionaisPanel({
           onClose={() => setNaturezasModalOpen(false)}
           totvsNaturezas={totvsNaturezaCatalog}
           onConfigChanged={refreshNaturezasConfig}
+          onTotalsShouldRefresh={onNaturezasTotalsRefresh}
         />
       ) : null}
     </Card>

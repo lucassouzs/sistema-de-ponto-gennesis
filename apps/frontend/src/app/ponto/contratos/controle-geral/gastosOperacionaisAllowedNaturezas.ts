@@ -2,16 +2,20 @@ import {
   getGastosOperacionaisDfcAllowedKeys,
   normalizeGastosOperacionaisNaturezaKey,
   resolveGastosOperacionaisDfcEntry,
-  gastosNaturezaTotalContribution,
-  isGastosOperacionaisPositiveCreditNatureza
+  gastosNaturezaTotalContribution as dfcGastosNaturezaTotalContribution,
+  isGastosOperacionaisPositiveCreditNatureza as dfcIsPositiveCredit
 } from './gastosOperacionaisDfcBlocks';
-import { isCustomGastosOperacionaisAllowedNatureza, isUnlinkedConfiguredNatureza } from './gastosOperacionaisNaturezasStore';
+import {
+  isCustomGastosOperacionaisAllowedNatureza,
+  isCustomPositiveCreditNatureza,
+  isUnlinkedConfiguredNatureza,
+  resolveGastosNaturezaModalEntry
+} from './gastosOperacionaisNaturezasStore';
 
 export {
   normalizeGastosOperacionaisNaturezaKey,
   resolveGastosOperacionaisDfcEntry,
-  gastosNaturezaTotalContribution,
-  isGastosOperacionaisPositiveCreditNatureza
+  resolveGastosNaturezaModalEntry
 };
 export {
   GASTOS_OPERACIONAIS_DFC_LEAF_BLOCKS,
@@ -57,4 +61,17 @@ export function isGastosOperacionaisAllowedNatureza(natureza: string): boolean {
     GASTOS_OPERACIONAIS_LEGACY_ALLOWED_KEYS.has(key) ||
     isCustomGastosOperacionaisAllowedNatureza(natureza)
   );
+}
+
+export function isGastosOperacionaisPositiveCreditNatureza(natureza: string): boolean {
+  return dfcIsPositiveCredit(natureza) || isCustomPositiveCreditNatureza(natureza);
+}
+
+export function gastosNaturezaTotalContribution(natureza: string, total: number): number {
+  if (!Number.isFinite(total) || total === 0) return 0;
+  const magnitude = Math.abs(total);
+  if (isGastosOperacionaisPositiveCreditNatureza(natureza)) {
+    return magnitude;
+  }
+  return dfcGastosNaturezaTotalContribution(natureza, total);
 }

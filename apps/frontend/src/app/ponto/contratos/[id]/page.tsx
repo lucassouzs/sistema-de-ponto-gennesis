@@ -102,6 +102,10 @@ import {
 } from '@/app/ponto/contratos/controle-geral/controleGeralGastosFluxo';
 import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
 import { aggregateGastosNaturezaRows } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
+import {
+  fetchGastosOperacionaisTotvs,
+  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
+} from '@/app/ponto/contratos/controle-geral/fetchGastosOperacionaisTotvs';
 import { normalizeGastosOperacionaisContractName } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisContractOrder';
 import {
   buildTetoOrcamentarioLookup,
@@ -110,7 +114,6 @@ import {
   tetoLabelsForSystemContract,
   type ControleGeralTetoOrcamentarioEntry
 } from '@/app/ponto/contratos/controle-geral/tetoOrcamentario';
-import { resolveGastosPoloFromContractName } from '@/lib/extratoCaixaPolo';
 import { ContractGastosResumoModal } from '@/components/contract/ContractGastosResumoModal';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
@@ -1166,47 +1169,14 @@ export default function ContractDetailPage() {
     retry: false
   });
 
-  type GastosOperacionaisModuleApi = {
-    success: boolean;
-    message?: string;
-    data: {
-      configured: boolean;
-      detailRows?: QueryGastosDetailRow[];
-      naturezaDetailRows?: QueryGastosNaturezaDetailRow[];
-      fetchedAt?: string;
-      message?: string;
-    };
-  };
-
   const {
     data: gastosOperacionaisModuleData,
     isLoading: gastosOperacionaisModuleLoading,
     isFetching: gastosOperacionaisModuleFetching,
     isError: gastosOperacionaisModuleIsError
   } = useQuery({
-    queryKey: ['gastos-operacionais-module-totvs-v34-adiantamento-predial'],
-    queryFn: async () => {
-      const res = await api.get<GastosOperacionaisModuleApi>('/contracts/gastos-operacionais', {
-        timeout: 180_000
-      });
-      const payload = res.data;
-      const detailRows = (payload.data?.detailRows ?? []).map((row) => {
-        const contractLabel = normalizeGastosOperacionaisContractName(row.contract);
-        const polo = resolveGastosPoloFromContractName(contractLabel, row.polo);
-        return { ...row, contract: contractLabel, polo };
-      });
-      const naturezaDetailRows = (payload.data?.naturezaDetailRows ?? []).map((row) => ({
-        ...row,
-        contract: normalizeGastosOperacionaisContractName(row.contract)
-      }));
-      return {
-        configured: payload.data?.configured ?? false,
-        detailRows,
-        naturezaDetailRows,
-        fetchedAt: payload.data?.fetchedAt ?? new Date().toISOString(),
-        message: payload.data?.message ?? payload.message
-      };
-    },
+    queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
+    queryFn: fetchGastosOperacionaisTotvs,
     enabled: !!contractId,
     staleTime: 5 * 60 * 1000,
     retry: 1
