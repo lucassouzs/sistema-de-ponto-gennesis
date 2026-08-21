@@ -870,7 +870,6 @@ function SolicitarMateriaisPage() {
   const [activeTab, setActiveTab] = useState<'list' | 'new'>('list');
   const [isNewRequestModalOpen, setIsNewRequestModalOpen] = useState(false);
   const [showCloseNewRequestConfirm, setShowCloseNewRequestConfirm] = useState(false);
-  const [showCloseDetailConfirm, setShowCloseDetailConfirm] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState<string | null>(null);
   const [cancelItemTarget, setCancelItemTarget] = useState<{
     requestId: string;
@@ -1205,13 +1204,8 @@ function SolicitarMateriaisPage() {
   };
 
   const closeDetailModal = () => {
-    setShowCloseDetailConfirm(false);
     setDetailViewId(null);
     setDetailTab('resumo');
-  };
-
-  const requestCloseDetailModal = () => {
-    setShowCloseDetailConfirm(true);
   };
 
   // Criar requisição
@@ -1661,16 +1655,12 @@ function SolicitarMateriaisPage() {
     if (!detailViewId) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showCloseDetailConfirm) {
-          setShowCloseDetailConfirm(false);
-          return;
-        }
-        requestCloseDetailModal();
+        closeDetailModal();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [detailViewId, showCloseDetailConfirm]);
+  }, [detailViewId]);
 
 
   const user = userData?.data || {
@@ -2813,7 +2803,7 @@ function SolicitarMateriaisPage() {
           <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/40"
-              onClick={requestCloseDetailModal}
+              onClick={closeDetailModal}
               aria-hidden
             />
             <div
@@ -2833,7 +2823,7 @@ function SolicitarMateriaisPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={requestCloseDetailModal}
+                  onClick={closeDetailModal}
                   className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                   aria-label="Fechar"
                 >
@@ -3197,13 +3187,6 @@ function SolicitarMateriaisPage() {
           onCancel={() => setShowCloseNewRequestConfirm(false)}
           onConfirm={closeNewRequestModal}
           message="Tem certeza que deseja fechar a solicitação? Os dados preenchidos serão perdidos."
-        />
-
-        <ModalCloseConfirm
-          isOpen={showCloseDetailConfirm}
-          onCancel={() => setShowCloseDetailConfirm(false)}
-          onConfirm={closeDetailModal}
-          message="Tem certeza que deseja fechar os detalhes da solicitação?"
         />
 
         {cancelItemTarget && (

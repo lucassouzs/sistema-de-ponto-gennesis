@@ -102,10 +102,7 @@ import {
 } from '@/app/ponto/contratos/controle-geral/controleGeralGastosFluxo';
 import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
 import { aggregateGastosNaturezaRows } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
-import {
-  fetchGastosOperacionaisTotvs,
-  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
-} from '@/app/ponto/contratos/controle-geral/fetchGastosOperacionaisTotvs';
+import { useGastosOperacionaisTotvsQuery } from '@/app/ponto/contratos/controle-geral/useGastosOperacionaisTotvsQuery';
 import { normalizeGastosOperacionaisContractName } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisContractOrder';
 import {
   buildTetoOrcamentarioLookup,
@@ -1172,19 +1169,11 @@ export default function ContractDetailPage() {
   const {
     data: gastosOperacionaisModuleData,
     isLoading: gastosOperacionaisModuleLoading,
-    isFetching: gastosOperacionaisModuleFetching,
     isError: gastosOperacionaisModuleIsError,
     error: gastosOperacionaisModuleError
-  } = useQuery({
-    queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
-    queryFn: fetchGastosOperacionaisTotvs,
-    enabled: !!contractId,
-    staleTime: 5 * 60 * 1000,
-    retry: 1
-  });
+  } = useGastosOperacionaisTotvsQuery({ enabled: !!contractId });
 
-  const gastosOperacionaisCarregando =
-    gastosOperacionaisModuleLoading || gastosOperacionaisModuleFetching;
+  const gastosOperacionaisCarregando = gastosOperacionaisModuleLoading;
 
   const gastosOperacionaisNaoConfigurado =
     gastosOperacionaisModuleIsError &&

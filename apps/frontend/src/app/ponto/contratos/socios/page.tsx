@@ -13,10 +13,7 @@ import {
   filterTotvsGastosDetailRowsForControleGeral,
   mergeControleGeralGastosDetailRows
 } from '../controle-geral/buildQueryGastosRows';
-import {
-  fetchGastosOperacionaisTotvs,
-  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
-} from '../controle-geral/fetchGastosOperacionaisTotvs';
+import { useGastosOperacionaisTotvsQuery } from '../controle-geral/useGastosOperacionaisTotvsQuery';
 import { CONTRATOS_SOCIOS_ALLOWED } from './contratosSociosAllowed';
 
 export default function ContratosSociosPage() {
@@ -43,12 +40,7 @@ export default function ContratosSociosPage() {
     isError: totvsGastosError,
     error: totvsGastosErrorObj,
     refetch: refetchTotvsGastos
-  } = useQuery({
-    queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
-    queryFn: fetchGastosOperacionaisTotvs,
-    staleTime: 5 * 60 * 1000,
-    retry: 1
-  });
+  } = useGastosOperacionaisTotvsQuery();
 
   const {
     data: legacySheetData,

@@ -679,7 +679,7 @@ export function GastosNaturezasManageModal({
         title="Vincular natureza"
         size="md"
         elevated
-        confirmBeforeClose={false}
+        confirmBeforeClose
         contentOverflowVisible
       >
         {mappingDraft ? (

@@ -8,10 +8,8 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
 import { ControleGeralGastosOperacionaisPanel } from '../controle-geral/ControleGeralGastosOperacionaisPanel';
-import {
-  fetchGastosOperacionaisTotvs,
-  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
-} from '../controle-geral/fetchGastosOperacionaisTotvs';
+import { GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY } from '../controle-geral/fetchGastosOperacionaisTotvs';
+import { useGastosOperacionaisTotvsQuery } from '../controle-geral/useGastosOperacionaisTotvsQuery';
 
 export default function GastosOperacionaisPage() {
   const router = useRouter();
@@ -36,14 +34,8 @@ export default function GastosOperacionaisPage() {
     isLoading: loadingGastos,
     isError: gastosError,
     error: gastosErrorObj,
-    isFetching: fetchingGastos,
     refetch: refetchGastos
-  } = useQuery({
-    queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
-    queryFn: fetchGastosOperacionaisTotvs,
-    staleTime: 5 * 60 * 1000,
-    retry: 1
-  });
+  } = useGastosOperacionaisTotvsQuery();
 
   const gastosDetailRows = gastosData?.detailRows ?? [];
   const gastosNaturezaDetailRows = gastosData?.naturezaDetailRows ?? [];
@@ -89,7 +81,7 @@ export default function GastosOperacionaisPage() {
             detailRows={gastosDetailRows}
             naturezaDetailRows={gastosNaturezaDetailRows}
             totvsNaturezaCatalog={gastosTotvsNaturezaCatalog}
-            isLoading={loadingGastos || fetchingGastos}
+            isLoading={loadingGastos}
             isError={gastosError}
             errorMessage={gastosErrorMessage}
             onRetry={() => {

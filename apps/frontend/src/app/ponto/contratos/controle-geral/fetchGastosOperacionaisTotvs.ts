@@ -2,6 +2,7 @@ import api from '@/lib/api';
 import { resolveGastosPoloFromContractName } from '@/lib/extratoCaixaPolo';
 import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from './buildQueryGastosRows';
 import { resolveCanonicalGastosContractName } from './gastosOperacionaisContractOrder';
+import { writeGastosOperacionaisTotvsPersisted } from './gastosOperacionaisTotvsPersist';
 
 export type GastosOperacionaisTotvsApi = {
   success: boolean;
@@ -39,6 +40,10 @@ export type GastosOperacionaisTotvsQueryData = {
 export const GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY = [
   'gastos-operacionais-module-totvs-v41-natureza-by-contract'
 ] as const;
+
+/** Cache em memória + disco (localStorage). Mantém dados ao reabrir o navegador. */
+export const GASTOS_OPERACIONAIS_TOTVS_STALE_TIME = 30 * 60 * 1000;
+export const GASTOS_OPERACIONAIS_TOTVS_GC_TIME = 24 * 60 * 60 * 1000;
 
 /**
  * Carrega gastos TOTVS no mesmo formato para os dois módulos.
@@ -93,10 +98,13 @@ export async function fetchGastosOperacionaisTotvs(): Promise<GastosOperacionais
       : []
   }));
 
-  return {
+  const result: GastosOperacionaisTotvsQueryData = {
     detailRows,
     naturezaDetailRows,
     totvsNaturezaCatalog,
     fetchedAt: payload.data?.fetchedAt ?? new Date().toISOString()
   };
+
+  await writeGastosOperacionaisTotvsPersisted(result);
+  return result;
 }

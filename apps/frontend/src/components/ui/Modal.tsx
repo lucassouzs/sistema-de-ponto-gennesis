@@ -57,8 +57,9 @@ export interface ModalProps {
   /** Quando false, a tecla Escape não fecha o modal. */
   closeOnEscape?: boolean;
   /**
-   * Quando true (padrão), pede confirmação antes de fechar (overlay / X / Escape).
-   * Use false em diálogos que já são confirmação (excluir, sair, etc.).
+   * Quando true, pede confirmação antes de fechar (overlay / X / Escape).
+   * Use em modais de criar/editar com campos preenchíveis.
+   * Filtros, visualização e confirmações já existentes devem ficar false (padrão).
    */
   confirmBeforeClose?: boolean;
   /** Mensagem do diálogo de confirmação. */
@@ -85,7 +86,7 @@ export const Modal: React.FC<ModalProps> = ({
   size = 'md',
   closeOnOverlayClick = true,
   closeOnEscape = true,
-  confirmBeforeClose = true,
+  confirmBeforeClose = false,
   confirmCloseMessage,
   showCloseButton = true,
   headerActions,

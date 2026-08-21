@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -33,7 +33,7 @@ import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   aggregateGastosDetailRows,
-  aggregateGastosNaturezaForContract,
+  aggregateGastosNaturezaRows,
   getGastosNaturezaAggRowKey,
   groupGastosNaturezaModalRows,
   gastosNaturezaTotalContribution,
@@ -68,6 +68,7 @@ import {
   GASTOS_OPERACIONAIS_CONTRACT_ORDER,
   inferContractLocalityFromHints,
   normalizeContractOrderKey,
+  normalizeGastosOperacionaisContractName,
   resolveVisibleLocalityItems
 } from './gastosOperacionaisContractOrder';
 import {
@@ -859,6 +860,8 @@ export function ControleGeralGastosOperacionaisPanel({
   const [naturezaModalContract, setNaturezaModalContract] = useState<GastosOperacionaisRow | null>(
     null
   );
+  /** Evita 1º paint com a árvore DFC toda expandida (causa da travada no clique). */
+  const [naturezaModalBodyReady, setNaturezaModalBodyReady] = useState(false);
   const [collapsedNaturezaSections, setCollapsedNaturezaSections] = useState<Set<string>>(
     () => new Set()
   );
@@ -869,6 +872,21 @@ export function ControleGeralGastosOperacionaisPanel({
     useState<GastosNaturezaSolicitacaoRow | null>(null);
   const lastInitializedNaturezaContractRef = useRef<string | null>(null);
   const [fluxoModalContract, setFluxoModalContract] = useState<string | null>(null);
+
+  const openNaturezaModal = useCallback((row: GastosOperacionaisRow) => {
+    setNaturezaModalBodyReady(false);
+    setExpandedNaturezaBreakdownKey(null);
+    setSelectedNaturezaSolicitacao(null);
+    lastInitializedNaturezaContractRef.current = null;
+    startTransition(() => {
+      setNaturezaModalContract(row);
+    });
+  }, []);
+
+  const closeNaturezaModal = useCallback(() => {
+    setNaturezaModalContract(null);
+    setNaturezaModalBodyReady(false);
+  }, []);
 
   const toggleNaturezaBreakdown = useCallback((rowKey: string) => {
     setExpandedNaturezaBreakdownKey((prev) => (prev === rowKey ? null : rowKey));
@@ -1004,6 +1022,19 @@ export function ControleGeralGastosOperacionaisPanel({
     () => filterRowsByAllowedContracts(naturezaDetailRows, allowedContracts),
     [naturezaDetailRows, allowedContracts]
   );
+
+  const naturezaRowsByContractKey = useMemo(() => {
+    const map = new Map<string, QueryGastosNaturezaDetailRow[]>();
+    for (const row of scopedNaturezaDetailRows) {
+      const key = normalizeContractOrderKey(
+        normalizeGastosOperacionaisContractName(row.contract)
+      );
+      const bucket = map.get(key);
+      if (bucket) bucket.push(row);
+      else map.set(key, [row]);
+    }
+    return map;
+  }, [scopedNaturezaDetailRows]);
 
   const enableNaturezaBreakdown = scopedNaturezaDetailRows.length > 0;
 
@@ -1299,14 +1330,13 @@ export function ControleGeralGastosOperacionaisPanel({
   const naturezaModalRows = useMemo(() => {
     if (!naturezaModalContract) return [];
     void naturezasConfigVersion;
-    return aggregateGastosNaturezaForContract(
-      scopedNaturezaDetailRows,
-      naturezaModalContract.contract,
-      filters.periodFrom,
-      filters.periodTo
+    const contractKey = normalizeContractOrderKey(
+      normalizeGastosOperacionaisContractName(naturezaModalContract.contract)
     );
+    const bucket = naturezaRowsByContractKey.get(contractKey) ?? [];
+    return aggregateGastosNaturezaRows(bucket, filters.periodFrom, filters.periodTo);
   }, [
-    scopedNaturezaDetailRows,
+    naturezaRowsByContractKey,
     naturezaModalContract,
     filters.periodFrom,
     filters.periodTo,
@@ -1344,23 +1374,33 @@ export function ControleGeralGastosOperacionaisPanel({
     return keys;
   }, [naturezaModalGrouped]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!naturezaModalContract) {
       lastInitializedNaturezaContractRef.current = null;
-      // Idempotente: só troca o estado se realmente houver algo a limpar. Sem isso,
-      // criar um `new Set()` a cada execução dispara re-render em loop.
+      setNaturezaModalBodyReady(false);
       setCollapsedNaturezaSections((prev) => (prev.size === 0 ? prev : new Set()));
       setExpandedNaturezaBreakdownKey((prev) => (prev === null ? prev : null));
       setSelectedNaturezaSolicitacao((prev) => (prev === null ? prev : null));
       return;
     }
-    if (allNaturezaSectionKeys.size === 0) return;
+
     const contractKey = naturezaModalContract.contract;
-    if (lastInitializedNaturezaContractRef.current === contractKey) return;
-    lastInitializedNaturezaContractRef.current = contractKey;
-    setCollapsedNaturezaSections(new Set(allNaturezaSectionKeys));
-    setExpandedNaturezaBreakdownKey(null);
-    setSelectedNaturezaSolicitacao(null);
+    if (lastInitializedNaturezaContractRef.current !== contractKey) {
+      lastInitializedNaturezaContractRef.current = contractKey;
+      setExpandedNaturezaBreakdownKey(null);
+      setSelectedNaturezaSolicitacao(null);
+    }
+
+    setCollapsedNaturezaSections((prev) => {
+      if (
+        prev.size === allNaturezaSectionKeys.size &&
+        [...allNaturezaSectionKeys].every((key) => prev.has(key))
+      ) {
+        return prev;
+      }
+      return new Set(allNaturezaSectionKeys);
+    });
+    setNaturezaModalBodyReady(true);
   }, [naturezaModalContract, allNaturezaSectionKeys]);
 
   const renderNaturezaModalRow = useCallback(
@@ -2434,7 +2474,7 @@ export function ControleGeralGastosOperacionaisPanel({
                                   enableNaturezaBreakdown
                                     ? (event) => {
                                         event.stopPropagation();
-                                        setNaturezaModalContract(row);
+                                        openNaturezaModal(row);
                                       }
                                     : undefined
                                 }
@@ -2444,7 +2484,7 @@ export function ControleGeralGastosOperacionaisPanel({
                                         if (event.key === 'Enter' || event.key === ' ') {
                                           event.preventDefault();
                                           event.stopPropagation();
-                                          setNaturezaModalContract(row);
+                                          openNaturezaModal(row);
                                         }
                                       }
                                     : undefined
@@ -2597,7 +2637,7 @@ export function ControleGeralGastosOperacionaisPanel({
 
       <Modal
         isOpen={naturezaModalContract != null}
-        onClose={() => setNaturezaModalContract(null)}
+        onClose={closeNaturezaModal}
         title={
           naturezaModalContract
             ? `Naturezas — ${naturezaModalContract.contract}`
@@ -2607,7 +2647,12 @@ export function ControleGeralGastosOperacionaisPanel({
         scrollContent={false}
       >
         {naturezaModalContract ? (
-          naturezaModalRows.length === 0 ? (
+          !naturezaModalBodyReady ? (
+            <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Montando naturezas…
+            </div>
+          ) : naturezaModalRows.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
               Nenhuma natureza encontrada para este contrato no período selecionado.
             </p>

@@ -222,6 +222,7 @@ export function CreateTaskFromChatModal({
         </span>
       }
       size="md"
+      confirmBeforeClose
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-600 dark:text-gray-400">

@@ -7,19 +7,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import api from '@/lib/api';
 import { buildFluigApproversNavHref } from '@/lib/fluigWorkflowApproval';
-
-const FLUIG_APPROVAL_DATASET_IDS = [
-  'Processos_Workflow_Aprovacao_G3',
-  'Processos_Workflow_Aprovacao_G5',
-];
-const FLUIG_PREFETCH_HREFS = new Set([
-  '/ponto/fluig/aprovacoes-workflow',
-  '/ponto/fluig/aprovadores',
-]);
-import { 
-  Home, 
-  Users, 
-  Clock, 
+import {
+  fetchGastosOperacionaisTotvs,
+  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
+  GASTOS_OPERACIONAIS_TOTVS_STALE_TIME,
+} from '@/app/ponto/contratos/controle-geral/fetchGastosOperacionaisTotvs';
+import { readGastosOperacionaisTotvsPersisted } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisTotvsPersist';
+import {
+  Home,
+  Users,
+  Clock,
   X,
   User,
   ArrowLeftToLine,
@@ -97,6 +94,17 @@ import {
   type MenuSearchDetail,
 } from '@/lib/layoutChrome';
 import { useBrandingLogo } from '@/hooks/useBrandingLogo';
+
+const FLUIG_APPROVAL_DATASET_IDS = [
+  'Processos_Workflow_Aprovacao_G3',
+  'Processos_Workflow_Aprovacao_G5',
+];
+const FLUIG_PREFETCH_HREFS = new Set([
+  '/ponto/fluig/aprovacoes-workflow',
+  '/ponto/fluig/aprovadores',
+]);
+const GASTOS_OPERACIONAIS_HREF = '/ponto/contratos/gastos-operacionais';
+const GASTOS_OPERACIONAIS_MODULE_KEY = pathToModuleKey(GASTOS_OPERACIONAIS_HREF);
 
 const pk = pathToModuleKey;
 
@@ -275,6 +283,41 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     }
   }, [queryClient, router, fluigApproverFullAccess, fluigApproverNameKeys]);
 
+  const prefetchGastosOperacionais = useCallback(() => {
+    router.prefetch(GASTOS_OPERACIONAIS_HREF);
+
+    void (async () => {
+      const persisted = await readGastosOperacionaisTotvsPersisted();
+      if (persisted) {
+        queryClient.setQueryData(GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY, persisted.data);
+        const cached = queryClient.getQueryCache().find({
+          queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
+        });
+        if (cached) {
+          cached.setState({ dataUpdatedAt: persisted.updatedAt });
+        }
+        if (Date.now() - persisted.updatedAt < GASTOS_OPERACIONAIS_TOTVS_STALE_TIME) {
+          return;
+        }
+      }
+
+      void queryClient.prefetchQuery({
+        queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
+        queryFn: fetchGastosOperacionaisTotvs,
+        staleTime: GASTOS_OPERACIONAIS_TOTVS_STALE_TIME,
+      });
+    })();
+  }, [queryClient, router]);
+
+  const navDataPrefetchForHref = useCallback(
+    (href: string) => {
+      if (FLUIG_PREFETCH_HREFS.has(href)) return prefetchFluigDatasets;
+      if (href === GASTOS_OPERACIONAIS_HREF) return prefetchGastosOperacionais;
+      return undefined;
+    },
+    [prefetchFluigDatasets, prefetchGastosOperacionais]
+  );
+
   // Prefetch automático: pré-carrega rotas e dados Fluig assim que o usuário faz login.
   useEffect(() => {
     if (!user || isLoading) return;
@@ -283,6 +326,8 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       fullAccess: fluigApproverFullAccess,
       nameKeys: fluigApproverNameKeys,
     });
+    const canPrefetchGastos =
+      userPosition === 'Administrador' || can(GASTOS_OPERACIONAIS_MODULE_KEY);
 
     const timer = setTimeout(() => {
       router.prefetch('/ponto/fluig/aprovacoes-workflow');
@@ -304,6 +349,10 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           });
         }
       }
+
+      if (canPrefetchGastos) {
+        prefetchGastosOperacionais();
+      }
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -315,6 +364,9 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     fluigApproverFullAccess,
     fluigApproverNameKeys,
     canAccessFluigApproversRoute,
+    userPosition,
+    can,
+    prefetchGastosOperacionais,
   ]);
 
   // Verificar se é administrador
@@ -1465,9 +1517,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                     <Link
                       href={resolveNavHref(child.href)}
                       prefetch={navLinkPrefetch}
-                      onMouseEnter={
-                        FLUIG_PREFETCH_HREFS.has(child.href) ? prefetchFluigDatasets : undefined
-                      }
+                      onMouseEnter={navDataPrefetchForHref(child.href)}
                       onClick={(event) => {
                         if (!active) return;
                         event.preventDefault();
@@ -1501,7 +1551,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         <Link
           href={resolveNavHref(item.href)}
           prefetch={navLinkPrefetch}
-          onMouseEnter={FLUIG_PREFETCH_HREFS.has(item.href) ? prefetchFluigDatasets : undefined}
+          onMouseEnter={navDataPrefetchForHref(item.href)}
           onClick={(event) => {
             if (!active) return;
             event.preventDefault();

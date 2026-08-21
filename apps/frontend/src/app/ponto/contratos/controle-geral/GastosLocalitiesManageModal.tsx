@@ -89,7 +89,7 @@ export function GastosLocalitiesManageModal({ isOpen, onClose, onCatalogChanged 
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar localidades" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Gerenciar localidades" size="md" confirmBeforeClose>
       <div className="space-y-5">
         <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-700 dark:bg-gray-800/50">
           <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">

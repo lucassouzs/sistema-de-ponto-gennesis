@@ -205,7 +205,7 @@ export function ControleGeralTetoOrcamentarioModal({
   }, [entries, year]);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Teto orçamentário mensal" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Teto orçamentário mensal" size="lg" confirmBeforeClose>
       <div className="space-y-4">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Cadastre o teto orçamentário de cada contrato por mês. O valor aparece na coluna do

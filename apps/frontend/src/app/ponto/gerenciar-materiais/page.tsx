@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Pencil, X, CheckCircle, ClipboardList, Clock, ShoppingCart, XCircle, Paperclip } from 'lucide-react';
+import { Pencil, X, CheckCircle, ClipboardList, Clock, ShoppingCart, XCircle, Paperclip, Loader2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -53,7 +53,6 @@ import { MaterialRequestsRmList } from './_components/MaterialRequestsRmList';
 import { AsyncSearchSelectDropdown } from '@/components/ui/AsyncSearchSelectDropdown';
 import { searchOcSuppliers } from '@/components/oc/searchOcSuppliers';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
-import { ModalCloseConfirm } from '@/components/ui/ModalCloseConfirm';
 import { OC_PIX_KEY_TYPE_OPTIONS } from '@/components/oc/OcPurchaseOrderFormFields';
 import {
   getMaterialRequestCancellationReason,
@@ -249,9 +248,9 @@ export default function GerenciarMateriaisPage() {
   const queryClient = useQueryClient();
   
   const [selectedRequest, setSelectedRequest] = useState<MaterialRequest | null>(null);
+  const [loadingRmDetails, setLoadingRmDetails] = useState(false);
   const [showCreateOCModal, setShowCreateOCModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showCloseDetailsConfirm, setShowCloseDetailsConfirm] = useState(false);
   const [rmDetailTab, setRmDetailTab] = useState<RmDetailModalTab>('resumo');
   const [ocSupplierId, setOcSupplierId] = useState('');
   const [ocSupplierSearch, setOcSupplierSearch] = useState('');
@@ -534,14 +533,10 @@ export default function GerenciarMateriaisPage() {
   };
 
   const closeDetailsModal = () => {
-    setShowCloseDetailsConfirm(false);
     setShowDetailsModal(false);
     setSelectedRequest(null);
+    setLoadingRmDetails(false);
     setRmDetailTab('resumo');
-  };
-
-  const requestCloseDetailsModal = () => {
-    setShowCloseDetailsConfirm(true);
   };
 
   const handleLogout = () => {
@@ -832,15 +827,21 @@ export default function GerenciarMateriaisPage() {
             currentUserId={userData?.data?.id}
             isAdministrator={isAdministrator}
             isElevatedUser={isElevatedUser}
-            onDetails={async (request) => {
-              try {
-                const res = await api.get(`/material-requests/${request.id}`);
-                setSelectedRequest((res.data?.data ?? res.data) as MaterialRequest);
-                setRmDetailTab('resumo');
-                setShowDetailsModal(true);
-              } catch {
-                toast.error('Erro ao carregar detalhes da RM');
-              }
+            onDetails={(request) => {
+              setSelectedRequest(request);
+              setRmDetailTab('resumo');
+              setShowDetailsModal(true);
+              setLoadingRmDetails(true);
+              void (async () => {
+                try {
+                  const res = await api.get(`/material-requests/${request.id}`);
+                  setSelectedRequest((res.data?.data ?? res.data) as MaterialRequest);
+                } catch {
+                  toast.error('Erro ao carregar detalhes da RM');
+                } finally {
+                  setLoadingRmDetails(false);
+                }
+              })();
             }}
           />
         </div>
@@ -929,7 +930,7 @@ export default function GerenciarMateriaisPage() {
           <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center overflow-y-auto p-4">
             <div
               className="absolute inset-0 bg-black/50"
-              onClick={requestCloseDetailsModal}
+              onClick={closeDetailsModal}
               aria-hidden
             />
             <div
@@ -953,7 +954,7 @@ export default function GerenciarMateriaisPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={requestCloseDetailsModal}
+                  onClick={closeDetailsModal}
                   className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
                   aria-label="Fechar"
                 >
@@ -995,7 +996,14 @@ export default function GerenciarMateriaisPage() {
                     isCommentsTab ? 'flex h-full min-h-0 flex-col text-sm' : 'space-y-5 text-sm'
                   }
                 >
-                  {rmDetailTab === 'resumo' ? (
+                  {loadingRmDetails ? (
+                    <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-500 dark:text-gray-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Carregando detalhes da RM…
+                    </div>
+                  ) : null}
+
+                  {!loadingRmDetails && rmDetailTab === 'resumo' ? (
                     <div className="space-y-4">
                       <dl className="divide-y divide-gray-200 dark:divide-gray-700">
                         {infoRows.map((row) => (
@@ -1025,7 +1033,7 @@ export default function GerenciarMateriaisPage() {
                     </div>
                   ) : null}
 
-                  {rmDetailTab === 'ocs' ? (
+                  {!loadingRmDetails && rmDetailTab === 'ocs' ? (
                     <RmDetailOcTab
                       materialRequestStatus={selectedRequest.status}
                       orders={detailOrders}
@@ -1034,7 +1042,7 @@ export default function GerenciarMateriaisPage() {
                     />
                   ) : null}
 
-                  {rmDetailTab === 'materiais' ? (
+                  {!loadingRmDetails && rmDetailTab === 'materiais' ? (
                     selectedRequest.items?.length ? (
                       <div className="table-scroll">
                         <table className="w-full text-xs sm:text-sm">
@@ -1130,7 +1138,7 @@ export default function GerenciarMateriaisPage() {
                     )
                   ) : null}
 
-                  {rmDetailTab === 'documentos' ? (
+                  {!loadingRmDetails && rmDetailTab === 'documentos' ? (
                     <div className="space-y-4">
                       <RmDetailDocSection
                         title="Ficha de Demanda"
@@ -1270,7 +1278,7 @@ export default function GerenciarMateriaisPage() {
                     </div>
                   ) : null}
 
-                  {rmDetailTab === 'comentarios' ? (
+                  {!loadingRmDetails && rmDetailTab === 'comentarios' ? (
                     <RmCommentsSection
                       materialRequestId={selectedRequest.id}
                       currentUserId={userData?.data?.id}
@@ -1298,13 +1306,6 @@ export default function GerenciarMateriaisPage() {
           </AppModalOverlay>
           );
         })()}
-
-        <ModalCloseConfirm
-          isOpen={showCloseDetailsConfirm}
-          onCancel={() => setShowCloseDetailsConfirm(false)}
-          onConfirm={closeDetailsModal}
-          message="Tem certeza que deseja fechar os detalhes da requisição?"
-        />
 
         {cancelItemTarget && (
           <Modal

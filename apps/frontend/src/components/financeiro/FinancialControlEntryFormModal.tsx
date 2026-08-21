@@ -291,7 +291,13 @@ export function FinancialControlEntryFormModal({
   const modalTitle = title ?? (editingEntry ? 'Editar Lançamento' : 'Novo Lançamento');
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={modalTitle} size={showQuickLaunch ? 'md' : 'xl'}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={modalTitle}
+      size={showQuickLaunch ? 'md' : 'xl'}
+      confirmBeforeClose
+    >
       {showQuickLaunch ? (
         <FinancialControlOcQuickLaunch
           form={form}

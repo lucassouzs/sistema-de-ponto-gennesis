@@ -754,6 +754,7 @@ export function ReuniaoFormModal({
       title="Formulário de reunião"
       size="5xl"
       contentOverflowVisible
+      confirmBeforeClose
       headerActions={
         <div className="mr-2 flex items-center gap-3">
           <span
