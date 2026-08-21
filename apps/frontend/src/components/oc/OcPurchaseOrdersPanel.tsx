@@ -2713,6 +2713,7 @@ export function OcPurchaseOrdersPanel({
           ? { status: prev.status, updatedAt: prev.updatedAt }
           : {}),
         stockReceipt: prev.stockReceipt ?? selectedOrderFresh.stockReceipt,
+        quoteMap: selectedOrderFresh.quoteMap ?? prev.quoteMap,
         paymentProofUrl: prev.paymentProofUrl || selectedOrderFresh.paymentProofUrl,
         paymentProofName: prev.paymentProofName || selectedOrderFresh.paymentProofName,
         paymentBoletoUrl: prev.paymentBoletoUrl || selectedOrderFresh.paymentBoletoUrl,

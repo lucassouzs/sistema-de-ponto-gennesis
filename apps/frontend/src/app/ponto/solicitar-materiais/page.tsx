@@ -64,6 +64,7 @@ import {
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
+import { RmLinkedOcDocuments } from '@/components/material-requests/RmLinkedOcDocuments';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { getRmItemCoverageCounts, canUserCancelRmItem } from '@/lib/rmProcurementCoverage';
 import { RmItemSituationCell } from '@/components/material-requests/RmItemSituationCell';
@@ -3171,7 +3172,7 @@ function SolicitarMateriaisPage() {
 
                         {detailTab === 'documentos' ? (
                           <div className="space-y-4">
-                            <SolicitacaoDetailDocSection title="Documentos">
+                            <SolicitacaoDetailDocSection title="Ficha de Demanda">
                               {fdAttachments.length === 0 ? (
                                 <SolicitacaoDetailDocumentItem
                                   label="Arquivo"
@@ -3194,6 +3195,16 @@ function SolicitarMateriaisPage() {
                                 ))
                               )}
                             </SolicitacaoDetailDocSection>
+
+                            <RmLinkedOcDocuments
+                              orders={
+                                (detailViewId &&
+                                ordersByMaterialRequestId.get(detailViewId)?.length
+                                  ? ordersByMaterialRequestId.get(detailViewId)
+                                  : pos) ?? []
+                              }
+                              enabled={detailTab === 'documentos'}
+                            />
 
                             {(() => {
                               const itemsWithAttachments = (d.items ?? [])

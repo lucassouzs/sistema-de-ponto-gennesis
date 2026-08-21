@@ -727,6 +727,8 @@ const purchaseOrderIncludeList = {
 /** Listagem resumida (mapa/gerenciar): sem itens — bem mais leve. */
 const purchaseOrderIncludeListSummary = {
   supplier: { select: { id: true, code: true, name: true } },
+  /** Precisa na aba Documentos (ex.: fase Pagamento) sem esperar GET de detalhe. */
+  quoteMap: { select: { id: true, createdAt: true } },
   materialRequest: {
     select: {
       id: true,

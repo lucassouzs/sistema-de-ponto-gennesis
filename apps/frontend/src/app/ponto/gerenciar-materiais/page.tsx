@@ -38,6 +38,7 @@ import {
 } from './_lib/display';
 import { getCoveredRmItemIds, canUserCancelRmItem, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 import { RmItemSituationCell } from '@/components/material-requests/RmItemSituationCell';
+import { RmLinkedOcDocuments } from '@/components/material-requests/RmLinkedOcDocuments';
 import { Modal } from '@/components/ui/Modal';
 import {
   formatCurrencyBR,
@@ -1224,6 +1225,11 @@ export default function GerenciarMateriaisPage() {
                           ))
                         )}
                       </RmDetailDocSection>
+
+                      <RmLinkedOcDocuments
+                        orders={detailOrders}
+                        enabled={rmDetailTab === 'documentos'}
+                      />
 
                       {(() => {
                         const itemsWithAttachments = (selectedRequest.items ?? [])
