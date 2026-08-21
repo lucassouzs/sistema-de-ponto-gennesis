@@ -32,6 +32,7 @@ import {
   MoreVertical,
   Clock,
   History,
+  Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -56,6 +57,7 @@ import { ContractCronogramaMensalPanel } from '@/components/contract/ContractCro
 import { ContractHistoricoPleitosPanel } from '@/components/contract/ContractHistoricoPleitosPanel';
 import { ContractOsDetailModal } from '@/components/contract/ContractOsDetailModal';
 import { ContractOsPleitoListPanel } from '@/components/contract/ContractOsPleitoListPanel';
+import { OsPleitoBillingImportModal } from '@/components/contract/OsPleitoBillingImportModal';
 import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, rowActionMenuButtonClass } from '@/components/ui/RowActionMenu';
 import { listTableRowClasses } from '@/components/ui/listTableUi';
 import { CadastroListSummary, getCadastroListRange } from '@/components/ui/CadastroListSummary';
@@ -968,6 +970,7 @@ export default function ContractDetailPage() {
   const [searchTermPleitos, setSearchTermPleitos] = useState('');
   const [showPleitosFilterModal, setShowPleitosFilterModal] = useState(false);
   const [showOsExportModal, setShowOsExportModal] = useState(false);
+  const [showOsImportModal, setShowOsImportModal] = useState(false);
   const [exportingOsPdf, setExportingOsPdf] = useState(false);
   const [searchTermProduction, setSearchTermProduction] = useState('');
   const [showProductionFilterModal, setShowProductionFilterModal] = useState(false);
@@ -4679,6 +4682,17 @@ export default function ContractDetailPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setShowOsImportModal(true)}
+                      disabled={!canCreateContrato}
+                      className={OS_TOOLBAR_BTN}
+                      title="Importar planilha"
+                      aria-label="Importar planilha"
+                    >
+                      <Upload className="h-4 w-4 shrink-0" />
+                      Importar
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setShowOsExportModal(true)}
                       disabled={filteredPleitos.length === 0 || exportingOsPdf}
                       className={OS_TOOLBAR_BTN}
@@ -5576,6 +5590,18 @@ export default function ContractDetailPage() {
               </div>
             </div>
           </Modal>
+
+          <OsPleitoBillingImportModal
+            isOpen={showOsImportModal}
+            onClose={() => setShowOsImportModal(false)}
+            contractId={contractId}
+            existingPleitos={allPleitos}
+            onImported={() => {
+              void queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
+              void queryClient.invalidateQueries({ queryKey: ['contract-billings', contractId] });
+              void queryClient.invalidateQueries({ queryKey: ['pleitos-divse-list'] });
+            }}
+          />
 
           {/* Modal filtros — Produção Semanal */}
           <Modal
