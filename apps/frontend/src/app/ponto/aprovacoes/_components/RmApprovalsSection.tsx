@@ -573,6 +573,14 @@ export function RmApprovalsSection() {
                       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                         {Number(item.quantity)} {item.unit || '—'}
                       </p>
+                      {item.bankDetails?.trim() ? (
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-gray-600 dark:text-gray-300">
+                          <span className="font-medium text-gray-700 dark:text-gray-200">
+                            Dados bancários:{' '}
+                          </span>
+                          {item.bankDetails.trim()}
+                        </p>
+                      ) : null}
                       <div className="mt-2 grid grid-cols-2 gap-3 text-xs">
                         <div>
                           <p className="text-gray-500 dark:text-gray-400">Valor unitário</p>

@@ -49,7 +49,7 @@ import {
 import { ServiceOrderSearchSelect } from '@/components/suprimentos/ServiceOrderSearchSelect';
 import { AsyncSearchSelectDropdown } from '@/components/ui/AsyncSearchSelectDropdown';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
-import { getRmMaterialLabel, searchRmMaterials, type RmMaterialListItem } from '@/lib/searchRmMaterials';
+import { getRmMaterialLabel, isRmServiceMaterial, searchRmMaterials, type RmMaterialListItem } from '@/lib/searchRmMaterials';
 import {
   formatCurrencyInputBrFromNumber,
   maskCurrencyInputBrOrEmpty,
@@ -438,6 +438,10 @@ const emptyRmFormItem = () => ({
   /** Referência do que o comprador deveria pagar (padrão = média das últimas compras). */
   unitPrice: 0,
   observation: '',
+  /** Preenchido quando o item selecionado é Serviço. */
+  bankDetails: '',
+  /** 'Serviços' | 'Materiais' | '' — derivado do productType do catálogo. */
+  productKind: '' as '' | 'Materiais' | 'Serviços',
   attachmentUrl: '',
   attachmentName: ''
 });
@@ -598,6 +602,9 @@ function validateNewMaterialRequestForm(
     const qty = Number(item.quantity);
     if (!Number.isFinite(qty) || qty <= 0) {
       return `Informe a quantidade do item ${index + 1}.`;
+    }
+    if (item.productKind === 'Serviços' && !(item.bankDetails || '').trim()) {
+      return `Informe os dados bancários do item ${index + 1} (serviço).`;
     }
   }
 
@@ -1123,6 +1130,8 @@ function SolicitarMateriaisPage() {
           quantity: item.quantity,
           unitPrice: Number(item.unitPrice) || 0,
           observation: item.observation,
+          bankDetails:
+            item.productKind === 'Serviços' ? item.bankDetails.trim() || undefined : undefined,
           attachmentUrl: item.attachmentUrl || undefined,
           attachmentName: item.attachmentName || undefined
         })),
@@ -1540,6 +1549,8 @@ function SolicitarMateriaisPage() {
                 unit?: string;
                 unitPrice?: unknown;
                 notes?: string | null;
+                bankDetails?: string | null;
+                productKind?: 'Materiais' | 'Serviços' | null;
                 attachmentUrl?: string | null;
                 attachmentName?: string | null;
               }) => ({
@@ -1554,6 +1565,8 @@ function SolicitarMateriaisPage() {
                   return Number.isFinite(p) && p >= 0 ? Math.round(p * 100) / 100 : 0;
                 })(),
                 observation: it.notes || '',
+                bankDetails: it.bankDetails || '',
+                productKind: it.productKind || (it.bankDetails ? 'Serviços' : ''),
                 attachmentUrl: it.attachmentUrl || '',
                 attachmentName: it.attachmentName || ''
               })
@@ -1701,12 +1714,15 @@ function SolicitarMateriaisPage() {
   };
 
   const handleNewItemMaterialSelect = (index: number, material: RmMaterialListItem) => {
+    const isService = isRmServiceMaterial(material);
     const newItems = [...formData.items];
     newItems[index] = {
       ...newItems[index],
       materialId: material.id,
       unit: material.unit || '',
       unitPrice: defaultUnitPriceFromMaterial(material),
+      productKind: isService ? 'Serviços' : 'Materiais',
+      bankDetails: isService ? newItems[index].bankDetails : '',
     };
     setFormData({ ...formData, items: newItems });
     setNewItemMaterialLabels((prev) => {
@@ -1743,6 +1759,8 @@ function SolicitarMateriaisPage() {
         quantity: Number(item.quantity),
         unitPrice: Number(item.unitPrice) || 0,
         observation: item.observation.trim() || undefined,
+        bankDetails:
+          item.productKind === 'Serviços' ? item.bankDetails.trim() || undefined : undefined,
         attachmentUrl: item.attachmentUrl?.trim() || undefined,
         attachmentName: item.attachmentName?.trim() || undefined
       }))
@@ -1881,6 +1899,7 @@ function SolicitarMateriaisPage() {
   };
 
   const handleEditItemMaterialSelect = (index: number, material: RmMaterialListItem) => {
+    const isService = isRmServiceMaterial(material);
     setEditFormData((prev) => {
       const newItems = [...prev.items];
       newItems[index] = {
@@ -1888,6 +1907,8 @@ function SolicitarMateriaisPage() {
         materialId: material.id,
         unit: material.unit || '',
         unitPrice: defaultUnitPriceFromMaterial(material),
+        productKind: isService ? 'Serviços' : 'Materiais',
+        bankDetails: isService ? newItems[index].bankDetails : '',
       };
       return { ...prev, items: newItems };
     });
@@ -1916,6 +1937,14 @@ function SolicitarMateriaisPage() {
     if (validItems.length === 0) {
       toast.error('Inclua ao menos um material.');
       return;
+    }
+    for (let index = 0; index < editFormData.items.length; index += 1) {
+      const item = editFormData.items[index];
+      if (!item.materialId) continue;
+      if (item.productKind === 'Serviços' && !(item.bankDetails || '').trim()) {
+        toast.error(`Informe os dados bancários do item ${index + 1} (serviço).`);
+        return;
+      }
     }
     updateCorrectionMutation.mutate({
       id: correctionEditId,
@@ -2694,6 +2723,21 @@ function SolicitarMateriaisPage() {
                                   />
                                 </div>
                               </div>
+                              {item.productKind === 'Serviços' ? (
+                                <div>
+                                  <label className={RM_FORM_FIELD_LABEL_CLS}>Dados bancários *</label>
+                                  <textarea
+                                    required
+                                    value={item.bankDetails}
+                                    onChange={(e) =>
+                                      handleItemChange(index, 'bankDetails', e.target.value)
+                                    }
+                                    rows={3}
+                                    className={FORM_FIELD_TEXTAREA_CLS}
+                                    placeholder="Banco, agência, conta, PIX, titular…"
+                                  />
+                                </div>
+                              ) : null}
                               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div>
                                   <label className={RM_FORM_FIELD_LABEL_CLS}>Valor referência</label>
@@ -3040,6 +3084,9 @@ function SolicitarMateriaisPage() {
                                       mat?.sinapiCode ||
                                       'Material';
                                     const note = (item.notes || item.observation)?.trim();
+                                    const bankDetails = (
+                                      item as { bankDetails?: string | null }
+                                    ).bankDetails?.trim();
                                     const unitPrice =
                                       (item as { unitPrice?: number | null }).unitPrice ?? null;
                                     return (
@@ -3055,6 +3102,14 @@ function SolicitarMateriaisPage() {
                                           {note ? (
                                             <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                                               {note}
+                                            </p>
+                                          ) : null}
+                                          {bankDetails ? (
+                                            <p className="mt-1 whitespace-pre-wrap text-xs text-gray-600 dark:text-gray-300">
+                                              <span className="font-medium text-gray-700 dark:text-gray-200">
+                                                Dados bancários:{' '}
+                                              </span>
+                                              {bankDetails}
                                             </p>
                                           ) : null}
                                         </td>
@@ -3464,6 +3519,21 @@ function SolicitarMateriaisPage() {
                               />
                             </div>
                           </div>
+                          {item.productKind === 'Serviços' ? (
+                            <div>
+                              <label className={RM_FORM_FIELD_LABEL_CLS}>Dados bancários *</label>
+                              <textarea
+                                required
+                                value={item.bankDetails}
+                                onChange={(e) =>
+                                  handleEditItemChange(index, 'bankDetails', e.target.value)
+                                }
+                                rows={3}
+                                className={FORM_FIELD_TEXTAREA_CLS}
+                                placeholder="Banco, agência, conta, PIX, titular…"
+                              />
+                            </div>
+                          ) : null}
                           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
                               <label className={RM_FORM_FIELD_LABEL_CLS}>Valor referência</label>

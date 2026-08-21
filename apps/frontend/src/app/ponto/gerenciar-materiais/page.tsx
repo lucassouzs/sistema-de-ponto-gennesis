@@ -1085,6 +1085,14 @@ export default function GerenciarMateriaisPage() {
                                       {(item.notes || item.observation)?.trim()}
                                     </p>
                                   ) : null}
+                                  {item.bankDetails?.trim() ? (
+                                    <p className="mt-1 whitespace-pre-wrap text-xs text-gray-600 dark:text-gray-300">
+                                      <span className="font-medium text-gray-700 dark:text-gray-200">
+                                        Dados bancários:{' '}
+                                      </span>
+                                      {item.bankDetails.trim()}
+                                    </p>
+                                  ) : null}
                                 </td>
                                 <td className="whitespace-nowrap px-2 py-3 text-right align-top tabular-nums">
                                   {Number(item.quantity)}

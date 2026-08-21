@@ -74,6 +74,8 @@ export interface MaterialRequest {
     status?: string;
     observation?: string;
     notes?: string;
+    bankDetails?: string | null;
+    productKind?: 'Materiais' | 'Serviços' | null;
     attachmentUrl?: string;
     attachmentName?: string;
     unitPrice?: number;

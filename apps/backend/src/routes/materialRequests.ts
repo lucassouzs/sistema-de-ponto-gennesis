@@ -42,11 +42,16 @@ function normalizeRmItemUnitPrice(raw: unknown): number | null {
 function normalizeRmItemBody(item: any) {
   const url = item?.attachmentUrl;
   const name = item?.attachmentName;
+  const bankRaw = item?.bankDetails;
   return {
     materialId: item?.materialId,
     quantity: item?.quantity,
     unitPrice: normalizeRmItemUnitPrice(item?.unitPrice),
     notes: item?.observation ?? item?.notes,
+    bankDetails:
+      typeof bankRaw === 'string' && bankRaw.trim().length > 0
+        ? bankRaw.trim().slice(0, 4000)
+        : null,
     attachmentUrl:
       typeof url === 'string' && url.trim().length > 0 ? url.trim().slice(0, 2000) : null,
     attachmentName:

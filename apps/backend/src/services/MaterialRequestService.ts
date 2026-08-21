@@ -274,7 +274,7 @@ async function withRmItemProductKinds<T extends { items?: RmItemForProductKind[]
 
   return requests.map((r) => {
     const kinds = new Set<RmItemProductKind>();
-    for (const item of r.items ?? []) {
+    const itemsWithKind = (r.items ?? []).map((item) => {
       const mat = item.material;
       let kind: RmItemProductKind | null = null;
       const cmId = constructionMaterialIdFromSinapi(mat?.sinapiCode);
@@ -301,11 +301,12 @@ async function withRmItemProductKinds<T extends { items?: RmItemForProductKind[]
       }
 
       if (kind) kinds.add(kind);
-    }
+      return { ...item, productKind: kind };
+    });
     const itemProductKinds = (['Materiais', 'Serviços'] as RmItemProductKind[]).filter((k) =>
       kinds.has(k)
     );
-    return { ...r, itemProductKinds };
+    return { ...r, items: itemsWithKind, itemProductKinds };
   });
 }
 
@@ -316,6 +317,8 @@ export interface RmDropdownMaterial {
   name: string;
   description: string;
   unit: string;
+  /** Produto ou Serviço (cadastro em materiais de construção). */
+  productType?: string | null;
   medianPrice: number | null;
   /** Média ponderada das últimas 10 compras efetivas (OCs aprovadas+). */
   avgPaidUnitPrice: number | null;
@@ -340,6 +343,8 @@ export interface CreateMaterialRequestData {
     /** Valor unitário informado na RM (editável; padrão = média paga). */
     unitPrice?: number | null;
     notes?: string;
+    /** Dados bancários (exibido/obrigatório quando o item é Serviço). */
+    bankDetails?: string | null;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
   }[];
@@ -367,6 +372,7 @@ export interface UpdateMaterialRequestCorrectionData {
     quantity: number;
     unitPrice?: number | null;
     notes?: string;
+    bankDetails?: string | null;
     attachmentUrl?: string | null;
     attachmentName?: string | null;
   }[];
@@ -514,6 +520,8 @@ export class MaterialRequestService {
       description: string | null;
       unit: string;
       isActive: boolean;
+      productType?: string | null;
+      category?: string | null;
     }>
   ): Promise<RmDropdownMaterial[]> {
     if (constructionMaterials.length === 0) {
@@ -553,6 +561,7 @@ export class MaterialRequestService {
         name: cm.name,
         description: cm.description || eng.description || '',
         unit: eng.unit,
+        productType: cm.productType || cm.category || null,
         medianPrice: eng.medianPrice ? Number(eng.medianPrice) : null,
         avgPaidUnitPrice: null
       };
@@ -724,6 +733,7 @@ export class MaterialRequestService {
                 unitPrice: safeUnit,
                 totalPrice: safeTotal,
                 notes: (item.notes || '').trim(),
+                bankDetails: (item.bankDetails || '').trim() || null,
                 attachmentUrl: item.attachmentUrl ?? null,
                 attachmentName: item.attachmentName ?? null,
                 status: 'PENDING'
@@ -1310,6 +1320,7 @@ export class MaterialRequestService {
         unitPrice: safeUnit,
         totalPrice: safeTotal,
         notes: item.notes || null,
+        bankDetails: (item.bankDetails || '').trim() || null,
         attachmentUrl: item.attachmentUrl ?? null,
         attachmentName: item.attachmentName ?? null,
         status: 'PENDING' as const
