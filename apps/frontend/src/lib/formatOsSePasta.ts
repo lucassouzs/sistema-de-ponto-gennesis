@@ -1,6 +1,6 @@
 /**
- * Exibe OS/SE com Nº pasta quando existir: "OS 10 - 1".
- * Sem pasta: apenas "OS 10" (prefixo OS se o valor não começar já por OS ou SE).
+ * Exibe OS/SE com Nº pasta quando existir: "AD-725 - 1".
+ * Sem pasta: apenas o código (ex.: "AD-725"), sem prefixo "OS"/"SE".
  */
 /** Exibe rótulo de OS/SE sem duplicar o prefixo (ex.: evita "OS OS 9030"). */
 export function ensureOsSePrefix(label: string | null | undefined): string {
@@ -9,16 +9,20 @@ export function ensureOsSePrefix(label: string | null | undefined): string {
   return /^(OS|SE)\s/i.test(d) ? d : `OS ${d}`;
 }
 
+/** Remove prefixo "OS "/"SE " para exibição em listas. */
+export function stripOsSePrefix(label: string | null | undefined): string {
+  return (label || '').trim().replace(/^(OS|SE)\s+/i, '').trim();
+}
+
 export function formatOsSePasta(
   divSe: string | null | undefined,
   folderNumber: string | null | undefined
 ): string {
-  const d = (divSe || '').trim();
+  const d = stripOsSePrefix(divSe);
   if (!d) return '';
   const pasta = (folderNumber || '').trim();
-  const osPart = /^(OS|SE)\s/i.test(d) ? d : `OS ${d}`;
-  if (pasta) return `${osPart} - ${pasta}`;
-  return osPart;
+  if (pasta) return `${d} - ${pasta}`;
+  return d;
 }
 
 export function formatOsSePastaOrDash(
@@ -45,7 +49,7 @@ export type DivSeOptionRow = { divSe: string; folderNumber: string | null };
 /**
  * Junta a lista global (`/pleitos/divse-list`) com as OS do contrato e,
  * quando a pasta não veio na API, preenche a partir dos pleitos do contrato.
- * Assim as listas suspensas mostram "OS x - pasta" sempre que existir no contrato.
+ * Assim as listas suspensas mostram "AD-725 - pasta" sempre que existir no contrato.
  */
 export function enrichDivSeOptionsWithPleitos(
   base: DivSeOptionRow[],

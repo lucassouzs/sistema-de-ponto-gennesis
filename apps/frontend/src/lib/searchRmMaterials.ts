@@ -6,6 +6,8 @@ export type RmMaterialListItem = {
   name?: string;
   description?: string;
   unit?: string;
+  /** Produto ou Serviço (cadastro em materiais de construção). */
+  productType?: string | null;
   /** Média ponderada das últimas 10 compras efetivas. */
   avgPaidUnitPrice?: number | null;
   medianPrice?: number | null;
@@ -13,6 +15,20 @@ export type RmMaterialListItem = {
 
 export function getRmMaterialLabel(material?: RmMaterialListItem | null): string {
   return material?.name?.trim() || material?.code?.trim() || material?.description?.trim() || 'Material sem nome';
+}
+
+/** True quando o item do catálogo é Serviço. */
+export function isRmServiceMaterial(
+  material?: Pick<RmMaterialListItem, 'productType'> | null
+): boolean {
+  const v = (material?.productType || '').trim().toLowerCase();
+  return (
+    v === 'serviço' ||
+    v === 'servico' ||
+    v === 'service' ||
+    v === 'serviços' ||
+    v === 'servicos'
+  );
 }
 
 /** Busca materiais para RM (IDs de engenharia); mínimo 2 caracteres. */

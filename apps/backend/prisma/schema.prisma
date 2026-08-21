@@ -1676,6 +1676,7 @@ model MaterialRequestItem {
   unitPrice         Decimal?                  @db.Decimal(12, 2) // Preço unitário no momento da requisição
   totalPrice        Decimal?                  @db.Decimal(12, 2) // Preço total (quantity * unitPrice)
   notes             String? // Observações sobre o item
+  bankDetails       String? // Dados bancários (itens de Serviço)
   attachmentUrl     String? // URL relativa do anexo (ex.: /uploads/material-request-items/...)
   attachmentName    String? // Nome original do arquivo
   status            MaterialRequestItemStatus @default(PENDING) // Status do item
