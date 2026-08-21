@@ -731,6 +731,7 @@ const purchaseOrderIncludeListSummary = {
     select: {
       id: true,
       requestNumber: true,
+      serviceOrder: true,
       costCenter: { select: { id: true, code: true, name: true } }
     }
   },
