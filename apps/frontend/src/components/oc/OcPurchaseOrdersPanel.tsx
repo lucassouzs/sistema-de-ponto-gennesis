@@ -42,6 +42,7 @@ import {
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
+import { stripOsSePrefix } from '@/lib/formatOsSePasta';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
@@ -4491,6 +4492,9 @@ export function OcPurchaseOrdersPanel({
                       <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         RM
                       </th>
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        OS
+                      </th>
                       <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
                         Status de entrega
                       </th>
@@ -4622,6 +4626,15 @@ export function OcPurchaseOrdersPanel({
                           title={o.materialRequest?.requestNumber || undefined}
                         >
                           {formatRmListDisplayId(o.materialRequest?.requestNumber)}
+                        </td>
+                        <td
+                          className="px-3 sm:px-6 py-4 text-sm text-center text-gray-900 dark:text-gray-100"
+                          title={o.materialRequest?.serviceOrder?.trim() || undefined}
+                        >
+                          {(() => {
+                            const os = stripOsSePrefix(o.materialRequest?.serviceOrder);
+                            return os || '—';
+                          })()}
                         </td>
                         <td className="px-3 sm:px-6 py-4 text-center whitespace-nowrap">
                           <OcListDeliveryStatusCellContent
@@ -5355,7 +5368,7 @@ export function OcPurchaseOrdersPanel({
                     },
                     {
                       label: 'Ordem de serviço',
-                      value: selectedOrder.materialRequest?.serviceOrder?.trim() || '—'
+                      value: stripOsSePrefix(selectedOrder.materialRequest?.serviceOrder) || '—'
                     },
                     {
                       label: 'Data',
