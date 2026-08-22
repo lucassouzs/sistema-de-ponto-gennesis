@@ -188,7 +188,6 @@ const CATEGORY_ORDER = [
   'Métricas',
   'Engenharia',
   'Contratos e Licitações',
-  'Controle CREA',
   'Jurídico',
   'Suprimentos',
   'Cadastros',
@@ -265,15 +264,16 @@ function inferCategoryFromHref(href: string): string {
   ) {
     return 'Engenharia';
   }
-  if (h === '/ponto/espelho-nf' || h === '/ponto/licitacoes' || h === '/ponto/contratos/medicao') {
-    return 'Contratos e Licitações';
-  }
   if (
+    h === '/ponto/espelho-nf' ||
+    h === '/ponto/licitacoes' ||
+    h === '/ponto/licitacoes-pncp' ||
+    h === '/ponto/contratos/medicao' ||
     h === '/ponto/responsaveis-tecnicos' ||
     h === '/ponto/controle-anuidade' ||
     h === '/ponto/controle-pagamentos-art'
   ) {
-    return 'Controle CREA';
+    return 'Contratos e Licitações';
   }
   if (h === '/ponto/juridico') return 'Jurídico';
   if (
@@ -307,7 +307,6 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/tomadores-servico',
       '/ponto/contas-bancarias',
       '/ponto/codigos-tributarios',
-      '/ponto/sistema-gestao-os/cadastros',
       '/ponto/sistema-gestao-os/locais',
       '/ponto/sistema-gestao-os/equipamentos',
       '/ponto/sistema-gestao-os/tipos-servico',
@@ -324,6 +323,9 @@ function moduleCategory(m: PermissionModuleDef): string {
   const c = (m as { category?: string }).category?.trim();
   const raw = c || inferCategoryFromHref(m.href);
   if (raw === 'Contrações e Licitações' || raw === 'Contratações e Licitações') {
+    return 'Contratos e Licitações';
+  }
+  if (raw === 'Controle CREA') {
     return 'Contratos e Licitações';
   }
   return raw;
@@ -899,6 +901,8 @@ export function UserPermissionsEditor({
   }, [enqueuePersistPermissions]);
 
   const modulesByCategory = useMemo(() => {
+    const byName = (a: PermissionModuleDef, b: PermissionModuleDef) =>
+      displayModuleName(a).localeCompare(displayModuleName(b), 'pt-BR', { sensitivity: 'base' });
     const map = new Map<string, PermissionModuleDef[]>();
     for (const m of PERMISSION_MODULES) {
       const cat = moduleCategory(m);
@@ -908,10 +912,15 @@ export function UserPermissionsEditor({
       list.push(m);
       map.set(cat, list);
     }
-    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({ category: c, modules: map.get(c)! }));
+    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({
+      category: c,
+      modules: [...(map.get(c) ?? [])].sort(byName),
+    }));
   }, []);
 
   const controleModulesByGroup = useMemo(() => {
+    const byName = (a: PermissionModuleDef, b: PermissionModuleDef) =>
+      displayModuleName(a).localeCompare(displayModuleName(b), 'pt-BR', { sensitivity: 'base' });
     const map = new Map<string, PermissionModuleDef[]>();
     for (const m of PERMISSION_MODULES) {
       const cat = moduleCategory(m);
@@ -924,12 +933,12 @@ export function UserPermissionsEditor({
     }
     const ordered = PERMISSION_CONTROLE_GROUP_ORDER.filter((g) => map.has(g)).map((g) => ({
       group: g,
-      modules: map.get(g)!,
+      modules: [...(map.get(g) ?? [])].sort(byName),
     }));
     const extras = [...map.keys()]
       .filter((g) => !(PERMISSION_CONTROLE_GROUP_ORDER as readonly string[]).includes(g))
       .sort((a, b) => a.localeCompare(b, 'pt-BR'))
-      .map((g) => ({ group: g, modules: map.get(g)! }));
+      .map((g) => ({ group: g, modules: [...(map.get(g) ?? [])].sort(byName) }));
     return [...ordered, ...extras];
   }, []);
 

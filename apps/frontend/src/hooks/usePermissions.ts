@@ -346,7 +346,6 @@ export function usePermissions() {
   const canGestaoOsCadastros =
     isAdministrator ||
     !!permissionData?.isAdmin ||
-    can(pk('/ponto/sistema-gestao-os/cadastros')) ||
     can(pk('/ponto/sistema-gestao-os/locais')) ||
     can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
     can(pk('/ponto/sistema-gestao-os/tipos-servico'));
@@ -637,8 +636,6 @@ export function useRoutePermission(route: string) {
       isAdministrator || can(pk('/ponto/sistema-gestao-os/planos')),
     '/ponto/sistema-gestao-os/relatorios':
       isAdministrator || can(pk('/ponto/sistema-gestao-os/relatorios')),
-    '/ponto/sistema-gestao-os/cadastros':
-      isAdministrator || can(pk('/ponto/sistema-gestao-os/cadastros')),
     '/ponto/sistema-gestao-os/locais':
       isAdministrator || can(pk('/ponto/sistema-gestao-os/locais')),
     '/ponto/sistema-gestao-os/equipamentos':

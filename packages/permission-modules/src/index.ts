@@ -161,19 +161,19 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     key: pathToModuleKey('/ponto/responsaveis-tecnicos'),
     name: 'Responsáveis Técnicos',
     href: '/ponto/responsaveis-tecnicos',
-    category: 'Controle CREA',
+    category: 'Contratos e Licitações',
   },
   {
     key: pathToModuleKey('/ponto/controle-anuidade'),
     name: 'Controle de Anuidade',
     href: '/ponto/controle-anuidade',
-    category: 'Controle CREA',
+    category: 'Contratos e Licitações',
   },
   {
     key: pathToModuleKey('/ponto/controle-pagamentos-art'),
     name: "Controle de Pagamentos ART's / Protocolos",
     href: '/ponto/controle-pagamentos-art',
-    category: 'Controle CREA',
+    category: 'Contratos e Licitações',
   },
   {
     key: pathToModuleKey('/ponto/contratos/medicao'),
@@ -267,12 +267,6 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     key: pathToModuleKey('/ponto/espelho-nf/codigos-tributarios'),
     name: 'Códigos Tributários',
     href: '/ponto/codigos-tributarios',
-    category: 'Cadastros',
-  },
-  {
-    key: pathToModuleKey('/ponto/sistema-gestao-os/cadastros'),
-    name: 'Sistema de Gestão de OS (legado)',
-    href: '/ponto/sistema-gestao-os/cadastros',
     category: 'Cadastros',
   },
   {

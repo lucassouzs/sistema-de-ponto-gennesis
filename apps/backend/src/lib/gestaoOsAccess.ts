@@ -7,8 +7,10 @@ import { createError } from '../middleware/errorHandler';
 export const GESTAO_OS_MODULE_KEY = pathToModuleKey('/ponto/sistema-gestao-os');
 /** Solicitar e acompanhar os próprios chamados (fluxo pessoal). */
 export const GESTAO_OS_MEUS_CHAMADOS_KEY = pathToModuleKey('/ponto/meus-chamados');
-/** Cadastros (locais, ativos, prestadores…). */
-export const GESTAO_OS_CADASTROS_KEY = pathToModuleKey('/ponto/sistema-gestao-os/cadastros');
+/** Cadastros (locais, equipamentos, tipos de serviço). */
+export const GESTAO_OS_LOCAIS_KEY = pathToModuleKey('/ponto/sistema-gestao-os/locais');
+export const GESTAO_OS_EQUIPAMENTOS_KEY = pathToModuleKey('/ponto/sistema-gestao-os/equipamentos');
+export const GESTAO_OS_TIPOS_SERVICO_KEY = pathToModuleKey('/ponto/sistema-gestao-os/tipos-servico');
 /** Analisar / aprovar / cancelar / atribuir. */
 export const GESTAO_OS_ANALISAR_KEY = pathToModuleKey('/ponto/controle/gestao-os-analisar');
 /** Executar OS em campo. */
@@ -63,16 +65,27 @@ export async function resolveGestaoOsAccess(input: {
     };
   }
 
-  const [canModule, canMeusChamados, canAnalisar, canExecutar, canEncerrar, canCadastros] =
-    await Promise.all([
-      userHasModule(input.userId, GESTAO_OS_MODULE_KEY),
-      userHasModule(input.userId, GESTAO_OS_MEUS_CHAMADOS_KEY),
-      userHasModule(input.userId, GESTAO_OS_ANALISAR_KEY),
-      userHasModule(input.userId, GESTAO_OS_EXECUTAR_KEY),
-      userHasModule(input.userId, GESTAO_OS_ENCERRAR_KEY),
-      userHasModule(input.userId, GESTAO_OS_CADASTROS_KEY)
-    ]);
+  const [
+    canModule,
+    canMeusChamados,
+    canAnalisar,
+    canExecutar,
+    canEncerrar,
+    canLocais,
+    canEquipamentos,
+    canTiposServico,
+  ] = await Promise.all([
+    userHasModule(input.userId, GESTAO_OS_MODULE_KEY),
+    userHasModule(input.userId, GESTAO_OS_MEUS_CHAMADOS_KEY),
+    userHasModule(input.userId, GESTAO_OS_ANALISAR_KEY),
+    userHasModule(input.userId, GESTAO_OS_EXECUTAR_KEY),
+    userHasModule(input.userId, GESTAO_OS_ENCERRAR_KEY),
+    userHasModule(input.userId, GESTAO_OS_LOCAIS_KEY),
+    userHasModule(input.userId, GESTAO_OS_EQUIPAMENTOS_KEY),
+    userHasModule(input.userId, GESTAO_OS_TIPOS_SERVICO_KEY),
+  ]);
 
+  const canCadastros = canLocais || canEquipamentos || canTiposServico;
   const canViewAll =
     canModule || canAnalisar || canExecutar || canEncerrar || canCadastros;
 
@@ -164,7 +177,7 @@ export function assertCanViewWorkOrder(
 export function assertCanManageCadastros(ctx: GestaoOsAccessContext) {
   if (ctx.isAdmin || ctx.canCadastros || ctx.canAnalisar) return;
   throw createError(
-    'Sem permissão: libere «Sistema de Gestão de OS» (cadastros) ou «Analisar OS» em Controle',
+    'Sem permissão: libere Locais e Ativos, Equipamentos, Tipos de Serviço ou «Analisar OS» em Controle',
     403
   );
 }
