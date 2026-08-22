@@ -146,6 +146,7 @@ function buildNomeToPoloMap(): Record<string, string> {
     ['GO - ADM LOCAL', 'GO'],
     ['BBGO - MANUTENCAO', 'GO'],
     ['TJGO RETROFIT PARCEIROS - LOTE 5', 'GO'],
+    ['TJGO RETROFIT PARCEIROS - LOTES 5', 'GO'],
     ['TJ 1A - GOIANIA - CORRETIVA', 'GO'],
     ['TJ 1B - ANAPOLIS - CORRETIVA', 'GO'],
     ['TJ MANUTENCAO RIO VERDE - CORRETIVA', 'GO'],

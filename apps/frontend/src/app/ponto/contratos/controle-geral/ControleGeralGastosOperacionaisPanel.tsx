@@ -33,10 +33,12 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   aggregateGastosDetailRows,
   aggregateGastosNaturezaForContract,
+  appendGastosNaturezaResidualToMatchRowTotal,
   getGastosNaturezaAggRowKey,
   groupGastosNaturezaModalRows,
   gastosNaturezaTotalContribution,
   EMPTY_GASTOS_OPERACIONAIS_FILTERS,
+  createControleGeralDefaultPeriodFilters,
   filterGastosDetailRows,
   filterGastosDetailRowsByPolo,
   filterRowsByAllowedContracts,
@@ -113,7 +115,12 @@ import {
   type ContractDetailLookupSource
 } from './buildGastosContractDetailLookup';
 import { ControleGeralFluxoDetalheModal } from './ControleGeralFluxoDetalheModal';
-import { filterGastosDetailRowsForContract, filterRecebidoMensalForContract } from './controleGeralGastosFluxo';
+import {
+  alignRecebidoMensalSeriesToTotal,
+  filterGastosDetailRowsForContract,
+  filterRecebidoMensalForContractExact,
+  type ControleGeralFluxoRowSnapshot
+} from './controleGeralGastosFluxo';
 import type { RecebidoMensalByGastosContractEntry } from './recebidoMensalTypes';
 import {
   ControleGeralTetoOrcamentarioModal,
@@ -712,8 +719,10 @@ export function ControleGeralGastosOperacionaisPanel({
     gastoRatioColumnCount +
     tetoOrcamentarioColumnCount;
   const tableLabelColSpan = tableColumnCount - tableAmountColumnCount;
-  const [filters, setFilters] = useState<GastosOperacionaisFilters>(
-    EMPTY_GASTOS_OPERACIONAIS_FILTERS
+  const [filters, setFilters] = useState<GastosOperacionaisFilters>(() =>
+    showFaturamentoColumn
+      ? createControleGeralDefaultPeriodFilters()
+      : EMPTY_GASTOS_OPERACIONAIS_FILTERS
   );
   const [exportingPdf, setExportingPdf] = useState(false);
   const [localityOverrides, setLocalityOverrides] = useState<GastosOperacionaisLocalityOverrideMap>(
@@ -1221,10 +1230,36 @@ export function ControleGeralGastosOperacionaisPanel({
     return resolveContractNfsTotals(fluxoModalContract, faturamentoLookup);
   }, [fluxoModalContract, faturamentoLookup]);
 
+  const fluxoModalRowSnapshot = useMemo((): ControleGeralFluxoRowSnapshot | undefined => {
+    if (!fluxoModalContract) return undefined;
+    const row = visibleRowsWithFaturamento.find((item) => item.contract === fluxoModalContract);
+    if (!row) return undefined;
+    const recebido = row.recebidoAcumulado ?? 0;
+    return {
+      gastos: Math.abs(row.totalAcumulado),
+      recebido,
+      lucroLiquido: calcLucroLiquido(recebido, row.totalAcumulado)
+    };
+  }, [fluxoModalContract, visibleRowsWithFaturamento]);
+
   const fluxoModalRecebidoMensal = useMemo(() => {
     if (!fluxoModalContract) return [];
-    return filterRecebidoMensalForContract(recebidoMensalByContract, fluxoModalContract);
-  }, [recebidoMensalByContract, fluxoModalContract]);
+    const entries = filterRecebidoMensalForContractExact(
+      recebidoMensalByContract,
+      fluxoModalContract
+    );
+    const targetRecebido =
+      fluxoModalRowSnapshot?.recebido ?? fluxoModalNfsTotals?.recebido ?? 0;
+    if (targetRecebido > 0) {
+      return alignRecebidoMensalSeriesToTotal(entries, targetRecebido);
+    }
+    return entries;
+  }, [
+    recebidoMensalByContract,
+    fluxoModalContract,
+    fluxoModalRowSnapshot,
+    fluxoModalNfsTotals
+  ]);
 
   const excludedContractLabels = useMemo(() => {
     if (!enableRowExclusion || excludedContracts.size === 0) return [];
@@ -1268,11 +1303,15 @@ export function ControleGeralGastosOperacionaisPanel({
 
   const naturezaModalRows = useMemo(() => {
     if (!naturezaModalContract) return [];
-    return aggregateGastosNaturezaForContract(
+    const rows = aggregateGastosNaturezaForContract(
       scopedNaturezaDetailRows,
       naturezaModalContract.contract,
       filters.periodFrom,
       filters.periodTo
+    );
+    return appendGastosNaturezaResidualToMatchRowTotal(
+      rows,
+      naturezaModalContract.totalAcumulado
     );
   }, [
     scopedNaturezaDetailRows,
@@ -1873,7 +1912,6 @@ export function ControleGeralGastosOperacionaisPanel({
         };
 
         await exportControleGeralContratosPdf({
-          filterLines: buildPdfFilterLines(),
           contractCount: visibleRowsWithFaturamento.length,
           sheetUpdatedAt,
           overviewSection: buildOverviewSection(),
@@ -2815,6 +2853,7 @@ export function ControleGeralGastosOperacionaisPanel({
           rows={fluxoModalGastosRows}
           recebidoMensal={fluxoModalRecebidoMensal}
           nfsTotals={fluxoModalNfsTotals}
+          rowSnapshot={fluxoModalRowSnapshot}
           titleSuffix={fluxoModalContract ?? undefined}
           loadingRecebido={loadingFaturamento && recebidoMensalByContract.length === 0}
         />

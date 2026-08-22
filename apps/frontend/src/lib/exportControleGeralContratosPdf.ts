@@ -41,7 +41,6 @@ export type ControleGeralPdfLocalityGroup = {
 };
 
 export type ExportControleGeralContratosPdfInput = {
-  filterLines: string[];
   groups: ControleGeralPdfLocalityGroup[];
   grandSummary: ControleGeralPdfFinancialSummary;
   contractCount: number;
@@ -268,50 +267,6 @@ function drawPageHeader(
   doc.text(`${generatedAt.getFullYear()} — Confidencial`, pageWidth - margin, 26, { align: 'right' });
 
   return headerH + 6;
-}
-
-function drawFilterBox(
-  doc: jsPDF,
-  y: number,
-  margin: number,
-  contentW: number,
-  filterLines: string[]
-): number {
-  const lines =
-    filterLines.length > 0
-      ? filterLines
-      : ['Nenhum filtro restritivo aplicado (todos os contratos visíveis).'];
-
-  doc.setFontSize(8);
-  const wrapped: string[] = [];
-  for (const line of lines) {
-    wrapped.push(...doc.splitTextToSize(line, contentW - 12));
-  }
-  const boxH = 10 + wrapped.length * 4.2;
-  y = ensureSpace(doc, y, boxH + 4, margin);
-
-  doc.setFillColor(248, 249, 250);
-  doc.setDrawColor(...BORDER);
-  doc.roundedRect(margin, y, contentW, boxH, 2, 2, 'FD');
-  doc.setFillColor(...BRAND_RED);
-  doc.rect(margin, y + 2, 2.5, boxH - 4, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...TEXT_BLACK);
-  doc.text('Filtros aplicados', margin + 8, y + 7);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(...TEXT_MUTED);
-  let ly = y + 12;
-  for (const line of wrapped) {
-    doc.text(line, margin + 6, ly);
-    ly += 4.2;
-  }
-
-  doc.setTextColor(...TEXT_BLACK);
-  return y + boxH + 8;
 }
 
 function buildColumns(contentW: number): PdfColumn[] {
@@ -784,7 +739,6 @@ export async function exportControleGeralContratosPdf(
   // Admin e demais usuários veem Gennesis; Predial só quem tem só UNB no cadastro.
   const logo = await loadCompanyLogo();
   let y = drawPageHeader(doc, margin, pageWidth, logo, generatedAt, input.sheetUpdatedAt);
-  y = drawFilterBox(doc, y, margin, contentW, input.filterLines);
 
   const columns = buildColumns(contentW);
   const colX = getColumnXs(margin, columns);
