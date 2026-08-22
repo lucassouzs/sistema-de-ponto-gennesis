@@ -1,7 +1,12 @@
 'use client';
 
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { FluigWorkflowAprovadoresPage } from '@/components/fluig/FluigWorkflowAprovadoresPage';
 
 export default function FluigAprovadoresRoutePage() {
-  return <FluigWorkflowAprovadoresPage />;
+  return (
+    <ProtectedRoute route="/ponto/fluig/aprovadores">
+      <FluigWorkflowAprovadoresPage />
+    </ProtectedRoute>
+  );
 }

@@ -1,7 +1,6 @@
 import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { prisma } from './prisma';
 import { createError } from '../middleware/errorHandler';
-import { userIsDepartmentCompras } from './fuelSuppliesAccess';
 
 export const LOGISTICS_DELIVERY_MODULE_KEY = pathToModuleKey('/ponto/entregas-logistica');
 
@@ -23,8 +22,7 @@ export async function userHasLogisticsDeliveryAccess(
   isAdmin: boolean,
 ): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userHasLogisticsDeliveryModuleAccess(userId)) return true;
-  return userIsDepartmentCompras(userId);
+  return userHasLogisticsDeliveryModuleAccess(userId);
 }
 
 export async function assertUserHasLogisticsDeliveryAccess(

@@ -279,7 +279,7 @@ export default function ControleGeralContratosPage() {
   // CONTRATO, CENTRO DE CUSTO, FATURAMENTO ACUMULADO, FATURAMENTO ANUAL, PRODUÇÃO, VALOR ORÇADO, PENDENTE FATURAMENTO.
 
   return (
-    <ProtectedRoute route="/ponto/contratos">
+    <ProtectedRoute route="/ponto/contratos/controle-geral">
       <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
         <div ref={containerRef} className="space-y-6">
           <div className="text-center">

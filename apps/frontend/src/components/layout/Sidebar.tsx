@@ -233,9 +233,6 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
     isLoading,
     userPosition,
     user,
-    isDepartmentPessoal,
-    isDepartmentProjetos,
-    userDepartment,
     can,
     canAccessDpApproverPages,
     canApproveEspelhoNf,
@@ -371,15 +368,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
   // Verificar se é administrador
   const isAdministrator = userPosition === 'Administrador';
-  const isDepartmentCompras = userDepartment?.toLowerCase().includes('compras');
   const canSeeFuroEstoque =
-    isAdministrator || isDepartmentCompras || can(pk('/ponto/furo-estoque'));
+    isAdministrator || can(pk('/ponto/furo-estoque'));
   const canSeeFuelSupplies =
-    isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel'));
+    isAdministrator || can(pk('/ponto/solicitacoes-combustivel'));
   const canSeeVehicleReservationSupplies =
-    isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-reserva-veiculos'));
+    isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos'));
   const canSeeToolRentalSupplies =
-    isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-ferramentas'));
+    isAdministrator || can(pk('/ponto/solicitacoes-ferramentas'));
   const canSeeEntregaLogistica =
     isAdministrator || can(pk('/ponto/entrega-logistica'));
 
@@ -614,13 +610,6 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
   // Verificar se o funcionário precisa bater ponto
   const requiresTimeClock = user?.employee?.requiresTimeClock !== false;
   
-  // Verificar se é do departamento Financeiro
-  const isDepartmentFinanceiro = userDepartment?.toLowerCase().includes('financeiro');
-
-  // Verificar se é do departamento Jurídico
-  const isDepartmentJuridico = userDepartment?.toLowerCase().includes('jurídico') ||
-    userDepartment?.toLowerCase().includes('juridico');
-
   const isEmployee = userRole === 'EMPLOYEE';
 
   // Menu items agrupados por categoria
@@ -636,14 +625,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/painel-do-sistema',
             icon: LayoutDashboard,
             description: 'Visão geral do sistema',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canViewDashboard
+            permission: isAdministrator || permissions.canViewDashboard
           },
           {
             name: 'Fluig - Processos',
             href: '/ponto/financeiro/gestao-solicitacoes',
             icon: BarChart3,
             description: 'Solicitações do Fluig na visão financeira',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/gestao-solicitacoes'))
+            permission: isAdministrator || can(pk('/ponto/financeiro/gestao-solicitacoes'))
           },
           {
             name: 'Fluig - Aprovações',
@@ -651,10 +640,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: FileCheck,
             description: 'Status de aprovação Compras, Gestor e Diretoria (G3/G5)',
             permission:
-              isAdministrator ||
-              isDepartmentFinanceiro ||
-              isDepartmentCompras ||
-              can(pk('/ponto/fluig/aprovacoes-workflow'))
+              isAdministrator || can(pk('/ponto/fluig/aprovacoes-workflow'))
           },
           {
             name: 'Aprovadores',
@@ -693,7 +679,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Car,
             description: 'Solicitar reserva de veículos da frota',
             permission:
-              isAdministrator || isDepartmentCompras || can(pk('/ponto/reserva-veiculos'))
+              isAdministrator || can(pk('/ponto/reserva-veiculos'))
           },
           {
             name: 'Solicitar Combustível',
@@ -701,17 +687,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Fuel,
             description: 'Solicitar abastecimento de veículos',
             permission:
-              isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitar-combustivel'))
+              isAdministrator || can(pk('/ponto/solicitar-combustivel'))
           },
           {
             name: 'Meus Chamados',
             href: '/ponto/meus-chamados',
             icon: Wrench,
             description: 'Abrir e acompanhar seus chamados de manutenção',
-            permission:
-              isAdministrator ||
-              can(pk('/ponto/meus-chamados')) ||
-              can(pk('/ponto/sistema-gestao-os'))
+            permission: isAdministrator || can(pk('/ponto/meus-chamados'))
           },
           {
             name: 'Entrega da Logística',
@@ -739,14 +722,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/funcionarios',
             icon: Users,
             description: 'Cadastrar e gerenciar funcionários e externos',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageEmployees
+            permission: isAdministrator || permissions.canManageEmployees
           },
           {
             name: 'Folha de Pagamento',
             href: '/ponto/folha-pagamento',
             icon: FileSpreadsheet,
             description: 'Gestão de folha de pagamento',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canAccessPayroll
+            permission: isAdministrator || permissions.canAccessPayroll
           },
           {
             name: 'Ausências',
@@ -760,7 +743,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/gerenciar-atestados',
             icon: BookText,
             description: 'Gerenciar todas as ausências',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-atestados'))
+            permission: isAdministrator || can(pk('/ponto/gerenciar-atestados'))
           },
           {
             name: 'Alterações de Ponto',
@@ -782,14 +765,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: FileText,
             description: 'Tramitar solicitações do Departamento Pessoal',
             permission:
-              isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-solicitacoes-dp')),
+              isAdministrator || can(pk('/ponto/gerenciar-solicitacoes-dp')),
           },
           {
             name: 'Central de Atendimentos',
             href: '/ponto/conversas-whatsapp',
             icon: MessageSquare,
             description: 'Conversas do chatbot WhatsApp para o pessoal ver',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/conversas-whatsapp'))
+            permission: isAdministrator || can(pk('/ponto/conversas-whatsapp'))
           },
           {
             name: 'Férias',
@@ -803,21 +786,21 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/gerenciar-ferias',
             icon: BookImage,
             description: 'Gerenciar férias dos funcionários',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageVacations
+            permission: isAdministrator || permissions.canManageVacations
           },
           {
             name: 'Gerenciar Feriados',
             href: '/ponto/gerenciar-feriados',
             icon: CalendarDays,
             description: 'Gerenciar calendário de feriados',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageVacations
+            permission: isAdministrator || permissions.canManageVacations
           },
           {
             name: 'Banco de Horas',
             href: '/ponto/banco-horas',
             icon: FolderClock,
             description: 'Controle de banco de horas',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageBankHours
+            permission: isAdministrator || permissions.canManageBankHours
           },
           {
             name: 'Alocação',
@@ -839,9 +822,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Shield,
             description: 'Controle de ASO dos funcionários',
             permission:
-              isAdministrator ||
-              isDepartmentPessoal ||
-              can(pk('/ponto/seguranca-do-trabalho')),
+              isAdministrator || can(pk('/ponto/seguranca-do-trabalho')),
           },
         ]
       },
@@ -869,14 +850,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/financeiro/controle-financeiro',
             icon: ClipboardList,
             description: 'Controle de Material/Serviço Aplicado por mês e ano',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/controle-financeiro'))
+            permission: isAdministrator || can(pk('/ponto/financeiro/controle-financeiro'))
           },
           {
             name: 'Receitas',
             href: '/ponto/financeiro/receitas',
             icon: CircleDollarSign,
             description: 'Receitas e repasses dos consórcios BSB e HUB',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/receitas'))
+            permission: isAdministrator || can(pk('/ponto/financeiro/receitas'))
           },
           {
             name: 'Pagamento da Folha',
@@ -897,7 +878,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/financeiro/analise-extrato',
             icon: BarChart3,
             description: 'Acompanhe o balanço financeiro',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/analise-extrato'))
+            permission: isAdministrator || can(pk('/ponto/financeiro/analise-extrato'))
           },
           {
             name: "Controle de NF's",
@@ -905,11 +886,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: FileSpreadsheet,
             description: 'Controle de notas fiscais por contrato (planilha Relatório de Custos)',
             permission:
-              isAdministrator ||
-              isDepartmentFinanceiro ||
-              can(pk('/ponto/financeiro/controle-nfs')) ||
-              can(pk('/ponto/financeiro/analise-extrato')) ||
-              can(pk('/ponto/financeiro/controle-financeiro'))
+              isAdministrator || can(pk('/ponto/financeiro/controle-nfs'))
           },
           {
             name: 'Controle Geral de Contratos',
@@ -1045,10 +1022,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/licitacoes-pncp',
             icon: Search,
             description: 'Consultar publicações no Portal Nacional de Contratações',
-            permission:
-              isAdministrator ||
-              can(pk('/ponto/licitacoes-pncp')) ||
-              can(pk('/ponto/licitacoes')),
+            permission: isAdministrator || can(pk('/ponto/licitacoes-pncp')),
           },
           {
             name: 'Responsáveis Técnicos',
@@ -1090,7 +1064,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/juridico',
             icon: Scale,
             description: 'Acompanhe status, acordos e valores dos processos',
-            permission: isAdministrator || isDepartmentJuridico || can(pk('/ponto/juridico'))
+            permission: isAdministrator || can(pk('/ponto/juridico'))
           }
         ]
       },
@@ -1104,21 +1078,21 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/gerenciar-materiais',
             icon: Package,
             description: 'Aprovar SC e criar OC',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/gerenciar-materiais'))
+            permission: isAdministrator || can(pk('/ponto/gerenciar-materiais'))
           },
           {
             name: 'Mapa de Cotação',
             href: '/ponto/mapa-cotacao',
             icon: FileSpreadsheet,
             description: 'Comparar cotações entre fornecedores e gerar OC por vencedor',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/mapa-cotacao'))
+            permission: isAdministrator || can(pk('/ponto/mapa-cotacao'))
           },
           {
             name: 'Ordens de Compra',
             href: '/ponto/ordem-de-compra',
             icon: FileText,
             description: 'Listar e gerenciar ordens de compra',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/ordem-de-compra'))
+            permission: isAdministrator || can(pk('/ponto/ordem-de-compra'))
           },
           {
             name: 'Controle de Entregas',
@@ -1132,28 +1106,28 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/entregas-logistica',
             icon: Truck,
             description: 'Registrar solicitações de entrega logística',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/entregas-logistica'))
+            permission: isAdministrator || can(pk('/ponto/entregas-logistica'))
           },
           {
             name: 'Estoque',
             href: '/ponto/estoque',
             icon: Package,
             description: 'Gerenciar estoque de materiais',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/estoque'))
+            permission: isAdministrator || can(pk('/ponto/estoque'))
           },
           {
             name: 'Furo de Estoque',
             href: '/ponto/furo-estoque',
             icon: PackageX,
             description: 'Pendências de entrega após recebimento parcial',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/furo-estoque'))
+            permission: isAdministrator || can(pk('/ponto/furo-estoque'))
           },
           {
             name: 'Ajuste de Estoque',
             href: '/ponto/ajuste-estoque',
             icon: Package,
             description: 'Realizar entradas e saídas de ajuste no estoque',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/ajuste-estoque'))
+            permission: isAdministrator || can(pk('/ponto/ajuste-estoque'))
           },
           {
             name: "FD's Aprovadas",
@@ -1161,7 +1135,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: ClipboardCheck,
             description: "FD's aprovadas — status de compras",
             permission:
-              isAdministrator || isDepartmentCompras || can(pk('/ponto/fds-aprovadas'))
+              isAdministrator || can(pk('/ponto/fds-aprovadas'))
           },
           {
             name: 'Solicitações de Combustível',
@@ -1169,7 +1143,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Fuel,
             description: 'Pedidos de abastecimento (sistema e Gennecy)',
             permission:
-              isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel'))
+              isAdministrator || can(pk('/ponto/solicitacoes-combustivel'))
           },
           {
             name: 'Reservas de Veículos',
@@ -1177,9 +1151,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: CalendarRange,
             description: 'Aprovar ou rejeitar solicitações de uso da frota',
             permission:
-              isAdministrator ||
-              isDepartmentCompras ||
-              can(pk('/ponto/solicitacoes-reserva-veiculos'))
+              isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos'))
           },
           {
             name: 'Solicitações de Ferramentas',
@@ -1187,9 +1159,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Wrench,
             description: 'Analisar solicitações de locação, renovação, devolução ou compra',
             permission:
-              isAdministrator ||
-              isDepartmentCompras ||
-              can(pk('/ponto/solicitacoes-ferramentas'))
+              isAdministrator || can(pk('/ponto/solicitacoes-ferramentas'))
           },
         ]
       },
@@ -1205,9 +1175,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Prédios, setores, salas e ativos com QR',
             permission:
               isAdministrator ||
-              can(pk('/ponto/sistema-gestao-os/locais')) ||
-              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-              can(pk('/ponto/sistema-gestao-os')),
+              can(pk('/ponto/sistema-gestao-os/locais')),
             section: 'Central de Chamados'
           },
           {
@@ -1217,9 +1185,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Grupos, subgrupos e equipamentos',
             permission:
               isAdministrator ||
-              can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
-              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-              can(pk('/ponto/sistema-gestao-os')),
+              can(pk('/ponto/sistema-gestao-os/equipamentos')),
             section: 'Central de Chamados'
           },
           {
@@ -1229,9 +1195,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Categorias de serviço para chamados e OS',
             permission:
               isAdministrator ||
-              can(pk('/ponto/sistema-gestao-os/tipos-servico')) ||
-              can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-              can(pk('/ponto/sistema-gestao-os')),
+              can(pk('/ponto/sistema-gestao-os/tipos-servico')),
             section: 'Central de Chamados'
           },
           {
@@ -1239,7 +1203,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/fornecedores',
             icon: Building2,
             description: 'Cadastro de fornecedores',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores')),
+            permission: isAdministrator || can(pk('/ponto/fornecedores')),
             section: 'Compras'
           },
           {
@@ -1247,7 +1211,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/materiais-construcao',
             icon: Package,
             description: 'Gerenciar cadastro de materiais e serviços',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
+            permission: isAdministrator || can(pk('/ponto/materiais-construcao')),
             section: 'Compras'
           },
           {
@@ -1255,7 +1219,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/condicoes-pagamento',
             icon: CreditCard,
             description: 'Condições para ordens de compra',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/condicoes-pagamento')),
+            permission: isAdministrator || can(pk('/ponto/condicoes-pagamento')),
             section: 'Compras'
           },
           {
@@ -1263,7 +1227,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/veiculos',
             icon: Car,
             description: 'Cadastro de veículos da frota',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/veiculos')),
+            permission: isAdministrator || can(pk('/ponto/veiculos')),
             section: 'Frota'
           },
           {
@@ -1272,9 +1236,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Fuel,
             description: 'Cidades satélites e postos para abastecimento',
             permission:
-              isAdministrator ||
-              isDepartmentCompras ||
-              can(pk('/ponto/regioes-postos-combustivel')),
+              isAdministrator || can(pk('/ponto/regioes-postos-combustivel')),
             section: 'Frota'
           },
           {
@@ -1282,7 +1244,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/centros-custo',
             icon: Building2,
             description: 'Gerenciar centros de custo',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
+            permission: isAdministrator || can(pk('/ponto/centros-custo')),
             section: 'Financeiro'
           },
           {
@@ -1290,7 +1252,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto/natureza-orcamentaria',
             icon: BookPlus,
             description: 'Cadastrar naturezas orçamentárias',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/natureza-orcamentaria')),
+            permission: isAdministrator || can(pk('/ponto/natureza-orcamentaria')),
             section: 'Financeiro'
           },
           {
@@ -1300,8 +1262,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Cadastro de prestadores para espelho de nota fiscal',
             permission:
               isAdministrator ||
-              can(pk('/ponto/espelho-nf/prestadores-servico')) ||
-              can(pk('/ponto/espelho-nf')),
+              can(pk('/ponto/espelho-nf/prestadores-servico')),
             section: 'Nota Fiscal'
           },
           {
@@ -1311,8 +1272,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Cadastro de tomadores para espelho de nota fiscal',
             permission:
               isAdministrator ||
-              can(pk('/ponto/espelho-nf/tomadores-servico')) ||
-              can(pk('/ponto/espelho-nf')),
+              can(pk('/ponto/espelho-nf/tomadores-servico')),
             section: 'Nota Fiscal'
           },
           {
@@ -1322,8 +1282,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Contas usadas em tomadores e no espelho de nota fiscal',
             permission:
               isAdministrator ||
-              can(pk('/ponto/espelho-nf/contas-bancarias')) ||
-              can(pk('/ponto/espelho-nf')),
+              can(pk('/ponto/espelho-nf/contas-bancarias')),
             section: 'Nota Fiscal'
           },
           {
@@ -1333,8 +1292,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Parâmetros por município para espelho de nota fiscal',
             permission:
               isAdministrator ||
-              can(pk('/ponto/espelho-nf/codigos-tributarios')) ||
-              can(pk('/ponto/espelho-nf')),
+              can(pk('/ponto/espelho-nf/codigos-tributarios')),
             section: 'Nota Fiscal'
           }
         ]
@@ -1349,7 +1307,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             href: '/ponto',
             icon: FolderClock,
             description: 'Gerencie seus registros',
-            permission: (isAdministrator || isDepartmentPessoal || permissions.canRegisterTime) && requiresTimeClock
+            permission: (isAdministrator || permissions.canRegisterTime) && requiresTimeClock
           }
         ]
       }
@@ -1909,7 +1867,9 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             </Link>
           </div>
 
-          <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2 [@media(max-height:820px)]:pt-1">
+          {/* pt reserva a folga que o badge do primeiro ícone ocupa acima do botão: como o nav
+              rola, qualquer coisa acima do topo do conteúdo é cortada. */}
+          <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2">
             {sidebarHydrated && (!isLoading || menuItems.length > 0) ? menuItems.map((category) => {
               const CategoryIcon = category.icon;
               const isRailActive = category.id === railModuleActiveId;

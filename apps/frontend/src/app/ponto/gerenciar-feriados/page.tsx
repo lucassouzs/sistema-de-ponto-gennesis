@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -71,7 +72,7 @@ const HOLIDAY_STATE_OPTIONS = labeledToSelectOptions([
   { value: 'GO', label: 'Goiás (GO)' },
 ]);
 
-export default function GerenciarFeriadosPage() {
+function GerenciarFeriadosPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -837,6 +838,14 @@ export default function GerenciarFeriadosPage() {
         </Modal>
       </div>
     </MainLayout>
+  );
+}
+
+export default function GerenciarFeriadosPage() {
+  return (
+    <ProtectedRoute route="/ponto/gerenciar-feriados">
+      <GerenciarFeriadosPageContent />
+    </ProtectedRoute>
   );
 }
 

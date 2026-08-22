@@ -75,9 +75,8 @@ export async function resolveGestaoOsAccess(input: {
 
   const canViewAll =
     canModule || canAnalisar || canExecutar || canEncerrar || canCadastros;
-  const canMeus = canMeusChamados || canViewAll;
 
-  if (!canMeus && !canViewAll) {
+  if (!canMeusChamados && !canViewAll) {
     throw createError(
       'Sem permissão para chamados. Libere «Meus Chamados» ou «Central de Chamados» em Controle.',
       403
@@ -91,7 +90,7 @@ export async function resolveGestaoOsAccess(input: {
     canExecutar,
     canEncerrar,
     canCadastros: canCadastros || canAnalisar,
-    canMeusChamados: canMeus,
+    canMeusChamados,
     canViewAll,
     companyId: null,
     profile: null,

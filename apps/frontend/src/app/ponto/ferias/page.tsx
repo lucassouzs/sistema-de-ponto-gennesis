@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -48,7 +49,7 @@ const formatDate = (dateString: string | Date): string => {
   return `${day}/${month}/${year}`;
 };
 
-export default function VacationsPage() {
+function VacationsPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -561,5 +562,13 @@ export default function VacationsPage() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function VacationsPage() {
+  return (
+    <ProtectedRoute route="/ponto/ferias">
+      <VacationsPageContent />
+    </ProtectedRoute>
   );
 }

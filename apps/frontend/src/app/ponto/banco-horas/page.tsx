@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Clock, Calendar, Filter, Download, Search, Building2, User, CreditCard, ChevronDown, ChevronUp, ListPlus, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
 import { DEPARTMENTS_LIST, CLIENTS_LIST, POLOS_LIST } from '@/constants/payrollFilters';
@@ -53,7 +54,7 @@ interface BankHoursFilters {
   endDate: string;
 }
 
-export default function BankHoursPage() {
+function BankHoursPageContent() {
   const { costCentersList } = useCostCenters();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -715,5 +716,13 @@ export default function BankHoursPage() {
       </div>
 
     </MainLayout>
+  );
+}
+
+export default function BankHoursPage() {
+  return (
+    <ProtectedRoute route="/ponto/banco-horas">
+      <BankHoursPageContent />
+    </ProtectedRoute>
   );
 }

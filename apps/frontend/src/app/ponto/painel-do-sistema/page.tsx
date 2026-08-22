@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
 import { RmOcDashboard } from '@/components/dashboard/RmOcDashboard';
@@ -46,25 +47,27 @@ export default function PainelDoSistemaPage() {
   };
 
   return (
-    <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-      <div className="space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-            Painel do Sistema
-          </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-            Visão operacional de requisições de materiais (RMs) e ordens de compra (OCs)
-          </p>
+    <ProtectedRoute route="/ponto/painel-do-sistema">
+      <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+        <div className="space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+              Painel do Sistema
+            </h1>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+              Visão operacional de requisições de materiais (RMs) e ordens de compra (OCs)
+            </p>
+          </div>
+
+          <RmOcDashboard />
         </div>
 
-        <RmOcDashboard />
-      </div>
-
-      <ChangePasswordModal
-        isOpen={isChangePasswordOpen}
-        onClose={() => setIsChangePasswordOpen(false)}
-        onSuccess={() => setIsChangePasswordOpen(false)}
-      />
-    </MainLayout>
+        <ChangePasswordModal
+          isOpen={isChangePasswordOpen}
+          onClose={() => setIsChangePasswordOpen(false)}
+          onSuccess={() => setIsChangePasswordOpen(false)}
+        />
+      </MainLayout>
+    </ProtectedRoute>
   );
 }

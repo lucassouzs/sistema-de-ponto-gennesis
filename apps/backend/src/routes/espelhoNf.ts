@@ -1,7 +1,26 @@
 import { Router } from 'express';
+import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import { prisma } from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
+import { requireAnyModuleAccess, requireModuleAccess } from '../middleware/permissionAuth';
 import { createError } from '../middleware/errorHandler';
+
+const ESPELHO_NF_KEY = pathToModuleKey('/ponto/espelho-nf');
+const PRESTADORES_KEY = pathToModuleKey('/ponto/espelho-nf/prestadores-servico');
+const TOMADORES_KEY = pathToModuleKey('/ponto/espelho-nf/tomadores-servico');
+const CONTAS_BANCARIAS_KEY = pathToModuleKey('/ponto/espelho-nf/contas-bancarias');
+const CODIGOS_TRIBUTARIOS_KEY = pathToModuleKey('/ponto/espelho-nf/codigos-tributarios');
+const APROVAR_ESPELHO_NF_KEY = pathToModuleKey('/ponto/controle/aprovar-espelho-nf');
+
+/** O bootstrap carrega os dados usados pelo espelho, por cada tela de cadastro e pela aprovação. */
+const requireEspelhoNfRead = requireAnyModuleAccess([
+  ESPELHO_NF_KEY,
+  PRESTADORES_KEY,
+  TOMADORES_KEY,
+  CONTAS_BANCARIAS_KEY,
+  CODIGOS_TRIBUTARIOS_KEY,
+  APROVAR_ESPELHO_NF_KEY,
+]);
 
 const COLLECTION_TYPES = ['RETIDO', 'RECOLHIDO'] as const;
 function normCollectionType(v: unknown): string {
@@ -62,7 +81,7 @@ function stripFederalJsonFieldsForPrisma(data: Record<string, any>): Record<stri
 const router = Router();
 router.use(authenticate);
 
-router.get('/bootstrap', async (_req, res, next) => {
+router.get('/bootstrap', requireEspelhoNfRead, async (_req, res, next) => {
   try {
     const p = prisma as any;
     const [providers, takers, bankAccounts, taxCodes, mirrors] = await Promise.all([
@@ -160,7 +179,7 @@ router.get('/bootstrap', async (_req, res, next) => {
   }
 });
 
-router.put('/bootstrap', async (req, res, next) => {
+router.put('/bootstrap', requireEspelhoNfRead, async (req, res, next) => {
   try {
     const p = prisma as any;
     const mirrorHasCnae = Boolean(
@@ -518,7 +537,7 @@ function taxCodeDbRowToApiBody(row: Record<string, any>) {
 }
 
 // --- Prestadores ---
-router.post('/service-providers', async (req, res, next) => {
+router.post('/service-providers', requireModuleAccess(PRESTADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const b = (req.body || {}) as Record<string, any>;
@@ -543,7 +562,7 @@ router.post('/service-providers', async (req, res, next) => {
   }
 });
 
-router.patch('/service-providers/:id', async (req, res, next) => {
+router.patch('/service-providers/:id', requireModuleAccess(PRESTADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -578,7 +597,7 @@ router.patch('/service-providers/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/service-providers/:id', async (req, res, next) => {
+router.delete('/service-providers/:id', requireModuleAccess(PRESTADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -593,7 +612,7 @@ router.delete('/service-providers/:id', async (req, res, next) => {
 });
 
 // --- Contas bancárias ---
-router.post('/bank-accounts', async (req, res, next) => {
+router.post('/bank-accounts', requireModuleAccess(CONTAS_BANCARIAS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const b = (req.body || {}) as Record<string, any>;
@@ -613,7 +632,7 @@ router.post('/bank-accounts', async (req, res, next) => {
   }
 });
 
-router.patch('/bank-accounts/:id', async (req, res, next) => {
+router.patch('/bank-accounts/:id', requireModuleAccess(CONTAS_BANCARIAS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -634,7 +653,7 @@ router.patch('/bank-accounts/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/bank-accounts/:id', async (req, res, next) => {
+router.delete('/bank-accounts/:id', requireModuleAccess(CONTAS_BANCARIAS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -654,7 +673,7 @@ router.delete('/bank-accounts/:id', async (req, res, next) => {
 });
 
 // --- Códigos tributários ---
-router.post('/tax-codes', async (req, res, next) => {
+router.post('/tax-codes', requireModuleAccess(CODIGOS_TRIBUTARIOS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const raw = (req.body || {}) as Record<string, any>;
@@ -669,7 +688,7 @@ router.post('/tax-codes', async (req, res, next) => {
   }
 });
 
-router.patch('/tax-codes/:id', async (req, res, next) => {
+router.patch('/tax-codes/:id', requireModuleAccess(CODIGOS_TRIBUTARIOS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -695,7 +714,7 @@ router.patch('/tax-codes/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/tax-codes/:id', async (req, res, next) => {
+router.delete('/tax-codes/:id', requireModuleAccess(CODIGOS_TRIBUTARIOS_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -715,7 +734,7 @@ router.delete('/tax-codes/:id', async (req, res, next) => {
 });
 
 // --- Tomadores ---
-router.post('/service-takers', async (req, res, next) => {
+router.post('/service-takers', requireModuleAccess(TOMADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const b = (req.body || {}) as Record<string, any>;
@@ -768,7 +787,7 @@ router.post('/service-takers', async (req, res, next) => {
   }
 });
 
-router.patch('/service-takers/:id', async (req, res, next) => {
+router.patch('/service-takers/:id', requireModuleAccess(TOMADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;
@@ -821,7 +840,7 @@ router.patch('/service-takers/:id', async (req, res, next) => {
   }
 });
 
-router.delete('/service-takers/:id', async (req, res, next) => {
+router.delete('/service-takers/:id', requireModuleAccess(TOMADORES_KEY), async (req, res, next) => {
   try {
     const p = prismaEspelho();
     const { id } = req.params;

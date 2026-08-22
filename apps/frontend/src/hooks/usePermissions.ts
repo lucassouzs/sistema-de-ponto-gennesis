@@ -558,11 +558,6 @@ export function useRoutePermission(route: string) {
     permissions,
     isLoading,
     isElevatedUser,
-    isDepartmentPessoal,
-    isDepartmentProjetos,
-    isDepartmentFinanceiro,
-    isDepartmentCompras,
-    isDepartmentJuridico,
     canAccessCollaborationTools,
     can,
     canAccessContract,
@@ -594,8 +589,8 @@ export function useRoutePermission(route: string) {
   const isAdministrator = isElevatedUser;
 
   const routePermissions: Record<string, boolean> = {
-    '/ponto': isAdministrator || isDepartmentPessoal || permissions.canRegisterTime,
-    '/ponto/painel-do-sistema': isAdministrator || isDepartmentPessoal || permissions.canViewDashboard,
+    '/ponto': isAdministrator || permissions.canRegisterTime,
+    '/ponto/painel-do-sistema': isAdministrator || permissions.canViewDashboard,
     '/ponto/agenda': canAccessCollaborationTools,
     '/ponto/conversas': canAccessCollaborationTools,
     /**
@@ -615,71 +610,50 @@ export function useRoutePermission(route: string) {
       can(pk('/ponto/controle/aprovar-oc-compras')) ||
       can(pk('/ponto/controle/aprovar-oc-diretoria')) ||
       can(pk('/ponto/controle/aprovar-requisicoes-materiais')),
-    '/ponto/funcionarios':
-      isAdministrator || isDepartmentPessoal || permissions.canManageEmployees,
-    '/ponto/aniversariantes': isAdministrator || isDepartmentPessoal || can(pk('/ponto/aniversariantes')),
-    '/ponto/seguranca-do-trabalho':
-      isAdministrator || isDepartmentPessoal || can(pk('/ponto/seguranca-do-trabalho')),
+    '/ponto/funcionarios': isAdministrator || permissions.canManageEmployees,
+    '/ponto/aniversariantes': isAdministrator || can(pk('/ponto/aniversariantes')),
+    '/ponto/seguranca-do-trabalho': isAdministrator || can(pk('/ponto/seguranca-do-trabalho')),
     '/ponto/atestados': isAdministrator || can(pk('/ponto/atestados')),
-    '/ponto/gerenciar-atestados': isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-atestados')),
+    '/ponto/gerenciar-atestados': isAdministrator || can(pk('/ponto/gerenciar-atestados')),
     '/ponto/solicitacoes': isAdministrator || can(pk('/ponto/solicitacoes')),
     '/ponto/gerenciar-solicitacoes': isAdministrator || can(pk('/ponto/gerenciar-solicitacoes')),
-    '/ponto/solicitacoes-gerais':
-      isAdministrator || isDepartmentPessoal || can(pk('/ponto/solicitacoes-dp')),
+    '/ponto/solicitacoes-gerais': isAdministrator || can(pk('/ponto/solicitacoes-dp')),
     '/ponto/gerenciar-solicitacoes-gerais':
-      isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-solicitacoes-dp')),
+      isAdministrator || can(pk('/ponto/gerenciar-solicitacoes-dp')),
     '/ponto/gerenciar-solicitacoes-adm-tst':
       isAdministrator || can(pk('/ponto/gerenciar-solicitacoes-adm-tst')),
     '/ponto/ferias': isAdministrator || can(pk('/ponto/ferias')),
-    '/ponto/gerenciar-ferias': isAdministrator || isDepartmentPessoal || permissions.canManageVacations,
-    '/ponto/gerenciar-feriados': isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-feriados')),
-    '/ponto/banco-horas': isAdministrator || isDepartmentPessoal || permissions.canManageBankHours,
-    '/ponto/folha-pagamento': isAdministrator || isDepartmentPessoal || permissions.canAccessPayroll,
-    '/relatorios/alocacao': isAdministrator || isDepartmentPessoal || permissions.canAccessPayroll,
-    '/ponto/centros-custo': isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo')),
-    '/ponto/materiais-construcao': isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao')),
+    '/ponto/gerenciar-ferias': isAdministrator || permissions.canManageVacations,
+    '/ponto/gerenciar-feriados': isAdministrator || can(pk('/ponto/gerenciar-feriados')),
+    '/ponto/banco-horas': isAdministrator || permissions.canManageBankHours,
+    '/ponto/folha-pagamento': isAdministrator || permissions.canAccessPayroll,
+    '/relatorios/alocacao': isAdministrator || permissions.canAccessPayroll,
+    '/ponto/centros-custo': isAdministrator || can(pk('/ponto/centros-custo')),
+    '/ponto/materiais-construcao': isAdministrator || can(pk('/ponto/materiais-construcao')),
     '/ponto/andamento-da-os': canAccessOsRoutePage,
-    '/ponto/meus-chamados': true,
+    '/ponto/meus-chamados': isAdministrator || can(pk('/ponto/meus-chamados')),
     '/ponto/sistema-gestao-os': isAdministrator || can(pk('/ponto/sistema-gestao-os')),
     '/ponto/sistema-gestao-os/planos':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/planos')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/planos')),
     '/ponto/sistema-gestao-os/relatorios':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/relatorios')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/relatorios')),
     '/ponto/sistema-gestao-os/cadastros':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/cadastros')),
     '/ponto/sistema-gestao-os/locais':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/locais')) ||
-      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/locais')),
     '/ponto/sistema-gestao-os/equipamentos':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/equipamentos')) ||
-      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/equipamentos')),
     '/ponto/sistema-gestao-os/tipos-servico':
-      isAdministrator ||
-      can(pk('/ponto/sistema-gestao-os/tipos-servico')) ||
-      can(pk('/ponto/sistema-gestao-os/cadastros')) ||
-      can(pk('/ponto/sistema-gestao-os')),
+      isAdministrator || can(pk('/ponto/sistema-gestao-os/tipos-servico')),
     '/ponto/permissoes': true,
-    '/ponto/conversas-whatsapp': isAdministrator || isDepartmentPessoal || can(pk('/ponto/conversas-whatsapp')),
+    '/ponto/conversas-whatsapp': isAdministrator || can(pk('/ponto/conversas-whatsapp')),
     '/ponto/financeiro': isAdministrator || can(pk('/ponto/financeiro')),
     '/ponto/financeiro/analise-extrato':
-      isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/analise-extrato')),
+      isAdministrator || can(pk('/ponto/financeiro/analise-extrato')),
     '/ponto/financeiro/gestao-solicitacoes':
-      isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/gestao-solicitacoes')),
+      isAdministrator || can(pk('/ponto/financeiro/gestao-solicitacoes')),
     '/ponto/fluig/aprovacoes-workflow':
-      isAdministrator ||
-      isDepartmentFinanceiro ||
-      isDepartmentCompras ||
-      can(pk('/ponto/fluig/aprovacoes-workflow')),
+      isAdministrator || can(pk('/ponto/fluig/aprovacoes-workflow')),
     '/ponto/fluig/aprovadores': canAccessFluigApproversRoute,
     '/ponto/orcamento': canAccessOrcamentoRoutePage,
     '/ponto/contratos': isAdministrator || can(pk('/ponto/contratos')),
@@ -692,22 +666,15 @@ export function useRoutePermission(route: string) {
     '/ponto/recebimento-entregas': canAccessRecebimentoEntregasRoutePage,
     '/ponto/espelho-nf': isAdministrator || can(pk('/ponto/espelho-nf')),
     '/ponto/prestadores-servico':
-      isAdministrator ||
-      can(pk('/ponto/espelho-nf/prestadores-servico')) ||
-      can(pk('/ponto/espelho-nf')),
+      isAdministrator || can(pk('/ponto/espelho-nf/prestadores-servico')),
     '/ponto/tomadores-servico':
-      isAdministrator ||
-      can(pk('/ponto/espelho-nf/tomadores-servico')) ||
-      can(pk('/ponto/espelho-nf')),
+      isAdministrator || can(pk('/ponto/espelho-nf/tomadores-servico')),
     '/ponto/contas-bancarias':
-      isAdministrator ||
-      can(pk('/ponto/espelho-nf/contas-bancarias')) ||
-      can(pk('/ponto/espelho-nf')),
+      isAdministrator || can(pk('/ponto/espelho-nf/contas-bancarias')),
     '/ponto/codigos-tributarios':
-      isAdministrator ||
-      can(pk('/ponto/espelho-nf/codigos-tributarios')) ||
-      can(pk('/ponto/espelho-nf')),
+      isAdministrator || can(pk('/ponto/espelho-nf/codigos-tributarios')),
     '/ponto/licitacoes': isAdministrator || can(pk('/ponto/licitacoes')),
+    '/ponto/licitacoes-pncp': isAdministrator || can(pk('/ponto/licitacoes-pncp')),
     '/ponto/responsaveis-tecnicos': isAdministrator || can(pk('/ponto/responsaveis-tecnicos')),
     '/ponto/controle-anuidade': isAdministrator || can(pk('/ponto/controle-anuidade')),
     '/ponto/controle-pagamentos-art': isAdministrator || can(pk('/ponto/controle-pagamentos-art')),
@@ -715,49 +682,36 @@ export function useRoutePermission(route: string) {
     '/ponto/solicitar-materiais': isAdministrator || can(pk('/ponto/solicitar-materiais')),
     '/ponto/solicitar-ferramentas':
       isAdministrator || can(pk('/ponto/solicitar-ferramentas')),
-    '/ponto/gerenciar-materiais': isAdministrator || isDepartmentCompras || can(pk('/ponto/gerenciar-materiais')),
-    '/ponto/mapa-cotacao': isAdministrator || isDepartmentCompras || can(pk('/ponto/mapa-cotacao')),
-    '/ponto/ordem-de-compra': isAdministrator || isDepartmentCompras || can(pk('/ponto/ordem-de-compra')),
+    '/ponto/gerenciar-materiais': isAdministrator || can(pk('/ponto/gerenciar-materiais')),
+    '/ponto/mapa-cotacao': isAdministrator || can(pk('/ponto/mapa-cotacao')),
+    '/ponto/ordem-de-compra': isAdministrator || can(pk('/ponto/ordem-de-compra')),
     '/ponto/controle-entregas': isAdministrator || can(pk('/ponto/controle-entregas')),
-    '/ponto/entregas-logistica':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/entregas-logistica')),
-    '/ponto/entrega-logistica':
-      isAdministrator || can(pk('/ponto/entrega-logistica')),
-    '/ponto/estoque': isAdministrator || isDepartmentCompras || can(pk('/ponto/estoque')),
-    '/ponto/ajuste-estoque': isAdministrator || isDepartmentCompras || can(pk('/ponto/ajuste-estoque')),
-    '/ponto/furo-estoque': isAdministrator || isDepartmentCompras || can(pk('/ponto/furo-estoque')),
-    '/ponto/fds-aprovadas':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/fds-aprovadas')),
+    '/ponto/entregas-logistica': isAdministrator || can(pk('/ponto/entregas-logistica')),
+    '/ponto/entrega-logistica': isAdministrator || can(pk('/ponto/entrega-logistica')),
+    '/ponto/estoque': isAdministrator || can(pk('/ponto/estoque')),
+    '/ponto/ajuste-estoque': isAdministrator || can(pk('/ponto/ajuste-estoque')),
+    '/ponto/furo-estoque': isAdministrator || can(pk('/ponto/furo-estoque')),
+    '/ponto/fds-aprovadas': isAdministrator || can(pk('/ponto/fds-aprovadas')),
     '/ponto/solicitacoes-combustivel':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-combustivel')),
+      isAdministrator || can(pk('/ponto/solicitacoes-combustivel')),
     '/ponto/solicitacoes-reserva-veiculos':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-reserva-veiculos')),
+      isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos')),
     '/ponto/solicitacoes-ferramentas':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitacoes-ferramentas')),
-    '/ponto/fornecedores': isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores')),
-    '/ponto/veiculos': isAdministrator || isDepartmentCompras || can(pk('/ponto/veiculos')),
+      isAdministrator || can(pk('/ponto/solicitacoes-ferramentas')),
+    '/ponto/fornecedores': isAdministrator || can(pk('/ponto/fornecedores')),
+    '/ponto/veiculos': isAdministrator || can(pk('/ponto/veiculos')),
     '/ponto/regioes-postos-combustivel':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/regioes-postos-combustivel')),
-    '/ponto/reserva-veiculos':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/reserva-veiculos')),
-    '/ponto/solicitar-combustivel':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/solicitar-combustivel')),
-    '/ponto/condicoes-pagamento':
-      isAdministrator || isDepartmentCompras || can(pk('/ponto/condicoes-pagamento')),
-    '/ponto/natureza-orcamentaria':
-      isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/natureza-orcamentaria')),
-    '/ponto/juridico':
-      isAdministrator || isDepartmentJuridico || can(pk('/ponto/juridico')),
+      isAdministrator || can(pk('/ponto/regioes-postos-combustivel')),
+    '/ponto/reserva-veiculos': isAdministrator || can(pk('/ponto/reserva-veiculos')),
+    '/ponto/solicitar-combustivel': isAdministrator || can(pk('/ponto/solicitar-combustivel')),
+    '/ponto/condicoes-pagamento': isAdministrator || can(pk('/ponto/condicoes-pagamento')),
+    '/ponto/natureza-orcamentaria': isAdministrator || can(pk('/ponto/natureza-orcamentaria')),
+    '/ponto/juridico': isAdministrator || can(pk('/ponto/juridico')),
     '/ponto/financeiro/controle-financeiro':
-      isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/controle-financeiro')),
-    '/ponto/financeiro/receitas':
-      isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/receitas')),
+      isAdministrator || can(pk('/ponto/financeiro/controle-financeiro')),
+    '/ponto/financeiro/receitas': isAdministrator || can(pk('/ponto/financeiro/receitas')),
     '/ponto/financeiro/controle-nfs':
-      isAdministrator ||
-      isDepartmentFinanceiro ||
-      can(pk('/ponto/financeiro/controle-nfs')) ||
-      can(pk('/ponto/financeiro/analise-extrato')) ||
-      can(pk('/ponto/financeiro/controle-financeiro')),
+      isAdministrator || can(pk('/ponto/financeiro/controle-nfs')),
   };
 
   return {

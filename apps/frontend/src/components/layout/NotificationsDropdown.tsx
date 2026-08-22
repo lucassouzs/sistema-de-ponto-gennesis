@@ -48,7 +48,6 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
   const {
     isLoading: permissionsLoading,
     isAdministrator,
-    isDepartmentCompras,
     can,
     canAccessDpApproverPages,
     canApproveEspelhoNf,
@@ -60,22 +59,14 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
   const { counts, isLoading: approvalsLoading } = useApprovalNotificationCounts();
   const { counts: fdNotificationCounts } = useFdNotificationCounts();
 
-  const canSeeFuroEstoque =
-    isAdministrator || isDepartmentCompras || can(pathToModuleKey('/ponto/furo-estoque'));
+  const canSeeFuroEstoque = isAdministrator || can(pathToModuleKey('/ponto/furo-estoque'));
   const canSeeFuelSupplies =
-    isAdministrator ||
-    isDepartmentCompras ||
-    can(pathToModuleKey('/ponto/solicitacoes-combustivel'));
+    isAdministrator || can(pathToModuleKey('/ponto/solicitacoes-combustivel'));
   const canSeeVehicleReservationSupplies =
-    isAdministrator ||
-    isDepartmentCompras ||
-    can(pathToModuleKey('/ponto/solicitacoes-reserva-veiculos'));
+    isAdministrator || can(pathToModuleKey('/ponto/solicitacoes-reserva-veiculos'));
   const canSeeEntregaLogistica =
     isAdministrator || can(pathToModuleKey('/ponto/entrega-logistica'));
-  const canSeeFdAprovadas =
-    isAdministrator ||
-    isDepartmentCompras ||
-    can(pathToModuleKey('/ponto/fds-aprovadas'));
+  const canSeeFdAprovadas = isAdministrator || can(pathToModuleKey('/ponto/fds-aprovadas'));
 
   const canSeeGestaoOs =
     isAdministrator ||

@@ -17,19 +17,9 @@ export async function userHasFuelSuppliesModuleAccess(userId: string): Promise<b
   return !!row;
 }
 
-export async function userIsDepartmentCompras(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { employee: { select: { department: true } } },
-  });
-  const dept = user?.employee?.department?.toLowerCase() ?? '';
-  return dept.includes('compras');
-}
-
 export async function userHasFuelSuppliesAccess(userId: string, isAdmin: boolean): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userHasFuelSuppliesModuleAccess(userId)) return true;
-  return userIsDepartmentCompras(userId);
+  return userHasFuelSuppliesModuleAccess(userId);
 }
 
 export async function assertUserHasFuelSuppliesAccess(

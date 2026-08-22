@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -27,7 +28,7 @@ import {
 import { Vacation, ComplianceReport } from '@/types';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
-export default function FeriasPage() {
+function GerenciarFeriasPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<'pending' | 'all' | 'compliance'>('pending');
@@ -695,5 +696,13 @@ export default function FeriasPage() {
         </AppModalOverlay>
       )}
     </MainLayout>
+  );
+}
+
+export default function GerenciarFeriasPage() {
+  return (
+    <ProtectedRoute route="/ponto/gerenciar-ferias">
+      <GerenciarFeriasPageContent />
+    </ProtectedRoute>
   );
 }

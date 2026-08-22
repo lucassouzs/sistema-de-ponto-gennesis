@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import {
   MessageSquare,
@@ -287,7 +288,7 @@ const ABAS: { id: TabFiltro; label: string; icon: React.ElementType }[] = [
   { id: 'outros', label: 'Outros', icon: MoreHorizontal }
 ];
 
-export default function ConversasWhatsAppPage() {
+function ConversasWhatsAppPageContent() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -1366,5 +1367,13 @@ export default function ConversasWhatsAppPage() {
           document.body
         )}
     </MainLayout>
+  );
+}
+
+export default function ConversasWhatsAppPage() {
+  return (
+    <ProtectedRoute route="/ponto/conversas-whatsapp">
+      <ConversasWhatsAppPageContent />
+    </ProtectedRoute>
   );
 }

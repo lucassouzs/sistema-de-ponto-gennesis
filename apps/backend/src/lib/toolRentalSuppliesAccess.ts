@@ -1,7 +1,6 @@
 import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { prisma } from './prisma';
 import { createError } from '../middleware/errorHandler';
-import { userIsDepartmentCompras } from './fuelSuppliesAccess';
 
 export const TOOL_RENTAL_SUPPLIES_MODULE_KEY = pathToModuleKey(
   '/ponto/solicitacoes-ferramentas'
@@ -25,8 +24,7 @@ export async function userHasToolRentalSuppliesAccess(
   isAdmin: boolean
 ): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userHasToolRentalSuppliesModuleAccess(userId)) return true;
-  return userIsDepartmentCompras(userId);
+  return userHasToolRentalSuppliesModuleAccess(userId);
 }
 
 export async function assertUserHasToolRentalSuppliesAccess(

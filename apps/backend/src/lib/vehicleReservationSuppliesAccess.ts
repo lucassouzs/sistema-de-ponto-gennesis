@@ -1,7 +1,6 @@
 import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { prisma } from './prisma';
 import { createError } from '../middleware/errorHandler';
-import { userIsDepartmentCompras } from './fuelSuppliesAccess';
 
 export const VEHICLE_RESERVATION_SUPPLIES_MODULE_KEY = pathToModuleKey(
   '/ponto/solicitacoes-reserva-veiculos'
@@ -27,8 +26,7 @@ export async function userHasVehicleReservationSuppliesAccess(
   isAdmin: boolean
 ): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userHasVehicleReservationSuppliesModuleAccess(userId)) return true;
-  return userIsDepartmentCompras(userId);
+  return userHasVehicleReservationSuppliesModuleAccess(userId);
 }
 
 export async function assertUserHasVehicleReservationSuppliesAccess(

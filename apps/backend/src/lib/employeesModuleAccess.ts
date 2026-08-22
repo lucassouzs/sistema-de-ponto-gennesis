@@ -8,19 +8,9 @@ import { createError } from '../middleware/errorHandler';
 
 export const EMPLOYEES_MODULE_KEY = pathToModuleKey('/ponto/funcionarios');
 
-export async function userIsDepartmentPessoal(userId: string): Promise<boolean> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { employee: { select: { department: true } } },
-  });
-  const dept = user?.employee?.department?.toLowerCase() ?? '';
-  return dept.includes('departamento pessoal') || dept.includes('pessoal');
-}
-
-/** Alinhado ao front: admin, DP ou qualquer permissão no módulo Funcionários. */
+/** Alinhado ao front: admin ou qualquer permissão no módulo Funcionários. */
 export async function userHasEmployeesModuleAccess(userId: string, isAdmin: boolean): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userIsDepartmentPessoal(userId)) return true;
 
   const row = await prisma.userPermission.findFirst({
     where: {

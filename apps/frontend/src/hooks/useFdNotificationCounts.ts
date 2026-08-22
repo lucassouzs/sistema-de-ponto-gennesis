@@ -15,13 +15,11 @@ export function useFdNotificationCounts() {
   const {
     isLoading,
     isAdministrator,
-    isDepartmentCompras,
     canAccessDpApproverPages,
     can,
   } = usePermissions();
 
-  const canFetchPurchase =
-    isAdministrator || isDepartmentCompras || can(pathToModuleKey('/ponto/fds-aprovadas'));
+  const canFetchPurchase = isAdministrator || can(pathToModuleKey('/ponto/fds-aprovadas'));
   const canFetchManager = isAdministrator || canAccessDpApproverPages;
   const enabled = !isLoading && (canFetchPurchase || canFetchManager);
 

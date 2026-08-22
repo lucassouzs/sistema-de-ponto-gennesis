@@ -2565,13 +2565,10 @@ export default function AnaliseExtratoPage() {
   const pageTitle = 'Balanço Financeiro';
   const pageSubtitle = 'Movimentações do balanço financeiro integradas ao TOTVS RM';
 
-  const { isDepartmentFinanceiro, userPosition, can, user, isLoading: permissionsLoading } =
-    usePermissions();
+  const { userPosition, can, user, isLoading: permissionsLoading } = usePermissions();
   const isAdministrator = userPosition === 'Administrador';
   const canAccess =
-    isAdministrator ||
-    isDepartmentFinanceiro ||
-    can(pathToModuleKey('/ponto/financeiro/analise-extrato'));
+    isAdministrator || can(pathToModuleKey('/ponto/financeiro/analise-extrato'));
 
   const [ccFilterCodes, setCcFilterCodes] = useState<string[]>([]);
   const [natureFilterCodes, setNatureFilterCodes] = useState<string[]>([]);

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { MedicalCertificateCard } from '@/components/medical-certificate/MedicalCertificateCard';
 import { MedicalCertificateList } from '@/components/medical-certificate/MedicalCertificateList';
@@ -12,7 +13,7 @@ import { Loading } from '@/components/ui/Loading';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
-export default function AtestadosPage() {
+function AtestadosPageContent() {
   const [activeTab, setActiveTab] = useState<'list' | 'send'>('list');
 
   // Buscar dados do usuário
@@ -110,5 +111,13 @@ export default function AtestadosPage() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function AtestadosPage() {
+  return (
+    <ProtectedRoute route="/ponto/atestados">
+      <AtestadosPageContent />
+    </ProtectedRoute>
   );
 }

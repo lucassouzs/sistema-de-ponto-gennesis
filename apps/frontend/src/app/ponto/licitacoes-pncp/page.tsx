@@ -2298,7 +2298,7 @@ export default function LicitacoesPncpPage() {
   }
 
   return (
-    <ProtectedRoute route="/ponto/licitacoes">
+    <ProtectedRoute route="/ponto/licitacoes-pncp">
       <MainLayout
         userRole="EMPLOYEE"
         userName={user.name || ''}

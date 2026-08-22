@@ -6,7 +6,6 @@ import {
   getContractGestorListScopeCostCenterIds,
   userHasContractGestorAssignment,
 } from './contractGestorApprovalAccess';
-import { userIsDepartmentCompras } from './fuelSuppliesAccess';
 
 export const RM_APPROVE_MODULE_KEY = pathToModuleKey('/ponto/controle/aprovar-requisicoes-materiais');
 export const GERENCIAR_MATERIAIS_MODULE_KEY = pathToModuleKey('/ponto/gerenciar-materiais');
@@ -27,13 +26,12 @@ export async function userHasRmApprovePermission(userId: string): Promise<boolea
   return !!row;
 }
 
-/** Mesma regra da tela Mapa de Cotação: admin, dept. Compras ou permissão do módulo. */
+/** Mesma regra da tela Mapa de Cotação: admin ou permissão do módulo. */
 export async function userHasMapaCotacaoAccess(
   userId: string,
   isAdmin?: boolean,
 ): Promise<boolean> {
   if (isAdmin) return true;
-  if (await userIsDepartmentCompras(userId)) return true;
   const row = await prisma.userPermission.findFirst({
     where: {
       userId,
