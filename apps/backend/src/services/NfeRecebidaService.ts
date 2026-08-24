@@ -39,8 +39,25 @@ type WorkerResult = {
   chave?: string;
   fileName?: string;
   docsCount?: number;
+  documentosRecebidos?: number;
   statusCodigo?: string;
+  statusMotivo?: string;
 };
+
+/** cStat 656: a SEFAZ bloqueia o CNPJ por 1 hora quando as consultas se repetem sem novidade. */
+const SEFAZ_CONSUMO_INDEVIDO = '656';
+const SEFAZ_BLOQUEIO_MS = 60 * 60 * 1000;
+let sefazBlockedUntil: number | null = null;
+
+function sefazBloqueioRestanteMin(): number | null {
+  if (sefazBlockedUntil == null) return null;
+  const restante = sefazBlockedUntil - Date.now();
+  if (restante <= 0) {
+    sefazBlockedUntil = null;
+    return null;
+  }
+  return Math.max(1, Math.ceil(restante / 60_000));
+}
 
 function dataDir(): string {
   const configured = process.env.NFE_DATA_DIR?.trim();
@@ -359,7 +376,55 @@ async function getOrCreateState() {
   });
 }
 
-type ImportResult = 'created' | 'updated' | 'skipped' | 'out_of_period';
+type ImportResult = 'created' | 'updated' | 'skipped' | 'out_of_year';
+
+type ImportCounts = {
+  imported: number;
+  updated: number;
+  skipped: number;
+  outOfYear: number;
+};
+
+function emptyImportCounts(): ImportCounts {
+  return { imported: 0, updated: 0, skipped: 0, outOfYear: 0 };
+}
+
+function addImportCounts(a: ImportCounts, b: ImportCounts): ImportCounts {
+  return {
+    imported: a.imported + b.imported,
+    updated: a.updated + b.updated,
+    skipped: a.skipped + b.skipped,
+    outOfYear: a.outOfYear + b.outOfYear,
+  };
+}
+
+function formatImportMessageParts(counts: ImportCounts): string {
+  if (counts.imported <= 0) return 'nenhuma nota nova nesta consulta';
+  return counts.imported === 1 ? '1 nota nova nesta consulta' : `${counts.imported} notas novas nesta consulta`;
+}
+
+function emissionYear(dataEmissao: Date | null): number | null {
+  if (!dataEmissao) return null;
+  return dataEmissao.getFullYear();
+}
+
+function targetYearFromPeriod(period?: { from?: string; to?: string }): number {
+  const fromYear = period?.from?.slice(0, 4);
+  if (fromYear && /^\d{4}$/.test(fromYear)) return Number(fromYear);
+  const yearEnv = process.env.NFE_AUTO_FETCH_YEAR?.trim();
+  if (yearEnv && /^\d{4}$/.test(yearEnv)) return Number(yearEnv);
+  return new Date().getFullYear();
+}
+
+function classifyImport(
+  result: 'created' | 'updated',
+  dataEmissao: Date | null,
+  year: number
+): ImportResult {
+  const y = emissionYear(dataEmissao);
+  if (y == null || y !== year) return 'out_of_year';
+  return result;
+}
 
 async function importFromXmlFile(
   filePath: string,
@@ -369,17 +434,7 @@ async function importFromXmlFile(
 ): Promise<ImportResult> {
   const xml = await fs.promises.readFile(filePath, 'utf8');
   const parsed = parseNfeXml(xml);
-
-  if (period?.from || period?.to) {
-    if (!parsed.dataEmissao) return 'out_of_period';
-    const ymd = [
-      parsed.dataEmissao.getFullYear(),
-      String(parsed.dataEmissao.getMonth() + 1).padStart(2, '0'),
-      String(parsed.dataEmissao.getDate()).padStart(2, '0')
-    ].join('-');
-    if (period.from && ymd < period.from) return 'out_of_period';
-    if (period.to && ymd > period.to) return 'out_of_period';
-  }
+  const year = targetYearFromPeriod(period);
 
   const fileName = path.basename(filePath);
   const destDir = ensureDataDir();
@@ -403,56 +458,98 @@ async function importFromXmlFile(
     fetchedAt: new Date()
   };
 
+  const incomingResumo =
+    (schema || '').toLowerCase().includes('resnfe') ||
+    fileName.toLowerCase().startsWith('resnfe');
+
   if (parsed.chaveAcesso) {
     const existing = await prisma.nfeRecebida.findUnique({
       where: { chaveAcesso: parsed.chaveAcesso },
-      select: { id: true, schema: true, xmlFileName: true }
+      select: { id: true, schema: true, xmlFileName: true, dataEmissao: true, valor: true }
     });
     if (existing) {
       const existingFull =
         (existing.schema || '').toLowerCase().includes('proc') ||
         (existing.xmlFileName || '').startsWith('NFe-');
-      const incomingResumo =
-        (schema || '').toLowerCase().includes('resnfe') ||
-        (fileName || '').toLowerCase().startsWith('resnfe');
-      // Não rebaixar XML completo para resumo.
       if (existingFull && incomingResumo) return 'skipped';
+
+      const keepDate =
+        incomingResumo ||
+        !parsed.dataEmissao ||
+        (existing.dataEmissao != null &&
+          emissionYear(parsed.dataEmissao) !== emissionYear(existing.dataEmissao) &&
+          emissionYear(existing.dataEmissao) === year);
+      const savedDate = keepDate ? existing.dataEmissao : parsed.dataEmissao;
+      const savedValor =
+        parsed.valor == null && existing.valor != null ? existing.valor : parsed.valor;
 
       await prisma.nfeRecebida.update({
         where: { chaveAcesso: parsed.chaveAcesso },
-        data
+        data: {
+          ...data,
+          dataEmissao: savedDate,
+          valor: savedValor,
+          schema: incomingResumo ? existing.schema : data.schema,
+          xmlFileName: incomingResumo ? existing.xmlFileName : data.xmlFileName,
+        }
       });
-      return 'updated';
+      return classifyImport('updated', savedDate, year);
     }
     try {
       await prisma.nfeRecebida.create({
         data: { ...data, chaveAcesso: parsed.chaveAcesso }
       });
-      return 'created';
+      return classifyImport('created', parsed.dataEmissao, year);
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const clash = await prisma.nfeRecebida.findUnique({
+          where: { chaveAcesso: parsed.chaveAcesso },
+          select: { dataEmissao: true, valor: true, schema: true, xmlFileName: true },
+        });
+        const savedDate = incomingResumo && clash?.dataEmissao ? clash.dataEmissao : parsed.dataEmissao;
         await prisma.nfeRecebida.update({
           where: { chaveAcesso: parsed.chaveAcesso },
-          data
+          data: {
+            ...data,
+            dataEmissao: savedDate,
+            valor: parsed.valor == null && clash?.valor != null ? clash.valor : parsed.valor,
+          }
         });
-        return 'updated';
+        return classifyImport('updated', savedDate, year);
       }
       throw err;
     }
   }
 
   const existingByNsu = nsu
-    ? await prisma.nfeRecebida.findFirst({ where: { nsu }, select: { id: true } })
+    ? await prisma.nfeRecebida.findFirst({
+        where: { nsu },
+        select: { id: true, dataEmissao: true, valor: true },
+      })
     : null;
   if (existingByNsu) {
-    await prisma.nfeRecebida.update({ where: { id: existingByNsu.id }, data });
-    return 'updated';
+    const savedDate =
+      incomingResumo && existingByNsu.dataEmissao
+        ? existingByNsu.dataEmissao
+        : parsed.dataEmissao ?? existingByNsu.dataEmissao;
+    await prisma.nfeRecebida.update({
+      where: { id: existingByNsu.id },
+      data: {
+        ...data,
+        dataEmissao: savedDate,
+        valor:
+          parsed.valor == null && existingByNsu.valor != null
+            ? existingByNsu.valor
+            : parsed.valor,
+      },
+    });
+    return classifyImport('updated', savedDate, year);
   }
 
   await prisma.nfeRecebida.create({
     data: { ...data, chaveAcesso: null }
   });
-  return 'created';
+  return classifyImport('created', parsed.dataEmissao, year);
 }
 
 function runJavaWorker(
@@ -653,8 +750,8 @@ function spawnJavaWorker(extraArgs: string[]): Promise<WorkerResult> {
 async function importDirectory(
   dir: string,
   period?: { from?: string; to?: string }
-): Promise<{ imported: number; updated: number; skipped: number }> {
-  if (!fs.existsSync(dir)) return { imported: 0, updated: 0, skipped: 0 };
+): Promise<ImportCounts> {
+  if (!fs.existsSync(dir)) return emptyImportCounts();
   const files = (await fs.promises.readdir(dir)).filter((f) => f.toLowerCase().endsWith('.xml'));
   // Completos (NFe-chave) depois dos resumos, para não sobrescrever procNFe com resNFe.
   files.sort((a, b) => {
@@ -662,9 +759,7 @@ async function importDirectory(
       /^NFe-\d{44}\.xml$/i.test(name) ? 2 : /^resNFe-/i.test(name) ? 0 : 1;
     return score(a) - score(b);
   });
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
+  const counts = emptyImportCounts();
   for (const file of files) {
     const full = path.join(dir, file);
     const nsuMatch = file.match(/(\d{15,})/);
@@ -682,11 +777,12 @@ async function importDirectory(
       schema,
       period
     );
-    if (result === 'created') imported += 1;
-    else if (result === 'updated') updated += 1;
-    else if (result === 'skipped' || result === 'out_of_period') skipped += 1;
+    if (result === 'created') counts.imported += 1;
+    else if (result === 'updated') counts.updated += 1;
+    else if (result === 'skipped') counts.skipped += 1;
+    else if (result === 'out_of_year') counts.outOfYear += 1;
   }
-  return { imported, updated, skipped };
+  return counts;
 }
 
 function normalizePeriod(input?: { periodFrom?: string; periodTo?: string }) {
@@ -731,6 +827,7 @@ export class NfeRecebidaService {
     pageSize?: number;
     periodFrom?: string;
     periodTo?: string;
+    scope?: 'ano' | 'outros';
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(500, Math.max(1, params.pageSize ?? 50));
@@ -740,6 +837,9 @@ export class NfeRecebidaService {
       .map((v) => v.trim())
       .filter(Boolean);
     const period = normalizePeriod(params);
+    const year = nfeAutoFetchPeriod().periodFrom.slice(0, 4);
+    const yearFrom = `${year}-01-01`;
+    const yearTo = `${year}-12-31`;
 
     const and: Prisma.NfeRecebidaWhereInput[] = [];
     if (q) {
@@ -769,7 +869,15 @@ export class NfeRecebidaService {
         }),
       });
     }
-    if (period.from || period.to) {
+    if (params.scope === 'outros') {
+      and.push({
+        OR: [
+          { dataEmissao: null },
+          { dataEmissao: { lt: new Date(`${yearFrom}T00:00:00.000Z`) } },
+          { dataEmissao: { gt: new Date(`${yearTo}T23:59:59.999Z`) } },
+        ],
+      });
+    } else if (period.from || period.to) {
       and.push({
         dataEmissao: {
           ...(period.from ? { gte: new Date(`${period.from}T00:00:00.000Z`) } : {}),
@@ -780,7 +888,21 @@ export class NfeRecebidaService {
 
     const where: Prisma.NfeRecebidaWhereInput = and.length > 0 ? { AND: and } : {};
 
-    const [total, rows, state] = await Promise.all([
+    const yearWhere: Prisma.NfeRecebidaWhereInput = {
+      dataEmissao: {
+        gte: new Date(`${yearFrom}T00:00:00.000Z`),
+        lte: new Date(`${yearTo}T23:59:59.999Z`),
+      },
+    };
+    const outrosWhere: Prisma.NfeRecebidaWhereInput = {
+      OR: [
+        { dataEmissao: null },
+        { dataEmissao: { lt: new Date(`${yearFrom}T00:00:00.000Z`) } },
+        { dataEmissao: { gt: new Date(`${yearTo}T23:59:59.999Z`) } },
+      ],
+    };
+
+    const [total, rows, state, totalAno, totalOutros] = await Promise.all([
       prisma.nfeRecebida.count({ where }),
       prisma.nfeRecebida.findMany({
         where,
@@ -788,7 +910,9 @@ export class NfeRecebidaService {
         skip: (page - 1) * pageSize,
         take: pageSize
       }),
-      getOrCreateState()
+      getOrCreateState(),
+      prisma.nfeRecebida.count({ where: yearWhere }),
+      prisma.nfeRecebida.count({ where: outrosWhere }),
     ]);
 
     const items: NfeRecebidaListItem[] = await Promise.all(
@@ -824,6 +948,8 @@ export class NfeRecebidaService {
     return {
       items,
       total,
+      totalAno,
+      totalOutros,
       page,
       pageSize,
       ultimoNsu: state.ultimoNsu,
@@ -1108,6 +1234,13 @@ export class NfeRecebidaService {
       const importDir = process.env.NFE_XML_DIR?.trim();
 
       if (javaEnabled) {
+        const bloqueioMin = sefazBloqueioRestanteMin();
+        if (bloqueioMin != null) {
+          throw new Error(
+            `A SEFAZ bloqueou novas consultas deste CNPJ por consumo indevido (consultas repetidas). Tente novamente em ~${bloqueioMin} min.`
+          );
+        }
+
         const startNsu = resetNsu ? '000000000000000' : state.ultimoNsu;
         if (resetNsu) {
           await prisma.nfeDistribuicaoState.update({
@@ -1120,19 +1253,22 @@ export class NfeRecebidaService {
           ? Math.max(histMax, Number(process.env.NFE_MAX_CONSULTAS?.trim() || '50') || 50)
           : undefined;
         const result = await runJavaWorker(startNsu, outDir, period, { maxConsultas });
-        // Sempre reimporta data dir + pasta externa (XMLs legados).
         const fromOut = await importDirectory(outDir, period);
-        let fromExtra = { imported: 0, updated: 0, skipped: 0 };
-        if (importDir && path.resolve(importDir) !== path.resolve(outDir)) {
-          fromExtra = await importDirectory(importDir, period);
-        }
-        imported = fromOut.imported + fromExtra.imported;
-        skipped = fromOut.skipped + fromExtra.skipped;
-        const updated = fromOut.updated + fromExtra.updated;
+        imported = fromOut.imported;
+        skipped = fromOut.skipped + fromOut.outOfYear;
         const novoNsu = result.ultimoNsu || startNsu;
-        const updPart = updated > 0 ? `, ${updated} atualizada(s)` : '';
-        const skipPart = skipped > 0 ? `, ${skipped} fora do período/ignorada(s)` : '';
-        message = `SEFAZ${triggerLabel}${periodLabel}: ${imported} nova(s)${updPart}${skipPart}. Último NSU: ${novoNsu}.`;
+
+        if (result.statusCodigo === SEFAZ_CONSUMO_INDEVIDO) {
+          sefazBlockedUntil = Date.now() + SEFAZ_BLOQUEIO_MS;
+          message = `SEFAZ${triggerLabel}: consulta bloqueada por consumo indevido (consultas repetidas). Libera em ~60 min. Último NSU: ${novoNsu}.`;
+          await prisma.nfeDistribuicaoState.update({
+            where: { id: 'default' },
+            data: { lastFetchAt: new Date(), lastMessage: message },
+          });
+          throw new Error(message);
+        }
+
+        message = `SEFAZ${triggerLabel}${periodLabel}: ${formatImportMessageParts(fromOut)}. Último NSU: ${novoNsu}.`;
         await prisma.nfeDistribuicaoState.update({
           where: { id: 'default' },
           data: {
@@ -1144,12 +1280,10 @@ export class NfeRecebidaService {
       } else if (importDir) {
         const result = await importDirectory(importDir, period);
         const fromOut = await importDirectory(outDir, period);
-        imported = result.imported + fromOut.imported;
-        skipped = result.skipped + fromOut.skipped;
-        const updated = result.updated + fromOut.updated;
-        const updPart = updated > 0 ? `, ${updated} atualizada(s)` : '';
-        const skipPart = skipped > 0 ? `, ${skipped} fora do período` : '';
-        message = `Importação de pasta${triggerLabel}${periodLabel}: ${imported} nova(s)${updPart}${skipPart}. Configure NFE_JAVA_ENABLED=1 para buscar na SEFAZ.`;
+        const counts = addImportCounts(result, fromOut);
+        imported = counts.imported;
+        skipped = counts.skipped + counts.outOfYear;
+        message = `Importação de pasta${triggerLabel}${periodLabel}: ${formatImportMessageParts(counts)}. Configure NFE_JAVA_ENABLED=1 para buscar na SEFAZ.`;
         await prisma.nfeDistribuicaoState.update({
           where: { id: 'default' },
           data: {
@@ -1160,15 +1294,14 @@ export class NfeRecebidaService {
       } else {
         // Ainda tenta a pasta local de XMLs (legado).
         const fromOut = await importDirectory(outDir, period);
-        if (fromOut.imported + fromOut.updated === 0 && fromOut.skipped === 0) {
+        if (fromOut.imported + fromOut.updated + fromOut.skipped + fromOut.outOfYear === 0) {
           throw new Error(
             'Busca não configurada. Defina NFE_JAVA_ENABLED=1 (com certificado) ou NFE_XML_DIR / data/nfe-xmls com XMLs.'
           );
         }
         imported = fromOut.imported;
-        skipped = fromOut.skipped;
-        const updPart = fromOut.updated > 0 ? `, ${fromOut.updated} atualizada(s)` : '';
-        message = `Importação local${triggerLabel}${periodLabel}: ${imported} nova(s)${updPart}.`;
+        skipped = fromOut.skipped + fromOut.outOfYear;
+        message = `Importação local${triggerLabel}${periodLabel}: ${formatImportMessageParts(fromOut)}.`;
         await prisma.nfeDistribuicaoState.update({
           where: { id: 'default' },
           data: {
@@ -1212,15 +1345,13 @@ export class NfeRecebidaService {
     const outDir = ensureDataDir();
     const fromDir = await importDirectory(outDir, p);
     const xmlDir = process.env.NFE_XML_DIR?.trim();
-    let extra = { imported: 0, updated: 0, skipped: 0 };
+    let extra = emptyImportCounts();
     if (xmlDir && path.resolve(xmlDir) !== path.resolve(outDir)) {
       extra = await importDirectory(xmlDir, p);
     }
-    const imported = fromDir.imported + extra.imported;
-    const updated = fromDir.updated + extra.updated;
-    const skipped = fromDir.skipped + extra.skipped;
-    const message = `Reimportação local: ${imported} nova(s), ${updated} atualizada(s), ${skipped} ignorada(s).`;
+    const counts = addImportCounts(fromDir, extra);
+    const message = `Reimportação local: ${formatImportMessageParts(counts)}.`;
     // Não sobrescreve lastMessage da SEFAZ (evita poluir a UI)
-    return { imported, updated, skipped, message };
+    return { ...counts, message };
   }
 }

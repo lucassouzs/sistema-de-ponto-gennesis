@@ -99,6 +99,8 @@ type NfeDetalhe = NfeItem & {
 type NfeListResponse = {
   items: NfeItem[];
   total: number;
+  totalAno?: number;
+  totalOutros?: number;
   page: number;
   pageSize: number;
   ultimoNsu: string;
@@ -276,10 +278,36 @@ function yearPeriodForFetch() {
   };
 }
 
-function statusBuscaVisivel(msg: string | null | undefined) {
+function statusBuscaVisivel(
+  msg: string | null | undefined,
+  totalAno: number,
+  totalOutros: number,
+  year: number
+) {
   if (!msg) return null;
   if (/reimporta/i.test(msg)) return null;
-  return msg;
+
+  const totais = `${year}: ${totalAno} nota(s). Outros períodos: ${totalOutros} nota(s).`;
+  if (/consumo indevido|bloquead/i.test(msg)) {
+    return `${msg} ${totais}`;
+  }
+
+  const novasMatch = msg.match(/(\d+)\s*nota[s]?\s+nova/i) || msg.match(/(\d+)\s*nova/);
+  const novas = /nenhuma nota nova/i.test(msg)
+    ? 0
+    : novasMatch
+      ? Number(novasMatch[1])
+      : null;
+  const nsuMatch = msg.match(/Último NSU:\s*([0-9]+)/i);
+  const nsuPart = nsuMatch ? ` Último NSU: ${nsuMatch[1]}.` : '';
+  const novasTxt =
+    novas == null
+      ? 'Última consulta à SEFAZ concluída.'
+      : novas === 1
+        ? '1 nota nova nesta consulta.'
+        : `${novas} nota(s) nova(s) nesta consulta.`;
+
+  return `${novasTxt}${nsuPart} ${totais}`;
 }
 
 export default function NfsRecebidasPage() {
@@ -296,6 +324,8 @@ export default function NfsRecebidasPage() {
   const [filterEmitentes, setFilterEmitentes] = useState<string[]>([]);
   const [draftEmitentes, setDraftEmitentes] = useState<string[]>([]);
   const [detailNfe, setDetailNfe] = useState<NfeItem | null>(null);
+  const [listaScope, setListaScope] = useState<'ano' | 'outros'>('ano');
+  const [draftListaScope, setDraftListaScope] = useState<'ano' | 'outros'>('ano');
   const [buscarProgress, setBuscarProgress] = useState<number | null>(null);
   const buscarProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -361,7 +391,7 @@ export default function NfsRecebidasPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filterPeriodFrom, filterPeriodTo, filterEmitentes]);
+  }, [search, filterPeriodFrom, filterPeriodTo, filterEmitentes, listaScope]);
 
   const { data: emitentesData } = useQuery({
     queryKey: ['nfe-recebidas-emitentes'],
@@ -390,6 +420,7 @@ export default function NfsRecebidasPage() {
     setDraftEmitentes(filterEmitentes);
     setDraftFrom(filterPeriodFrom);
     setDraftTo(filterPeriodTo);
+    setDraftListaScope(listaScope);
     setFiltersOpen(true);
   };
 
@@ -397,16 +428,18 @@ export default function NfsRecebidasPage() {
     setDraftEmitentes([]);
     setDraftFrom(YEAR_FROM);
     setDraftTo(YEAR_TO);
+    setDraftListaScope('ano');
   };
 
   const applyFilters = () => {
-    if (draftFrom && draftTo && draftFrom > draftTo) {
+    if (draftListaScope !== 'outros' && draftFrom && draftTo && draftFrom > draftTo) {
       toast.error('A data inicial não pode ser maior que a final.');
       return;
     }
     setFilterEmitentes(draftEmitentes);
     setFilterPeriodFrom(draftFrom || YEAR_FROM);
     setFilterPeriodTo(draftTo || YEAR_TO);
+    setListaScope(draftListaScope);
     setPage(1);
     setFiltersOpen(false);
   };
@@ -414,6 +447,7 @@ export default function NfsRecebidasPage() {
   const { data, isLoading } = useQuery({
     queryKey: [
       'nfe-recebidas',
+      listaScope,
       search,
       filterEmitentes,
       listPeriod.periodFrom,
@@ -426,15 +460,19 @@ export default function NfsRecebidasPage() {
           q: search || undefined,
           emitente:
             filterEmitentes.length > 0 ? filterEmitentes.join(',') : undefined,
-          periodFrom: listPeriod.periodFrom,
-          periodTo: listPeriod.periodTo,
+          ...(listaScope === 'outros'
+            ? { scope: 'outros' }
+            : {
+                periodFrom: listPeriod.periodFrom,
+                periodTo: listPeriod.periodTo,
+              }),
           page,
           pageSize: PAGE_SIZE
         },
         timeout: 120_000
       });
       return res.data?.data as NfeListResponse;
-    }
+    },
   });
 
   const buscarMutation = useMutation({
@@ -474,21 +512,37 @@ export default function NfsRecebidasPage() {
   const total = data?.total ?? 0;
   const listRange = getCadastroListRange(page, PAGE_SIZE, total);
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
-  const statusMsg = statusBuscaVisivel(data?.lastMessage);
+  const statusMsg = statusBuscaVisivel(
+    data?.lastMessage,
+    data?.totalAno ?? (listaScope === 'ano' ? total : 0),
+    data?.totalOutros ?? (listaScope === 'outros' ? total : 0),
+    NFE_YEAR
+  );
   const hasActiveSearch = Boolean(search.trim());
   const hasActiveEmitente = filterEmitentes.length > 0;
   const hasActivePeriod =
-    filterPeriodFrom !== YEAR_FROM || filterPeriodTo !== YEAR_TO;
+    listaScope === 'outros' ||
+    filterPeriodFrom !== YEAR_FROM ||
+    filterPeriodTo !== YEAR_TO;
   const hasActiveFilters = hasActiveSearch || hasActiveEmitente || hasActivePeriod;
 
   const listSubtitle = useMemo(() => {
-    if (isLoading && !data) return 'Carregando notas…';
+    if (isLoading && !data) {
+      return listaScope === 'outros' ? 'Carregando notas de outros períodos…' : 'Carregando notas…';
+    }
+    if (listaScope === 'outros') {
+      const base =
+        total === 1
+          ? `1 nota fora de ${NFE_YEAR}`
+          : `${total} nota(s) fora de ${NFE_YEAR}`;
+      return hasActiveFilters ? `${base} · filtrados` : base;
+    }
     const base =
       total === 1
         ? `1 nota em ${NFE_YEAR}`
         : `${total} nota(s) em ${NFE_YEAR}`;
     return hasActiveFilters ? `${base} · filtrados` : base;
-  }, [data, isLoading, total, hasActiveFilters]);
+  }, [data, isLoading, total, hasActiveFilters, listaScope]);
 
   if (loadingUser) {
     return (
@@ -574,7 +628,39 @@ export default function NfsRecebidasPage() {
                   noFocusRing
                 />
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <span className={labelClass}>Lista</span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDraftListaScope('ano')}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                      draftListaScope === 'ano'
+                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {NFE_YEAR}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraftListaScope('outros')}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${
+                      draftListaScope === 'outros'
+                        ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    Outros períodos
+                  </button>
+                </div>
+                {draftListaScope === 'outros' ? (
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    Mostra notas com emissão fora de {NFE_YEAR} (ou sem data).
+                  </p>
+                ) : null}
+              </div>
+              <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${draftListaScope === 'outros' ? 'pointer-events-none opacity-50' : ''}`}>
                 <div>
                   <label className={labelClass}>Emissão de</label>
                   <DatePickerField
@@ -720,12 +806,16 @@ export default function NfsRecebidasPage() {
                   title={
                     hasActiveFilters
                       ? 'Nenhum resultado encontrado'
-                      : `Nenhuma nota de ${NFE_YEAR} ainda`
+                      : listaScope === 'outros'
+                        ? `Nenhuma nota fora de ${NFE_YEAR}`
+                        : `Nenhuma nota de ${NFE_YEAR} ainda`
                   }
                   hint={
                     hasActiveFilters
                       ? 'Ajuste a busca ou o período e tente novamente.'
-                      : 'Clique em Buscar notas para consultar a SEFAZ.'
+                      : listaScope === 'outros'
+                        ? 'Aqui aparecem as notas que a SEFAZ enviou com emissão fora do ano atual.'
+                        : 'Clique em Buscar notas para consultar a SEFAZ.'
                   }
                 />
               ) : (

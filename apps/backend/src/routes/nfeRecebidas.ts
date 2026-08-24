@@ -39,9 +39,10 @@ router.use(authorize('EMPLOYEE'));
 
 router.get('/', (req, res, next) => controller.list(req, res, next));
 router.get('/emitentes', (req, res, next) => controller.listEmitentes(req, res, next));
+router.post('/buscar', (req, res, next) => controller.buscar(req, res, next));
+router.post('/reimportar', (req, res, next) => controller.reimportar(req, res, next));
 router.get('/:id/detalhe', (req, res, next) => controller.getDetalhe(req, res, next));
 router.get('/:id/danfe', (req, res, next) => controller.downloadDanfe(req, res, next));
 router.get('/:id/xml', (req, res, next) => controller.downloadXml(req, res, next));
-router.post('/buscar', (req, res, next) => controller.buscar(req, res, next));
 
 export default router;

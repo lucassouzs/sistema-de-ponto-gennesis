@@ -18,6 +18,7 @@ export class NfeRecebidaController {
       const periodFrom =
         typeof req.query.periodFrom === 'string' ? req.query.periodFrom : undefined;
       const periodTo = typeof req.query.periodTo === 'string' ? req.query.periodTo : undefined;
+      const scope = req.query.scope === 'outros' ? 'outros' : 'ano';
       const page = req.query.page ? Number(req.query.page) : 1;
       const pageSize = req.query.pageSize ? Number(req.query.pageSize) : 50;
       const data = await service.list({
@@ -27,6 +28,7 @@ export class NfeRecebidaController {
         pageSize,
         periodFrom,
         periodTo,
+        scope,
       });
       res.json({ success: true, data });
     } catch (error) {
@@ -96,6 +98,15 @@ export class NfeRecebidaController {
       const periodTo = typeof req.body?.periodTo === 'string' ? req.body.periodTo : undefined;
       const resetNsu = Boolean(req.body?.resetNsu);
       const data = await service.buscar({ periodFrom, periodTo, resetNsu });
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async reimportar(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const data = await service.reimportLocal();
       res.json({ success: true, data });
     } catch (error) {
       next(error);

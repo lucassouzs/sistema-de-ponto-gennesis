@@ -68,7 +68,10 @@ public class NfeDistribuicaoCli {
       String ultimoNSU = ultNsu;
       int totalConsultas = 0;
       int docsCount = 0;
+      int lotesRecebidos = 0;
       boolean continuar = true;
+      String statusCodigo = "";
+      String statusMotivo = "";
 
       while (continuar && totalConsultas < maxConsultas) {
         totalConsultas++;
@@ -76,6 +79,8 @@ public class NfeDistribuicaoCli {
             facade.consultarDistribuicaoDFe(cnpj, uf, null, null, ultimoNSU);
 
         String codigo = retorno.getCodigoStatusReposta();
+        statusCodigo = codigo == null ? "" : codigo;
+        statusMotivo = retorno.getMotivo() == null ? "" : retorno.getMotivo();
 
         if ("137".equals(codigo)) {
           continuar = false;
@@ -89,6 +94,9 @@ public class NfeDistribuicaoCli {
         }
         ultimoNSU = padNsu(novoUltimoNSU);
 
+        if (retorno.getLote() != null && retorno.getLote().getDocZip() != null) {
+          lotesRecebidos += retorno.getLote().getDocZip().size();
+        }
         docsCount += saveDistribuicaoDocs(retorno.getLote(), outDir, periodFrom, periodTo, false);
 
         Thread.sleep(400);
@@ -98,6 +106,9 @@ public class NfeDistribuicaoCli {
       result.put("ok", true);
       result.put("ultimoNsu", ultimoNSU);
       result.put("docsCount", Integer.valueOf(docsCount));
+      result.put("documentosRecebidos", Integer.valueOf(lotesRecebidos));
+      result.put("statusCodigo", statusCodigo);
+      result.put("statusMotivo", statusMotivo);
       result.put("docs", new ArrayList<Map<String, String>>());
       String periodMsg =
           (periodFrom != null || periodTo != null)
@@ -110,11 +121,16 @@ public class NfeDistribuicaoCli {
           "message",
           "Consultas="
               + totalConsultas
+              + "; documentos="
+              + lotesRecebidos
               + "; notas="
               + docsCount
               + periodMsg
               + "; ultimoNsu="
-              + ultimoNSU);
+              + ultimoNSU
+              + "; cStat="
+              + (statusCodigo.isEmpty() ? "?" : statusCodigo)
+              + (statusMotivo.isEmpty() ? "" : " (" + statusMotivo + ")"));
       System.out.println(toJson(result));
     } catch (Exception e) {
       fail(e.getMessage() == null ? e.toString() : e.getMessage());
