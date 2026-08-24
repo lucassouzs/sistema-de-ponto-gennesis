@@ -112,6 +112,7 @@ apps/backend/dist/
 apps/backend/uploads/
 apps/backend/data/nfe-xmls/
 apps/backend/data/nfe-secrets/
+apps/backend/data/nfe-jdk/
 
 # Frontend
 apps/frontend/.next/

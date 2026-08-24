@@ -903,7 +903,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/financeiro/controle-nfs'))
           },
           {
-            name: 'NFs Recebidas',
+            name: 'Entrada Fiscal',
             href: '/ponto/financeiro/nfs-recebidas',
             icon: FileText,
             description: 'Notas fiscais emitidas contra a empresa (SEFAZ)',

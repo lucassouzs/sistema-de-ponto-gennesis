@@ -24,7 +24,7 @@ const nfeJava =
   process.env.NFE_JAVA_ENABLED === '1' || process.env.NFE_JAVA_ENABLED === 'true';
 const nfeXml = !!(process.env.NFE_XML_DIR || '').trim();
 console.log(
-  `   🧾 NFs Recebidas: ${
+  `   🧾 Entrada Fiscal: ${
     nfeJava ? '✅ SEFAZ (Java)' : nfeXml ? '✅ pasta XML' : '❌ não configurado'
   }`
 );
@@ -115,6 +115,7 @@ import pncpRoutes from './routes/pncp';
 import { startPncpSyncScheduler } from './services/PncpIngestService';
 import { startNfeAutoFetchScheduler } from './services/NfeRecebidaAutoFetch';
 import { ensureNfeSecretsFromEnv } from './lib/ensureNfeSecretsFromEnv';
+import { ensureNfeJavaRuntime } from './lib/ensureNfeJavaRuntime';
 import { logNfeRuntimeStatus } from './services/NfeRecebidaService';
 import { LicitacaoController } from './controllers/LicitacaoController';
 import { authenticate, AuthRequest } from './middleware/auth';
@@ -522,6 +523,8 @@ try {
       }
 
       try {
+        await ensureNfeJavaRuntime();
+        logNfeRuntimeStatus();
         startNfeAutoFetchScheduler();
       } catch (e) {
         console.error('[nfe-auto] falha ao agendar:', e);

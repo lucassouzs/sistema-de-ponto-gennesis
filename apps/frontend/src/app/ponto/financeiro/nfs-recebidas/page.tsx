@@ -8,7 +8,6 @@ import {
   FileText,
   Filter,
   Info,
-  RefreshCw,
   Search,
   X
 } from 'lucide-react';
@@ -412,7 +411,7 @@ export default function NfsRecebidasPage() {
     setFiltersOpen(false);
   };
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: [
       'nfe-recebidas',
       search,
@@ -507,10 +506,10 @@ export default function NfsRecebidasPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              NFs Recebidas
+              Entrada Fiscal
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Notas fiscais emitidas contra a empresa (distribuição SEFAZ).
+              Consulte e acompanhe as notas fiscais da empresa.
             </p>
           </div>
 
@@ -621,7 +620,7 @@ export default function NfsRecebidasPage() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      NFs Recebidas
+                      Entrada Fiscal
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">{listSubtitle}</p>
                   </div>
@@ -695,17 +694,6 @@ export default function NfsRecebidasPage() {
                     {hasActiveFilters ? (
                       <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                     ) : null}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void refetch()}
-                    disabled={isFetching}
-                    aria-label="Atualizar lista"
-                    title="Atualizar lista"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
                   </button>
 
                   <button
