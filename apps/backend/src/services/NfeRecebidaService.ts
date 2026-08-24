@@ -496,9 +496,11 @@ function resolveNfeWorkerJar(): string {
   if (process.env.NFE_WORKER_JAR?.trim()) return process.env.NFE_WORKER_JAR.trim();
   const root = resolveMonorepoRoot();
   const candidates = [
+    path.resolve(process.cwd(), 'vendor', 'nfe-distribuicao.jar'),
+    path.resolve(root, 'apps/backend/vendor/nfe-distribuicao.jar'),
     path.resolve(process.cwd(), 'dist', 'nfe-distribuicao.jar'),
-    path.resolve(process.cwd(), 'native', 'nfe-distribuicao.jar'),
     path.resolve(root, 'apps/backend/dist/nfe-distribuicao.jar'),
+    path.resolve(process.cwd(), 'native', 'nfe-distribuicao.jar'),
     path.resolve(root, 'apps/backend/native/nfe-distribuicao.jar'),
     path.resolve(root, 'tools/nfe-distribuicao/target/nfe-distribuicao.jar'),
     path.resolve(process.cwd(), '../../tools/nfe-distribuicao/target/nfe-distribuicao.jar'),
@@ -513,6 +515,8 @@ function resolveNfeJavaBin(): string {
   if (process.env.NFE_JAVA_BIN?.trim()) return process.env.NFE_JAVA_BIN.trim();
   const root = resolveMonorepoRoot();
   const bundled = [
+    path.resolve(process.cwd(), 'vendor', 'jdk', 'bin', 'java'),
+    path.resolve(root, 'apps/backend/vendor/jdk/bin/java'),
     path.resolve(process.cwd(), 'dist', 'jdk', 'bin', 'java'),
     path.resolve(root, 'apps/backend/dist/jdk/bin/java'),
     path.resolve(root, '.tools/jdk/bin/java'),
@@ -528,8 +532,10 @@ function spawnJavaWorker(extraArgs: string[]): Promise<WorkerResult> {
   const javaBin = resolveNfeJavaBin();
 
   if (!fs.existsSync(jar)) {
-    throw new Error(
-      `Worker Java não encontrado em ${jar}. Compile tools/nfe-distribuicao (mvn package) e configure NFE_WORKER_JAR.`
+    return Promise.reject(
+      new Error(
+        `Worker Java não encontrado em ${jar}. Compile tools/nfe-distribuicao (mvn package) e configure NFE_WORKER_JAR.`
+      )
     );
   }
 
@@ -542,7 +548,7 @@ function spawnJavaWorker(extraArgs: string[]): Promise<WorkerResult> {
   ];
   for (const key of required) {
     if (!process.env[key]?.trim()) {
-      throw new Error(`Variável ${key} não configurada no backend (.env).`);
+      return Promise.reject(new Error(`Variável ${key} não configurada no backend (.env).`));
     }
   }
 

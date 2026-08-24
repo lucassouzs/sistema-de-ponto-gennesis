@@ -1,4 +1,6 @@
 import cron from 'node-cron';
+import fs from 'fs';
+import path from 'path';
 import {
   NfeRecebidaService,
   nfeAutoFetchPeriod
@@ -11,6 +13,17 @@ function envBool(key: string, fallback = false): boolean {
   const v = process.env[key]?.trim().toLowerCase();
   if (v == null || v === '') return fallback;
   return v === '1' || v === 'true' || v === 'yes';
+}
+
+function nfeWorkerJarReady(): boolean {
+  if (process.env.NFE_WORKER_JAR?.trim() && fs.existsSync(process.env.NFE_WORKER_JAR.trim())) {
+    return true;
+  }
+  return [
+    path.resolve(process.cwd(), 'vendor', 'nfe-distribuicao.jar'),
+    path.resolve(process.cwd(), 'dist', 'nfe-distribuicao.jar'),
+    path.resolve(process.cwd(), '../../apps/backend/vendor/nfe-distribuicao.jar'),
+  ].some((p) => fs.existsSync(p));
 }
 
 /**
@@ -40,6 +53,15 @@ export function startNfeAutoFetchScheduler(): void {
   if (started) return;
   if (!envBool('NFE_AUTO_FETCH_ENABLED', false)) {
     console.log('[nfe-auto] desabilitado (defina NFE_AUTO_FETCH_ENABLED=1 para ligar)');
+    return;
+  }
+
+  const javaEnabled =
+    process.env.NFE_JAVA_ENABLED === '1' || process.env.NFE_JAVA_ENABLED === 'true';
+  if (javaEnabled && !nfeWorkerJarReady()) {
+    console.warn(
+      '[nfe-auto] NFE_JAVA_ENABLED=1 mas o JAR do worker não está no servidor — agenda desligada até o próximo deploy com vendor/nfe-distribuicao.jar'
+    );
     return;
   }
 

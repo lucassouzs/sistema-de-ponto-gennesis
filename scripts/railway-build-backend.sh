@@ -82,18 +82,20 @@ if [[ -d "$NFE_SRC/src" && -f "$NFE_SRC/pom.xml" ]]; then
     echo "JAR não gerado: $NFE_JAR_OUT"
     exit 1
   fi
-  mkdir -p "$(dirname "$NFE_JAR_COPY")"
+  mkdir -p "$ROOT/apps/backend/vendor"
   cp -f "$NFE_JAR_OUT" "$NFE_JAR_COPY"
+  cp -f "$NFE_JAR_OUT" "$ROOT/apps/backend/vendor/nfe-distribuicao.jar"
   mkdir -p "$ROOT/apps/backend/dist"
   cp -f "$NFE_JAR_OUT" "$ROOT/apps/backend/dist/nfe-distribuicao.jar"
-  # Railpack costuma manter dist/ no runtime; .tools/ e native/ (gitignored) podem sumir.
+  # vendor/ não está no .railwayignore (dist/ estava e o JAR sumia no runtime).
   if [[ -d "$JDK_LINK" ]]; then
-    rm -rf "$ROOT/apps/backend/dist/jdk"
+    rm -rf "$ROOT/apps/backend/vendor/jdk" "$ROOT/apps/backend/dist/jdk"
+    cp -a "$JDK_LINK" "$ROOT/apps/backend/vendor/jdk"
     cp -a "$JDK_LINK" "$ROOT/apps/backend/dist/jdk"
-    echo "==> JDK copiado para apps/backend/dist/jdk"
+    echo "==> JDK copiado para apps/backend/vendor/jdk"
   fi
-  echo "==> Worker NF-e pronto: $ROOT/apps/backend/dist/nfe-distribuicao.jar"
-  ls -lh "$ROOT/apps/backend/dist/nfe-distribuicao.jar" || true
+  echo "==> Worker NF-e pronto: $ROOT/apps/backend/vendor/nfe-distribuicao.jar"
+  ls -lh "$ROOT/apps/backend/vendor/nfe-distribuicao.jar" || true
 else
   echo "==> Aviso: tools/nfe-distribuicao ausente — SEFAZ Java não será embutida neste deploy"
 fi
