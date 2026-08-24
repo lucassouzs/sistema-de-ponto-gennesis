@@ -1,6 +1,0 @@
-{
-  "$schema": "https://schema.railpack.com",
-  "packages": {
-    "java": "17"
-  }
-}

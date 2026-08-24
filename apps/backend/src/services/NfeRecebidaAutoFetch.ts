@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import {
   NfeRecebidaService,
-  nfeAutoFetchPeriod
+  nfeAutoFetchPeriod,
+  nfeJavaAvailable
 } from './NfeRecebidaService';
 
 const service = new NfeRecebidaService();
@@ -61,6 +62,12 @@ export function startNfeAutoFetchScheduler(): void {
   if (javaEnabled && !nfeWorkerJarReady()) {
     console.warn(
       '[nfe-auto] NFE_JAVA_ENABLED=1 mas o JAR do worker não está no servidor — agenda desligada até o próximo deploy com vendor/nfe-distribuicao.jar'
+    );
+    return;
+  }
+  if (javaEnabled && !nfeJavaAvailable()) {
+    console.warn(
+      '[nfe-auto] NFE_JAVA_ENABLED=1 mas o Java não está instalado no container — agenda desligada (defina RAILPACK_PACKAGES=java@17 e redeploy)'
     );
     return;
   }

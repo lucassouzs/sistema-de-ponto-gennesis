@@ -527,6 +527,38 @@ function resolveNfeJavaBin(): string {
   return 'java';
 }
 
+function findJavaInPath(): string | null {
+  const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  const names = process.platform === 'win32' ? ['java.exe'] : ['java'];
+  for (const dir of dirs) {
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+export function nfeJavaAvailable(): boolean {
+  const javaBin = resolveNfeJavaBin();
+  if (javaBin !== 'java') return fs.existsSync(javaBin);
+  return findJavaInPath() != null;
+}
+
+/** Log de diagnóstico no boot: mostra se o worker SEFAZ tem JAR e Java disponíveis. */
+export function logNfeRuntimeStatus(): void {
+  const jar = resolveNfeWorkerJar();
+  const javaBin = resolveNfeJavaBin();
+  const javaResolved = javaBin === 'java' ? findJavaInPath() : javaBin;
+
+  console.log(`   📦 NF-e worker JAR: ${jar} ${fs.existsSync(jar) ? '(ok)' : '(AUSENTE)'}`);
+  console.log(
+    javaResolved && fs.existsSync(javaResolved)
+      ? `   ☕ Java: ${javaResolved}`
+      : '   ☕ Java: NÃO encontrado — defina RAILPACK_PACKAGES=java@17 no serviço (ou NFE_JAVA_BIN)'
+  );
+}
+
 function spawnJavaWorker(extraArgs: string[]): Promise<WorkerResult> {
   const jar = resolveNfeWorkerJar();
   const javaBin = resolveNfeJavaBin();
@@ -555,20 +587,41 @@ function spawnJavaWorker(extraArgs: string[]): Promise<WorkerResult> {
   return new Promise((resolve, reject) => {
     const args = ['-jar', jar, ...extraArgs];
 
-    const child = spawn(javaBin, args, {
-      env: { ...process.env },
-      windowsHide: true,
-    });
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(javaBin, args, {
+        env: { ...process.env },
+        windowsHide: true,
+      });
+    } catch (err) {
+      reject(
+        new Error(
+          `Não foi possível executar o Java (${javaBin}): ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      );
+      return;
+    }
 
     let stdout = '';
     let stderr = '';
-    child.stdout.on('data', (chunk) => {
+    child.stdout?.on('data', (chunk) => {
       stdout += String(chunk);
     });
-    child.stderr.on('data', (chunk) => {
+    child.stderr?.on('data', (chunk) => {
       stderr += String(chunk);
     });
-    child.on('error', (err) => reject(err));
+    child.on('error', (err) => {
+      const isMissingJava = (err as NodeJS.ErrnoException)?.code === 'ENOENT';
+      reject(
+        isMissingJava
+          ? new Error(
+              `Java não encontrado no servidor (${javaBin}). No Railway, adicione a variável RAILPACK_PACKAGES=java@17 no serviço do backend e faça redeploy.`
+            )
+          : err
+      );
+    });
     child.on('close', (code) => {
       const lines = stdout
         .split(/\r?\n/)
@@ -1135,9 +1188,13 @@ export class NfeRecebidaService {
       };
     })();
 
-    buscarInFlight = run.finally(() => {
-      buscarInFlight = null;
-    });
+    // catch aqui evita unhandledRejection (mata o processo no Node 18);
+    // o erro real continua propagando para quem chamou via `run`.
+    buscarInFlight = run
+      .catch(() => undefined)
+      .finally(() => {
+        buscarInFlight = null;
+      });
 
     return run as Promise<{
       imported: number;

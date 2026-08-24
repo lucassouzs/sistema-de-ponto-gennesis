@@ -17,6 +17,13 @@ TOOLS_DIR="$ROOT/.tools"
 JDK_LINK="$TOOLS_DIR/jdk"
 
 ensure_jdk() {
+  # Java do ambiente (ex.: RAILPACK_PACKAGES=java@17) evita baixar 300 MB no build.
+  if command -v javac >/dev/null 2>&1; then
+    echo "==> Usando JDK do ambiente: $(command -v javac)"
+    java -version || true
+    return 0
+  fi
+
   if [[ -x "$JDK_LINK/bin/java" ]]; then
     export JAVA_HOME="$JDK_LINK"
     export PATH="$JAVA_HOME/bin:$PATH"

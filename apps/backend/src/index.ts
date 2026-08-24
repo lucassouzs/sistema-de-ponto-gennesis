@@ -115,6 +115,7 @@ import pncpRoutes from './routes/pncp';
 import { startPncpSyncScheduler } from './services/PncpIngestService';
 import { startNfeAutoFetchScheduler } from './services/NfeRecebidaAutoFetch';
 import { ensureNfeSecretsFromEnv } from './lib/ensureNfeSecretsFromEnv';
+import { logNfeRuntimeStatus } from './services/NfeRecebidaService';
 import { LicitacaoController } from './controllers/LicitacaoController';
 import { authenticate, AuthRequest } from './middleware/auth';
 import { removeOrphanUserPermissions } from './lib/permissionRegistrySync';
@@ -124,8 +125,14 @@ import { ensureProductionSchema } from './lib/ensureProductionSchema';
 import { attachCallSignaling } from './realtime/wsCallSignaling';
 
 ensureNfeSecretsFromEnv();
+logNfeRuntimeStatus();
 
 const licitacaoExtraCtrl = new LicitacaoController();
+
+// Sem isto, uma rejeição solta (ex.: worker externo ausente) encerra o processo no Node 18.
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason instanceof Error ? reason.stack : reason);
+});
 
 const prismaPool = getPrismaPoolConfig();
 console.log('🚀 Iniciando aplicação...');
