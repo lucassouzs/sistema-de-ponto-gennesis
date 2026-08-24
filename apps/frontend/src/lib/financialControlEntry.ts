@@ -5,6 +5,8 @@ import type { FinancialControlStatus } from '@/lib/financialControlStatus';
 
 export type FinancialControlConsorcio = 'brasilia' | 'hub';
 
+export type FinancialControlApplicationType = 'MATERIAL' | 'SERVICO' | 'MISTO';
+
 export interface FinancialControlEntry {
   id: string;
   consorcio?: FinancialControlConsorcio;
@@ -25,6 +27,7 @@ export interface FinancialControlEntry {
   remainingDays: number | null;
   receivedNote: string | null;
   notes: string | null;
+  applicationType?: FinancialControlApplicationType | string | null;
   attachments?: Array<{ url: string; name: string }> | null;
   createdAt: string;
   updatedAt: string;
@@ -65,6 +68,7 @@ export interface EntryFormState {
   remainingDays: string;
   receivedNote: string;
   notes: string;
+  applicationType: FinancialControlApplicationType | '';
   attachments: Array<{ url: string; name: string }>;
 }
 
@@ -138,6 +142,7 @@ export function buildInitialForm(
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    applicationType: '',
     attachments: [],
   };
 }
@@ -164,6 +169,11 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
       entry.remainingDays !== null && entry.remainingDays !== undefined ? String(entry.remainingDays) : '',
     receivedNote: entry.receivedNote || '',
     notes: entry.notes || '',
+    applicationType: (() => {
+      const v = (entry.applicationType || '').trim().toUpperCase();
+      if (v === 'MATERIAL' || v === 'SERVICO' || v === 'MISTO') return v;
+      return '';
+    })(),
     attachments: Array.isArray(entry.attachments)
       ? entry.attachments
           .map((item) => ({
@@ -206,6 +216,7 @@ export function buildInitialFormFromPurchaseOrder(order: {
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    applicationType: '',
     attachments: [],
   };
 }
@@ -234,6 +245,7 @@ export function formToPayload(form: EntryFormState) {
     remainingDays: computedRemainingDays,
     receivedNote: form.receivedNote || null,
     notes: form.notes || null,
+    applicationType: form.applicationType || null,
     attachments: form.attachments,
   };
 }

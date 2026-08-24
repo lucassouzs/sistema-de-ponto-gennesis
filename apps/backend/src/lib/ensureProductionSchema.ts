@@ -132,6 +132,14 @@ async function ensureMaterialRequestItemColumns(prisma: PrismaClient): Promise<v
         ADD COLUMN IF NOT EXISTS "attachmentName" TEXT;
     `);
   }
+
+  if (!(await columnExists(prisma, 'material_request_items', 'bankDetails'))) {
+    console.warn('[Schema] Coluna bankDetails em material_request_items ausente — adicionando.');
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "material_request_items"
+        ADD COLUMN IF NOT EXISTS "bankDetails" TEXT;
+    `);
+  }
 }
 
 async function ensureMaterialRequestCommentsTable(prisma: PrismaClient): Promise<void> {
@@ -428,6 +436,16 @@ async function ensureFinancialControlAttachmentsColumn(prisma: PrismaClient): Pr
     await prisma.$executeRawUnsafe(`
       ALTER TABLE "financial_control_entries"
         ADD COLUMN IF NOT EXISTS "attachments" JSONB;
+    `);
+  }
+}
+
+async function ensureFinancialControlApplicationTypeColumn(prisma: PrismaClient): Promise<void> {
+  if (!(await columnExists(prisma, 'financial_control_entries', 'applicationType'))) {
+    console.warn('[Schema] Coluna applicationType em financial_control_entries ausente — adicionando.');
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "financial_control_entries"
+        ADD COLUMN IF NOT EXISTS "applicationType" TEXT;
     `);
   }
 }
@@ -1306,6 +1324,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureFinancialControlLancadoStatus(prisma);
     await ensureFinancialControlNfNumberColumn(prisma);
     await ensureFinancialControlAttachmentsColumn(prisma);
+    await ensureFinancialControlApplicationTypeColumn(prisma);
     await ensureDpRequestTypeAdmAsos(prisma);
     await ensureLicitacoesTables(prisma);
     await ensureLicitacaoColumns(prisma);

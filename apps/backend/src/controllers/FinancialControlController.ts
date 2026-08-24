@@ -68,10 +68,167 @@ function parseAttachments(raw: unknown): FinancialControlAttachment[] {
   return out;
 }
 
+const ALLOWED_APPLICATION_TYPES = ['MATERIAL', 'SERVICO', 'MISTO'] as const;
+type FinancialControlApplicationType = (typeof ALLOWED_APPLICATION_TYPES)[number];
+
+function parseApplicationType(value: unknown): FinancialControlApplicationType | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  if (!v) return null;
+  if (
+    v === 'material' ||
+    v === 'materiais' ||
+    v === 'produto' ||
+    v === 'product'
+  ) {
+    return 'MATERIAL';
+  }
+  if (
+    v === 'servico' ||
+    v === 'serviço' ||
+    v === 'servicos' ||
+    v === 'serviços' ||
+    v === 'service'
+  ) {
+    return 'SERVICO';
+  }
+  if (v === 'misto' || v === 'mixed' || v === 'ambos') return 'MISTO';
+  const upper = value.trim().toUpperCase();
+  if (ALLOWED_APPLICATION_TYPES.includes(upper as FinancialControlApplicationType)) {
+    return upper as FinancialControlApplicationType;
+  }
+  return null;
+}
+
+function mapProductTypeToKind(productType?: string | null): 'Materiais' | 'Serviços' | null {
+  const v = (productType || '').trim().toLowerCase();
+  if (!v) return null;
+  if (v === 'produto' || v === 'product' || v === 'material' || v === 'materiais') return 'Materiais';
+  if (
+    v === 'serviço' ||
+    v === 'servico' ||
+    v === 'service' ||
+    v === 'serviços' ||
+    v === 'servicos'
+  ) {
+    return 'Serviços';
+  }
+  return null;
+}
+
+function mapEngineeringCategoryToKind(category?: {
+  code?: string | null;
+  name?: string | null;
+} | null): 'Materiais' | 'Serviços' | null {
+  const code = (category?.code || '').trim().toUpperCase();
+  const name = (category?.name || '').trim().toLowerCase();
+  if (code === 'MO' || name.includes('mão de obra') || name.includes('mao de obra')) {
+    return 'Serviços';
+  }
+  if (code === 'MAT' || name === 'materiais' || name.includes('material')) return 'Materiais';
+  if (code === 'EQP' || name.includes('equipamento')) return 'Materiais';
+  if (name.includes('serviço') || name.includes('servico')) return 'Serviços';
+  return null;
+}
+
+function aggregateApplicationType(
+  kinds: Array<'Materiais' | 'Serviços'>
+): FinancialControlApplicationType | null {
+  if (kinds.length === 0) return null;
+  const hasMaterial = kinds.some((k) => k === 'Materiais');
+  const hasService = kinds.some((k) => k === 'Serviços');
+  if (hasMaterial && hasService) return 'MISTO';
+  if (hasService) return 'SERVICO';
+  return 'MATERIAL';
+}
+
+/** Infere Material/Serviço a partir dos itens da OC (catálogo CM / categoria / bankDetails). */
+async function resolveApplicationTypeMapByOcNumbers(
+  ocNumbers: string[]
+): Promise<Map<string, FinancialControlApplicationType>> {
+  const unique = [...new Set(ocNumbers.map((n) => n.trim()).filter(Boolean))];
+  const result = new Map<string, FinancialControlApplicationType>();
+  if (unique.length === 0) return result;
+
+  const orders = await prisma.purchaseOrder.findMany({
+    where: {
+      OR: unique.map((n) => ({
+        orderNumber: { equals: n, mode: 'insensitive' as const },
+      })),
+    },
+    select: {
+      orderNumber: true,
+      items: {
+        select: {
+          materialRequestItem: { select: { bankDetails: true } },
+          material: {
+            select: {
+              sinapiCode: true,
+              name: true,
+              description: true,
+              category: { select: { code: true, name: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const cmIds = new Set<string>();
+  for (const order of orders) {
+    for (const item of order.items) {
+      const code = (item.material?.sinapiCode || '').trim();
+      if (code.startsWith('CM-')) {
+        const id = code.slice(3).trim();
+        if (id) cmIds.add(id);
+      }
+    }
+  }
+
+  const typeByCmId = new Map<string, string | null>();
+  if (cmIds.size > 0) {
+    const rows = await prisma.constructionMaterial.findMany({
+      where: { id: { in: [...cmIds] } },
+      select: { id: true, productType: true, category: true },
+    });
+    for (const row of rows) {
+      typeByCmId.set(row.id, row.productType || row.category);
+    }
+  }
+
+  for (const order of orders) {
+    const kinds: Array<'Materiais' | 'Serviços'> = [];
+    for (const item of order.items) {
+      if ((item.materialRequestItem?.bankDetails || '').trim()) {
+        kinds.push('Serviços');
+        continue;
+      }
+      const code = (item.material?.sinapiCode || '').trim();
+      if (code.startsWith('CM-')) {
+        const cmId = code.slice(3).trim();
+        const mapped = mapProductTypeToKind(typeByCmId.get(cmId) ?? null);
+        if (mapped) {
+          kinds.push(mapped);
+          continue;
+        }
+      }
+      const fromCat = mapEngineeringCategoryToKind(item.material?.category);
+      if (fromCat) kinds.push(fromCat);
+    }
+    const appType = aggregateApplicationType(kinds);
+    if (appType) {
+      result.set(order.orderNumber.trim().toLowerCase(), appType);
+    }
+  }
+
+  return result;
+}
+
 /** Resolve OS real da RM vinculada à OC (evita mostrar código de contrato/CC). */
 async function resolveOsCodeByOcNumber(
-  entries: Array<{ id: string; ocNumber: string | null; osCode: string | null }>
-): Promise<Array<{ id: string; ocNumber: string | null; osCode: string | null } & Record<string, unknown>>> {
+  entries: Array<{ id: string; ocNumber: string | null; osCode: string | null; applicationType?: string | null }>
+): Promise<Array<{ id: string; ocNumber: string | null; osCode: string | null; applicationType?: string | null } & Record<string, unknown>>> {
   const ocNumbers = [
     ...new Set(entries.map((e) => (e.ocNumber || '').trim()).filter(Boolean)),
   ];
@@ -95,22 +252,47 @@ async function resolveOsCodeByOcNumber(
     if (so) osByOc.set(order.orderNumber.trim().toLowerCase(), so);
   }
 
-  const persistFixes: Array<{ id: string; osCode: string }> = [];
+  const appTypeByOc = await resolveApplicationTypeMapByOcNumbers(ocNumbers);
+
+  const persistById = new Map<string, { osCode?: string; applicationType?: string }>();
   const enriched = entries.map((entry) => {
     const key = (entry.ocNumber || '').trim().toLowerCase();
+    let next = { ...entry };
     const serviceOrder = key ? osByOc.get(key) : undefined;
-    if (!serviceOrder) return entry;
-    if ((entry.osCode || '').trim() !== serviceOrder) {
-      persistFixes.push({ id: entry.id, osCode: serviceOrder });
+    if (serviceOrder) {
+      next = { ...next, osCode: serviceOrder };
+      if ((entry.osCode || '').trim() !== serviceOrder) {
+        const prev = persistById.get(entry.id) || {};
+        persistById.set(entry.id, { ...prev, osCode: serviceOrder });
+      }
     }
-    return { ...entry, osCode: serviceOrder };
+
+    const currentApp = parseApplicationType(entry.applicationType);
+    if (!currentApp && key) {
+      const inferred = appTypeByOc.get(key);
+      if (inferred) {
+        next = { ...next, applicationType: inferred };
+        const prev = persistById.get(entry.id) || {};
+        persistById.set(entry.id, { ...prev, applicationType: inferred });
+      }
+    }
+
+    return next;
   });
 
-  if (persistFixes.length > 0) {
+  if (persistById.size > 0) {
     void Promise.all(
-      persistFixes.map((fix) =>
+      [...persistById.entries()].map(([id, fix]) =>
         prisma.financialControlEntry
-          .update({ where: { id: fix.id }, data: { osCode: fix.osCode } })
+          .update({
+            where: { id },
+            data: {
+              ...(fix.osCode !== undefined ? { osCode: fix.osCode } : {}),
+              ...(fix.applicationType !== undefined
+                ? { applicationType: fix.applicationType }
+                : {}),
+            },
+          })
           .catch(() => undefined)
       )
     );
@@ -163,6 +345,15 @@ function buildEntryData(body: any, userId?: string | null, isUpdate = false) {
   if (body.remainingDays !== undefined) (data as any).remainingDays = parseInteger(body.remainingDays);
   if (body.receivedNote !== undefined) (data as any).receivedNote = body.receivedNote || null;
   if (body.notes !== undefined) (data as any).notes = body.notes || null;
+  if (body.applicationType !== undefined) {
+    if (body.applicationType === null || body.applicationType === '') {
+      (data as any).applicationType = null;
+    } else {
+      const appType = parseApplicationType(body.applicationType);
+      if (!appType) throw createError('Tipo inválido (Material, Serviço ou Misto)', 400);
+      (data as any).applicationType = appType;
+    }
+  }
   if (body.attachments !== undefined) {
     const files = parseAttachments(body.attachments);
     (data as any).attachments = files.length > 0 ? files : Prisma.DbNull;
@@ -279,7 +470,8 @@ export class FinancialControlController {
         where: { ocNumber: { equals: ocNumber, mode: 'insensitive' } },
         orderBy: [{ paymentYear: 'desc' }, { paymentMonth: 'desc' }, { createdAt: 'desc' }],
       });
-      res.json({ success: true, data: entries });
+      const data = await resolveOsCodeByOcNumber(entries);
+      res.json({ success: true, data });
     } catch (error) {
       next(error);
     }
@@ -302,7 +494,8 @@ export class FinancialControlController {
         },
         orderBy: [{ paymentYear: 'desc' }, { paymentMonth: 'desc' }, { createdAt: 'desc' }],
       });
-      res.json({ success: true, data: entries });
+      const data = await resolveOsCodeByOcNumber(entries);
+      res.json({ success: true, data });
     } catch (error) {
       next(error);
     }
@@ -324,10 +517,21 @@ export class FinancialControlController {
       if (req.body.paymentMonth === undefined || req.body.paymentYear === undefined) {
         throw createError('paymentMonth e paymentYear são obrigatórios', 400);
       }
-      const data = buildEntryData(req.body, req.user?.id, false);
-      const entry = await prisma.financialControlEntry.create({
-        data: data as Prisma.FinancialControlEntryUncheckedCreateInput,
-      });
+      const data = buildEntryData(
+        req.body,
+        req.user?.id,
+        false
+      ) as Prisma.FinancialControlEntryUncheckedCreateInput;
+      if (!(data as { applicationType?: string | null }).applicationType) {
+        const oc = String(
+          (data as { ocNumber?: string | null }).ocNumber || req.body.ocNumber || ''
+        ).trim();
+        if (oc) {
+          const inferred = (await resolveApplicationTypeMapByOcNumbers([oc])).get(oc.toLowerCase());
+          if (inferred) (data as { applicationType?: string }).applicationType = inferred;
+        }
+      }
+      const entry = await prisma.financialControlEntry.create({ data });
       res.status(201).json({ success: true, data: entry, message: 'Lançamento criado com sucesso' });
     } catch (error) {
       next(error);

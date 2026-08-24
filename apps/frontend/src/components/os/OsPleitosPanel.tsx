@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import { PleitoFormModal } from '@/components/pleito/PleitoFormModal';
 import {
   RowActionMenuCell,
@@ -77,16 +78,6 @@ export interface OsPleitosPanelProps {
   activeTab?: OsTab;
   searchTerm?: string;
   onSearchChange?: (value: string) => void;
-}
-
-function buildPaginationPageNumbers(currentPage: number, totalPages: number): number[] {
-  const windowSize = Math.min(5, totalPages);
-  return Array.from({ length: windowSize }, (_, i) => {
-    if (totalPages <= 5) return i + 1;
-    if (currentPage <= 3) return i + 1;
-    if (currentPage >= totalPages - 2) return totalPages - 4 + i;
-    return currentPage - 2 + i;
-  });
 }
 
 export function OsPleitosPanel({
@@ -516,40 +507,11 @@ export function OsPleitosPanel({
                 ) : null}
               </div>
 
-              {totalPages > 1 && (
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((pg) => Math.max(1, pg - 1))}
-                    disabled={safePage === 1}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                  >
-                    Anterior
-                  </button>
-                  {buildPaginationPageNumbers(safePage, totalPages).map((pageNumber) => (
-                    <button
-                      key={pageNumber}
-                      type="button"
-                      onClick={() => setCurrentPage(pageNumber)}
-                      className={`rounded-md px-3 py-2 text-sm font-medium ${
-                        pageNumber === safePage
-                          ? 'bg-red-600 text-white'
-                          : 'border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((pg) => Math.min(totalPages, pg + 1))}
-                    disabled={safePage === totalPages}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              )}
+              <ListPagination
+                currentPage={safePage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </>
           )}
         </CardContent>

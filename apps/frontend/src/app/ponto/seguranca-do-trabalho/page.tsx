@@ -29,6 +29,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import { Modal } from '@/components/ui/Modal';
 import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
@@ -1438,31 +1439,11 @@ export default function SegurancaDoTrabalhoPage() {
                     </table>
                   </div>
                 )}
-                {pagination.totalPages > 1 ? (
-                  <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                    <span>
-                      Página {pagination.page} de {pagination.totalPages}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={page <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
-                        className="rounded-lg border px-3 py-1 disabled:opacity-40 dark:border-gray-600"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        disabled={page >= pagination.totalPages}
-                        onClick={() => setPage((p) => p + 1)}
-                        className="rounded-lg border px-3 py-1 disabled:opacity-40 dark:border-gray-600"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                <ListPagination
+                  currentPage={page}
+                  totalPages={pagination.totalPages}
+                  onPageChange={setPage}
+                />
               </CardContent>
             </Card>
           ) : tab === 'por-funcionario' ? (

@@ -889,6 +889,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/financeiro/controle-nfs'))
           },
           {
+            name: 'NFs Recebidas',
+            href: '/ponto/financeiro/nfs-recebidas',
+            icon: FileText,
+            description: 'Notas fiscais emitidas contra a empresa (SEFAZ)',
+            permission:
+              isAdministrator || can(pk('/ponto/financeiro/nfs-recebidas'))
+          },
+          {
             name: 'Controle Geral de Contratos',
             href: '/ponto/contratos/controle-geral',
             icon: LayoutDashboard,

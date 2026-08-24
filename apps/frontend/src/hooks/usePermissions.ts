@@ -709,6 +709,8 @@ export function useRoutePermission(route: string) {
     '/ponto/financeiro/receitas': isAdministrator || can(pk('/ponto/financeiro/receitas')),
     '/ponto/financeiro/controle-nfs':
       isAdministrator || can(pk('/ponto/financeiro/controle-nfs')),
+    '/ponto/financeiro/nfs-recebidas':
+      isAdministrator || can(pk('/ponto/financeiro/nfs-recebidas')),
   };
 
   return {

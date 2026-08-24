@@ -241,6 +241,7 @@ function inferCategoryFromHref(href: string): string {
   if (
     h === '/ponto/financeiro/analise-extrato' ||
     h === '/ponto/financeiro/controle-nfs' ||
+    h === '/ponto/financeiro/nfs-recebidas' ||
     h === '/ponto/contratos/controle-geral' ||
     h === '/ponto/contratos/socios' ||
     h === '/ponto/contratos/gastos-operacionais'

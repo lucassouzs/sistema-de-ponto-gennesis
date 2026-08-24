@@ -20,6 +20,7 @@ import {
   type FinancialControlEntry,
 } from '@/lib/financialControlEntry';
 import {
+  FINANCIAL_CONTROL_APPLICATION_TYPE_OPTIONS,
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
   FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO,
   buildQuickLaunchPayload,
@@ -36,6 +37,9 @@ const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
   MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label }))
 );
 const STATUS_SELECT_OPTIONS = labeledToSelectOptions(STATUS_OPTIONS);
+const APPLICATION_TYPE_SELECT_OPTIONS = labeledToSelectOptions(
+  FINANCIAL_CONTROL_APPLICATION_TYPE_OPTIONS
+);
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_SELECT_OPTIONS = labeledToSelectOptions(
@@ -372,6 +376,24 @@ export function FinancialControlEntryFormModal({
               allowEmpty={false}
             />
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Tipo (Material / Serviço)
+          </label>
+          <StringSingleSelectDropdown
+            value={form.applicationType}
+            onChange={(v) =>
+              setForm({
+                ...form,
+                applicationType: (v || '') as EntryFormState['applicationType'],
+              })
+            }
+            options={APPLICATION_TYPE_SELECT_OPTIONS}
+            placeholder="Automático pela OC (se houver)"
+            allowEmpty
+          />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">

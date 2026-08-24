@@ -21,6 +21,7 @@ import {
   type FichaDemandaApprovalRecord,
 } from '@/lib/fichaDemandaApproval';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ListPagination } from '@/components/ui/ListPagination';
 
 const ROW_ACTION_MENU_WIDTH_PX = 224;
 const ITEMS_PER_PAGE = 20;
@@ -378,44 +379,11 @@ export default function AprovacaoFdsPage() {
                     </table>
                   </div>
 
-                  {totalPages > 1 && (
-                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Anterior
-                      </button>
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const pageNumber = i + 1;
-                        const isActive = pageNumber === currentPage;
-                        return (
-                          <button
-                            key={pageNumber}
-                            type="button"
-                            onClick={() => setCurrentPage(pageNumber)}
-                            className={`rounded-md px-3 py-2 text-sm font-medium ${
-                              isActive
-                                ? 'bg-red-600 text-white'
-                                : 'border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  )}
+                  <ListPagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
 
                   {rowActionMenu && rowForActionMenu && (
                     <ActionMenuOverlay

@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
@@ -640,28 +641,11 @@ export default function AjusteEstoquePage() {
                         </tbody>
                       </table>
                     </div>
-                    {historyTotalPages > 1 && (
-                      <div className="mt-4 flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHistoryCurrentPage((prev) => Math.max(prev - 1, 1))}
-                          disabled={historyCurrentPage === 1}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setHistoryCurrentPage((prev) => Math.min(prev + 1, historyTotalPages))
-                          }
-                          disabled={historyCurrentPage === historyTotalPages}
-                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    )}
+                    <ListPagination
+                      currentPage={historyCurrentPage}
+                      totalPages={historyTotalPages}
+                      onPageChange={setHistoryCurrentPage}
+                    />
                   </>
                 )}
               </CardContent>

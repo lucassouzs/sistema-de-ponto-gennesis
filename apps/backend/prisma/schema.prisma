@@ -10,7 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Modelo de Usuário
+// Modelo de UsuÃ¡rio
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -20,13 +20,13 @@ model User {
   role         UserRole @default(EMPLOYEE)
   isActive     Boolean  @default(true)
   isFirstLogin Boolean  @default(true)
-  /// URL pública ou relativa (/uploads/...) da foto de perfil
+  /// URL pÃºblica ou relativa (/uploads/...) da foto de perfil
   profilePhotoUrl  String?
   /// Chave no S3 (quando usar armazenamento em nuvem)
   profilePhotoKey  String?
-  /// Último login bem-sucedido
+  /// Ãltimo login bem-sucedido
   lastLoginAt       DateTime?
-  /// Última atividade observada (page view / heartbeat)
+  /// Ãltima atividade observada (page view / heartbeat)
   lastSeenAt        DateTime?
   lastActivityPath  String?
   lastActivityLabel String?
@@ -135,31 +135,31 @@ model User {
   @@map("users")
 }
 
-// Modelo de Funcionário
+// Modelo de FuncionÃ¡rio
 model Employee {
   id                    String    @id @default(cuid())
   userId                String    @unique
-  employeeId            String    @unique // Matrícula
+  employeeId            String    @unique // MatrÃ­cula
   department            String
   position              String
   hireDate              DateTime
-  birthDate             DateTime? // Data de nascimento para aniversários
+  birthDate             DateTime? // Data de nascimento para aniversÃ¡rios
   salary                Decimal   @db.Decimal(10, 2)
-  workSchedule          Json // Horário de trabalho em JSON
+  workSchedule          Json // HorÃ¡rio de trabalho em JSON
   isRemote              Boolean   @default(false)
   allowedLocations      Json? // Locais permitidos para bater ponto
   costCenter            String? // Centro de custo
   client                String? // Tomador
-  dailyFoodVoucher      Float?    @default(33.40) // Vale Alimentação diário (padrão R$ 33,40)
-  dailyTransportVoucher Float?    @default(11.00) // Vale Transporte diário (padrão R$ 11,00)
+  dailyFoodVoucher      Float?    @default(33.40) // Vale AlimentaÃ§Ã£o diÃ¡rio (padrÃ£o R$ 33,40)
+  dailyTransportVoucher Float?    @default(11.00) // Vale Transporte diÃ¡rio (padrÃ£o R$ 11,00)
 
   // Novos campos - Dados da Empresa
   company String? // EMPRESA
 
-  // Novos campos - Dados Bancários
+  // Novos campos - Dados BancÃ¡rios
   bank        String? // BANCO
   accountType String? // TIPO DE CONTA
-  agency      String? // AGÊNCIA
+  agency      String? // AGÃNCIA
   operation   String? // OP.
   account     String? // CONTA
   digit       String? // DIGITO
@@ -170,16 +170,16 @@ model Employee {
 
   // Novos campos - Modalidade e Adicionais
   modality     String? // MODALIDADE (MEI, CLT, ESTAGIARIO)
-  familySalary Decimal? @db.Decimal(10, 2) // SALÁRIO FAMÍLIA
+  familySalary Decimal? @db.Decimal(10, 2) // SALÃRIO FAMÃLIA
   dangerPay    Decimal? @db.Decimal(10, 2) // PERICULOSIDADE
   unhealthyPay Decimal? @db.Decimal(10, 2) // INSALUBRIDADE
 
   // Novos campos - Polo e Categoria Financeira
-  polo                String? // POLO (BRASÍLIA, GOIÁS)
+  polo                String? // POLO (BRASÃLIA, GOIÃS)
   categoriaFinanceira String? // CATEGORIA FINANCEIRA (CUSTO, DESPESA)
 
-  // Campo para controlar se o funcionário precisa bater ponto
-  requiresTimeClock Boolean @default(true) // Se false, não precisa bater ponto
+  // Campo para controlar se o funcionÃ¡rio precisa bater ponto
+  requiresTimeClock Boolean @default(true) // Se false, nÃ£o precisa bater ponto
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -212,13 +212,13 @@ model TimeRecord {
   photoUrl               String?
   photoKey               String? // Chave do S3
   isValid                Boolean        @default(true)
-  reason                 String? // Motivo se inválido
-  observation            String? // Observação do funcionário
+  reason                 String? // Motivo se invÃ¡lido
+  observation            String? // ObservaÃ§Ã£o do funcionÃ¡rio
   approvedBy             String? // ID do aprovador
   approvedAt             DateTime?
   foodVoucherAmount      Float?         @default(0) // Valor do VA no dia
   transportVoucherAmount Float?         @default(0) // Valor do VT no dia
-  costCenter             String? // Centro de custo do funcionário no momento do ponto
+  costCenter             String? // Centro de custo do funcionÃ¡rio no momento do ponto
   createdAt              DateTime       @default(now())
   updatedAt              DateTime       @updatedAt
 
@@ -229,34 +229,34 @@ model TimeRecord {
   @@map("time_records")
 }
 
-// Modelo de Férias
+// Modelo de FÃ©rias
 model Vacation {
   id         String @id @default(cuid())
   userId     String
   employeeId String
 
-  // Período das férias
+  // PerÃ­odo das fÃ©rias
   startDate DateTime
   endDate   DateTime
   days      Int
 
-  // Classificação
+  // ClassificaÃ§Ã£o
   type     VacationType   @default(ANNUAL)
   status   VacationStatus @default(PENDING)
-  fraction Int? // Número do fracionamento (1, 2, 3)
+  fraction Int? // NÃºmero do fracionamento (1, 2, 3)
 
-  // Período aquisitivo
-  aquisitiveStart DateTime // Início do período aquisitivo
-  aquisitiveEnd   DateTime // Fim do período aquisitivo
-  concessiveEnd   DateTime // Vencimento das férias
+  // PerÃ­odo aquisitivo
+  aquisitiveStart DateTime // InÃ­cio do perÃ­odo aquisitivo
+  aquisitiveEnd   DateTime // Fim do perÃ­odo aquisitivo
+  concessiveEnd   DateTime // Vencimento das fÃ©rias
 
-  // Documentação
+  // DocumentaÃ§Ã£o
   noticeSentAt     DateTime? // Data do aviso
-  noticeReceivedAt DateTime? // Data da confirmação
+  noticeReceivedAt DateTime? // Data da confirmaÃ§Ã£o
   paymentDate      DateTime? // Data do pagamento
   paymentAmount    Decimal?  @db.Decimal(10, 2)
 
-  // Aprovação
+  // AprovaÃ§Ã£o
   reason     String?
   approvedBy String?
   approvedAt DateTime?
@@ -294,15 +294,15 @@ model Overtime {
   @@map("overtime")
 }
 
-// Modelo de Relatórios
+// Modelo de RelatÃ³rios
 model Report {
   id          String       @id @default(cuid())
   userId      String
   type        ReportType
   title       String
   description String?
-  data        Json // Dados do relatório em JSON
-  period      Json // Período do relatório
+  data        Json // Dados do relatÃ³rio em JSON
+  period      Json // PerÃ­odo do relatÃ³rio
   status      ReportStatus @default(GENERATED)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -313,7 +313,7 @@ model Report {
   @@map("reports")
 }
 
-// Modelo de Configurações da Empresa
+// Modelo de ConfiguraÃ§Ãµes da Empresa
 model CompanySettings {
   id                  String   @id @default(cuid())
   name                String
@@ -331,7 +331,7 @@ model CompanySettings {
   defaultLatitude     Float    @default(-23.5505)
   defaultLongitude    Float    @default(-46.6333)
   vacationDaysPerYear Int      @default(30)
-  /// Prazo informado ao solicitante de combustível (horas úteis até atendimento do Suprimentos)
+  /// Prazo informado ao solicitante de combustÃ­vel (horas Ãºteis atÃ© atendimento do Suprimentos)
   fuelSuppliesSlaHours Int     @default(24)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -358,7 +358,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-/// Histórico de logins / logouts (web / mobile)
+/// HistÃ³rico de logins / logouts (web / mobile)
 model UserLoginEvent {
   id        String   @id @default(cuid())
   userId    String
@@ -376,7 +376,7 @@ model UserLoginEvent {
   @@map("user_login_events")
 }
 
-/// Páginas visitadas no sistema (web)
+/// PÃ¡ginas visitadas no sistema (web)
 model UserPageVisit {
   id        String   @id @default(cuid())
   userId    String
@@ -407,24 +407,24 @@ enum TimeRecordType {
 }
 
 enum VacationType {
-  ANNUAL // Férias anuais
-  FRACTIONED_1 // 1º período fracionado
-  FRACTIONED_2 // 2º período fracionado  
-  FRACTIONED_3 // 3º período fracionado
-  SICK // Férias por doença
-  MATERNITY // Licença maternidade
-  PATERNITY // Licença paternidade
-  EMERGENCY // Férias de emergência
-  COLLECTIVE // Férias coletivas
+  ANNUAL // FÃ©rias anuais
+  FRACTIONED_1 // 1Âº perÃ­odo fracionado
+  FRACTIONED_2 // 2Âº perÃ­odo fracionado  
+  FRACTIONED_3 // 3Âº perÃ­odo fracionado
+  SICK // FÃ©rias por doenÃ§a
+  MATERNITY // LicenÃ§a maternidade
+  PATERNITY // LicenÃ§a paternidade
+  EMERGENCY // FÃ©rias de emergÃªncia
+  COLLECTIVE // FÃ©rias coletivas
 }
 
 enum VacationStatus {
-  PENDING // Aguardando aprovação
+  PENDING // Aguardando aprovaÃ§Ã£o
   APPROVED // Aprovado
   NOTICE_SENT // Aviso enviado
   NOTICE_CONFIRMED // Aviso confirmado
   IN_PROGRESS // Em andamento
-  COMPLETED // Concluído
+  COMPLETED // ConcluÃ­do
   REJECTED // Rejeitado
   CANCELLED // Cancelado
   EXPIRED // Vencido
@@ -458,23 +458,23 @@ enum ReportStatus {
   ERROR
 }
 
-// Modelo de Atestados Médicos
+// Modelo de Atestados MÃ©dicos
 model MedicalCertificate {
   id          String                   @id @default(cuid())
   userId      String
   employeeId  String
   type        MedicalCertificateType   @default(MEDICAL)
-  startDate   DateTime // Data de início (pode ser futura)
+  startDate   DateTime // Data de inÃ­cio (pode ser futura)
   endDate     DateTime // Data de fim (pode ser futura)
   days        Int // Quantidade de dias (calculado automaticamente)
-  description String? // Descrição/observações do funcionário
+  description String? // DescriÃ§Ã£o/observaÃ§Ãµes do funcionÃ¡rio
   fileName    String? // Nome do arquivo anexado
   fileUrl     String? // URL do arquivo no S3
   fileKey     String? // Chave do arquivo no S3
   status      MedicalCertificateStatus @default(PENDING)
-  reason      String? // Motivo da reprovação (se aplicável)
+  reason      String? // Motivo da reprovaÃ§Ã£o (se aplicÃ¡vel)
   approvedBy  String? // ID do RH que aprovou/reprovou
-  approvedAt  DateTime? // Data da aprovação/reprovação
+  approvedAt  DateTime? // Data da aprovaÃ§Ã£o/reprovaÃ§Ã£o
   submittedAt DateTime                 @default(now()) // Data de envio
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
@@ -488,8 +488,8 @@ model MedicalCertificate {
 }
 
 enum MedicalCertificateType {
-  MEDICAL // Atestado médico
-  DENTAL // Atestado odontológico
+  MEDICAL // Atestado mÃ©dico
+  DENTAL // Atestado odontolÃ³gico
   PREVENTIVE // Atestado de exame preventivo
   ACCIDENT // Atestado de acidente de trabalho
   COVID // Atestado COVID-19
@@ -499,54 +499,54 @@ enum MedicalCertificateType {
 }
 
 enum MedicalCertificateStatus {
-  PENDING // Aguardando aprovação
+  PENDING // Aguardando aprovaÃ§Ã£o
   APPROVED // Aprovado
   REJECTED // Rejeitado
-  CANCELLED // Cancelado pelo funcionário
+  CANCELLED // Cancelado pelo funcionÃ¡rio
 }
 
 // Novos enums para os campos adicionados
 enum Company {
   ABRASIL // ABRASIL
-  GENNESIS // GÊNNESIS
-  METRICA // MÉTRICA
+  GENNESIS // GÃNNESIS
+  METRICA // MÃTRICA
 }
 
 enum Bank {
   BANCO_DO_BRASIL // BANCO DO BRASIL
   BRADESCO // BRADESCO
   C6 // C6
-  CAIXA_ECONOMICA // CAIXA ECONÔMICA
+  CAIXA_ECONOMICA // CAIXA ECONÃMICA
   CEF // CEF
   INTER // INTER
-  ITAU // ITAÚ
+  ITAU // ITAÃ
   NUBANK // NUBANK
   PICPAY // PICPAY
   SANTANDER // SANTANDER
 }
 
 enum AccountType {
-  CONTA_SALARIO // CONTA SALÁRIO
+  CONTA_SALARIO // CONTA SALÃRIO
   CONTA_CORRENTE // CONTA CORRENTE
-  POUPANCA // POUPANÇA
+  POUPANCA // POUPANÃA
 }
 
 enum PixKeyType {
-  ALEATORIA // ALEATÓRIA
+  ALEATORIA // ALEATÃRIA
   CELULAR // CELULAR
   CNPJ // CNPJ
   CPF // CPF
   EMAIL // E-MAIL
 }
 
-// Modelo de Acréscimos Salariais
+// Modelo de AcrÃ©scimos Salariais
 model SalaryAdjustment {
   id          String         @id @default(cuid())
   employeeId  String
   type        AdjustmentType
   description String
   amount      Decimal        @db.Decimal(10, 2)
-  isFixed     Boolean        @default(false) // Se true, será aplicado automaticamente todo mês
+  isFixed     Boolean        @default(false) // Se true, serÃ¡ aplicado automaticamente todo mÃªs
   createdBy   String
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -559,9 +559,9 @@ model SalaryAdjustment {
 }
 
 enum AdjustmentType {
-  BONUS // Bônus/Prêmio
+  BONUS // BÃ´nus/PrÃªmio
   OVERTIME // Horas Extras
-  COMMISSION // Comissão
+  COMMISSION // ComissÃ£o
   OTHER // Outros
 }
 
@@ -589,7 +589,7 @@ enum DiscountType {
   OTHER // Outros
 }
 
-// Modelo de Solicitações de Correção de Ponto
+// Modelo de SolicitaÃ§Ãµes de CorreÃ§Ã£o de Ponto
 model PointCorrectionRequest {
   id            String @id @default(cuid())
   employeeId    String
@@ -607,7 +607,7 @@ model PointCorrectionRequest {
   correctedTime String
   correctedType TimeRecordType
 
-  // Status e aprovação
+  // Status e aprovaÃ§Ã£o
   status          RequestStatus @default(PENDING)
   approvedBy      String?
   approvedAt      DateTime?
@@ -625,7 +625,7 @@ model PointCorrectionRequest {
   @@map("point_correction_requests")
 }
 
-// Modelo de Comentários das Solicitações
+// Modelo de ComentÃ¡rios das SolicitaÃ§Ãµes
 model PointCorrectionComment {
   id         String   @id @default(cuid())
   requestId  String
@@ -641,39 +641,39 @@ model PointCorrectionComment {
   @@map("point_correction_comments")
 }
 
-// Modelo de Valores Manuais de INSS (Rescisão e 13°)
+// Modelo de Valores Manuais de INSS (RescisÃ£o e 13Â°)
 model ManualInssValue {
   id                String   @id @default(cuid())
   employeeId        String
-  month             Int // Mês (1-12)
+  month             Int // MÃªs (1-12)
   year              Int // Ano
-  inssRescisao      Decimal  @default(0) // INSS RESCISÃO
-  inss13            Decimal  @default(0) // INSS 13°
+  inssRescisao      Decimal  @default(0) // INSS RESCISÃO
+  inss13            Decimal  @default(0) // INSS 13Â°
   descontoPorFaltas Decimal? // Ajuste manual do desconto por faltas
   dsrPorFalta       Decimal? // Ajuste manual do DSR por falta
   horasExtrasValue  Decimal? // Ajuste manual do valor de horas extras
   dsrHEValue        Decimal? // Ajuste manual do DSR por horas extras
-  alocacaoFinal     String? // Alocação final editável manualmente
+  alocacaoFinal     String? // AlocaÃ§Ã£o final editÃ¡vel manualmente
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   // Relacionamentos
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  // Índice único para evitar duplicatas
+  // Ãndice Ãºnico para evitar duplicatas
   @@unique([employeeId, month, year])
   @@map("manual_inss_values")
 }
 
 enum RequestStatus {
   PENDING // Pendente
-  IN_REVIEW // Em Análise
+  IN_REVIEW // Em AnÃ¡lise
   APPROVED // Aprovada
   REJECTED // Rejeitada
   CANCELLED // Cancelada
 }
 
-// Solicitações Departamento Pessoal (DP)
+// SolicitaÃ§Ãµes Departamento Pessoal (DP)
 enum DpRequestUrgency {
   LOW
   MEDIUM
@@ -681,18 +681,18 @@ enum DpRequestUrgency {
   URGENT
 }
 
-// Fluxo: gestor -> DP tramita entre etapas (financeiro, contabilidade, etc.) -> conclusão.
+// Fluxo: gestor -> DP tramita entre etapas (financeiro, contabilidade, etc.) -> conclusÃ£o.
 enum DpRequestStatus {
-  WAITING_MANAGER // Aguardando aprovação (antes do DP)
-  IN_REVIEW_DP // Em análise
-  IN_FINANCEIRO // Em análise / fila no Financeiro
-  WAITING_RETURN // Pendência colaborador (UI solicitante: “Sua pendência”)
-  WAITING_RETURN_ACCOUNTING // Pendência contábil
-  WAITING_RETURN_ADM_TST // Pendência ADM/TST
-  WAITING_RETURN_ENGINEERING // Pendência engenharia
+  WAITING_MANAGER // Aguardando aprovaÃ§Ã£o (antes do DP)
+  IN_REVIEW_DP // Em anÃ¡lise
+  IN_FINANCEIRO // Em anÃ¡lise / fila no Financeiro
+  WAITING_RETURN // PendÃªncia colaborador (UI solicitante: âSua pendÃªnciaâ)
+  WAITING_RETURN_ACCOUNTING // PendÃªncia contÃ¡bil
+  WAITING_RETURN_ADM_TST // PendÃªncia ADM/TST
+  WAITING_RETURN_ENGINEERING // PendÃªncia engenharia
   WAITING_SUPPLIES // Aguardando setor de suprimentos (fluxo ADM/TST)
   WAITING_PAYMENT // Aguardando pagamento (fluxo ADM/TST)
-  CONCLUDED // Concluída
+  CONCLUDED // ConcluÃ­da
   CANCELLED // Cancelada
 }
 
@@ -716,17 +716,17 @@ enum DpRequestType {
   ADM_ASOS
 }
 
-// Modelo de Solicitação DP (específico do AppSheet “Solicitações Departamento Pessoal”)
+// Modelo de SolicitaÃ§Ã£o DP (especÃ­fico do AppSheet âSolicitaÃ§Ãµes Departamento Pessoalâ)
 model DpRequest {
   id            String @id @default(cuid())
-  /// Número legível sequencial (1, 2, 3…) para exibição e busca.
+  /// NÃºmero legÃ­vel sequencial (1, 2, 3â¦) para exibiÃ§Ã£o e busca.
   displayNumber Int    @unique
 
   // Solicitante
   employeeId String
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  // Dados do formulário
+  // Dados do formulÃ¡rio
   urgency           DpRequestUrgency @default(MEDIUM)
   requestType       DpRequestType
   title             String
@@ -737,10 +737,10 @@ model DpRequest {
   prazoInicio DateTime
   prazoFim    DateTime
 
-  /// Campos específicos por tipo (JSON validado na API).
+  /// Campos especÃ­ficos por tipo (JSON validado na API).
   details Json?
 
-  // Dados vinculados ao contrato/centro de custo (pode ser persistido para histórico mesmo que contrato mude).
+  // Dados vinculados ao contrato/centro de custo (pode ser persistido para histÃ³rico mesmo que contrato mude).
   contractId   String?
   costCenterId String?
   costCenter   CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
@@ -749,30 +749,30 @@ model DpRequest {
 
   // Workflow
   status        DpRequestStatus @default(WAITING_MANAGER)
-  /// Linha do tempo: [{ "at": ISO-8601, "status": "IN_FINANCEIRO" }, ...] — cada mudança de etapa.
+  /// Linha do tempo: [{ "at": ISO-8601, "status": "IN_FINANCEIRO" }, ...] â cada mudanÃ§a de etapa.
   statusHistory Json            @default("[]")
 
-  // Aprovação do gestor
+  // AprovaÃ§Ã£o do gestor
   managerApprovedBy       String?
   managerApprovedAt       DateTime?
   managerApprovalComment  String?
   managerRejectionReason  String?
   managerRejectionComment String?
-  // (MVP) sem relação explícita com User: mantemos só o userId em managerApprovedBy.
+  // (MVP) sem relaÃ§Ã£o explÃ­cita com User: mantemos sÃ³ o userId em managerApprovedBy.
 
   // Feedback do DP
   dpFeedback             String?
   dpFeedbackAt           DateTime?
-  /// Nome ou observação do responsável pela ação (registro no fluxo).
+  /// Nome ou observaÃ§Ã£o do responsÃ¡vel pela aÃ§Ã£o (registro no fluxo).
   dpResponsibleNote      String?
   requesterReturnComment String?
   requesterReturnedAt    DateTime?
   dpConclusionComment    String?
   dpConcludedAt          DateTime?
-  /// Motivo informado pelo DP ao cancelar a solicitação.
+  /// Motivo informado pelo DP ao cancelar a solicitaÃ§Ã£o.
   dpCancellationReason   String?
   dpHandledBy            String?
-  // (MVP) sem relação explícita com User: mantemos só o userId em dpHandledBy.
+  // (MVP) sem relaÃ§Ã£o explÃ­cita com User: mantemos sÃ³ o userId em dpHandledBy.
 
   // Metadados
   createdAt DateTime @default(now())
@@ -790,14 +790,14 @@ model Holiday {
   name        String // Nome do feriado
   date        DateTime // Data do feriado
   type        HolidayType @default(NATIONAL) // Tipo de feriado
-  isRecurring Boolean     @default(false) // Se é recorrente (todos os anos)
+  isRecurring Boolean     @default(false) // Se Ã© recorrente (todos os anos)
   state       String? // Estado (para feriados estaduais)
   city        String? // Cidade (para feriados municipais)
-  description String? // Descrição adicional
-  isActive    Boolean     @default(true) // Se está ativo
+  description String? // DescriÃ§Ã£o adicional
+  isActive    Boolean     @default(true) // Se estÃ¡ ativo
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  createdBy   String? // ID do usuário que criou
+  createdBy   String? // ID do usuÃ¡rio que criou
 
   @@unique([date, name]) // Evita duplicatas
   @@index([date])
@@ -820,20 +820,20 @@ model Chat {
   chatType            ChatType        @default(DEPARTMENT)
   initiatorId         String          // Quem iniciou a conversa
   groupName           String?         // Nome do grupo (para tipo GROUP)
-  groupDescription    String?         // Descrição do grupo (opcional)
+  groupDescription    String?         // DescriÃ§Ã£o do grupo (opcional)
   groupAvatarUrl      String?         // Avatar do grupo (opcional)
-  recipientDepartment String?         // Setor destinatário (para tipo DEPARTMENT)
-  recipientId         String?         // Usuário destinatário (para tipo DIRECT)
+  recipientDepartment String?         // Setor destinatÃ¡rio (para tipo DEPARTMENT)
+  recipientId         String?         // UsuÃ¡rio destinatÃ¡rio (para tipo DIRECT)
   status              ChatStatus      @default(PENDING) // PENDING, ACCEPTED, CLOSED
   acceptedBy          String?         // Quem aceitou a conversa
   acceptedAt          DateTime?       // Quando foi aceita
   closedBy            String?         // Quem encerrou
   closedAt            DateTime?       // Quando foi encerrada
-  lastMessageAt       DateTime?       // Última mensagem enviada
+  lastMessageAt       DateTime?       // Ãltima mensagem enviada
   pinnedMessageId     String?         // Mensagem fixada no topo
-  /// Quando `chatType` = GROUP_CALL: conversa “sala” da chamada nativa (histórico fora do grupo).
+  /// Quando `chatType` = GROUP_CALL: conversa âsalaâ da chamada nativa (histÃ³rico fora do grupo).
   parentGroupChatId   String?
-  /// ID da sessão WebRTC (mesmo valor de `callId`) para correlacionar.
+  /// ID da sessÃ£o WebRTC (mesmo valor de `callId`) para correlacionar.
   groupCallSessionId  String?
   
   // Mensagens da conversa
@@ -879,7 +879,7 @@ model ChatParticipant {
   @@map("chat_participants")
 }
 
-/// Tópico dentro de uma conversa (estilo threads do ChatGPT)
+/// TÃ³pico dentro de uma conversa (estilo threads do ChatGPT)
 model ChatTopic {
   id            String    @id @default(cuid())
   chatId        String
@@ -906,12 +906,12 @@ model ChatTopic {
 model Message {
   id              String            @id @default(cuid())
   chatId          String            // Chat ao qual pertence
-  senderId        String            // Quem enviou (ou quem realizou a ação, nas mensagens de sistema)
-  content         String            // Conteúdo da mensagem
-  isSystem        Boolean           @default(false) // Eventos de grupo/fixar/etc. — exibidos como texto centralizado
+  senderId        String            // Quem enviou (ou quem realizou a aÃ§Ã£o, nas mensagens de sistema)
+  content         String            // ConteÃºdo da mensagem
+  isSystem        Boolean           @default(false) // Eventos de grupo/fixar/etc. â exibidos como texto centralizado
   isRead          Boolean           @default(false)
   readAt          DateTime?         // Quando foi lida
-  editedAt        DateTime?         // Última edição (texto)
+  editedAt        DateTime?         // Ãltima ediÃ§Ã£o (texto)
   deletedAt       DateTime?         // Soft delete: mensagem apagada pelo remetente
   
   // Anexos
@@ -926,7 +926,7 @@ model Message {
   replyTo         Message?          @relation("MessageReplyThread", fields: [replyToId], references: [id], onDelete: SetNull)
   replies         Message[]         @relation("MessageReplyThread")
 
-  /// Tópico da conversa (null = mensagem geral, legado)
+  /// TÃ³pico da conversa (null = mensagem geral, legado)
   topicId         String?
   topic           ChatTopic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
@@ -947,7 +947,7 @@ model Message {
   @@map("messages")
 }
 
-// Favoritar mensagem (por usuário; cada um tem seus favoritos)
+// Favoritar mensagem (por usuÃ¡rio; cada um tem seus favoritos)
 model MessageFavorite {
   id         String   @id @default(cuid())
   userId     String
@@ -963,7 +963,7 @@ model MessageFavorite {
   @@map("message_favorites")
 }
 
-/// Limpar conversa "só pra mim" (estilo WhatsApp): oculta mensagens com createdAt <= clearedAt
+/// Limpar conversa "sÃ³ pra mim" (estilo WhatsApp): oculta mensagens com createdAt <= clearedAt
 model ChatUserPrivacy {
   id        String    @id @default(cuid())
   userId    String
@@ -981,7 +981,7 @@ model ChatUserPrivacy {
   @@map("chat_user_privacy")
 }
 
-/// Apagar mensagem "só pra mim" — oculta no histórico deste usuário apenas
+/// Apagar mensagem "sÃ³ pra mim" â oculta no histÃ³rico deste usuÃ¡rio apenas
 model MessageHiddenForUser {
   id        String   @id @default(cuid())
   userId    String
@@ -1016,33 +1016,33 @@ model MessageAttachment {
 }
 
 enum ChatStatus {
-  PENDING // Aguardando aceitação
+  PENDING // Aguardando aceitaÃ§Ã£o
   ACCEPTED // Aceito e ativo
   CLOSED // Encerrado
 }
 
 enum ChatType {
   DEPARTMENT  // Chat com setor (modelo antigo)
-  DIRECT      // Chat direto entre usuários (estilo WhatsApp)
+  DIRECT      // Chat direto entre usuÃ¡rios (estilo WhatsApp)
   GROUP       // Chat em grupo
-  GROUP_CALL  // Sala temporária da chamada nativa em grupo (mensagens de chamada + chat paralelo)
+  GROUP_CALL  // Sala temporÃ¡ria da chamada nativa em grupo (mensagens de chamada + chat paralelo)
 }
 
 // Modelo de Status da Folha de Pagamento
 model PayrollStatus {
   id          String    @id @default(cuid())
-  month       Int // Mês (1-12)
+  month       Int // MÃªs (1-12)
   year        Int // Ano
   isFinalized Boolean   @default(false) // Se a folha foi finalizada pelo DP
-  finalizedBy String? // ID do usuário que finalizou
-  finalizedAt DateTime? // Data/hora da finalização
+  finalizedBy String? // ID do usuÃ¡rio que finalizou
+  finalizedAt DateTime? // Data/hora da finalizaÃ§Ã£o
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   // Relacionamentos
   finalizedByUser User? @relation("PayrollFinalizer", fields: [finalizedBy], references: [id], onDelete: SetNull)
 
-  // Índice único para mês/ano
+  // Ãndice Ãºnico para mÃªs/ano
   @@unique([month, year])
   @@index([month, year])
   @@index([isFinalized])
@@ -1052,13 +1052,13 @@ model PayrollStatus {
 // Modelo de Centro de Custo de Engenharia
 model CostCenter {
   id          String   @id @default(cuid())
-  code        String   @unique // Código do centro de custo
+  code        String   @unique // CÃ³digo do centro de custo
   name        String   // Nome do centro de custo
-  description String?  // Descrição adicional
+  description String?  // DescriÃ§Ã£o adicional
   state       String?  // Estado (DF, GO, etc.)
-  polo        String?  // Polo (BRASÍLIA, GOIÁS, etc.)
-  company     String?  // Empresa (ABRASIL, GÊNNESIS, MÉTRICA, etc.)
-  isActive    Boolean  @default(true) // Se está ativo
+  polo        String?  // Polo (BRASÃLIA, GOIÃS, etc.)
+  company     String?  // Empresa (ABRASIL, GÃNNESIS, MÃTRICA, etc.)
+  isActive    Boolean  @default(true) // Se estÃ¡ ativo
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1083,7 +1083,7 @@ model CostCenter {
   @@map("cost_centers")
 }
 
-// Espelho NF — Prestador de Serviço
+// Espelho NF â Prestador de ServiÃ§o
 model EspelhoNfServiceProvider {
   id                    String   @id @default(cuid())
   cnpj                  String
@@ -1105,16 +1105,16 @@ model EspelhoNfServiceProvider {
   @@map("espelho_nf_service_providers")
 }
 
-// Espelho NF — Código Tributário
+// Espelho NF â CÃ³digo TributÃ¡rio
 model EspelhoNfTaxCode {
   id                   String   @id @default(cuid())
   name                 String // Nome exibido no frontend (antes "cityName")
   abatesMaterial       Boolean  @default(false)
   /// Possui garantia complementar (contrato)
   hasComplementaryWarranty Boolean @default(false)
-  /// Se possui garantia: a garantia é retida na nota? (null = não se aplica)
+  /// Se possui garantia: a garantia Ã© retida na nota? (null = nÃ£o se aplica)
   garantiaRetidaNaNota Boolean?
-  /// Alíquota da garantia (%), texto pt-BR; vazio se não houver garantia complementar
+  /// AlÃ­quota da garantia (%), texto pt-BR; vazio se nÃ£o houver garantia complementar
   garantiaAliquota     String   @default("")
   issRate              String
   cofinsCollectionType String   @default("RETIDO")
@@ -1125,9 +1125,9 @@ model EspelhoNfTaxCode {
   issCollectionType    String   @default("RETIDO")
   inssMaterialLimit    String
   issMaterialLimit     String
-  /// Alíquotas federais (COFINS, CSLL, etc.) por tipo de contrato — espelhado na UI de cadastro.
+  /// AlÃ­quotas federais (COFINS, CSLL, etc.) por tipo de contrato â espelhado na UI de cadastro.
   federalRatesByContext    Json?
-  /// Qual linha de contrato federal está ativa na UI (checkboxes por contexto).
+  /// Qual linha de contrato federal estÃ¡ ativa na UI (checkboxes por contexto).
   federalTaxContextEnabled Json?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -1139,7 +1139,7 @@ model EspelhoNfTaxCode {
   @@map("espelho_nf_tax_codes")
 }
 
-// Espelho NF — Tomador de Serviço
+// Espelho NF â Tomador de ServiÃ§o
 model EspelhoNfServiceTaker {
   id                    String   @id @default(cuid())
   name                  String
@@ -1172,7 +1172,7 @@ model EspelhoNfServiceTaker {
   @@map("espelho_nf_service_takers")
 }
 
-// Espelho NF — Conta Bancária
+// Espelho NF â Conta BancÃ¡ria
 model EspelhoNfBankAccount {
   id        String   @id @default(cuid())
   name      String
@@ -1189,7 +1189,7 @@ model EspelhoNfBankAccount {
   @@map("espelho_nf_bank_accounts")
 }
 
-// Espelho NF — Espelho salvo
+// Espelho NF â Espelho salvo
 model EspelhoNfMirror {
   id                    String    @id @default(cuid())
   measurementRef        String
@@ -1204,7 +1204,7 @@ model EspelhoNfMirror {
   measurementStartDate  String?
   measurementEndDate    String?
   buildingUnit          String?
-  /// Nº inscrição Obra / CNO (formato xx.xxx.xxxxx/xx)
+  /// NÂº inscriÃ§Ã£o Obra / CNO (formato xx.xxx.xxxxx/xx)
   obraCno               String?
   /// Garantia complementar (texto livre)
   garantiaComplementar  String?
@@ -1225,9 +1225,9 @@ model EspelhoNfMirror {
   xmlAttachmentMimeType String?
   xmlAttachmentSize     Int?
   xmlAttachmentDataUrl  String?
-  /// Quais campos opcionais da NF o usuário escolheu exibir/preencher (JSON: processNumber, empenhoNumber, …)
+  /// Quais campos opcionais da NF o usuÃ¡rio escolheu exibir/preencher (JSON: processNumber, empenhoNumber, â¦)
   nfConstarNaNota       Json?
-  /// Confirmação obrigatória de que o usuário revisou “constar na nota fiscal”
+  /// ConfirmaÃ§Ã£o obrigatÃ³ria de que o usuÃ¡rio revisou âconstar na nota fiscalâ
   nfConstarNaNotaAcknowledged Boolean @default(false)
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -1251,9 +1251,9 @@ model EspelhoNfMirror {
 model Contract {
   id               String   @id @default(cuid())
   name             String // Nome do contrato
-  number           String   @unique // Número do contrato
-  startDate        DateTime // Início da vigência
-  endDate          DateTime // Fim da vigência
+  number           String   @unique // NÃºmero do contrato
+  startDate        DateTime // InÃ­cio da vigÃªncia
+  endDate          DateTime // Fim da vigÃªncia
   costCenterId     String // Centro de custo associado
   valuePlusAddenda Decimal  @db.Decimal(15, 2) // Valor mais aditivos
   createdAt        DateTime @default(now())
@@ -1285,7 +1285,7 @@ enum DemandSheetApprovalStatus {
   CANCELLED
 }
 
-/// Status de compras/suprimentos após aprovação do gestor (um único valor por FD).
+/// Status de compras/suprimentos apÃ³s aprovaÃ§Ã£o do gestor (um Ãºnico valor por FD).
 enum DemandSheetPurchaseStatus {
   WAREHOUSE_DF
   WAREHOUSE_GO
@@ -1296,7 +1296,7 @@ enum DemandSheetPurchaseStatus {
   FINISHED
 }
 
-/// Ficha de demanda (FD) — fluxo de aprovação pelo gestor do contrato (mesmo escopo das solicitações DP).
+/// Ficha de demanda (FD) â fluxo de aprovaÃ§Ã£o pelo gestor do contrato (mesmo escopo das solicitaÃ§Ãµes DP).
 model DemandSheetApproval {
   id                      String                      @id @default(cuid())
   numMovRm                String
@@ -1340,7 +1340,7 @@ model DemandSheetApproval {
   @@map("demand_sheet_approvals")
 }
 
-// Aditivos do contrato (permite múltiplos lançamentos com data de efeito)
+// Aditivos do contrato (permite mÃºltiplos lanÃ§amentos com data de efeito)
 model ContractAddendum {
   id            String   @id @default(cuid())
   contractId    String
@@ -1362,10 +1362,10 @@ model ContractAnnualValue {
   id                            String    @id @default(cuid())
   contractId                    String
   year                          Int // Ano (ex: 2025)
-  value                         Decimal   @db.Decimal(15, 2) // Valor anual final (base + ajuste), espelho para relatórios
-  /// Soma algebrica ao valor anual calculado pelo contrato (orçamento do órgão naquele ano)
+  value                         Decimal   @db.Decimal(15, 2) // Valor anual final (base + ajuste), espelho para relatÃ³rios
+  /// Soma algebrica ao valor anual calculado pelo contrato (orÃ§amento do Ã³rgÃ£o naquele ano)
   budgetAdjustmentDelta         Decimal?  @db.Decimal(15, 2)
-  /// Data do aditivo/orçamento: a partir deste mês civil a meta mensal usa (base + delta) ÷ 12
+  /// Data do aditivo/orÃ§amento: a partir deste mÃªs civil a meta mensal usa (base + delta) Ã· 12
   budgetAdjustmentEffectiveDate DateTime?
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
@@ -1378,10 +1378,10 @@ model ContractAnnualValue {
   @@map("contract_annual_values")
 }
 
-/// Teto orçamentário mensal por contrato (Controle Geral de Contratos).
+/// Teto orÃ§amentÃ¡rio mensal por contrato (Controle Geral de Contratos).
 model ControleGeralTetoOrcamentario {
   id           String   @id @default(cuid())
-  /// Chave normalizada do contrato (mesmo critério do painel de gastos).
+  /// Chave normalizada do contrato (mesmo critÃ©rio do painel de gastos).
   contractKey  String
   /// Nome exibido no cadastro.
   contractName String
@@ -1403,13 +1403,13 @@ model ControleGeralTetoOrcamentario {
 model ContractBilling {
   id            String   @id @default(cuid())
   contractId    String
-  pleitoId      String? // Pleito vinculado (obrigatório em novos lançamentos)
-  issueDate     DateTime // Data de emissão
-  invoiceNumber String // Número da nota fiscal
-  serviceOrder  String // Ordem de serviço
+  pleitoId      String? // Pleito vinculado (obrigatÃ³rio em novos lanÃ§amentos)
+  issueDate     DateTime // Data de emissÃ£o
+  invoiceNumber String // NÃºmero da nota fiscal
+  serviceOrder  String // Ordem de serviÃ§o
   divSe         String? // OS / SE
   grossValue    Decimal  @db.Decimal(15, 2) // Valor bruto
-  netValue      Decimal  @db.Decimal(15, 2) // Valor líquido
+  netValue      Decimal  @db.Decimal(15, 2) // Valor lÃ­quido
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1422,14 +1422,14 @@ model ContractBilling {
   @@map("contract_billings")
 }
 
-// Produção Semanal do contrato
+// ProduÃ§Ã£o Semanal do contrato
 model ContractWeeklyProduction {
   id                    String   @id @default(cuid())
   contractId            String
-  fillingDate           DateTime @default(now()) // Data em que o usuário preencheu (não editável)
+  fillingDate           DateTime @default(now()) // Data em que o usuÃ¡rio preencheu (nÃ£o editÃ¡vel)
   divSe                 String // OS / SE
-  weeklyProductionValue Decimal  @db.Decimal(15, 2) // Valor da Produção Semanal
-  responsiblePerson     String // Responsável pelo Preenchimento
+  weeklyProductionValue Decimal  @db.Decimal(15, 2) // Valor da ProduÃ§Ã£o Semanal
+  responsiblePerson     String // ResponsÃ¡vel pelo Preenchimento
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -1439,7 +1439,7 @@ model ContractWeeklyProduction {
   @@map("contract_weekly_productions")
 }
 
-// Andamento da OS — acompanhamento de ordens de serviço (Engenharia); tabela API: pleitos
+// Andamento da OS â acompanhamento de ordens de serviÃ§o (Engenharia); tabela API: pleitos
 model Pleito {
   id                 String    @id @default(cuid())
   serviceOrderId     String
@@ -1449,32 +1449,32 @@ model Pleito {
   valorExecutado     Decimal   @default(0) @db.Decimal(14, 2)
   dataMedicao        DateTime?
   observacao         String?
-  creationMonth      String? // Mês de criação (01-12)
-  creationYear       Int? // Ano de criação
-  startDate          DateTime? // Data início
-  endDate            DateTime? // Data término
-  budgetStatus       String? // Status orçamento
-  folderNumber       String? // Nº pasta
+  creationMonth      String? // MÃªs de criaÃ§Ã£o (01-12)
+  creationYear       Int? // Ano de criaÃ§Ã£o
+  startDate          DateTime? // Data inÃ­cio
+  endDate            DateTime? // Data tÃ©rmino
+  budgetStatus       String? // Status orÃ§amento
+  folderNumber       String? // NÂº pasta
   lot                String? // Lote
   divSe              String? // Div SE
   location           String? // Local
   unit               String? // Unidade
-  serviceDescription String    @db.Text // Descrição do serviço
-  budget             String? // Orçamento (referência/texto)
-  executionStatus    String? // Status execução
+  serviceDescription String    @db.Text // DescriÃ§Ã£o do serviÃ§o
+  budget             String? // OrÃ§amento (referÃªncia/texto)
+  executionStatus    String? // Status execuÃ§Ã£o
   billingStatus      String? // Status faturamento
   updatedContractId  String? // ID atualizado contrato
   accumulatedBilled  Decimal?  @db.Decimal(15, 2) // Acumulado faturado (moeda)
   billingRequest     Decimal?  @db.Decimal(15, 2) // Pendente faturamento (moeda)
-  invoiceNumber      String? // Nº nota
-  estimator          String? // Orçamentista
-  budgetAmount1      Decimal?  @db.Decimal(15, 2) // Orçamento R$ 1
+  invoiceNumber      String? // NÂº nota
+  estimator          String? // OrÃ§amentista
+  budgetAmount1      Decimal?  @db.Decimal(15, 2) // OrÃ§amento R$ 1
   budgetAmount2      Decimal?  @db.Decimal(15, 2)
   budgetAmount3      Decimal?  @db.Decimal(15, 2)
   budgetAmount4      Decimal?  @db.Decimal(15, 2)
-  pv                 String? // RVI — FEITO ou PENDENTE
-  ipi                String? // RVF — FEITO ou PENDENTE
-  reportsBilling     String? // Cobrança laudos
+  pv                 String? // RVI â FEITO ou PENDENTE
+  ipi                String? // RVF â FEITO ou PENDENTE
+  reportsBilling     String? // CobranÃ§a laudos
   engineer           String? // Engenheiro
   supervisor         String? // Encarregado
   createdAt          DateTime  @default(now())
@@ -1495,13 +1495,13 @@ model Pleito {
 // Modelo de Obra/Projeto
 model Project {
   id           String        @id @default(cuid())
-  code         String        @unique // Código da obra
+  code         String        @unique // CÃ³digo da obra
   name         String // Nome da obra
-  description  String? // Descrição da obra
+  description  String? // DescriÃ§Ã£o da obra
   costCenterId String // Centro de custo associado
   status       ProjectStatus @default(ACTIVE) // Status da obra
-  startDate    DateTime? // Data de início
-  endDate      DateTime? // Data de término prevista
+  startDate    DateTime? // Data de inÃ­cio
+  endDate      DateTime? // Data de tÃ©rmino prevista
   isActive     Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -1521,36 +1521,36 @@ enum ProjectStatus {
   ACTIVE // Em andamento
   PLANNING // Em planejamento
   SUSPENDED // Suspensa
-  COMPLETED // Concluída
+  COMPLETED // ConcluÃ­da
   CANCELLED // Cancelada
 }
 
-// Modelo de Requisição de Material
+// Modelo de RequisiÃ§Ã£o de Material
 model MaterialRequest {
   id              String                  @id @default(cuid())
-  requestNumber   String                  @unique // Número da requisição (ex: REQ-2025-001)
-  requestedBy     String // ID do usuário que solicitou
+  requestNumber   String                  @unique // NÃºmero da requisiÃ§Ã£o (ex: REQ-2025-001)
+  requestedBy     String // ID do usuÃ¡rio que solicitou
   costCenterId    String // Centro de custo
   projectId       String? // Obra/Projeto (opcional)
   serviceOrderId  String?
-  serviceOrder    String? // Ordem de serviço (texto livre)
+  serviceOrder    String? // Ordem de serviÃ§o (texto livre)
   obra            String? // Obra (texto livre)
-  description     String? // Descrição/observações da requisição
-  demandSheet     String? // Número ou referência da ficha de demanda
+  description     String? // DescriÃ§Ã£o/observaÃ§Ãµes da requisiÃ§Ã£o
+  demandSheet     String? // NÃºmero ou referÃªncia da ficha de demanda
   demandSheetAttachmentUrl  String? // URL do anexo da FD (primeiro arquivo; compat)
   demandSheetAttachmentName String? // Nome original do anexo da FD (primeiro arquivo; compat)
-  demandSheetAttachments    Json? // [{ url, name }] — vários anexos da FD
-  status          MaterialRequestStatus   @default(PENDING) // Status da requisição
-  /// Último tipo de entrada de estoque vinculada a OC desta RM (Total ou Parcial).
+  demandSheetAttachments    Json? // [{ url, name }] â vÃ¡rios anexos da FD
+  status          MaterialRequestStatus   @default(PENDING) // Status da requisiÃ§Ã£o
+  /// Ãltimo tipo de entrada de estoque vinculada a OC desta RM (Total ou Parcial).
   lastStockReceiptType MaterialDeliveryReceiptType?
   priority        MaterialRequestPriority @default(MEDIUM) // Prioridade
-  requestedAt     DateTime                @default(now()) // Data da requisição
+  requestedAt     DateTime                @default(now()) // Data da requisiÃ§Ã£o
   approvedBy      String? // ID do aprovador (compras)
-  approvedAt      DateTime? // Data de aprovação
+  approvedAt      DateTime? // Data de aprovaÃ§Ã£o
   rejectedBy      String? // ID de quem rejeitou
-  rejectedAt      DateTime? // Data de rejeição
-  rejectionReason String? // Motivo da rejeição
-  completedAt     DateTime? // Data de conclusão (quando todos os itens foram atendidos)
+  rejectedAt      DateTime? // Data de rejeiÃ§Ã£o
+  rejectionReason String? // Motivo da rejeiÃ§Ã£o
+  completedAt     DateTime? // Data de conclusÃ£o (quando todos os itens foram atendidos)
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
 
@@ -1651,37 +1651,37 @@ model service_orders {
 }
 
 enum MaterialRequestStatus {
-  PENDING // Pendente - Aguardando análise de compras
-  IN_REVIEW // Correção RM - aguardando ajuste do solicitante
-  APPROVED // Aprovada - Compras aprovou e está processando
+  PENDING // Pendente - Aguardando anÃ¡lise de compras
+  IN_REVIEW // CorreÃ§Ã£o RM - aguardando ajuste do solicitante
+  APPROVED // Aprovada - Compras aprovou e estÃ¡ processando
   PARTIALLY_FULFILLED // Parcialmente atendida - Alguns itens foram atendidos
   FULFILLED // Atendida - Todos os itens foram atendidos
-  REJECTED // Rejeitada - Compras rejeitou a requisição
-  CANCELLED // Cancelada - Engenharia cancelou a requisição
+  REJECTED // Rejeitada - Compras rejeitou a requisiÃ§Ã£o
+  CANCELLED // Cancelada - Engenharia cancelou a requisiÃ§Ã£o
 }
 
 enum MaterialRequestPriority {
   LOW // Baixa
-  MEDIUM // Média
+  MEDIUM // MÃ©dia
   HIGH // Alta
   URGENT // Urgente
 }
 
-// Modelo de Item da Requisição de Material
+// Modelo de Item da RequisiÃ§Ã£o de Material
 model MaterialRequestItem {
   id                String                    @id @default(cuid())
-  materialRequestId String // ID da requisição
+  materialRequestId String // ID da requisiÃ§Ã£o
   materialId        String // ID do material (EngineeringMaterial)
   quantity          Decimal                   @db.Decimal(10, 2) // Quantidade solicitada
   unit              String // Unidade de medida
-  unitPrice         Decimal?                  @db.Decimal(12, 2) // Preço unitário no momento da requisição
-  totalPrice        Decimal?                  @db.Decimal(12, 2) // Preço total (quantity * unitPrice)
-  notes             String? // Observações sobre o item
-  bankDetails       String? // Dados bancários (itens de Serviço)
+  unitPrice         Decimal?                  @db.Decimal(12, 2) // PreÃ§o unitÃ¡rio no momento da requisiÃ§Ã£o
+  totalPrice        Decimal?                  @db.Decimal(12, 2) // PreÃ§o total (quantity * unitPrice)
+  notes             String? // ObservaÃ§Ãµes sobre o item
+  bankDetails       String? // Dados bancÃ¡rios (itens de ServiÃ§o)
   attachmentUrl     String? // URL relativa do anexo (ex.: /uploads/material-request-items/...)
   attachmentName    String? // Nome original do arquivo
   status            MaterialRequestItemStatus @default(PENDING) // Status do item
-  fulfilledQuantity Decimal?                  @db.Decimal(10, 2) // Quantidade já atendida
+  fulfilledQuantity Decimal?                  @db.Decimal(10, 2) // Quantidade jÃ¡ atendida
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
@@ -1725,13 +1725,13 @@ enum MaterialRequestItemStatus {
 // Modelo de Fornecedor (estilo TOTVS RM)
 model Supplier {
   id                    String   @id @default(cuid())
-  code                  String   @unique // Código do fornecedor
+  code                  String   @unique // CÃ³digo do fornecedor
   partyType             String? // Cliente / Fornecedor
   tradeName             String? // Nome fantasia
-  name                  String // Razão social / Nome
+  name                  String // RazÃ£o social / Nome
   cnpj                  String?  @unique // CPF ou CNPJ
-  stateRegistration     String? // Inscrição estadual
-  municipalRegistration String? // Inscrição municipal
+  stateRegistration     String? // InscriÃ§Ã£o estadual
+  municipalRegistration String? // InscriÃ§Ã£o municipal
   category              String?
   street                String?
   streetNumber          String?
@@ -1742,17 +1742,17 @@ model Supplier {
   phone                 String?
   fax                   String?
   mobile                String?
-  address               String? // Endereço legado / composto
+  address               String? // EndereÃ§o legado / composto
   city                  String?
   state                 String? // UF
   zipCode               String?
   contactName           String? // Nome do contato
-  /// Dados para remessa CNAB400 (pagamento a fornecedores) — opcionais
-  bank                  String? // Nome ou identificação do banco (ex.: ITAÚ, 341)
-  agency                String? // Agência do favorecido
-  account               String? // Conta (sem dígito)
-  accountDigit          String? // Dígito da conta
-  pixKeyType            String? // Tipo de chave PIX (ALEATÓRIA, CELULAR, CNPJ, CPF, E-MAIL)
+  /// Dados para remessa CNAB400 (pagamento a fornecedores) â opcionais
+  bank                  String? // Nome ou identificaÃ§Ã£o do banco (ex.: ITAÃ, 341)
+  agency                String? // AgÃªncia do favorecido
+  account               String? // Conta (sem dÃ­gito)
+  accountDigit          String? // DÃ­gito da conta
+  pixKeyType            String? // Tipo de chave PIX (ALEATÃRIA, CELULAR, CNPJ, CPF, E-MAIL)
   pixKey                String? // Chave PIX
   notes                 String?
   isActive              Boolean  @default(true)
@@ -1777,7 +1777,7 @@ enum VehicleUsageType {
   PARTICULAR
 }
 
-/// Cadastro de veículos da frota
+/// Cadastro de veÃ­culos da frota
 model Vehicle {
   id          String             @id @default(cuid())
   code        String             @unique
@@ -1808,14 +1808,14 @@ enum VehicleReservationStatus {
   CANCELLED
 }
 
-/// Reservas de veículos da frota
+/// Reservas de veÃ­culos da frota
 model VehicleReservation {
   id                      String                   @id @default(cuid())
   code                    String                   @unique
   solicitante             String
   motorista               String
   vehicleId               String?
-  /// Observações do solicitante sobre capacidade necessária do veículo
+  /// ObservaÃ§Ãµes do solicitante sobre capacidade necessÃ¡ria do veÃ­culo
   observacaoCapacidadeVeiculo String?
   atividade               String
   localDestino            String
@@ -1861,7 +1861,7 @@ model VehicleReservation {
   @@map("vehicle_reservations")
 }
 
-/// Condições de pagamento para OC (valores gravados em PurchaseOrder.paymentCondition)
+/// CondiÃ§Ãµes de pagamento para OC (valores gravados em PurchaseOrder.paymentCondition)
 model PaymentCondition {
   id            String   @id @default(cuid())
   code          String   @unique
@@ -1869,7 +1869,7 @@ model PaymentCondition {
   paymentType   String // AVISTA | BOLETO
   /// Quantidade de parcelas (ex.: 3 boletos)
   parcelCount   Int      @default(1)
-  /// Prazo em dias para cada parcela, na ordem — ex.: [30, 60, 90]
+  /// Prazo em dias para cada parcela, na ordem â ex.: [30, 60, 90]
   parcelDueDays Json
   sortOrder     Int      @default(0)
   isActive      Boolean  @default(true)
@@ -1884,43 +1884,43 @@ model PaymentCondition {
 // Modelo de Ordem de Compra (OC - estilo TOTVS RM)
 model PurchaseOrder {
   id                         String              @id @default(cuid())
-  orderNumber                String              @unique // Número da OC (ex: OC-2025-001)
+  orderNumber                String              @unique // NÃºmero da OC (ex: OC-2025-001)
   materialRequestId          String? // SC que originou (opcional)
-  quoteMapId                 String? // Mapa de cotação que gerou esta OC (opcional)
+  quoteMapId                 String? // Mapa de cotaÃ§Ã£o que gerou esta OC (opcional)
   supplierId                 String // Fornecedor
   status                     PurchaseOrderStatus @default(PENDING)
   orderDate                  DateTime            @default(now())
   expectedDelivery           DateTime? // Data prevista de entrega
-  deliveryAddress            String? // Endereço de entrega
+  deliveryAddress            String? // EndereÃ§o de entrega
   /// AVISTA | BOLETO
   paymentType                String?
-  /// AVISTA | BOLETO_30 | BOLETO_28 (rótulos: à vista, boleto 30 dias, boleto 28 dias)
+  /// AVISTA | BOLETO_30 | BOLETO_28 (rÃ³tulos: Ã  vista, boleto 30 dias, boleto 28 dias)
   paymentCondition           String?
   paymentDetails             String?             @db.Text // Dados do pagamento (texto livre)
-  pixKeyType                 String? // Tipo de chave PIX (à vista)
-  pixKey                     String? // Chave PIX (à vista)
-  boletoAttachmentUrl        String? // Caminho público ex.: /uploads/purchase-orders/...
+  pixKeyType                 String? // Tipo de chave PIX (Ã  vista)
+  pixKey                     String? // Chave PIX (Ã  vista)
+  boletoAttachmentUrl        String? // Caminho pÃºblico ex.: /uploads/purchase-orders/...
   boletoAttachmentName       String? // Nome original do arquivo
-  /// Boleto para pagamento (financeiro), após OC aprovada — distinto do anexo na criação da OC
+  /// Boleto para pagamento (financeiro), apÃ³s OC aprovada â distinto do anexo na criaÃ§Ã£o da OC
   paymentBoletoUrl           String?
   paymentBoletoName          String?
-  /// Parcelas de boleto: [{ amount, dueDate, boletoUrl, boletoName }, ...] alinhado à condição de pagamento
+  /// Parcelas de boleto: [{ amount, dueDate, boletoUrl, boletoName }, ...] alinhado Ã  condiÃ§Ã£o de pagamento
   paymentBoletoInstallments  Json?
-  /// Após anexar boleto(s), o financeiro confirma com botão para exibir a OC na fase Pagamento (comprovante/CNAB)
+  /// ApÃ³s anexar boleto(s), o financeiro confirma com botÃ£o para exibir a OC na fase Pagamento (comprovante/CNAB)
   paymentBoletoPhaseReleased Boolean             @default(false)
   /// Comprovante de pagamento anexado na fase Pagamento
   paymentProofUrl            String?
   paymentProofName           String?
-  /// Notas fiscais anexadas após validação do comprovante: [{ url, name, uploadedAt, number }]
+  /// Notas fiscais anexadas apÃ³s validaÃ§Ã£o do comprovante: [{ url, name, uploadedAt, number }]
   nfAttachments              Json?
-  /// Frete informado na criação (ou edição em correção). Total a pagar = soma dos itens + frete.
+  /// Frete informado na criaÃ§Ã£o (ou ediÃ§Ã£o em correÃ§Ã£o). Total a pagar = soma dos itens + frete.
   freightAmount              Decimal             @default(0) @db.Decimal(15, 2)
   amountToPay                Decimal?            @db.Decimal(15, 2) // Itens + frete (recalculado ao salvar itens/frete)
   notes                      String?
-  /// [{ url, name }] — anexos gerais na criação da OC
+  /// [{ url, name }] â anexos gerais na criaÃ§Ã£o da OC
   attachments                Json?
-  createdBy                  String // Usuário que criou
-  approvedBy                 String? // Usuário que aprovou (diretoria — status APPROVED)
+  createdBy                  String // UsuÃ¡rio que criou
+  approvedBy                 String? // UsuÃ¡rio que aprovou (diretoria â status APPROVED)
   approvedAt                 DateTime?
   comprasApprovedBy          String?
   comprasApprovedAt          DateTime?
@@ -1968,7 +1968,7 @@ model PurchaseOrderComment {
   @@map("purchase_order_comments")
 }
 
-/// Número de NF vinculado à OC (unicidade global entre OCs).
+/// NÃºmero de NF vinculado Ã  OC (unicidade global entre OCs).
 model PurchaseOrderInvoiceNumber {
   id              String   @id @default(cuid())
   /// Chave canonica (sem espacos/pontuacao) para unicidade
@@ -1986,16 +1986,16 @@ model PurchaseOrderInvoiceNumber {
 
 enum PurchaseOrderStatus {
   DRAFT // Rascunho
-  PENDING_COMPRAS // OC - Aprovação Compras (0ª fase)
-  PENDING // OC - Aprovação Gestor (1ª fase)
-  PENDING_DIRETORIA // OC - Aprovação Diretoria (2ª fase)
-  IN_REVIEW // CORREÇÃO OC - aguardando ajuste de quem criou
-  APPROVED // Aprovada (após diretoria)
-  PENDING_PROOF_VALIDATION // Aguardando validação do comprovante de pagamento
-  PENDING_PROOF_CORRECTION // Comprovante reprovado na validação — comprador substitui e reenvia
-  PENDING_NF_ATTACHMENT // Após comprovante validado — anexar NF(s)
+  PENDING_COMPRAS // OC - AprovaÃ§Ã£o Compras (0Âª fase)
+  PENDING // OC - AprovaÃ§Ã£o Gestor (1Âª fase)
+  PENDING_DIRETORIA // OC - AprovaÃ§Ã£o Diretoria (2Âª fase)
+  IN_REVIEW // CORREÃÃO OC - aguardando ajuste de quem criou
+  APPROVED // Aprovada (apÃ³s diretoria)
+  PENDING_PROOF_VALIDATION // Aguardando validaÃ§Ã£o do comprovante de pagamento
+  PENDING_PROOF_CORRECTION // Comprovante reprovado na validaÃ§Ã£o â comprador substitui e reenvia
+  PENDING_NF_ATTACHMENT // ApÃ³s comprovante validado â anexar NF(s)
   SENT // Enviada ao fornecedor (legado; fluxo completo atual usa FINALIZED)
-  FINALIZED // Fluxo completo concluído (NF anexada — arquivo)
+  FINALIZED // Fluxo completo concluÃ­do (NF anexada â arquivo)
   PARTIALLY_RECEIVED // Parcialmente recebida
   RECEIVED // Totalmente recebida
   REJECTED // Reprovada
@@ -2013,7 +2013,7 @@ model PurchaseOrderItem {
   unitPrice             Decimal  @db.Decimal(12, 5)
   totalPrice            Decimal  @db.Decimal(14, 5)
   notes                 String?
-  receivedQuantity      Decimal? @default(0) @db.Decimal(10, 2) // Quantidade já recebida
+  receivedQuantity      Decimal? @default(0) @db.Decimal(10, 2) // Quantidade jÃ¡ recebida
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -2027,7 +2027,7 @@ model PurchaseOrderItem {
   @@map("purchase_order_items")
 }
 
-// Modelo de Mapa de Cotação (comparação de fornecedores por item)
+// Modelo de Mapa de CotaÃ§Ã£o (comparaÃ§Ã£o de fornecedores por item)
 model QuoteMap {
   id                String         @id @default(cuid())
   materialRequestId String
@@ -2060,7 +2060,7 @@ model QuoteMapSupplier {
   supplierId String
   freight    Decimal? @db.Decimal(12, 2)
 
-  // Campos de pagamento (usados na geração de OC) - opcionais
+  // Campos de pagamento (usados na geraÃ§Ã£o de OC) - opcionais
   paymentType          String?
   paymentCondition     String?
   paymentDetails       String?  @db.Text
@@ -2082,7 +2082,7 @@ model QuoteMapSupplier {
   @@map("quote_map_suppliers")
 }
 
-// Preço unitário cotado por item da SC e fornecedor
+// PreÃ§o unitÃ¡rio cotado por item da SC e fornecedor
 model QuoteMapSupplierItem {
   id                    String  @id @default(cuid())
   quoteMapId            String
@@ -2131,9 +2131,9 @@ model QuoteMapWinnerItem {
 // Modelo de Categoria de Material
 model MaterialCategory {
   id          String   @id @default(cuid())
-  code        String   @unique // Código da categoria
-  name        String // Nome da categoria (ex: Materiais, Mão de Obra, Equipamentos, Serviços)
-  description String? // Descrição
+  code        String   @unique // CÃ³digo da categoria
+  name        String // Nome da categoria (ex: Materiais, MÃ£o de Obra, Equipamentos, ServiÃ§os)
+  description String? // DescriÃ§Ã£o
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -2144,7 +2144,7 @@ model MaterialCategory {
   @@map("material_categories")
 }
 
-// Modelo de Natureza Orçamentária
+// Modelo de Natureza OrÃ§amentÃ¡ria
 model BudgetNature {
   id        String   @id @default(cuid())
   code      String?  @unique
@@ -2163,14 +2163,14 @@ model BudgetNature {
 // Modelo de Material de Engenharia (SINAPI)
 model EngineeringMaterial {
   id             String   @id @default(cuid())
-  sinapiCode     String   @unique // Código oficial do material no SINAPI
+  sinapiCode     String   @unique // CÃ³digo oficial do material no SINAPI
   name           String? // Nome do material
-  description    String // Descrição completa do material
-  unit           String // Unidade de medida (kg, m, m², un, etc.)
-  medianPrice    Decimal? @db.Decimal(12, 2) // Preço mediano atual do SINAPI
+  description    String // DescriÃ§Ã£o completa do material
+  unit           String // Unidade de medida (kg, m, mÂ², un, etc.)
+  medianPrice    Decimal? @db.Decimal(12, 2) // PreÃ§o mediano atual do SINAPI
   state          String? // Estado (UF) referente ao material
-  referenceMonth Int? // Mês de referência (1-12)
-  referenceYear  Int? // Ano de referência
+  referenceMonth Int? // MÃªs de referÃªncia (1-12)
+  referenceYear  Int? // Ano de referÃªncia
   categoryId     String? // Categoria do material
   costCenterId   String? // Centro de custo associado
   isActive       Boolean  @default(true)
@@ -2192,16 +2192,16 @@ model EngineeringMaterial {
   @@map("engineering_materials")
 }
 
-// Modelo de Composição SINAPI (CPU - Composição de Preços Unitários)
+// Modelo de ComposiÃ§Ã£o SINAPI (CPU - ComposiÃ§Ã£o de PreÃ§os UnitÃ¡rios)
 model Composition {
   id             String   @id @default(cuid())
-  sinapiCode     String // Código oficial da composição no SINAPI
-  description    String // Descrição da composição
-  unit           String // Unidade de medida (m², m³, etc.)
-  compositePrice Decimal? @db.Decimal(12, 2) // Custo total (materiais + mão de obra + equipamentos)
+  sinapiCode     String // CÃ³digo oficial da composiÃ§Ã£o no SINAPI
+  description    String // DescriÃ§Ã£o da composiÃ§Ã£o
+  unit           String // Unidade de medida (mÂ², mÂ³, etc.)
+  compositePrice Decimal? @db.Decimal(12, 2) // Custo total (materiais + mÃ£o de obra + equipamentos)
   state          String? // Estado (UF) referente
-  referenceMonth Int? // Mês de referência (1-12)
-  referenceYear  Int? // Ano de referência
+  referenceMonth Int? // MÃªs de referÃªncia (1-12)
+  referenceYear  Int? // Ano de referÃªncia
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -2215,13 +2215,13 @@ model Composition {
   @@map("compositions")
 }
 
-// Modelo de Histórico de Preços
+// Modelo de HistÃ³rico de PreÃ§os
 model PriceHistory {
   id            String   @id @default(cuid())
-  materialId    String? // ID do material (se aplicável)
-  compositionId String? // ID da composição (se aplicável)
+  materialId    String? // ID do material (se aplicÃ¡vel)
+  compositionId String? // ID da composiÃ§Ã£o (se aplicÃ¡vel)
   price         Decimal  @db.Decimal(12, 2) // Valor registrado
-  referenceDate DateTime // Data de referência (mês/ano)
+  referenceDate DateTime // Data de referÃªncia (mÃªs/ano)
   source        String   @default("SINAPI") // Fonte (SINAPI, ou outro sistema)
   createdAt     DateTime @default(now())
 
@@ -2235,21 +2235,21 @@ model PriceHistory {
   @@map("price_history")
 }
 
-// Modelo de Material de Construção Civil
+// Modelo de Material de ConstruÃ§Ã£o Civil
 model ConstructionMaterial {
   id               String   @id @default(cuid())
-  code             String? // Código do produto
+  code             String? // CÃ³digo do produto
   name             String // Nome do produto
   productType      String? // Tipo do produto
-  description      String? // Descrição do produto
+  description      String? // DescriÃ§Ã£o do produto
   category         String? // Legado (categoria antiga)
-  dimensions       String? // Dimensões do material
+  dimensions       String? // DimensÃµes do material
   productImageUrl  String? // URL da imagem do produto
   productImageName String? // Nome original do arquivo da imagem
-  unit             String // Unidade de medida (kg, m, m², un, etc.)
+  unit             String // Unidade de medida (kg, m, mÂ², un, etc.)
   budgetNatureId   String?
   budgetNature     BudgetNature? @relation(fields: [budgetNatureId], references: [id], onDelete: SetNull)
-  isActive         Boolean  @default(true) // Se está ativo
+  isActive         Boolean  @default(true) // Se estÃ¡ ativo
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -2268,7 +2268,7 @@ enum StockShortfallStatus {
   RESOLVIDO
 }
 
-/// Pendência de entrega (furo) após recebimento parcial na OC — material ainda não totalmente recebido.
+/// PendÃªncia de entrega (furo) apÃ³s recebimento parcial na OC â material ainda nÃ£o totalmente recebido.
 model StockShortfall {
   id                     String               @id @default(cuid())
   purchaseOrderId        String
@@ -2297,17 +2297,17 @@ model StockShortfall {
   @@map("stock_shortfalls")
 }
 
-// Modelo de Movimentação de Estoque
+// Modelo de MovimentaÃ§Ã£o de Estoque
 model StockMovement {
   id           String               @id @default(cuid())
   materialId   String
   material     ConstructionMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
   costCenterId String?
   costCenter   CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  type         String // 'IN' (entrada) ou 'OUT' (saída)
+  type         String // 'IN' (entrada) ou 'OUT' (saÃ­da)
   quantity     Float
-  notes        String? // Observações sobre a movimentação
-  userId       String // Usuário que realizou a movimentação
+  notes        String? // ObservaÃ§Ãµes sobre a movimentaÃ§Ã£o
+  userId       String // UsuÃ¡rio que realizou a movimentaÃ§Ã£o
   user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt    DateTime             @default(now())
   materialDelivery MaterialDelivery?
@@ -2322,8 +2322,8 @@ model StockMovement {
 // Modelo de Conversas com ChatGPT
 model ChatGPTConversation {
   id        String   @id @default(cuid())
-  userId    String // Usuário que criou a conversa
-  title     String // Título da conversa (primeira mensagem)
+  userId    String // UsuÃ¡rio que criou a conversa
+  title     String // TÃ­tulo da conversa (primeira mensagem)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2339,9 +2339,9 @@ model ChatGPTConversation {
 // Modelo de Mensagens do ChatGPT
 model ChatGPTMessage {
   id             String   @id @default(cuid())
-  conversationId String // Conversa à qual pertence
+  conversationId String // Conversa Ã  qual pertence
   role           String // 'user' ou 'assistant'
-  content        String // Conteúdo da mensagem
+  content        String // ConteÃºdo da mensagem
   createdAt      DateTime @default(now())
 
   // Relacionamento
@@ -2388,12 +2388,12 @@ model UserPermission {
   @@map("user_permissions")
 }
 
-/// Contratos que um usuário não-admin pode acessar (além da permissão de módulo "Contratos").
+/// Contratos que um usuÃ¡rio nÃ£o-admin pode acessar (alÃ©m da permissÃ£o de mÃ³dulo "Contratos").
 model UserContractPermission {
   id         String   @id @default(cuid())
   userId     String
   contractId String
-  /// Recursos por contrato (aba Permissões). Se false, o usuário não acessa esse bloco dentro do contrato.
+  /// Recursos por contrato (aba PermissÃµes). Se false, o usuÃ¡rio nÃ£o acessa esse bloco dentro do contrato.
   accessOrcamento       Boolean  @default(true)
   accessRelatorios      Boolean  @default(true)
   accessOrdemServico    Boolean  @default(true)
@@ -2413,7 +2413,7 @@ model UserContractPermission {
   @@map("user_contract_permissions")
 }
 
-/// Contratos em que o usuário pode aprovar solicitações ao DP (ação Controle «Aprovar solicitações…»).
+/// Contratos em que o usuÃ¡rio pode aprovar solicitaÃ§Ãµes ao DP (aÃ§Ã£o Controle Â«Aprovar solicitaÃ§Ãµesâ¦Â»).
 model UserDpApprovalContract {
   id         String   @id @default(cuid())
   userId     String
@@ -2432,7 +2432,7 @@ model UserDpApprovalContract {
   @@map("user_dp_approval_contracts")
 }
 
-/// Usuários autorizados a ver a página de um aprovador específico no Fluig (fluxos G3/G5).
+/// UsuÃ¡rios autorizados a ver a pÃ¡gina de um aprovador especÃ­fico no Fluig (fluxos G3/G5).
 model FluigWorkflowApproverViewer {
   id              String   @id @default(cuid())
   approverNameKey String
@@ -2451,7 +2451,7 @@ model FluigWorkflowApproverViewer {
   @@map("fluig_workflow_approver_viewers")
 }
 
-/// Template de permissões por cargo (nome do campo `Employee.position`). Usado como padrão na tela Permissões.
+/// Template de permissÃµes por cargo (nome do campo `Employee.position`). Usado como padrÃ£o na tela PermissÃµes.
 model PositionPermissionTemplate {
   id                    String   @id @default(cuid())
   position              String   @unique
@@ -2465,7 +2465,7 @@ model PositionPermissionTemplate {
   @@map("position_permission_templates")
 }
 
-// Drive — pastas e arquivos armazenados no S3
+// Drive â pastas e arquivos armazenados no S3
 model DriveFolder {
   id        String    @id @default(cuid())
   name      String
@@ -2494,7 +2494,7 @@ enum DriveFolderSharePermission {
   READ_WRITE
 }
 
-/// Quem tem acesso a qual pasta (além do dono). Acesso a subpastas/arquivos segue a pasta compartilhada.
+/// Quem tem acesso a qual pasta (alÃ©m do dono). Acesso a subpastas/arquivos segue a pasta compartilhada.
 model DriveFolderShare {
   id         String                     @id @default(cuid())
   folderId   String
@@ -2610,55 +2610,57 @@ model WhatsAppSubmission {
   @@map("whatsapp_submissions")
 }
 
-/// Status da OS no Controle Financeiro (planilha "CONTROLE FINANCEIRO - MATERIAL/SERVIÇO APLICADO")
+/// Status da OS no Controle Financeiro (planilha "CONTROLE FINANCEIRO - MATERIAL/SERVIÃO APLICADO")
 enum FinancialControlStatus {
   PROCESSO_COMPLETO // amarelo
   PAGO              // verde
   AGUARDAR_NOTA     // verde (pago, aguardar nota)
   AGUARDAR_PAGAMENTO // azul claro (agendado, aguardar pagamento)
-  LANCADO           // cinza/azul — lançamento criado a partir da OC (ainda nao pago)
+  LANCADO           // cinza/azul â lanÃ§amento criado a partir da OC (ainda nao pago)
   CANCELADO         // vermelho
 }
 
-/// Lançamentos da página "Controle Financeiro" (Material/Serviço Aplicado).
-/// Cada linha representa uma OS e suas informações de pagamento.
+/// LanÃ§amentos da pÃ¡gina "Controle Financeiro" (Material/ServiÃ§o Aplicado).
+/// Cada linha representa uma OS e suas informaÃ§Ãµes de pagamento.
 model FinancialControlEntry {
   id              String                  @id @default(cuid())
-  /// Consórcio Predial: brasilia | hub
+  /// ConsÃ³rcio Predial: brasilia | hub
   consorcio       String                  @default("brasilia")
-  /// Mês e ano de referência do pagamento (para agrupamento na UI: JANEIRO/2025, FEVEREIRO/2025...).
+  /// MÃªs e ano de referÃªncia do pagamento (para agrupamento na UI: JANEIRO/2025, FEVEREIRO/2025...).
   paymentMonth    Int // 1-12
   paymentYear     Int
   /// Status visual da linha (cor da primeira coluna).
   status          FinancialControlStatus @default(AGUARDAR_NOTA)
-  /// "O.S." — código ou identificação da Ordem de Serviço (ex.: ADM, IMP-20/SC-01, AD-11/SC-02).
+  /// "O.S." â cÃ³digo ou identificaÃ§Ã£o da Ordem de ServiÃ§o (ex.: ADM, IMP-20/SC-01, AD-11/SC-02).
   osCode          String?
-  /// "Código-Nome do Fornecedor".
+  /// "CÃ³digo-Nome do Fornecedor".
   supplierName    String?
-  /// Número da nota fiscal (ex.: 556713). Na planilha antiga às vezes vinha junto da parcela (`556713-2/2`).
+  /// NÃºmero da nota fiscal (ex.: 556713). Na planilha antiga Ã s vezes vinha junto da parcela (`556713-2/2`).
   nfNumber        String?
-  /// Número da parcela (ex.: 2/2, 1). Pode vir separado ou no sufixo de `NF-parcela` na importação.
+  /// NÃºmero da parcela (ex.: 2/2, 1). Pode vir separado ou no sufixo de `NF-parcela` na importaÃ§Ã£o.
   parcelNumber    String?
-  /// "Data de Emissão" da nota/título.
+  /// "Data de EmissÃ£o" da nota/tÃ­tulo.
   emissionDate    DateTime?
-  /// "Boleto" — Sim/Não/CANCELADA (texto livre para refletir a planilha).
+  /// "Boleto" â Sim/NÃ£o/CANCELADA (texto livre para refletir a planilha).
   boleto          String?
-  /// "Data de Vencto" — vencimento do pagamento.
+  /// "Data de Vencto" â vencimento do pagamento.
   dueDate         DateTime?
-  /// "Valor Original" do título.
+  /// "Valor Original" do tÃ­tulo.
   originalValue   Decimal?               @db.Decimal(15, 2)
-  /// "O. C." — Ordem de Compra ou número auxiliar.
+  /// "O. C." â Ordem de Compra ou nÃºmero auxiliar.
   ocNumber        String?
-  /// "Valor Final" (após acertos/encontro de contas).
+  /// "Valor Final" (apÃ³s acertos/encontro de contas).
   finalValue      Decimal?               @db.Decimal(15, 2)
-  /// "PAGO DIA" — data em que o pagamento foi efetivamente realizado.
+  /// "PAGO DIA" â data em que o pagamento foi efetivamente realizado.
   paidDate        DateTime?
-  /// "Falta Dias" — campo numérico calculado/manual na planilha.
+  /// "Falta Dias" â campo numÃ©rico calculado/manual na planilha.
   remainingDays   Int?
-  /// "Recebido" — observação livre (ex.: PAGO TED, PAGO PIX, CANCELADO, PAGO pelo ÊNFASE).
+  /// "Recebido" â observaÃ§Ã£o livre (ex.: PAGO TED, PAGO PIX, CANCELADO, PAGO pelo ÃNFASE).
   receivedNote    String?
   notes           String?
-  /// [{ url, name }] — anexos do lançamento
+  /// MATERIAL | SERVICO | MISTO â tipo do lanÃ§amento (material e/ou serviÃ§o).
+  applicationType String?
+  /// [{ url, name }] â anexos do lanÃ§amento
   attachments     Json?
 
   createdAt       DateTime               @default(now())
@@ -2675,7 +2677,7 @@ model FinancialControlEntry {
   @@map("financial_control_entries")
 }
 
-/// Ajustes manuais permanentes no extrato de caixa (correções fora do TOTVS RM).
+/// Ajustes manuais permanentes no extrato de caixa (correÃ§Ãµes fora do TOTVS RM).
 model ExtratoCaixaAjuste {
   id               String    @id @default(cuid())
   dataCompensacao  DateTime  @db.Date
@@ -2696,7 +2698,7 @@ model ExtratoCaixaAjuste {
   @@map("extrato_caixa_ajustes")
 }
 
-/// Presets de filtro do extrato de caixa (por usuário).
+/// Presets de filtro do extrato de caixa (por usuÃ¡rio).
 model ExtratoCaixaFiltroSalvo {
   id        String   @id @default(cuid())
   userId    String
@@ -2712,7 +2714,7 @@ model ExtratoCaixaFiltroSalvo {
   @@map("extrato_caixa_filtros_salvos")
 }
 
-// ─── Tasks (Kanban) ───────────────────────────────────────────────────────────
+// âââ Tasks (Kanban) âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 enum TaskPriority {
   LOW
@@ -2732,7 +2734,7 @@ model KanbanBoard {
   slug            String   @unique
   departmentKey   String   @unique @map("department_key")
   departmentLabel String   @map("department_label")
-  /// Quadro criado manualmente (não vinculado ao setor do funcionário).
+  /// Quadro criado manualmente (nÃ£o vinculado ao setor do funcionÃ¡rio).
   isCustom        Boolean  @default(false) @map("is_custom")
   /// Paleta de etiquetas do setor: [{ color, name }]
   labelPresets    Json     @default("[]") @map("label_presets")
@@ -2749,7 +2751,7 @@ model KanbanBoard {
   @@map("kanban_boards")
 }
 
-/// Quem tem acesso a quadros personalizados (além do criador).
+/// Quem tem acesso a quadros personalizados (alÃ©m do criador).
 model KanbanBoardShare {
   id         String                     @id @default(cuid())
   boardId    String                     @map("board_id")
@@ -2834,11 +2836,11 @@ model PlannerEvent {
   startAt       DateTime
   endAt         DateTime
   color         String   @default("#3B82F6")
-  /// Ícone opcional do card (chave do conjunto fixo no frontend).
+  /// Ãcone opcional do card (chave do conjunto fixo no frontend).
   icon          String?
-  /// ID do evento no Google Calendar (para sincronização sem duplicar).
+  /// ID do evento no Google Calendar (para sincronizaÃ§Ã£o sem duplicar).
   googleEventId String?
-  /// PDF da ata da reunião (opcional).
+  /// PDF da ata da reuniÃ£o (opcional).
   ataFileName   String?  @map("ata_file_name")
   ataFileUrl    String?  @map("ata_file_url")
   ataFileKey    String?  @map("ata_file_key")
@@ -2856,7 +2858,7 @@ model PlannerEvent {
   @@map("planner_events")
 }
 
-/// Pessoas atribuídas a um evento (aparece na agenda delas em leitura).
+/// Pessoas atribuÃ­das a um evento (aparece na agenda delas em leitura).
 model PlannerEventAttendee {
   id        String   @id @default(cuid())
   eventId   String   @map("event_id")
@@ -2872,7 +2874,7 @@ model PlannerEventAttendee {
   @@map("planner_event_attendees")
 }
 
-/// Compartilhamento da agenda de um usuário com outro (ver ou editar).
+/// Compartilhamento da agenda de um usuÃ¡rio com outro (ver ou editar).
 model PlannerAgendaShare {
   id               String                       @id @default(cuid())
   ownerId          String                       @map("owner_id")
@@ -2908,7 +2910,7 @@ model PlannerTaskList {
   @@map("planner_task_lists")
 }
 
-/// Tarefas estilo Google Tasks — com data aparecem na Agenda.
+/// Tarefas estilo Google Tasks â com data aparecem na Agenda.
 model PlannerTask {
   id          String    @id @default(cuid())
   userId      String
@@ -2933,7 +2935,7 @@ model PlannerTask {
   @@map("planner_tasks")
 }
 
-/// Conexão OAuth do Google Calendar por usuário.
+/// ConexÃ£o OAuth do Google Calendar por usuÃ¡rio.
 model GoogleCalendarConnection {
   id           String    @id @default(cuid())
   userId       String    @unique
@@ -3108,7 +3110,7 @@ enum MaterialDeliveryFinalStatus {
   CANCELADO
 }
 
-/// Espelho da aba GERAL (coluna E → L): ID Mov → Normal/Correção para pagamento boleto
+/// Espelho da aba GERAL (coluna E â L): ID Mov â Normal/CorreÃ§Ã£o para pagamento boleto
 model MaterialDeliveryGeralLookup {
   id             String                          @id @default(cuid())
   lookupKey      String                          @unique
@@ -3143,7 +3145,7 @@ enum FuelRefuelRequestStatus {
   CANCELLED
 }
 
-/// Sessão de fluxo conversacional da Gennecy (ex.: solicitação de abastecimento).
+/// SessÃ£o de fluxo conversacional da Gennecy (ex.: solicitaÃ§Ã£o de abastecimento).
 model GennecyChatFlowSession {
   id        String   @id @default(cuid())
   chatId    String
@@ -3166,7 +3168,7 @@ enum FuelRefuelDeadlineUnit {
   DAYS
 }
 
-/// Região administrativa para abastecimento (cidade satélite / local de origem da rota).
+/// RegiÃ£o administrativa para abastecimento (cidade satÃ©lite / local de origem da rota).
 model FuelAdministrativeRegion {
   id        String   @id @default(cuid())
   code      String   @unique
@@ -3186,7 +3188,7 @@ model FuelAdministrativeRegion {
   @@map("fuel_administrative_regions")
 }
 
-/// Posto de combustível vinculado a uma cidade satélite (código em fuelSatelliteCities).
+/// Posto de combustÃ­vel vinculado a uma cidade satÃ©lite (cÃ³digo em fuelSatelliteCities).
 model FuelGasStation {
   id            String   @id @default(cuid())
   displayNumber Int      @unique
@@ -3195,7 +3197,7 @@ model FuelGasStation {
   address       String?
   isActive      Boolean  @default(true)
   sortOrder     Int      @default(0)
-  /// Legado — regiões antigas no banco; novos postos usam apenas cityCode.
+  /// Legado â regiÃµes antigas no banco; novos postos usam apenas cityCode.
   regionId      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -3209,7 +3211,7 @@ model FuelGasStation {
   @@map("fuel_gas_stations")
 }
 
-/// Solicitação de abastecimento de combustível (espelho do AppSheet tb solicitAbast).
+/// SolicitaÃ§Ã£o de abastecimento de combustÃ­vel (espelho do AppSheet tb solicitAbast).
 model FuelRefuelRequest {
   id            String @id @default(cuid())
   displayNumber Int    @unique
@@ -3220,7 +3222,7 @@ model FuelRefuelRequest {
   requestedAt DateTime @default(now())
   refuelDate  DateTime
   route       String
-  /// Código da cidade satélite (lista fixa em fuelSatelliteCities).
+  /// CÃ³digo da cidade satÃ©lite (lista fixa em fuelSatelliteCities).
   satelliteCityCode      String?
   administrativeRegionId String?
   administrativeRegion   FuelAdministrativeRegion? @relation(fields: [administrativeRegionId], references: [id], onDelete: SetNull)
@@ -3233,7 +3235,7 @@ model FuelRefuelRequest {
   driverName         String
   vehiclePlate       String
   vehicleDescription String?
-  /// Particular → aprovação do gestor; frota/empresa → fila direta do Suprimentos.
+  /// Particular â aprovaÃ§Ã£o do gestor; frota/empresa â fila direta do Suprimentos.
   vehicleType        FuelVehicleType?
 
   dashboardPhotoUrl  String?
@@ -3254,7 +3256,7 @@ model FuelRefuelRequest {
   suppliesApprovedAt      DateTime?
   suppliesApprovalComment String?
   suppliesRejectionReason String?
-  /// Prazo para o solicitante realizar o abastecimento após liberação do Suprimentos
+  /// Prazo para o solicitante realizar o abastecimento apÃ³s liberaÃ§Ã£o do Suprimentos
   refuelDeadlineAt        DateTime?
   refuelDeadlineAmount    Int?
   refuelDeadlineUnit      FuelRefuelDeadlineUnit?
@@ -3301,7 +3303,7 @@ enum LogisticsDeliveryOutcome {
   NOT_DELIVERED
 }
 
-/// Solicitação de entrega logística (tb solicitação logística).
+/// SolicitaÃ§Ã£o de entrega logÃ­stica (tb solicitaÃ§Ã£o logÃ­stica).
 model LogisticsDeliveryRequest {
   id            String @id @default(cuid())
   displayNumber Int    @unique
@@ -3360,7 +3362,7 @@ model LogisticsDeliveryRequest {
   @@map("logistics_delivery_requests")
 }
 
-/// Feedback de entrega logística (tb feedback entrega fornecedor log).
+/// Feedback de entrega logÃ­stica (tb feedback entrega fornecedor log).
 model LogisticsDeliveryCompletion {
   id                String @id @default(cuid())
   deliveryRequestId String @unique
@@ -3388,7 +3390,7 @@ model LogisticsDeliveryCompletion {
   @@map("logistics_delivery_completions")
 }
 
-/// Notas fiscais anexadas na finalização (tb nf feedback log).
+/// Notas fiscais anexadas na finalizaÃ§Ã£o (tb nf feedback log).
 model LogisticsDeliveryInvoiceAttachment {
   id             String @id @default(cuid())
   completionId   String
@@ -3405,7 +3407,7 @@ model LogisticsDeliveryInvoiceAttachment {
 model FlowDiagram {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
-  name        String   @default("Fluxo sem título")
+  name        String   @default("Fluxo sem tÃ­tulo")
   description String?
   nodes       Json     @default("[]")
   edges       Json     @default("[]")
@@ -3431,13 +3433,13 @@ model HelpTutorial {
   href        String?
   /// STEPS | MARKDOWN | DOCS | RICH
   contentType String   @default("STEPS") @map("content_type")
-  /// [{ title, body, hint? }] — usado quando contentType = STEPS
+  /// [{ title, body, hint? }] â usado quando contentType = STEPS
   steps       Json     @default("[]")
-  /// Conteúdo markdown — usado quando contentType = MARKDOWN
+  /// ConteÃºdo markdown â usado quando contentType = MARKDOWN
   markdown    String?  @db.Text
-  /// URL do Google Docs — usado quando contentType = DOCS
+  /// URL do Google Docs â usado quando contentType = DOCS
   docsUrl     String?  @map("docs_url") @db.Text
-  /// HTML do editor visual — usado quando contentType = RICH
+  /// HTML do editor visual â usado quando contentType = RICH
   richHtml    String?  @map("rich_html") @db.Text
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now())
@@ -3450,7 +3452,7 @@ model HelpTutorial {
   @@map("help_tutorials")
 }
 
-/// Processo de licitação com documentos e análise por IA.
+/// Processo de licitaÃ§Ã£o com documentos e anÃ¡lise por IA.
 model Licitacao {
   id              String   @id @default(cuid())
   titulo          String
@@ -3458,13 +3460,13 @@ model Licitacao {
   orgao           String?
   modalidade      String?
   status          String   @default("RASCUNHO")
-  /// Objeto da licitação (extraído ou informado manualmente)
+  /// Objeto da licitaÃ§Ã£o (extraÃ­do ou informado manualmente)
   objeto          String?  @db.Text
   /// Valor estimado em texto (ex.: "R$ 1.500.000,00")
   valorEstimado   String?
-  /// Vigência do contrato em texto
+  /// VigÃªncia do contrato em texto
   vigenciaContrato String? @db.Text
-  /// Resultado estruturado da extração IA (JSON)
+  /// Resultado estruturado da extraÃ§Ã£o IA (JSON)
   analiseJson     Json?
   createdBy       String
   creator         User     @relation("LicitacaoCreator", fields: [createdBy], references: [id], onDelete: Restrict)
@@ -3478,7 +3480,7 @@ model Licitacao {
   @@map("licitacoes")
 }
 
-/// Orçamento de participação em licitação (manutenção predial).
+/// OrÃ§amento de participaÃ§Ã£o em licitaÃ§Ã£o (manutenÃ§Ã£o predial).
 model LicitacaoOrcamento {
   id          String   @id @default(cuid())
   licitacaoId String   @unique
@@ -3493,7 +3495,7 @@ model LicitacaoOrcamento {
   @@map("licitacao_orcamentos")
 }
 
-/// Documento anexado a um processo de licitação.
+/// Documento anexado a um processo de licitaÃ§Ã£o.
 model LicitacaoDocumento {
   id           String    @id @default(cuid())
   licitacaoId  String
@@ -3508,7 +3510,7 @@ model LicitacaoDocumento {
   @@map("licitacao_documentos")
 }
 
-/// Cadastro de responsáveis técnicos (CREA) para o módulo de Licitações.
+/// Cadastro de responsÃ¡veis tÃ©cnicos (CREA) para o mÃ³dulo de LicitaÃ§Ãµes.
 model ResponsavelTecnico {
   id             String    @id @default(cuid())
   crea           String
@@ -3534,7 +3536,7 @@ model ResponsavelTecnico {
   @@map("responsaveis_tecnicos")
 }
 
-/// Controle de anuidade CREA para o módulo de Licitações.
+/// Controle de anuidade CREA para o mÃ³dulo de LicitaÃ§Ãµes.
 model ControleAnuidade {
   id                 String    @id @default(cuid())
   pagosPelo          String?
@@ -3560,7 +3562,7 @@ model ControleAnuidade {
   @@map("controle_anuidades")
 }
 
-/// Controle de pagamentos de ART's / Protocolos (módulo Licitações).
+/// Controle de pagamentos de ART's / Protocolos (mÃ³dulo LicitaÃ§Ãµes).
 model ControlePagamentoArt {
   id               String    @id @default(cuid())
   uf               String?
@@ -3595,7 +3597,7 @@ model ControlePagamentoArt {
   @@map("controle_pagamentos_art")
 }
 
-/// Receitas dos consórcios BSB/HUB (página Financeiro → Receitas).
+/// Receitas dos consÃ³rcios BSB/HUB (pÃ¡gina Financeiro â Receitas).
 model ReceitaFinanceira {
   id                 String   @id @default(cuid())
   consorcio          String // bsb | hub
@@ -3615,7 +3617,7 @@ model ReceitaFinanceira {
   @@map("receitas_financeiras")
 }
 
-/// Repasses Gennesis por consórcio (seção BSB/HUB na planilha).
+/// Repasses Gennesis por consÃ³rcio (seÃ§Ã£o BSB/HUB na planilha).
 model RepasseFinanceiro {
   id            String   @id @default(cuid())
   consorcio     String // bsb | hub
@@ -3637,7 +3639,7 @@ model RepasseFinanceiro {
   @@map("repasses_financeiros")
 }
 
-/// Espelho local de contratações PNCP (ingestão por keywords, janela recente).
+/// Espelho local de contrataÃ§Ãµes PNCP (ingestÃ£o por keywords, janela recente).
 model PncpContratacao {
   id                       String    @id @default(cuid())
   numeroControlePNCP       String    @unique
@@ -3679,7 +3681,7 @@ model PncpContratacao {
   @@map("pncp_contratacoes")
 }
 
-/// Histórico / status das sincronizações PNCP → banco local.
+/// HistÃ³rico / status das sincronizaÃ§Ãµes PNCP â banco local.
 model PncpSyncRun {
   id            String    @id @default(cuid())
   status        String // running | success | partial | failed
@@ -3699,7 +3701,7 @@ model PncpSyncRun {
   @@map("pncp_sync_runs")
 }
 
-/// Estado de sincronização por UF (incremental + retry de erros).
+/// Estado de sincronizaÃ§Ã£o por UF (incremental + retry de erros).
 model PncpSyncUfState {
   uf               String    @id
   lastSuccessAt    DateTime?
@@ -3715,7 +3717,7 @@ model PncpSyncUfState {
   @@map("pncp_sync_uf_states")
 }
 
-// ─── Segurança do Trabalho / ASO ─────────────────────────────────────────────
+// âââ SeguranÃ§a do Trabalho / ASO âââââââââââââââââââââââââââââââââââââââââââââ
 
 enum AsoGrauRisco {
   BAIXO
@@ -3729,11 +3731,11 @@ enum AsoResultado {
   INAPTO
 }
 
-/// Tipos de ASO (Admissional, Periódico, etc.)
+/// Tipos de ASO (Admissional, PeriÃ³dico, etc.)
 model AsoTipo {
   id          String   @id @default(cuid())
   nome        String   @unique
-  /// Preço padrão sugerido ao cadastrar ASO deste tipo (R$)
+  /// PreÃ§o padrÃ£o sugerido ao cadastrar ASO deste tipo (R$)
   valorPadrao Decimal? @db.Decimal(12, 2)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -3743,7 +3745,7 @@ model AsoTipo {
   @@map("tipos_aso")
 }
 
-/// Periodicidade do ASO periódico por cargo + setor (Employee.position + department)
+/// Periodicidade do ASO periÃ³dico por cargo + setor (Employee.position + department)
 model CargoRisco {
   id                  String       @id @default(cuid())
   cargo               String
@@ -3759,7 +3761,7 @@ model CargoRisco {
   @@map("cargos_risco")
 }
 
-/// Registro de ASO vinculado a um funcionário
+/// Registro de ASO vinculado a um funcionÃ¡rio
 model AsoRegistro {
   id                String       @id @default(cuid())
   funcionarioId     String
@@ -3774,7 +3776,7 @@ model AsoRegistro {
   valor             Decimal?     @db.Decimal(12, 2)
   anexoUrl          String?
   observacoes       String?      @db.Text
-  /// true quando a validade usou 12 meses padrão (cargo sem cargos_risco)
+  /// true quando a validade usou 12 meses padrÃ£o (cargo sem cargos_risco)
   validadePadrao    Boolean      @default(false)
   periodicidadeUsada Int
   criadoPorId       String?
@@ -3821,7 +3823,7 @@ enum ToolRentalRequestStatus {
   CANCELLED
 }
 
-/// Solicitações de ferramentas (Engenharia → fluxo Suprimentos até pagamento)
+/// SolicitaÃ§Ãµes de ferramentas (Engenharia â fluxo Suprimentos atÃ© pagamento)
 model ToolRentalRequest {
   id                      String                    @id @default(cuid())
   code                    String                    @unique
@@ -3865,7 +3867,7 @@ model ToolRentalRequest {
   @@map("tool_rental_requests")
 }
 
-/// Histórico de etapas da solicitação de ferramentas (timeline)
+/// HistÃ³rico de etapas da solicitaÃ§Ã£o de ferramentas (timeline)
 model ToolRentalRequestEvent {
   id         String                   @id @default(cuid())
   requestId  String
@@ -3882,9 +3884,9 @@ model ToolRentalRequestEvent {
   @@map("tool_rental_request_events")
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sistema de Gestão - OS (manutenção predial / patrimonial)
-// ─────────────────────────────────────────────────────────────────────────────
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Sistema de GestÃ£o - OS (manutenÃ§Ã£o predial / patrimonial)
+// âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 enum GestaoOsPriority {
   LOW
@@ -3912,7 +3914,7 @@ enum GestaoOsStatus {
   CANCELLED
 }
 
-/// Perfis de acesso no módulo Gestao OS (por empresa).
+/// Perfis de acesso no mÃ³dulo Gestao OS (por empresa).
 enum GestaoOsProfile {
   REQUESTER
   MANAGER
@@ -3920,19 +3922,19 @@ enum GestaoOsProfile {
   ADMIN
 }
 
-/// Configurações gerais do módulo Gestão de OS (ex.: numeração).
+/// ConfiguraÃ§Ãµes gerais do mÃ³dulo GestÃ£o de OS (ex.: numeraÃ§Ã£o).
 model GestaoOsSettings {
   id           String   @id @default("default")
-  /// Próximo número mínimo a usar na numeração das OS (não afeta número do chamado).
+  /// PrÃ³ximo nÃºmero mÃ­nimo a usar na numeraÃ§Ã£o das OS (nÃ£o afeta nÃºmero do chamado).
   nextOsNumber Int      @default(1)
-  /// true após migração que separou sequência de chamado da de OS.
+  /// true apÃ³s migraÃ§Ã£o que separou sequÃªncia de chamado da de OS.
   chamadoSeqSeparated Boolean @default(false)
   updatedAt    DateTime @updatedAt
 
   @@map("gestao_os_settings")
 }
 
-/// Empresa (tenant) — base multi-empresa simples.
+/// Empresa (tenant) â base multi-empresa simples.
 model GestaoOsCompany {
   id        String   @id @default(cuid())
   name      String
@@ -3977,7 +3979,7 @@ model GestaoOsBranch {
   @@map("gestao_os_branches")
 }
 
-/// Prestador de serviço / fornecedor de manutenção.
+/// Prestador de serviÃ§o / fornecedor de manutenÃ§Ã£o.
 model GestaoOsProvider {
   id          String   @id @default(cuid())
   companyId   String?
@@ -4001,14 +4003,14 @@ model GestaoOsProvider {
   @@map("gestao_os_providers")
 }
 
-/// Tipo / categoria de serviço (elétrica, hidráulica, etc.).
+/// Tipo / categoria de serviÃ§o (elÃ©trica, hidrÃ¡ulica, etc.).
 model GestaoOsServiceCategory {
   id          String   @id @default(cuid())
   companyId   String?
   name        String
   code        String?
   description String?
-  /// Template de checklist copiado para a OS na abertura (por tipo de serviço).
+  /// Template de checklist copiado para a OS na abertura (por tipo de serviÃ§o).
   checklistId String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -4022,7 +4024,7 @@ model GestaoOsServiceCategory {
   @@map("gestao_os_service_categories")
 }
 
-/// Vínculo usuário ↔ empresa + perfil no Gestao OS.
+/// VÃ­nculo usuÃ¡rio â empresa + perfil no Gestao OS.
 model GestaoOsMembership {
   id        String         @id @default(cuid())
   companyId String
@@ -4041,7 +4043,7 @@ model GestaoOsMembership {
   @@map("gestao_os_memberships")
 }
 
-/// Prédio / edifício da hierarquia de locais.
+/// PrÃ©dio / edifÃ­cio da hierarquia de locais.
 model GestaoOsBuilding {
   id        String   @id @default(cuid())
   companyId String?
@@ -4073,7 +4075,7 @@ model GestaoOsBuilding {
   @@map("gestao_os_buildings")
 }
 
-/// Andar / Setor dentro de um prédio.
+/// Andar / Setor dentro de um prÃ©dio.
 model GestaoOsSector {
   id         String   @id @default(cuid())
   buildingId String
@@ -4119,7 +4121,7 @@ model GestaoOsAsset {
   code      String?
   category  String?
   serialNumber String?
-  /// Token estável usado no QR Code do ativo.
+  /// Token estÃ¡vel usado no QR Code do ativo.
   qrToken   String   @unique
   /// Fim da garantia do ativo (alerta no sino antes de vencer).
   warrantyEndsAt DateTime?
@@ -4137,7 +4139,7 @@ model GestaoOsAsset {
   @@map("gestao_os_assets")
 }
 
-/// Grupo de equipamento (catálogo Sispred: CIVIL, ELÉTRICA, etc.).
+/// Grupo de equipamento (catÃ¡logo Sispred: CIVIL, ELÃTRICA, etc.).
 model GestaoOsEquipmentGroup {
   id        String   @id @default(cuid())
   name      String
@@ -4168,19 +4170,19 @@ model GestaoOsEquipmentSubgroup {
   @@map("gestao_os_equipment_subgroups")
 }
 
-/// Equipamento do catálogo (não é o ativo físico do local).
+/// Equipamento do catÃ¡logo (nÃ£o Ã© o ativo fÃ­sico do local).
 model GestaoOsEquipment {
   id                String   @id @default(cuid())
   subgroupId        String
   name              String
   manufacturer      String?
   model             String?
-  /// SLA padrão em horas. Null = nenhum.
+  /// SLA padrÃ£o em horas. Null = nenhum.
   defaultSlaHours   Int?
-  /// Expectativa de vida útil em anos.
+  /// Expectativa de vida Ãºtil em anos.
   expectedLifeYears Int?
   notes             String?  @db.Text
-  /// Anexos: [{ url, name, mimeType?, kind? }] — kind: MANUAL | WARRANTY | LAUDO | OTHER
+  /// Anexos: [{ url, name, mimeType?, kind? }] â kind: MANUAL | WARRANTY | LAUDO | OTHER
   attachments       Json?
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -4193,12 +4195,12 @@ model GestaoOsEquipment {
   @@map("gestao_os_equipments")
 }
 
-/// Ordem de serviço / chamado de manutenção predial.
+/// Ordem de serviÃ§o / chamado de manutenÃ§Ã£o predial.
 model GestaoOsWorkOrder {
   id            String @id @default(cuid())
-  /// Número do chamado (sempre gerado na abertura).
+  /// NÃºmero do chamado (sempre gerado na abertura).
   displayNumber Int    @unique
-  /// Número da OS — gerado na primeira análise (Em Análise). Null = ainda só chamado.
+  /// NÃºmero da OS â gerado na primeira anÃ¡lise (Em AnÃ¡lise). Null = ainda sÃ³ chamado.
   osNumber      Int?   @unique
   companyId     String?
 
@@ -4230,7 +4232,7 @@ model GestaoOsWorkOrder {
   assigneeId String?
   assignee   User?   @relation("GestaoOsAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  /// Nome livre da empresa prestadora (quando não for cadastro).
+  /// Nome livre da empresa prestadora (quando nÃ£o for cadastro).
   providerName String?
 
   /// Anexos: [{ url, name, mimeType? }]
@@ -4253,25 +4255,25 @@ model GestaoOsWorkOrder {
 
   /// Prazo / SLA da OS.
   dueAt DateTime?
-  /// Horas de SLA aplicadas na abertura/aprovação (auditoria).
+  /// Horas de SLA aplicadas na abertura/aprovaÃ§Ã£o (auditoria).
   slaHoursApplied Int?
-  /// Quando o alerta pré-estouro de SLA foi enviado.
+  /// Quando o alerta prÃ©-estouro de SLA foi enviado.
   slaWarnedAt DateTime?
-  /// Peças/custos: [{ id, name, supplier, quantity, unitCost, expectedAt, notes }]
+  /// PeÃ§as/custos: [{ id, name, supplier, quantity, unitCost, expectedAt, notes }]
   parts Json?
-  /// Chamado/OS relacionado (reincidência).
+  /// Chamado/OS relacionado (reincidÃªncia).
   relatedWorkOrderId String?
   relatedWorkOrder   GestaoOsWorkOrder?  @relation("GestaoOsRelated", fields: [relatedWorkOrderId], references: [id], onDelete: SetNull)
   relatedFrom        GestaoOsWorkOrder[] @relation("GestaoOsRelated")
-  /// Foto no início da execução (campo).
+  /// Foto no inÃ­cio da execuÃ§Ã£o (campo).
   startPhotoUrl String?
-  /// Foto no fim da execução (campo).
+  /// Foto no fim da execuÃ§Ã£o (campo).
   endPhotoUrl   String?
-  /// Respostas de checklist preenchidas na execução [{ id, label, checked, note? }].
+  /// Respostas de checklist preenchidas na execuÃ§Ã£o [{ id, label, checked, note? }].
   checklistResponses Json?
-  /// Checklist de segurança do trabalho (EPIs) antes da execução.
+  /// Checklist de seguranÃ§a do trabalho (EPIs) antes da execuÃ§Ã£o.
   safetyChecklistResponses Json?
-  /// Foto da pessoa usando os EPIs, exigida na etapa Segurança do Trabalho.
+  /// Foto da pessoa usando os EPIs, exigida na etapa SeguranÃ§a do Trabalho.
   safetyPhotoUrl String?
   signatureRequesterUrl  String?
   signatureTechnicianUrl String?
@@ -4280,9 +4282,9 @@ model GestaoOsWorkOrder {
   approvedAt   DateTime?
   startedAt    DateTime?
   completedAt  DateTime?
-  /// Tempo efetivo de execução em milissegundos (pausa em Aguardando peça).
+  /// Tempo efetivo de execuÃ§Ã£o em milissegundos (pausa em Aguardando peÃ§a).
   executionMs  Int       @default(0)
-  /// Quando o relógio de execução foi retomado (status Em Execução).
+  /// Quando o relÃ³gio de execuÃ§Ã£o foi retomado (status Em ExecuÃ§Ã£o).
   lastExecutionResumeAt DateTime?
   closedAt     DateTime?
   cancelledAt  DateTime?
@@ -4346,7 +4348,7 @@ enum GestaoOsPlanType {
   SAFETY
 }
 
-/// Template de checklist reutilizável (preventiva / PMOC / SST).
+/// Template de checklist reutilizÃ¡vel (preventiva / PMOC / SST).
 model GestaoOsChecklistTemplate {
   id          String          @id @default(cuid())
   companyId   String?
@@ -4367,7 +4369,7 @@ model GestaoOsChecklistTemplate {
   @@map("gestao_os_checklist_templates")
 }
 
-/// Plano de manutenção preventiva / PMOC / segurança.
+/// Plano de manutenÃ§Ã£o preventiva / PMOC / seguranÃ§a.
 model GestaoOsMaintenancePlan {
   id              String          @id @default(cuid())
   companyId       String
@@ -4378,14 +4380,14 @@ model GestaoOsMaintenancePlan {
   buildingId      String?
   assetId         String?
   checklistId     String?
-  /// Intervalo em dias entre gerações (ex.: 30, 90, 180).
+  /// Intervalo em dias entre geraÃ§Ãµes (ex.: 30, 90, 180).
   intervalDays    Int             @default(30)
   nextDueAt       DateTime
   lastGeneratedAt DateTime?
   assigneeId      String?
-  /// Horário previsto da OS (HH:mm).
+  /// HorÃ¡rio previsto da OS (HH:mm).
   scheduledTime   String?
-  /// IDs dos técnicos na ordem do rodízio.
+  /// IDs dos tÃ©cnicos na ordem do rodÃ­zio.
   technicianIds   Json            @default("[]")
   rotateTechnicians Boolean       @default(false)
   rotationIndex   Int             @default(0)
@@ -4432,7 +4434,7 @@ enum GestaoOsDocumentKind {
   OTHER
 }
 
-/// Repositório de documentos por empresa / prédio / ativo.
+/// RepositÃ³rio de documentos por empresa / prÃ©dio / ativo.
 model GestaoOsDocument {
   id          String              @id @default(cuid())
   companyId   String
@@ -4458,4 +4460,39 @@ model GestaoOsDocument {
   @@index([assetId])
   @@index([kind])
   @@map("gestao_os_documents")
+}
+
+/// NF-e recebidas via distribuicao DF-e (SEFAZ) — buscadas sob demanda.
+model NfeRecebida {
+  id               String    @id @default(cuid())
+  chaveAcesso      String?   @unique @map("chave_acesso")
+  nsu              String
+  schema           String?
+  numero           String?
+  serie            String?
+  emitCnpj         String?   @map("emit_cnpj")
+  emitNome         String?   @map("emit_nome")
+  destinatarioCnpj String?   @map("destinatario_cnpj")
+  valor            Decimal?  @db.Decimal(18, 2)
+  dataEmissao      DateTime? @map("data_emissao")
+  xmlFileName      String?   @map("xml_file_name")
+  fetchedAt        DateTime  @default(now()) @map("fetched_at")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([nsu])
+  @@index([dataEmissao])
+  @@index([emitCnpj])
+  @@index([fetchedAt])
+  @@map("nfe_recebidas")
+}
+
+model NfeDistribuicaoState {
+  id         String    @id @default("default")
+  ultimoNsu  String    @default("000000000000000") @map("ultimo_nsu")
+  lastFetchAt DateTime? @map("last_fetch_at")
+  lastMessage String?  @map("last_message") @db.Text
+  updatedAt  DateTime  @updatedAt
+
+  @@map("nfe_distribuicao_state")
 }
