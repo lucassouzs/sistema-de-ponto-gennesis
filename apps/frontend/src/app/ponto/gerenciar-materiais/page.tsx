@@ -55,6 +55,7 @@ import { AsyncSearchSelectDropdown } from '@/components/ui/AsyncSearchSelectDrop
 import { searchOcSuppliers } from '@/components/oc/searchOcSuppliers';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import { OC_PIX_KEY_TYPE_OPTIONS } from '@/components/oc/OcPurchaseOrderFormFields';
+import { buildSupplierPaymentPrefill } from '@/lib/supplierPaymentPrefill';
 import {
   getMaterialRequestCancellationReason,
   getMaterialRequestDisplayStatus,
@@ -165,6 +166,12 @@ type OcSupplierOption = {
   name: string;
   tradeName?: string | null;
   isActive?: boolean;
+  bank?: string | null;
+  agency?: string | null;
+  account?: string | null;
+  accountDigit?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
 };
 
 function isOcAvistaPaymentIncomplete(
@@ -1540,6 +1547,16 @@ export default function GerenciarMateriaisPage() {
                   onChange={(supplier) => {
                     setOcSupplierId(supplier.id);
                     setOcSupplierSearch(getOcSupplierLabel(supplier));
+                    const bankPrefill = buildSupplierPaymentPrefill(supplier);
+                    if (bankPrefill.paymentDetails) {
+                      setOcPaymentDetails(bankPrefill.paymentDetails);
+                    }
+                    if (bankPrefill.pixKeyType) {
+                      setOcPixKeyType(bankPrefill.pixKeyType);
+                    }
+                    if (bankPrefill.pixKey) {
+                      setOcPixKey(bankPrefill.pixKey);
+                    }
                   }}
                   searchFn={searchOcSuppliers}
                   getOptionId={(supplier) => supplier.id}

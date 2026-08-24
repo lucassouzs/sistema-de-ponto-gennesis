@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Filter, Search, X, FileText, Receipt, Trash2, MoreVertical } from 'lucide-react';
+import { Filter, Search, X, FileText, Receipt, Trash2, MoreVertical, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
@@ -22,6 +22,7 @@ import {
   getHistoricoEtiqueta,
   getPleitoBillableTotal,
   getPleitoLinkedBillings,
+  getPleitoBilledAmount,
   getPleitoRemainingBalance,
   historicoEtiquetaBadgeClass,
   isGeneratedPleito,
@@ -118,6 +119,10 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
   const [selectedPleitos, setSelectedPleitos] = useState<Set<string>>(new Set());
   const [showBatchNfModal, setShowBatchNfModal] = useState(false);
   const [batchInvoiceValue, setBatchInvoiceValue] = useState('');
+  const [pleitoToEdit, setPleitoToEdit] = useState<ContractPleitoHistorico | null>(null);
+  const [editDescription, setEditDescription] = useState('');
+  const [editValorInput, setEditValorInput] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [batchFaturamentoMode, setBatchFaturamentoMode] = useState<'saldo' | 'parcial'>('saldo');
   const [batchPartialValue, setBatchPartialValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -434,6 +439,75 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
 
   const handleRemoverPleito = (pleitoId: string) => {
     void removePleitos([pleitoId]);
+  };
+
+  const formatCurrencyInputFromNumber = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '';
+    return value.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
+  const openEditPleito = (pleito: ContractPleitoHistorico) => {
+    const currentValor = getPleitoBillableTotal(pleito);
+    setPleitoToEdit(pleito);
+    setEditDescription(pleito.serviceDescription || '');
+    setEditValorInput(formatCurrencyInputFromNumber(currentValor));
+    closeRowActionMenu();
+  };
+
+  const closeEditPleito = () => {
+    if (isSavingEdit) return;
+    setPleitoToEdit(null);
+    setEditDescription('');
+    setEditValorInput('');
+  };
+
+  const confirmEditPleito = async () => {
+    if (!pleitoToEdit) return;
+    const description = editDescription.trim();
+    if (!description) {
+      toast.error('Informe a descrição do pleito.');
+      return;
+    }
+    const valor = parseHistoricoCurrencyInput(editValorInput);
+    if (valor <= 0) {
+      toast.error('Informe um valor pleiteado válido.');
+      return;
+    }
+    const billed = getPleitoBilledAmount(pleitoToEdit, billings);
+    if (valor + 0.01 < billed) {
+      toast.error(
+        `O valor não pode ser menor que o já faturado (${formatHistoricoCurrency(billed)}).`
+      );
+      return;
+    }
+    const orc = parseBudgetToNumberSafe(pleitoToEdit.budget);
+    if (orc > 0 && valor > orc + 0.01) {
+      toast.error(
+        `O valor não pode exceder o orçamento da OS (${formatHistoricoCurrency(orc)}).`
+      );
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      await api.patch(`/pleitos/${pleitoToEdit.id}`, {
+        serviceDescription: description,
+        billingRequest: valor.toFixed(2),
+      });
+      await invalidateQueries();
+      toast.success('Pleito atualizado.');
+      setPleitoToEdit(null);
+      setEditDescription('');
+      setEditValorInput('');
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string } } };
+      toast.error(ax.response?.data?.message || 'Erro ao atualizar pleito');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const confirmBatchFaturamento = async () => {
@@ -805,6 +879,13 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
                     hideDefaultActions
                     extraItems={[
                       {
+                        label: 'Editar pleito',
+                        onClick: () => openEditPleito(pleitoForActionMenu),
+                        icon: (
+                          <Pencil className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-300" />
+                        ),
+                      },
+                      {
                         label: 'Faturar',
                         disabled: !canHistoricoFaturar(pleitoForActionMenu, billings),
                         disabledTitle: 'Este pleito não possui saldo para faturar',
@@ -879,6 +960,76 @@ export function ContractHistoricoPleitosPanel({ contractId }: { contractId: stri
             </Button>
             <Button type="button" onClick={() => setShowFilterModal(false)}>
               Fechar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!pleitoToEdit}
+        onClose={closeEditPleito}
+        title="Editar pleito"
+        size="md"
+        elevated
+      >
+        <div className="space-y-4">
+          {pleitoToEdit ? (
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              OS/SE: {formatOsSePastaOrDash(pleitoToEdit.divSe, pleitoToEdit.folderNumber)}
+              {getPleitoBilledAmount(pleitoToEdit, billings) > 0.01 ? (
+                <>
+                  {' '}
+                  · Já faturado:{' '}
+                  {formatHistoricoCurrency(getPleitoBilledAmount(pleitoToEdit, billings))}
+                </>
+              ) : null}
+            </p>
+          ) : null}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Descrição
+            </label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={3}
+              disabled={isSavingEdit}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Valor pleiteado
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                R$
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={editValorInput}
+                disabled={isSavingEdit}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '');
+                  const formatted = digits
+                    ? (Number(digits) / 100).toLocaleString('pt-BR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })
+                    : '';
+                  setEditValorInput(formatted);
+                }}
+                className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <Button type="button" variant="outline" onClick={closeEditPleito} disabled={isSavingEdit}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void confirmEditPleito()} disabled={isSavingEdit}>
+              {isSavingEdit ? 'Salvando...' : 'Salvar'}
             </Button>
           </div>
         </div>

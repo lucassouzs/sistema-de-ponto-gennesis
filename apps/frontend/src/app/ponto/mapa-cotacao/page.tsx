@@ -40,6 +40,7 @@ import {
   getRmItemCoverageCounts,
   rmHasOpenItemsForProcurement,
 } from '@/lib/rmProcurementCoverage';
+import { buildSupplierPaymentPrefill } from '@/lib/supplierPaymentPrefill';
 
 type MaterialRequestItem = {
   id: string;
@@ -97,6 +98,13 @@ type Supplier = {
   code: string;
   name: string;
   isActive: boolean;
+  bank?: string | null;
+  agency?: string | null;
+  account?: string | null;
+  accountDigit?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
+  tradeName?: string | null;
 };
 
 type PurchaseOrderCreateInput = {
@@ -1602,11 +1610,17 @@ export default function MapaCotacaoPage() {
                                                 const suggested = totals
                                                   ? formatCurrencyBR(totals.amountToPay)
                                                   : '';
+                                                const bankPrefill = buildSupplierPaymentPrefill(
+                                                  suppliers.find((s) => s.id === supplierId) ?? {}
+                                                );
                                                 return {
                                                   ...prev,
                                                   [supplierId]: {
                                                     ...emptyPaymentDraft(),
                                                     amountToPayStr: suggested,
+                                                    paymentDetails: bankPrefill.paymentDetails,
+                                                    pixKeyType: bankPrefill.pixKeyType,
+                                                    pixKey: bankPrefill.pixKey,
                                                   },
                                                 };
                                               });

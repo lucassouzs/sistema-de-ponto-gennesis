@@ -2562,6 +2562,8 @@ export function OcPurchaseOrdersPanel({
     {}
   );
   const [boletoParcelModalOrder, setBoletoParcelModalOrder] = useState<PurchaseOrder | null>(null);
+  const [editDueDatesOpen, setEditDueDatesOpen] = useState(false);
+  const [editDueDatesDraft, setEditDueDatesDraft] = useState<Record<number, string>>({});
   const [finalizedPage, setFinalizedPage] = useState(1);
   const [internalSearchTerm, setInternalSearchTerm] = useState('');
   const [isFinalizedFiltersModalOpen, setIsFinalizedFiltersModalOpen] = useState(false);
@@ -3909,6 +3911,72 @@ export function OcPurchaseOrdersPanel({
     selectedOrder.paymentType === 'BOLETO' &&
     canActAttachBoletoUi &&
     showInAttachBoletoTab(selectedOrder);
+
+  const unpaidInstallmentsForDueEdit = useMemo(() => {
+    if (!selectedOrder || !isOcBoletoPaymentType(selectedOrder.paymentType)) return [];
+    const n = Math.max(1, selectedOrder.paymentParcelCount ?? 1);
+    const rows = parsePaymentBoletoInstallments(selectedOrder.paymentBoletoInstallments);
+    const out: Array<{ index: number; dueDate: string; amount: number | null; status: string }> =
+      [];
+    for (let i = 0; i < n; i++) {
+      const row = rows[i];
+      const st = rowStatus(row);
+      if (st === 'PAID') continue;
+      out.push({
+        index: i,
+        dueDate: (row?.dueDate || '').trim().slice(0, 10),
+        amount: Number.isFinite(row?.amount) ? Number(row?.amount) : null,
+        status: st
+      });
+    }
+    return out;
+  }, [selectedOrder]);
+
+  const canShowEditDueDatesButton =
+    !!selectedOrder &&
+    canActPaymentUi &&
+    isOcBoletoPaymentType(selectedOrder.paymentType) &&
+    selectedOrder.paymentBoletoPhaseReleased === true &&
+    unpaidInstallmentsForDueEdit.length > 0 &&
+    !canEditBoletoParcels;
+
+  const openEditDueDatesModal = () => {
+    const draft: Record<number, string> = {};
+    for (const row of unpaidInstallmentsForDueEdit) {
+      draft[row.index] = row.dueDate;
+    }
+    setEditDueDatesDraft(draft);
+    setEditDueDatesOpen(true);
+  };
+
+  const updateInstallmentDueDatesMutation = useMutation({
+    mutationFn: async ({
+      id,
+      dueDates
+    }: {
+      id: string;
+      dueDates: Array<{ index: number; dueDate: string }>;
+    }) => {
+      const res = await api.patch(`/purchase-orders/${id}/payment-boleto-installment-due-dates`, {
+        dueDates
+      });
+      return res.data?.data as PurchaseOrder | undefined;
+    },
+    onSuccess: (updated) => {
+      if (updated?.id) {
+        applyOcLocalPatch(queryClient, setSelectedOrder, updated.id, {
+          paymentBoletoInstallments: updated.paymentBoletoInstallments,
+          paymentParcelCount: updated.paymentParcelCount,
+          updatedAt: updated.updatedAt
+        });
+      }
+      setEditDueDatesOpen(false);
+      setEditDueDatesDraft({});
+      toast.success('Vencimento atualizado.');
+    },
+    onError: (error: { response?: { data?: { message?: string } }; message?: string }) =>
+      toast.error(error.response?.data?.message || error.message || 'Erro ao atualizar vencimento')
+  });
 
   const handleBoletoParcelsSaved = (payload: { data: unknown }) => {
     const updated = (payload as { data?: PurchaseOrder })?.data;
@@ -5529,6 +5597,18 @@ export function OcPurchaseOrdersPanel({
                       releasePaymentBoletoPhaseMutation.variables === selectedOrder.id
                     }
                   />
+                  {canShowEditDueDatesButton ? (
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={openEditDueDatesModal}
+                        className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/80"
+                      >
+                        <Pencil className="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+                        Editar vencimento
+                      </button>
+                    </div>
+                  ) : null}
                 </OcDetailSection>
               )}
               {selectedOrder.status === 'PENDING_PROOF_VALIDATION' && canActValidateProofUi && (
@@ -6466,6 +6546,84 @@ export function OcPurchaseOrdersPanel({
           }
         />
       )}
+
+      <Modal
+        isOpen={editDueDatesOpen && !!selectedOrder}
+        onClose={() => {
+          if (updateInstallmentDueDatesMutation.isPending) return;
+          setEditDueDatesOpen(false);
+          setEditDueDatesDraft({});
+        }}
+        title="Editar vencimento"
+        size="md"
+        elevated
+        contentOverflowVisible
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Altere a data de vencimento das parcelas ainda não pagas. Parcelas pagas não aparecem
+            aqui.
+          </p>
+          {unpaidInstallmentsForDueEdit.map((row) => (
+            <div key={row.index} className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Parcela {row.index + 1}
+                {row.amount != null ? (
+                  <span className="ml-2 font-normal text-gray-500 dark:text-gray-400">
+                    ({formatCurrency(row.amount)})
+                  </span>
+                ) : null}
+              </label>
+              <DatePickerField
+                value={editDueDatesDraft[row.index] ?? ''}
+                onChange={(v) =>
+                  setEditDueDatesDraft((prev) => ({
+                    ...prev,
+                    [row.index]: v
+                  }))
+                }
+                placeholder="dd/mm/aaaa"
+                noFocusRing
+                aria-label={`Vencimento da parcela ${row.index + 1}`}
+              />
+            </div>
+          ))}
+          <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={updateInstallmentDueDatesMutation.isPending}
+              onClick={() => {
+                setEditDueDatesOpen(false);
+                setEditDueDatesDraft({});
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={updateInstallmentDueDatesMutation.isPending}
+              onClick={() => {
+                if (!selectedOrder) return;
+                const dueDates = unpaidInstallmentsForDueEdit.map((row) => ({
+                  index: row.index,
+                  dueDate: (editDueDatesDraft[row.index] || '').trim()
+                }));
+                if (dueDates.some((d) => !/^\d{4}-\d{2}-\d{2}$/.test(d.dueDate))) {
+                  toast.error('Informe uma data válida em todas as parcelas.');
+                  return;
+                }
+                updateInstallmentDueDatesMutation.mutate({
+                  id: selectedOrder.id,
+                  dueDates
+                });
+              }}
+            >
+              {updateInstallmentDueDatesMutation.isPending ? 'Salvando…' : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {selectedOrder && financialEntryModalOpen && (
         <FinancialControlEntryFormModal
