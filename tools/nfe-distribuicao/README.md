@@ -86,25 +86,24 @@ NFE_CERT_PASSWORD=sua_senha_do_p12
 NFE_CADEIA_PASSWORD=changeit
 ```
 
-### Certificado e cadeia (Base64 — mais fácil no Railway)
+### Certificado A1 (Base64) — a cadeia já vai no deploy
 
-No PowerShell (no seu PC), gere o Base64 dos arquivos:
+A cadeia `.jks` (~180 KB em Base64) **passa do limite de 32 KB** das Variables do Railway.
+Por isso ela fica em `apps/backend/native/cadeia_producao.jks` (cadeia pública SEFAZ).
+
+Só o certificado da empresa (`.p12`) vai em Variable:
 
 ```powershell
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\certificado.p12")) | Set-Clipboard
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\caminho\cadeia_producao.jks")) | Set-Clipboard
 ```
-
-Cole no Railway:
 
 ```env
 NFE_CERT_BASE64=cole_aqui_o_base64_do_p12
-NFE_CADEIA_BASE64=cole_aqui_o_base64_do_jks
+NFE_CERT_PASSWORD=sua_senha_do_p12
+NFE_CADEIA_PASSWORD=changeit
 ```
 
-Na subida, o backend grava os arquivos sozinho e define `NFE_CERT_PATH` / `NFE_CADEIA_PATH`.
-
-(Não precisa setar `NFE_WORKER_JAR` em produção — o caminho padrão já aponta para o JAR gerado no build.)
+Não precisa de `NFE_CADEIA_BASE64` nem `NFE_WORKER_JAR`.
 
 ### Cron (opcional)
 
