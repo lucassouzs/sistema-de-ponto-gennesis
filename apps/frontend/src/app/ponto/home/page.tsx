@@ -492,15 +492,15 @@ export default function HomePage() {
                 <CardHeader className="border-b-0 pb-1">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex min-w-0 items-center space-x-3">
-                      <div className="shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30 sm:p-3">
-                        <Gavel className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
+                      <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                        <Gavel className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
                           Captações
                         </h3>
                         <p className="text-xs text-gray-600 dark:text-gray-400 sm:text-sm">
-                          Envios para análise · semana vs. anterior
+                          Envios para análise
                         </p>
                       </div>
                     </div>
