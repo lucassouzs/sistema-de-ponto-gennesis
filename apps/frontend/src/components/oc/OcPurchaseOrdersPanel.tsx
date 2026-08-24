@@ -44,6 +44,7 @@ import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { normalizeCostCentersResponse } from '@/lib/costCenters';
@@ -4904,31 +4905,11 @@ export function OcPurchaseOrdersPanel({
                   finalizedPagination &&
                   finalizedPagination.totalPages > 1 &&
                   displayedOrders.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Página {finalizedPagination.page} de {finalizedPagination.totalPages}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={finalizedPage <= 1 || finalizedListFetching}
-                          onClick={() => setFinalizedPage((p) => Math.max(1, p - 1))}
-                          className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                        >
-                          Anterior
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            finalizedPage >= finalizedPagination.totalPages || finalizedListFetching
-                          }
-                          onClick={() => setFinalizedPage((p) => p + 1)}
-                          className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    </div>
+                    <ListPagination
+                      currentPage={finalizedPagination.page}
+                      totalPages={finalizedPagination.totalPages}
+                      onPageChange={setFinalizedPage}
+                    />
                   )}
                 {!isIntegratedFlux &&
                   ((activeTab === 'FINALIZADAS' && displayedOrders.length === 0 && !listLoading) ||

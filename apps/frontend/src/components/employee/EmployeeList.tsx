@@ -34,6 +34,7 @@ import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import toast from 'react-hot-toast';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ListPagination } from '@/components/ui/ListPagination';
 
 const EMPLOYEE_ACTION_MENU_WIDTH_PX = 224; // w-56
 
@@ -1361,46 +1362,11 @@ export function EmployeeList({
               </ActionMenuOverlay>
             )}
 
-            {/* Botões de paginação */}
-            {totalPages > 1 && (
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Anterior
-                </button>
-                
-                {/* Números das páginas */}
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNumber = i + 1;
-                  const isActive = pageNumber === currentPage;
-                  
-                  return (
-                    <button
-                      key={pageNumber}
-                      onClick={() => setCurrentPage(pageNumber)}
-                      className={`px-3 py-2 text-sm font-medium rounded-md ${
-                        isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
-                
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  disabled={currentPage === totalPages}
-                  className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Próxima
-                </button>
-              </div>
-            )}
+            <ListPagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </>
         )}
 

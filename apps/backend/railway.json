@@ -5,8 +5,8 @@
     "buildCommand": "bash scripts/railway-build-backend.sh"
   },
   "deploy": {
-    "startCommand": "cd apps/backend && npm run start",
-    "healthcheckPath": "/health", 
+    "startCommand": "export PATH=\"$PWD/.tools/jdk/bin:$PATH\" && cd apps/backend && npm run start",
+    "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10

@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
@@ -482,53 +483,11 @@ export function ExtratoCaixaAjustesPanel({
                   </tbody>
                 </table>
               </div>
-              {showPagination ? (
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Anterior
-                  </button>
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNumber: number;
-                    if (totalPages <= 5) {
-                      pageNumber = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNumber = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNumber = totalPages - 4 + i;
-                    } else {
-                      pageNumber = currentPage - 2 + i;
-                    }
-                    const isActive = pageNumber === currentPage;
-                    return (
-                      <button
-                        key={pageNumber}
-                        type="button"
-                        onClick={() => setCurrentPage(pageNumber)}
-                        className={`min-w-[2.25rem] rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                          isActive
-                            ? 'bg-red-600 text-white'
-                            : 'border border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                        }`}
-                      >
-                        {pageNumber}
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              ) : null}
+              <ListPagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </>
           )}
         </CardContent>

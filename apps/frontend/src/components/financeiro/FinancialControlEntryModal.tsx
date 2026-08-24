@@ -11,6 +11,7 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import api from '@/lib/api';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
+  FINANCIAL_CONTROL_APPLICATION_TYPE_OPTIONS,
   FINANCIAL_CONTROL_CONSORCIO_LABELS,
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
   FINANCIAL_CONTROL_OC_DEFAULT_CONSORCIO,
@@ -37,6 +38,9 @@ const MONTH_SELECT_OPTIONS = labeledToSelectOptions(
   MONTHS_PT.map((label, idx) => ({ value: String(idx + 1), label }))
 );
 const STATUS_SELECT_OPTIONS = labeledToSelectOptions(STATUS_OPTIONS);
+const APPLICATION_TYPE_SELECT_OPTIONS = labeledToSelectOptions(
+  FINANCIAL_CONTROL_APPLICATION_TYPE_OPTIONS
+);
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_SELECT_OPTIONS = labeledToSelectOptions(
@@ -449,6 +453,22 @@ export function FinancialControlEntryModal({
                   allowEmpty={false}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className={labelCls}>Tipo (Material / Serviço)</label>
+              <StringSingleSelectDropdown
+                value={form.applicationType}
+                onChange={(v) =>
+                  setForm({
+                    ...form,
+                    applicationType: (v || '') as EntryFormState['applicationType'],
+                  })
+                }
+                options={APPLICATION_TYPE_SELECT_OPTIONS}
+                placeholder="Automático pela OC (se houver)"
+                allowEmpty
+              />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

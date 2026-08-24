@@ -46,6 +46,7 @@ import { labeledToSelectOptions, stringsToSelectOptions } from '@/lib/selectOpti
 import { POLOS_LIST } from '@/constants/payrollFilters';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ListPagination } from '@/components/ui/ListPagination';
 
 const SUPPLIER_ACTIVE_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos (ativos e inativos)' },
@@ -854,59 +855,11 @@ export default function FornecedoresPage() {
                     </table>
                   </div>
 
-                  {pagination.totalPages > 1 && (
-                    <div className={cadastroListClasses.pagination}>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Anterior
-                      </button>
-
-                      {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                        let pageNumber: number;
-                        if (pagination.totalPages <= 5) {
-                          pageNumber = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNumber = i + 1;
-                        } else if (currentPage >= pagination.totalPages - 2) {
-                          pageNumber = pagination.totalPages - 4 + i;
-                        } else {
-                          pageNumber = currentPage - 2 + i;
-                        }
-
-                        const isActive = pageNumber === currentPage;
-
-                        return (
-                          <button
-                            key={pageNumber}
-                            type="button"
-                            onClick={() => setCurrentPage(pageNumber)}
-                            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                              isActive
-                                ? 'bg-red-600 text-white'
-                                : 'border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCurrentPage((prev) => Math.min(prev + 1, pagination.totalPages))
-                        }
-                        disabled={currentPage === pagination.totalPages}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  )}
+                  <ListPagination
+                    currentPage={currentPage}
+                    totalPages={pagination.totalPages}
+                    onPageChange={setCurrentPage}
+                  />
                 </>
               )}
               {rowActionMenu && rowForActionMenu && (

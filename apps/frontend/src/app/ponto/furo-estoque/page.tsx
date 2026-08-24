@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import toast from 'react-hot-toast';
@@ -469,26 +470,11 @@ export default function FuroEstoquePage() {
                       </tbody>
                     </table>
                   </div>
-                  {totalPages > 1 && (
-                    <div className="mt-4 flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setListCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={listCurrentPage === 1}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setListCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={listCurrentPage === totalPages}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  )}
+                  <ListPagination
+                    currentPage={listCurrentPage}
+                    totalPages={totalPages}
+                    onPageChange={setListCurrentPage}
+                  />
                 </>
               )}
             </CardContent>

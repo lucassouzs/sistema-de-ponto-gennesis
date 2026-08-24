@@ -56,9 +56,13 @@ function OptionAvatar({
 
 function OptionLabelContent({ opt }: { opt: MultiSelectSearchOption }) {
   const label = opt.labelClassName ? (
-    <span className={`truncate font-normal tracking-tight ${opt.labelClassName}`}>{opt.label}</span>
+    <span className={`whitespace-normal break-words font-normal tracking-tight ${opt.labelClassName}`}>
+      {opt.label}
+    </span>
   ) : (
-    <span className="truncate font-normal tracking-tight text-gray-900 dark:text-gray-100">{opt.label}</span>
+    <span className="whitespace-normal break-words font-normal tracking-tight text-gray-900 dark:text-gray-100">
+      {opt.label}
+    </span>
   );
 
   const hasAvatar = Boolean(opt.avatarUrl || opt.avatarFallback);
@@ -114,7 +118,7 @@ function OptionLabelContent({ opt }: { opt: MultiSelectSearchOption }) {
           {descriptionLines.map((line) => (
             <span
               key={line}
-              className="truncate text-[11px] font-normal leading-tight text-gray-500 dark:text-gray-400"
+              className="whitespace-normal break-words text-[11px] font-normal leading-tight text-gray-500 dark:text-gray-400"
             >
               {line}
             </span>
@@ -146,7 +150,7 @@ function OptionLabelContent({ opt }: { opt: MultiSelectSearchOption }) {
       {descriptionLines.map((line) => (
         <span
           key={line}
-          className="truncate text-[11px] font-normal leading-tight text-gray-500 dark:text-gray-400"
+          className="whitespace-normal break-words text-[11px] font-normal leading-tight text-gray-500 dark:text-gray-400"
         >
           {line}
         </span>
@@ -258,6 +262,8 @@ export type MultiSelectSearchDropdownProps = {
   menuInline?: boolean;
   /** Altura máxima da área rolável de opções (padrão: 220px). */
   listMaxHeight?: number;
+  /** Largura mínima do painel flutuante (px). */
+  menuMinWidth?: number;
   /**
    * @deprecated Mantido por compatibilidade. O menu flutuante já sobrepõe o conteúdo.
    */
@@ -288,20 +294,26 @@ function estimateListMaxHeight(optionCount: number, cap: number): number {
   return Math.min(cap, Math.max(80, optionCount * LIST_ROW_ESTIMATE_PX + 8));
 }
 
-function computeFloatingPos(trigger: HTMLElement, listMax: number): FloatingPos {
+function computeFloatingPos(
+  trigger: HTMLElement,
+  listMax: number,
+  menuMinWidth = 0
+): FloatingPos {
   const rect = trigger.getBoundingClientRect();
   const gap = 6;
   const margin = 12;
-  const width = Math.max(rect.width, 200);
+  const maxWidth = Math.max(200, window.innerWidth - margin * 2);
+  const width = Math.min(maxWidth, Math.max(rect.width, menuMinWidth || 0, 200));
   const preferred = Math.min(listMax + PANEL_CHROME_PX, window.innerHeight - margin * 2);
   const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
   const spaceAbove = rect.top - gap - margin;
   // Abre para cima quando não cabe o painel completo abaixo.
   const openUp = spaceBelow < preferred && spaceAbove > spaceBelow;
+  const left = Math.min(rect.left, Math.max(margin, window.innerWidth - margin - width));
 
   if (openUp) {
     return {
-      left: rect.left,
+      left,
       width,
       bottom: window.innerHeight - rect.top + gap,
       maxHeight: Math.max(160, Math.min(preferred, spaceAbove)),
@@ -310,7 +322,7 @@ function computeFloatingPos(trigger: HTMLElement, listMax: number): FloatingPos 
   }
 
   return {
-    left: rect.left,
+    left,
     width,
     top: rect.bottom + gap,
     maxHeight: Math.max(160, Math.min(preferred, Math.max(spaceBelow, 160))),
@@ -322,6 +334,7 @@ function MenuPanel({
   panelId,
   panelRef,
   listRef,
+  searchInputRef,
   search,
   setSearch,
   searchPlaceholder,
@@ -342,8 +355,9 @@ function MenuPanel({
   noFocusRing,
 }: {
   panelId: string;
-  panelRef: React.RefObject<HTMLDivElement>;
-  listRef: React.RefObject<HTMLDivElement>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
+  listRef: React.RefObject<HTMLDivElement | null>;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
   search: string;
   setSearch: (v: string) => void;
   searchPlaceholder: string;
@@ -379,6 +393,7 @@ function MenuPanel({
             aria-hidden
           />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder={searchPlaceholder}
             value={search}
@@ -391,6 +406,7 @@ function MenuPanel({
               onClick={(e) => {
                 e.stopPropagation();
                 setSearch('');
+                searchInputRef.current?.focus();
               }}
               className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 outline-none transition-colors hover:bg-gray-200/80 hover:text-gray-600 focus:ring-0 dark:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
               aria-label="Limpar pesquisa"
@@ -473,6 +489,7 @@ export function MultiSelectSearchDropdown({
   closeOnOutsideClick = true,
   menuInline = false,
   listMaxHeight: listMaxHeightProp,
+  menuMinWidth = 0,
   menuOverlapContent: _menuOverlapContent = false,
   noFocusRing = false,
   hideFocus = false,
@@ -500,6 +517,7 @@ export function MultiSelectSearchDropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const listScrollTopRef = useRef(0);
 
   const selectedSet = useMemo(() => new Set(selected), [selected]);
@@ -529,10 +547,17 @@ export function MultiSelectSearchDropdown({
 
   const syncFloatingPos = useCallback(() => {
     if (!triggerRef.current) return;
-    setFloatingPos(computeFloatingPos(triggerRef.current, estimatedListMax));
-  }, [estimatedListMax]);
+    setFloatingPos(computeFloatingPos(triggerRef.current, estimatedListMax, menuMinWidth));
+  }, [estimatedListMax, menuMinWidth]);
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!menuInline && !floatingPos) return;
+    const id = window.requestAnimationFrame(() => searchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
+  }, [open, menuInline, floatingPos]);
 
   useLayoutEffect(() => {
     if (!open || menuInline) return;
@@ -649,6 +674,7 @@ export function MultiSelectSearchDropdown({
     panelId,
     panelRef,
     listRef,
+    searchInputRef,
     search,
     setSearch,
     searchPlaceholder,
@@ -712,6 +738,10 @@ export function MultiSelectSearchDropdown({
             if (v) setSearch('');
             return !v;
           });
+        }}
+        onMouseDown={(e) => {
+          // Evita o botão roubar o foco da barra de busca ao abrir.
+          if (!open) e.preventDefault();
         }}
         className={`${SINGLE_SELECT_TRIGGER_BASE_CLS} ${icon ? 'pl-10' : ''} ${singleSelectTriggerBorderClass(open, suppressOpenBorder)} ${singleSelectTriggerTextClass(hasSelection)}`}
         data-form-field-trigger="true"

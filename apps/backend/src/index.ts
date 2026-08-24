@@ -20,6 +20,14 @@ const totvsRmOk =
     (!!(process.env.TOTVS_RM_USER || process.env.TOTVS_RM_USERNAME || '').trim() &&
       !!(process.env.TOTVS_RM_PASSWORD || '').trim()));
 console.log(`   📈 TOTVS RM (RELATORIOFIN): ${totvsRmOk ? '✅ Configurado' : '❌ Não configurado'}`);
+const nfeJava =
+  process.env.NFE_JAVA_ENABLED === '1' || process.env.NFE_JAVA_ENABLED === 'true';
+const nfeXml = !!(process.env.NFE_XML_DIR || '').trim();
+console.log(
+  `   🧾 NFs Recebidas: ${
+    nfeJava ? '✅ SEFAZ (Java)' : nfeXml ? '✅ pasta XML' : '❌ não configurado'
+  }`
+);
 console.log('');
 
 import http from 'http';
@@ -63,6 +71,7 @@ import financialAnalysisRoutes from './routes/financialAnalysis';
 import financialControlRoutes from './routes/financialControl';
 import extratoCaixaRoutes from './routes/extratoCaixa';
 import controleNfsRoutes from './routes/controleNfs';
+import nfeRecebidasRoutes from './routes/nfeRecebidas';
 import controleGeralRoutes from './routes/controleGeral';
 import supplierRoutes from './routes/suppliers';
 import responsaveisTecnicosRoutes from './routes/responsaveisTecnicos';
@@ -104,6 +113,8 @@ import approvalsRoutes from './routes/approvals';
 import licitacoesRoutes from './routes/licitacoes';
 import pncpRoutes from './routes/pncp';
 import { startPncpSyncScheduler } from './services/PncpIngestService';
+import { startNfeAutoFetchScheduler } from './services/NfeRecebidaAutoFetch';
+import { ensureNfeSecretsFromEnv } from './lib/ensureNfeSecretsFromEnv';
 import { LicitacaoController } from './controllers/LicitacaoController';
 import { authenticate, AuthRequest } from './middleware/auth';
 import { removeOrphanUserPermissions } from './lib/permissionRegistrySync';
@@ -111,6 +122,8 @@ import { getPrismaPoolConfig, prisma } from './lib/prisma';
 import { getPasswordHashImplementation } from './lib/passwordHash';
 import { ensureProductionSchema } from './lib/ensureProductionSchema';
 import { attachCallSignaling } from './realtime/wsCallSignaling';
+
+ensureNfeSecretsFromEnv();
 
 const licitacaoExtraCtrl = new LicitacaoController();
 
@@ -348,6 +361,7 @@ app.use('/api/financial-analysis', financialAnalysisRoutes);
 app.use('/api/financial-control', financialControlRoutes);
 app.use('/api/extrato-caixa', extratoCaixaRoutes);
 app.use('/api/controle-nfs', controleNfsRoutes);
+app.use('/api/nfe-recebidas', nfeRecebidasRoutes);
 /** Teto orçamentário mensal (Controle Geral de Contratos). */
 app.use('/api/controle-geral', controleGeralRoutes);
 app.use('/api/suppliers', supplierRoutes);
@@ -498,6 +512,12 @@ try {
         startPncpSyncScheduler();
       } catch (e) {
         console.error('[pncp-sync] falha ao agendar:', e);
+      }
+
+      try {
+        startNfeAutoFetchScheduler();
+      } catch (e) {
+        console.error('[nfe-auto] falha ao agendar:', e);
       }
     })();
 

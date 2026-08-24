@@ -758,6 +758,13 @@ export function useRoutePermission(route: string) {
       can(pk('/ponto/financeiro/controle-nfs')) ||
       can(pk('/ponto/financeiro/analise-extrato')) ||
       can(pk('/ponto/financeiro/controle-financeiro')),
+    '/ponto/financeiro/nfs-recebidas':
+      isAdministrator ||
+      isDepartmentFinanceiro ||
+      can(pk('/ponto/financeiro/nfs-recebidas')) ||
+      can(pk('/ponto/financeiro/controle-nfs')) ||
+      can(pk('/ponto/financeiro/analise-extrato')) ||
+      can(pk('/ponto/financeiro/controle-financeiro')),
   };
 
   return {

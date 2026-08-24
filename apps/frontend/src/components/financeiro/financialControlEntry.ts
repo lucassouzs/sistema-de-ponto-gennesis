@@ -14,6 +14,34 @@ import type { FinancialControlStatus } from '@/lib/financialControlStatus';
 
 export type FinancialControlConsorcio = 'brasilia' | 'hub';
 
+export type FinancialControlApplicationType = 'MATERIAL' | 'SERVICO' | 'MISTO';
+
+export const FINANCIAL_CONTROL_APPLICATION_TYPE_OPTIONS: Array<{
+  value: FinancialControlApplicationType;
+  label: string;
+}> = [
+  { value: 'MATERIAL', label: 'Material' },
+  { value: 'SERVICO', label: 'Serviço' },
+  { value: 'MISTO', label: 'Misto' },
+];
+
+export const FINANCIAL_CONTROL_APPLICATION_TYPE_LABELS: Record<
+  FinancialControlApplicationType,
+  string
+> = {
+  MATERIAL: 'Material',
+  SERVICO: 'Serviço',
+  MISTO: 'Misto',
+};
+
+export function formatApplicationTypeLabel(
+  value: string | null | undefined
+): string {
+  if (!value) return '—';
+  const key = value.trim().toUpperCase() as FinancialControlApplicationType;
+  return FINANCIAL_CONTROL_APPLICATION_TYPE_LABELS[key] || value;
+}
+
 export const FINANCIAL_CONTROL_CONSORCIO_OPTIONS: Array<{
   value: FinancialControlConsorcio;
   label: string;
@@ -54,6 +82,7 @@ export interface FinancialControlEntry {
   remainingDays: number | null;
   receivedNote: string | null;
   notes: string | null;
+  applicationType?: FinancialControlApplicationType | string | null;
   attachments?: FinancialControlAttachment[] | null;
   createdAt: string;
   updatedAt: string;
@@ -123,6 +152,7 @@ export interface EntryFormState {
   remainingDays: string;
   receivedNote: string;
   notes: string;
+  applicationType: FinancialControlApplicationType | '';
   attachments: FinancialControlAttachment[];
 }
 
@@ -203,6 +233,7 @@ export function buildInitialForm(
     remainingDays: '',
     receivedNote: '',
     notes: '',
+    applicationType: '',
     attachments: [],
   };
 }
@@ -229,6 +260,11 @@ export function entryToForm(entry: FinancialControlEntry): EntryFormState {
       entry.remainingDays !== null && entry.remainingDays !== undefined ? String(entry.remainingDays) : '',
     receivedNote: entry.receivedNote || '',
     notes: entry.notes || '',
+    applicationType: (() => {
+      const v = (entry.applicationType || '').trim().toUpperCase();
+      if (v === 'MATERIAL' || v === 'SERVICO' || v === 'MISTO') return v;
+      return '';
+    })(),
     attachments: parseFinancialControlAttachments(entry.attachments),
   };
 }
@@ -262,6 +298,7 @@ export function buildFinancialEntryPayload(form: EntryFormState) {
     remainingDays: computedRemainingDays,
     receivedNote: form.receivedNote || null,
     notes: form.notes || null,
+    applicationType: form.applicationType || null,
     attachments: form.attachments,
   };
 }
@@ -457,6 +494,7 @@ export function buildFormFromPurchaseOrder(
     remainingDays: '',
     receivedNote: formatOcFinancialControlOriginNote(order.orderNumber),
     notes: rmRef,
+    applicationType: '',
     attachments: [],
   };
 }

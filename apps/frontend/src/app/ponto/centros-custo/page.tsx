@@ -27,6 +27,7 @@ import { POLOS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { filterOptionsWithAll, labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ListPagination } from '@/components/ui/ListPagination';
 
 const ACTIVE_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos' },
@@ -513,56 +514,11 @@ export default function CentrosCustoPage() {
                 />
               )}
               
-              {/* Paginação */}
-              {pagination.totalPages > 1 && (
-                <div className={cadastroListClasses.pagination}>
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Anterior
-                      </button>
-                      
-                      {/* Números das páginas */}
-                      {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                        let pageNumber: number;
-                        if (pagination.totalPages <= 5) {
-                          pageNumber = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNumber = i + 1;
-                        } else if (currentPage >= pagination.totalPages - 2) {
-                          pageNumber = pagination.totalPages - 4 + i;
-                        } else {
-                          pageNumber = currentPage - 2 + i;
-                        }
-                        
-                        const isActive = pageNumber === currentPage;
-                        
-                        return (
-                          <button
-                            key={pageNumber}
-                            onClick={() => setCurrentPage(pageNumber)}
-                            className={`px-3 py-2 text-sm font-medium rounded-md ${
-                              isActive
-                                ? 'bg-red-600 text-white'
-                                : 'text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                            } transition-colors`}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                      
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.totalPages))}
-                        disabled={currentPage === pagination.totalPages}
-                        className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Próxima
-                      </button>
-                </div>
-              )}
+              <ListPagination
+                currentPage={currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={setCurrentPage}
+              />
               </>
               )}
             </CardContent>

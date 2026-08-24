@@ -11,6 +11,7 @@ import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
@@ -480,46 +481,11 @@ export default function RegioesPostosCombustivelPage() {
                     </table>
                   </div>
 
-                  {listRange.totalPages > 1 ? (
-                    <div className={cadastroListClasses.pagination}>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                        disabled={currentPage === 1}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Anterior
-                      </button>
-                      {Array.from({ length: Math.min(5, listRange.totalPages) }, (_, index) => {
-                        const pageNumber = index + 1;
-                        const isActivePage = pageNumber === currentPage;
-                        return (
-                          <button
-                            key={pageNumber}
-                            type="button"
-                            onClick={() => setCurrentPage(pageNumber)}
-                            className={`rounded-md px-3 py-2 text-sm font-medium ${
-                              isActivePage
-                                ? 'bg-red-600 text-white'
-                                : 'border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                            }`}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCurrentPage((page) => Math.min(listRange.totalPages, page + 1))
-                        }
-                        disabled={currentPage === listRange.totalPages}
-                        className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  ) : null}
+                  <ListPagination
+                    currentPage={currentPage}
+                    totalPages={listRange.totalPages}
+                    onPageChange={setCurrentPage}
+                  />
 
                   {rowActionMenu && rowForActionMenu ? (
                     <RowActionMenuPortal

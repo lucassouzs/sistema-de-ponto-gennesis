@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { listTableRowClasses } from '@/components/ui/listTableUi';
 import { ControleGeralGastosOperacionaisPanel } from './ControleGeralGastosOperacionaisPanel';
@@ -515,46 +516,11 @@ export default function ControleGeralContratosPage() {
                       </table>
                     </div>
 
-                    {totalPages > 1 ? (
-                      <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6">
-                        <button
-                          type="button"
-                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                          disabled={currentPage === 1}
-                          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                        >
-                          Anterior
-                        </button>
-
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          const pageNumber = i + 1;
-                          const isActive = pageNumber === currentPage;
-                          return (
-                            <button
-                              key={pageNumber}
-                              type="button"
-                              onClick={() => setCurrentPage(pageNumber)}
-                              className={`rounded-md px-3 py-2 text-sm font-medium ${
-                                isActive
-                                  ? 'bg-red-600 text-white'
-                                  : 'border border-gray-300 bg-white text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                              }`}
-                            >
-                              {pageNumber}
-                            </button>
-                          );
-                        })}
-
-                        <button
-                          type="button"
-                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                          disabled={currentPage === totalPages}
-                          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
-                        >
-                          Próxima
-                        </button>
-                      </div>
-                    ) : null}
+                    <ListPagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
                   </>
                 )}
               </CardContent>

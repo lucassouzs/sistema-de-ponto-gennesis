@@ -36,8 +36,10 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { FinancialControlEntryModal } from '@/components/financeiro/FinancialControlEntryModal';
 import {
+  FINANCIAL_CONTROL_APPLICATION_TYPE_LABELS,
   FINANCIAL_CONTROL_CONSORCIO_LABELS,
   FINANCIAL_CONTROL_CONSORCIO_OPTIONS,
+  formatApplicationTypeLabel,
   parseFinancialControlAttachments,
   resolveNfAndParcelForDisplay,
   type FinancialControlConsorcio,
@@ -1670,13 +1672,14 @@ function MonthGroup({
                 <th className={cadastroListClasses.thCenter}>NF</th>
                 <th className={cadastroListClasses.thCenter}>Parcela</th>
                 <th className={cadastroListClasses.th}>Fornecedor</th>
+                <th className={cadastroListClasses.thCenter}>Tipo</th>
                 <th className={cadastroListClasses.thCenter}>OS</th>
                 <th className={cadastroListClasses.thCenter}>OC</th>
                 <th className={cadastroListClasses.thCenter}>Vencimento</th>
                 <th className={cadastroListClasses.thCenter}>Valor Final</th>
                 <th className={cadastroListClasses.thCenter}>Dias</th>
                 <th className={cadastroListClasses.thCenter}>Status</th>
-                <th className={cadastroListClasses.thRight}>Ação</th>
+                <th className={`${listTableRowClasses.actionTh} !text-center`}>Ação</th>
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1704,6 +1707,33 @@ function MonthGroup({
                         {entry.supplierName || '—'}
                       </span>
                     </td>
+                    <td className="px-3 sm:px-6 py-3 text-center">
+                      {(() => {
+                        const key = (entry.applicationType || '').trim().toUpperCase();
+                        if (!key) {
+                          return (
+                            <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                          );
+                        }
+                        const label =
+                          FINANCIAL_CONTROL_APPLICATION_TYPE_LABELS[
+                            key as keyof typeof FINANCIAL_CONTROL_APPLICATION_TYPE_LABELS
+                          ] || formatApplicationTypeLabel(entry.applicationType);
+                        const style =
+                          key === 'SERVICO'
+                            ? 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300'
+                            : key === 'MISTO'
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                              : 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300';
+                        return (
+                          <span
+                            className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${style}`}
+                          >
+                            {label}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 sm:px-6 py-3 text-sm text-center text-gray-700 dark:text-gray-300">
                       {entry.osCode || '—'}
                     </td>
@@ -1726,8 +1756,11 @@ function MonthGroup({
                         {statusStyle.label}
                       </span>
                     </td>
-                    <td className="px-3 sm:px-6 py-3 text-right">
-                      <div className="flex justify-end">
+                    <td
+                      className={`${listTableRowClasses.actionTd} text-center`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex justify-center">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1842,6 +1875,9 @@ function MonthGroup({
               </DetailField>
               <DetailField label="Fornecedor" className="sm:col-span-2">
                 {detailEntry.supplierName || '—'}
+              </DetailField>
+              <DetailField label="Tipo">
+                {formatApplicationTypeLabel(detailEntry.applicationType)}
               </DetailField>
               <DetailField label="OS">{detailEntry.osCode || '—'}</DetailField>
               <DetailField label="OC">

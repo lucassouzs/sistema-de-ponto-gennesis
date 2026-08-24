@@ -14,6 +14,7 @@ import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { ListPagination } from '@/components/ui/ListPagination';
 import { Modal } from '@/components/ui/Modal';
 import { DatePickerField } from '@/components/ui/DatePickerField';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
@@ -707,26 +708,11 @@ export default function EntregasLogisticaPageClient() {
                       onDelete={() => setDeleteId(rowForActionMenu.id)}
                     />
                   ) : null}
-                  {totalPages > 1 ? (
-                    <div className="mt-4 flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setListPage((p) => Math.max(1, p - 1))}
-                        disabled={listPage === 1}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-gray-600"
-                      >
-                        Anterior
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setListPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={listPage === totalPages}
-                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-gray-600"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  ) : null}
+                  <ListPagination
+                    currentPage={listPage}
+                    totalPages={totalPages}
+                    onPageChange={setListPage}
+                  />
                 </>
               )}
             </CardContent>
