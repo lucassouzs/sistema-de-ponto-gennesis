@@ -50,6 +50,12 @@ export type OcSupplierOption = {
   code: string;
   name: string;
   tradeName?: string | null;
+  bank?: string | null;
+  agency?: string | null;
+  account?: string | null;
+  accountDigit?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
 };
 
 export function getOcSupplierLabel(supplier?: OcSupplierOption | null): string {

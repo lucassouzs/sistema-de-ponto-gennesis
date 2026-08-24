@@ -625,6 +625,45 @@ router.patch('/:id/payment-boleto-installments', async (req: AuthRequest, res: R
   }
 });
 
+router.patch(
+  '/:id/payment-boleto-installment-due-dates',
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+      await assertUserHasOcModule(
+        req.user.id,
+        !!req.user.isAdmin,
+        OC_TAB_PAYMENT_KEY,
+        'Sem permissão na aba Pagamento da OC'
+      );
+      const body = req.body as { dueDates?: Array<{ index: number; dueDate: string }> };
+      const order = await service.updateUnpaidInstallmentDueDates(req.params.id, {
+        dueDates: Array.isArray(body?.dueDates) ? body.dueDates : []
+      });
+      res.json({
+        success: true,
+        data: order,
+        message: 'Vencimento(s) atualizado(s) com sucesso'
+      });
+    } catch (error) {
+      if (error instanceof Error && /Sem permissão/.test(error.message)) {
+        res.status(403).json({ success: false, message: error.message });
+        return;
+      }
+      if (
+        error instanceof Error &&
+        /Ordem de compra não encontrada|Só é possível|apenas|Informe|Índice|inválid|já está paga|ainda não|Anexe os boletos|Usuário não autenticado/.test(
+          error.message
+        )
+      ) {
+        res.status(400).json({ success: false, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+);
+
 router.patch('/:id/payment-proof', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);

@@ -2042,6 +2042,95 @@ export class PurchaseOrderService {
   }
 
   /**
+   * Atualiza só a data de vencimento de parcelas ainda não pagas (fase Pagamento).
+   * Parcelas PAID ficam bloqueadas.
+   */
+  async updateUnpaidInstallmentDueDates(
+    id: string,
+    body: { dueDates: Array<{ index: number; dueDate: string }> }
+  ) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+    if (order.paymentType !== 'BOLETO') {
+      throw new Error('Vencimento de parcelas aplica-se apenas a OC com pagamento em boleto');
+    }
+    if (
+      order.status !== 'APPROVED' &&
+      order.status !== 'PENDING_PROOF_VALIDATION' &&
+      order.status !== 'PENDING_PROOF_CORRECTION'
+    ) {
+      throw new Error('Só é possível editar vencimento na fase de pagamento do boleto');
+    }
+    if (!order.paymentBoletoPhaseReleased) {
+      throw new Error(
+        'Anexe os boletos e envie para a fase Pagamento antes de editar vencimentos por aqui'
+      );
+    }
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const parcelCount = meta.paymentParcelCount;
+    const existing = parseStoredInstallments(order.paymentBoletoInstallments);
+    if (existing.length < parcelCount) {
+      throw new Error('Parcelas de boleto ainda não foram registradas nesta OC');
+    }
+
+    const updates = Array.isArray(body?.dueDates) ? body.dueDates : [];
+    if (updates.length === 0) {
+      throw new Error('Informe ao menos uma data de vencimento');
+    }
+
+    const next = existing.map((row) => ({ ...row }));
+    let changed = 0;
+    for (const item of updates) {
+      const index = Math.round(Number(item.index));
+      if (!Number.isInteger(index) || index < 0 || index >= parcelCount) {
+        throw new Error(`Índice de parcela inválido: ${item.index}`);
+      }
+      const dueDate = String(item.dueDate || '').trim().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+        throw new Error('Data de vencimento inválida (use AAAA-MM-DD)');
+      }
+      const st = rowStatus(next[index]);
+      if (st === 'PAID') {
+        throw new Error(`A parcela ${index + 1} já está paga e não pode ter o vencimento alterado`);
+      }
+      if ((next[index]?.dueDate || '') === dueDate) continue;
+      next[index] = { ...next[index], dueDate };
+      changed += 1;
+    }
+    if (changed === 0) {
+      const [unchanged] = await enrichOrdersParcelPlans([
+        await prisma.purchaseOrder.findUniqueOrThrow({
+          where: { id },
+          include: purchaseOrderIncludeListSummary
+        })
+      ]);
+      return unchanged;
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        paymentBoletoInstallments: next as unknown as Prisma.InputJsonValue,
+        updatedAt: new Date()
+      },
+      include: purchaseOrderIncludeListSummary
+    });
+    const [e] = await enrichOrdersParcelPlans([updated]);
+    return e;
+  }
+
+  /**
    * Anexa comprovante de pagamento na fase Pagamento (OC aprovada).
    */
   async attachPaymentProof(

@@ -598,6 +598,8 @@ export function useRoutePermission(route: string) {
     '/ponto/painel-do-sistema': isAdministrator || isDepartmentPessoal || permissions.canViewDashboard,
     '/ponto/agenda': canAccessCollaborationTools,
     '/ponto/conversas': canAccessCollaborationTools,
+    /** Fallback se o dist de permission-modules estiver desatualizado (OPEN_ACCESS). */
+    '/ponto/central-de-ajuda': true,
     /**
      * Aprovações: a página agora aparece automaticamente para quem precisa decidir
      * sobre algum bloco. Não há mais entrada na matriz de acessos.
