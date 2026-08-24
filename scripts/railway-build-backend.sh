@@ -84,7 +84,16 @@ if [[ -d "$NFE_SRC/src" && -f "$NFE_SRC/pom.xml" ]]; then
   fi
   mkdir -p "$(dirname "$NFE_JAR_COPY")"
   cp -f "$NFE_JAR_OUT" "$NFE_JAR_COPY"
-  echo "==> Worker NF-e pronto: $NFE_JAR_COPY"
+  mkdir -p "$ROOT/apps/backend/dist"
+  cp -f "$NFE_JAR_OUT" "$ROOT/apps/backend/dist/nfe-distribuicao.jar"
+  # Railpack costuma manter dist/ no runtime; .tools/ e native/ (gitignored) podem sumir.
+  if [[ -d "$JDK_LINK" ]]; then
+    rm -rf "$ROOT/apps/backend/dist/jdk"
+    cp -a "$JDK_LINK" "$ROOT/apps/backend/dist/jdk"
+    echo "==> JDK copiado para apps/backend/dist/jdk"
+  fi
+  echo "==> Worker NF-e pronto: $ROOT/apps/backend/dist/nfe-distribuicao.jar"
+  ls -lh "$ROOT/apps/backend/dist/nfe-distribuicao.jar" || true
 else
   echo "==> Aviso: tools/nfe-distribuicao ausente — SEFAZ Java não será embutida neste deploy"
 fi

@@ -32,7 +32,7 @@ export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron'
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[nfe-auto] falha: ${msg}`);
-    throw err;
+    return null;
   }
 }
 

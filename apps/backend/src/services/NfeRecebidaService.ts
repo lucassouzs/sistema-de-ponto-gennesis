@@ -494,10 +494,13 @@ function resolveMonorepoRoot(): string {
 
 function resolveNfeWorkerJar(): string {
   if (process.env.NFE_WORKER_JAR?.trim()) return process.env.NFE_WORKER_JAR.trim();
+  const root = resolveMonorepoRoot();
   const candidates = [
+    path.resolve(process.cwd(), 'dist', 'nfe-distribuicao.jar'),
     path.resolve(process.cwd(), 'native', 'nfe-distribuicao.jar'),
-    path.resolve(resolveMonorepoRoot(), 'apps/backend/native/nfe-distribuicao.jar'),
-    path.resolve(resolveMonorepoRoot(), 'tools/nfe-distribuicao/target/nfe-distribuicao.jar'),
+    path.resolve(root, 'apps/backend/dist/nfe-distribuicao.jar'),
+    path.resolve(root, 'apps/backend/native/nfe-distribuicao.jar'),
+    path.resolve(root, 'tools/nfe-distribuicao/target/nfe-distribuicao.jar'),
     path.resolve(process.cwd(), '../../tools/nfe-distribuicao/target/nfe-distribuicao.jar'),
   ];
   for (const p of candidates) {
@@ -508,8 +511,15 @@ function resolveNfeWorkerJar(): string {
 
 function resolveNfeJavaBin(): string {
   if (process.env.NFE_JAVA_BIN?.trim()) return process.env.NFE_JAVA_BIN.trim();
-  const bundled = path.resolve(resolveMonorepoRoot(), '.tools/jdk/bin/java');
-  if (fs.existsSync(bundled)) return bundled;
+  const root = resolveMonorepoRoot();
+  const bundled = [
+    path.resolve(process.cwd(), 'dist', 'jdk', 'bin', 'java'),
+    path.resolve(root, 'apps/backend/dist/jdk/bin/java'),
+    path.resolve(root, '.tools/jdk/bin/java'),
+  ];
+  for (const p of bundled) {
+    if (fs.existsSync(p)) return p;
+  }
   return 'java';
 }
 
