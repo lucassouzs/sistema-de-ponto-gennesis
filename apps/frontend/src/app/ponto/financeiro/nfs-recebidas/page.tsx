@@ -348,82 +348,67 @@ function StatusBuscaTooltip({ info }: { info: StatusBuscaInfo }) {
           : 'border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800'
       }`}
     >
-      <span className="flex items-start gap-2.5">
-        <span
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-            isBlocked
-              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
-              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
-          }`}
-        >
-          {isBlocked ? (
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <Info className="h-3.5 w-3.5" aria-hidden />
-          )}
-        </span>
-        <span className="min-w-0 flex-1 space-y-2">
-          <span className="block">
-            <span
-              className={`block text-sm font-semibold leading-snug ${
-                isBlocked
-                  ? 'text-amber-900 dark:text-amber-100'
-                  : 'text-gray-900 dark:text-gray-100'
-              }`}
-            >
-              {info.title}
-            </span>
-            {info.detail ? (
-              <span
-                className={`mt-1 block text-xs leading-relaxed ${
-                  isBlocked
-                    ? 'text-amber-800/90 dark:text-amber-200/85'
-                    : 'text-gray-600 dark:text-gray-400'
-                }`}
-              >
-                {info.detail}
-              </span>
-            ) : null}
-          </span>
-
-          {info.waitHint ? (
-            <span
-              className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide ${
-                isBlocked
-                  ? 'bg-amber-200/70 text-amber-900 dark:bg-amber-900/70 dark:text-amber-100'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
-              }`}
-            >
-              {info.waitHint}
-            </span>
-          ) : null}
-
+      <span className="block space-y-2">
+        <span className="block">
           <span
-            className={`block space-y-1.5 border-t pt-2 text-[11px] leading-relaxed ${
+            className={`block text-sm font-semibold leading-snug ${
               isBlocked
-                ? 'border-amber-200/80 text-amber-900/80 dark:border-amber-800/60 dark:text-amber-100/75'
-                : 'border-gray-100 text-gray-600 dark:border-gray-700 dark:text-gray-400'
+                ? 'text-amber-900 dark:text-amber-100'
+                : 'text-gray-900 dark:text-gray-100'
             }`}
           >
-            <span className="flex justify-between gap-3">
-              <span className="font-medium opacity-80">{info.year}</span>
-              <span className="tabular-nums font-semibold text-current">
-                {info.totalAno} nota(s)
-              </span>
-            </span>
-            <span className="flex justify-between gap-3">
-              <span className="font-medium opacity-80">Outros períodos</span>
-              <span className="tabular-nums font-semibold text-current">
-                {info.totalOutros} nota(s)
-              </span>
-            </span>
-            {info.nsu ? (
-              <span className="flex justify-between gap-3">
-                <span className="font-medium opacity-80">Último NSU</span>
-                <span className="truncate font-mono text-[10px] tabular-nums">{info.nsu}</span>
-              </span>
-            ) : null}
+            {info.title}
           </span>
+          {info.detail ? (
+            <span
+              className={`mt-1 block text-xs leading-relaxed ${
+                isBlocked
+                  ? 'text-amber-800/90 dark:text-amber-200/85'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              {info.detail}
+            </span>
+          ) : null}
+        </span>
+
+        {info.waitHint ? (
+          <span
+            className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide ${
+              isBlocked
+                ? 'bg-amber-200/70 text-amber-900 dark:bg-amber-900/70 dark:text-amber-100'
+                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+            }`}
+          >
+            {info.waitHint}
+          </span>
+        ) : null}
+
+        <span
+          className={`block space-y-1.5 border-t pt-2 text-[11px] leading-relaxed ${
+            isBlocked
+              ? 'border-amber-200/80 text-amber-900/80 dark:border-amber-800/60 dark:text-amber-100/75'
+              : 'border-gray-100 text-gray-600 dark:border-gray-700 dark:text-gray-400'
+          }`}
+        >
+          <span className="flex justify-between gap-3">
+            <span className="font-medium opacity-80">{info.year}</span>
+            <span className="tabular-nums font-semibold text-current">
+              {info.totalAno} nota(s)
+            </span>
+          </span>
+          <span className="flex justify-between gap-3">
+            <span className="font-medium opacity-80">Outros períodos</span>
+            <span className="tabular-nums font-semibold text-current">
+              {info.totalOutros} nota(s)
+            </span>
+          </span>
+          {info.nsu ? (
+            <span className="flex justify-between gap-3">
+              <span className="font-medium opacity-80">Último NSU</span>
+              <span className="truncate font-mono text-[10px] tabular-nums">{info.nsu}</span>
+            </span>
+          ) : null}
         </span>
       </span>
     </span>
