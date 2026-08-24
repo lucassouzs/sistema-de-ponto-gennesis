@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  AlertTriangle,
   Download,
   FileText,
   Filter,
@@ -262,18 +263,49 @@ const ACTIONS_COL_TH =
 const ACTIONS_COL_TD =
   'w-[5%] min-w-[3.75rem] whitespace-nowrap px-2 py-3 text-center align-middle sm:px-3';
 
+type StatusBuscaInfo = {
+  kind: 'blocked' | 'ok';
+  title: string;
+  detail?: string;
+  waitHint?: string;
+  nsu?: string;
+  novas: number | null;
+  totalAno: number;
+  totalOutros: number;
+  year: number;
+};
+
 function statusBuscaVisivel(
   msg: string | null | undefined,
   totalAno: number,
   totalOutros: number,
   year: number
-) {
+): StatusBuscaInfo | null {
   if (!msg) return null;
   if (/reimporta/i.test(msg)) return null;
 
-  const totais = `${year}: ${totalAno} nota(s). Outros períodos: ${totalOutros} nota(s).`;
+  const nsuMatch = msg.match(/Último NSU:\s*([0-9]+)/i);
+  const nsu = nsuMatch?.[1];
+  const waitMatch = msg.match(/Libera em\s*~?\s*(\d+)\s*min/i);
+  const waitHint = waitMatch
+    ? `Libera em cerca de ${waitMatch[1]} minutos`
+    : /~60\s*min/i.test(msg)
+      ? 'Libera em cerca de 60 minutos'
+      : undefined;
+
   if (/consumo indevido|bloquead/i.test(msg)) {
-    return `${msg} ${totais}`;
+    return {
+      kind: 'blocked',
+      title: 'Consulta temporariamente pausada',
+      detail:
+        'A SEFAZ limitou novas consultas deste CNPJ por excesso de requisições. A atualização automática volta sozinha após o intervalo.',
+      waitHint,
+      nsu,
+      novas: null,
+      totalAno,
+      totalOutros,
+      year,
+    };
   }
 
   const novasMatch = msg.match(/(\d+)\s*nota[s]?\s+nova/i) || msg.match(/(\d+)\s*nova/);
@@ -282,16 +314,120 @@ function statusBuscaVisivel(
     : novasMatch
       ? Number(novasMatch[1])
       : null;
-  const nsuMatch = msg.match(/Último NSU:\s*([0-9]+)/i);
-  const nsuPart = nsuMatch ? ` Último NSU: ${nsuMatch[1]}.` : '';
-  const novasTxt =
-    novas == null
-      ? 'Última atualização automática concluída.'
-      : novas === 1
-        ? '1 nota nova na última atualização automática.'
-        : `${novas} nota(s) nova(s) na última atualização automática.`;
 
-  return `${novasTxt}${nsuPart} ${totais}`;
+  const title =
+    novas == null
+      ? 'Última atualização automática'
+      : novas === 0
+        ? 'Nenhuma nota nova'
+        : novas === 1
+          ? '1 nota nova encontrada'
+          : `${novas} notas novas encontradas`;
+
+  return {
+    kind: 'ok',
+    title,
+    detail: 'Busca automática na SEFAZ (a cada hora, quando permitido).',
+    nsu,
+    novas,
+    totalAno,
+    totalOutros,
+    year,
+  };
+}
+
+function StatusBuscaTooltip({ info }: { info: StatusBuscaInfo }) {
+  const isBlocked = info.kind === 'blocked';
+  return (
+    <span
+      id="nfe-sefaz-status-hint"
+      role="tooltip"
+      className={`pointer-events-none absolute left-0 top-full z-30 mt-2 w-[min(19.5rem,calc(100vw-2rem))] rounded-xl border px-3.5 py-3 text-left shadow-xl transition-opacity duration-150 invisible opacity-0 group-hover/sefaz-info:visible group-hover/sefaz-info:opacity-100 group-focus-within/sefaz-info:visible group-focus-within/sefaz-info:opacity-100 ${
+        isBlocked
+          ? 'border-amber-200 bg-amber-50 dark:border-amber-800/70 dark:bg-amber-950/95'
+          : 'border-gray-200 bg-white dark:border-gray-600 dark:bg-gray-800'
+      }`}
+    >
+      <span className="flex items-start gap-2.5">
+        <span
+          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+            isBlocked
+              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
+              : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'
+          }`}
+        >
+          {isBlocked ? (
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+          ) : (
+            <Info className="h-3.5 w-3.5" aria-hidden />
+          )}
+        </span>
+        <span className="min-w-0 flex-1 space-y-2">
+          <span className="block">
+            <span
+              className={`block text-sm font-semibold leading-snug ${
+                isBlocked
+                  ? 'text-amber-900 dark:text-amber-100'
+                  : 'text-gray-900 dark:text-gray-100'
+              }`}
+            >
+              {info.title}
+            </span>
+            {info.detail ? (
+              <span
+                className={`mt-1 block text-xs leading-relaxed ${
+                  isBlocked
+                    ? 'text-amber-800/90 dark:text-amber-200/85'
+                    : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {info.detail}
+              </span>
+            ) : null}
+          </span>
+
+          {info.waitHint ? (
+            <span
+              className={`inline-flex rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide ${
+                isBlocked
+                  ? 'bg-amber-200/70 text-amber-900 dark:bg-amber-900/70 dark:text-amber-100'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+              }`}
+            >
+              {info.waitHint}
+            </span>
+          ) : null}
+
+          <span
+            className={`block space-y-1.5 border-t pt-2 text-[11px] leading-relaxed ${
+              isBlocked
+                ? 'border-amber-200/80 text-amber-900/80 dark:border-amber-800/60 dark:text-amber-100/75'
+                : 'border-gray-100 text-gray-600 dark:border-gray-700 dark:text-gray-400'
+            }`}
+          >
+            <span className="flex justify-between gap-3">
+              <span className="font-medium opacity-80">{info.year}</span>
+              <span className="tabular-nums font-semibold text-current">
+                {info.totalAno} nota(s)
+              </span>
+            </span>
+            <span className="flex justify-between gap-3">
+              <span className="font-medium opacity-80">Outros períodos</span>
+              <span className="tabular-nums font-semibold text-current">
+                {info.totalOutros} nota(s)
+              </span>
+            </span>
+            {info.nsu ? (
+              <span className="flex justify-between gap-3">
+                <span className="font-medium opacity-80">Último NSU</span>
+                <span className="truncate font-mono text-[10px] tabular-nums">{info.nsu}</span>
+              </span>
+            ) : null}
+          </span>
+        </span>
+      </span>
+    </span>
+  );
 }
 
 export default function NfsRecebidasPage() {
@@ -607,17 +743,19 @@ export default function NfsRecebidasPage() {
                         type="button"
                         aria-label="Status da última consulta SEFAZ"
                         aria-describedby="nfe-sefaz-status-hint"
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                          statusMsg.kind === 'blocked'
+                            ? 'text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/40 dark:hover:text-amber-300'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200'
+                        }`}
                       >
-                        <Info className="h-4 w-4" aria-hidden />
+                        {statusMsg.kind === 'blocked' ? (
+                          <AlertTriangle className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <Info className="h-4 w-4" aria-hidden />
+                        )}
                       </button>
-                      <span
-                        id="nfe-sefaz-status-hint"
-                        role="tooltip"
-                        className="pointer-events-none absolute left-0 top-full z-30 mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-left text-xs font-normal leading-relaxed text-gray-700 opacity-0 shadow-lg transition-opacity duration-150 invisible group-hover/sefaz-info:visible group-hover/sefaz-info:opacity-100 group-focus-within/sefaz-info:visible group-focus-within/sefaz-info:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200"
-                      >
-                        {statusMsg}
-                      </span>
+                      <StatusBuscaTooltip info={statusMsg} />
                     </span>
                   ) : null}
 
