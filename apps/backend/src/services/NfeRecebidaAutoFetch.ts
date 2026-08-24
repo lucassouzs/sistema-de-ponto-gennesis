@@ -2,22 +2,16 @@ import cron from 'node-cron';
 import fs from 'fs';
 import path from 'path';
 import {
+  getSefazFetchGate,
   NfeRecebidaService,
   nfeAutoFetchPeriod,
-  nfeJavaAvailable
+  nfeJavaAvailable,
+  SEFAZ_COOLDOWN_MS,
 } from './NfeRecebidaService';
-import { prisma } from '../lib/prisma';
 
 const service = new NfeRecebidaService();
 let started = false;
 let fetchInFlight = false;
-
-/** Intervalo mínimo entre consultas SEFAZ (padrão ~55 min — abaixo de 1h para alinhar ao cron horário). */
-function minIntervalMs(): number {
-  const raw = Number(process.env.NFE_AUTO_FETCH_MIN_INTERVAL_MS?.trim());
-  if (Number.isFinite(raw) && raw >= 60_000) return raw;
-  return 55 * 60 * 1000;
-}
 
 function envBool(key: string, fallback = false): boolean {
   const v = process.env[key]?.trim().toLowerCase();
@@ -41,35 +35,12 @@ function nfeWorkerJarReady(): boolean {
 }
 
 /**
- * Só consulta a SEFAZ se a última busca (sucesso ou bloqueio) já passou do intervalo mínimo.
- * Evita cStat 656 por consultas repetidas no mesmo CNPJ.
- */
-export async function canFetchSefazNow(): Promise<{
-  ok: boolean;
-  waitMin?: number;
-  lastFetchAt?: string | null;
-}> {
-  const state = await prisma.nfeDistribuicaoState.findUnique({ where: { id: 'default' } });
-  if (!state?.lastFetchAt) {
-    return { ok: true, lastFetchAt: null };
-  }
-  const elapsed = Date.now() - state.lastFetchAt.getTime();
-  const minMs = minIntervalMs();
-  if (elapsed >= minMs) {
-    return { ok: true, lastFetchAt: state.lastFetchAt.toISOString() };
-  }
-  const waitMin = Math.max(1, Math.ceil((minMs - elapsed) / 60_000));
-  return {
-    ok: false,
-    waitMin,
-    lastFetchAt: state.lastFetchAt.toISOString(),
-  };
-}
-
-/**
- * Busca automática horário (respeitando intervalo mínimo da SEFAZ).
+ * Busca automática horário (respeitando cooldown da SEFAZ).
+ * Nunca consulta enquanto o CNPJ ainda está no bloqueio 656 / intervalo mínimo —
+ * senão a SEFAZ renova as ~60 min e fica em loop.
+ *
  * Liga com NFE_AUTO_FETCH_ENABLED=1 (padrão: ligado se NFE_JAVA_ENABLED=1).
- * Cron padrão: a cada hora (minuto 5).
+ * Cron padrão: a cada hora (minuto 5); a gate pode pular a hora se ainda estiver cedo.
  */
 export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron') {
   if (fetchInFlight) {
@@ -82,10 +53,14 @@ export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron'
     return null;
   }
 
-  const gate = await canFetchSefazNow();
+  const gate = await getSefazFetchGate();
   if (!gate.ok) {
+    const why =
+      gate.reason === 'blocked'
+        ? 'ainda bloqueado (656) — não consultar para não renovar'
+        : 'intervalo mínimo entre consultas';
     console.log(
-      `[nfe-auto] ignorado (${trigger}) — aguardando intervalo SEFAZ (~${gate.waitMin} min). Última: ${gate.lastFetchAt}`
+      `[nfe-auto] ignorado (${trigger}) — ${why} (~${gate.waitMin} min). Última: ${gate.lastFetchAt}`
     );
     return null;
   }
@@ -100,6 +75,10 @@ export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron'
       ...period,
       trigger: 'cron'
     });
+    if (result.skippedDueToCooldown) {
+      console.log(`[nfe-auto] pulado sem consultar SEFAZ: ${result.message}`);
+      return null;
+    }
     console.log(`[nfe-auto] ok: ${result.message}`);
     return result;
   } catch (err) {
@@ -133,7 +112,7 @@ export function startNfeAutoFetchScheduler(): void {
     return;
   }
 
-  // A cada hora, no minuto 5 — alinhado ao limite de ~1h da SEFAZ após consulta sem novidade / 656.
+  // A cada hora; a gate (65 min) pode pular uma execução se ainda estiver cedo.
   const expression = process.env.NFE_AUTO_FETCH_CRON?.trim() || '5 * * * *';
   if (!cron.validate(expression)) {
     console.error(`[nfe-auto] cron inválido: ${expression}`);
@@ -142,7 +121,7 @@ export function startNfeAutoFetchScheduler(): void {
 
   started = true;
   const tz = process.env.TZ || 'America/Sao_Paulo';
-  const intervalMin = Math.round(minIntervalMs() / 60_000);
+  const intervalMin = Math.round(SEFAZ_COOLDOWN_MS / 60_000);
 
   cron.schedule(
     expression,
@@ -155,7 +134,7 @@ export function startNfeAutoFetchScheduler(): void {
   );
 
   console.log(
-    `[nfe-auto] agendado: "${expression}" (${tz}) — intervalo mín. ${intervalMin} min — ano ${nfeAutoFetchPeriod().periodFrom.slice(0, 4)}`
+    `[nfe-auto] agendado: "${expression}" (${tz}) — cooldown ${intervalMin} min (não consulta se bloqueado) — ano ${nfeAutoFetchPeriod().periodFrom.slice(0, 4)}`
   );
 
   const defaultOnBoot =
@@ -167,7 +146,7 @@ export function startNfeAutoFetchScheduler(): void {
       void runNfeAutoFetch('boot');
     }, wait);
     console.log(
-      `[nfe-auto] também tenta ~${Math.round(wait / 1000)}s após o boot se o intervalo SEFAZ permitir`
+      `[nfe-auto] também tenta ~${Math.round(wait / 1000)}s após o boot se o cooldown SEFAZ permitir`
     );
   }
 }

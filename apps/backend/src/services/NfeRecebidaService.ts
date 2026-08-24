@@ -46,8 +46,18 @@ type WorkerResult = {
 
 /** cStat 656: a SEFAZ bloqueia o CNPJ por 1 hora quando as consultas se repetem sem novidade. */
 const SEFAZ_CONSUMO_INDEVIDO = '656';
-const SEFAZ_BLOQUEIO_MS = 60 * 60 * 1000;
+/** Bloqueio oficial da SEFAZ. */
+export const SEFAZ_BLOQUEIO_MS = 60 * 60 * 1000;
+/**
+ * Folga além de 1h para não consultar “no limite” e renovar o 656.
+ * Usado tanto após bloqueio quanto entre consultas normais (cStat 137).
+ */
+export const SEFAZ_COOLDOWN_MS = 65 * 60 * 1000;
 let sefazBlockedUntil: number | null = null;
+
+export function isSefazBlockedMessage(msg: string | null | undefined): boolean {
+  return Boolean(msg && /consumo indevido|bloquead/i.test(msg));
+}
 
 function sefazBloqueioRestanteMin(): number | null {
   if (sefazBlockedUntil == null) return null;
@@ -61,12 +71,52 @@ function sefazBloqueioRestanteMin(): number | null {
 
 /** Restaura o cooldown 656 após restart do processo (usa lastFetchAt + mensagem). */
 function restoreSefazBlockFromState(lastFetchAt: Date | null | undefined, lastMessage: string | null | undefined) {
-  if (!lastFetchAt || !lastMessage) return;
-  if (!/consumo indevido|bloquead/i.test(lastMessage)) return;
+  if (!lastFetchAt || !isSefazBlockedMessage(lastMessage)) return;
   const until = lastFetchAt.getTime() + SEFAZ_BLOQUEIO_MS;
   if (until > Date.now()) {
     sefazBlockedUntil = until;
   }
+}
+
+/**
+ * Decide se ainda dá para consultar a SEFAZ sem risco de renovar o bloqueio.
+ * Após 656 exige o bloqueio oficial + folga; entre consultas normais usa o cooldown com folga.
+ */
+export async function getSefazFetchGate(): Promise<{
+  ok: boolean;
+  waitMin?: number;
+  reason?: 'blocked' | 'cooldown';
+  lastFetchAt?: string | null;
+}> {
+  const state = await prisma.nfeDistribuicaoState.findUnique({ where: { id: 'default' } });
+  if (!state?.lastFetchAt) {
+    return { ok: true, lastFetchAt: null };
+  }
+
+  restoreSefazBlockFromState(state.lastFetchAt, state.lastMessage);
+  const blockedMin = sefazBloqueioRestanteMin();
+  if (blockedMin != null) {
+    // Ainda dentro da janela oficial de 60 min do 656 — NÃO consultar.
+    return {
+      ok: false,
+      waitMin: blockedMin,
+      reason: 'blocked',
+      lastFetchAt: state.lastFetchAt.toISOString(),
+    };
+  }
+
+  const requiredMs = SEFAZ_COOLDOWN_MS; // 65 min: após 656 ou consulta normal (evita renovar bloqueio)
+  const elapsed = Date.now() - state.lastFetchAt.getTime();
+  if (elapsed >= requiredMs) {
+    return { ok: true, lastFetchAt: state.lastFetchAt.toISOString() };
+  }
+
+  return {
+    ok: false,
+    waitMin: Math.max(1, Math.ceil((requiredMs - elapsed) / 60_000)),
+    reason: isSefazBlockedMessage(state.lastMessage) ? 'blocked' : 'cooldown',
+    lastFetchAt: state.lastFetchAt.toISOString(),
+  };
 }
 
 function dataDir(): string {
@@ -1245,11 +1295,25 @@ export class NfeRecebidaService {
       const importDir = process.env.NFE_XML_DIR?.trim();
 
       if (javaEnabled) {
-        const bloqueioMin = sefazBloqueioRestanteMin();
-        if (bloqueioMin != null) {
-          throw new Error(
-            `A SEFAZ bloqueou novas consultas deste CNPJ por consumo indevido (consultas repetidas). Tente novamente em ~${bloqueioMin} min.`
-          );
+        const gate = await getSefazFetchGate();
+        if (!gate.ok) {
+          const msg =
+            gate.reason === 'blocked'
+              ? `A SEFAZ ainda está com consulta pausada deste CNPJ. Próxima tentativa em ~${gate.waitMin} min.`
+              : `Aguardando intervalo mínimo entre consultas SEFAZ (~${gate.waitMin} min) para não renovar o bloqueio.`;
+          // Auto: só pula — não chama a SEFAZ e não “renova” o bloqueio.
+          if (input?.trigger === 'cron') {
+            return {
+              imported: 0,
+              skipped: 0,
+              message: msg,
+              periodFrom: period.from ?? null,
+              periodTo: period.to ?? null,
+              resetNsu,
+              skippedDueToCooldown: true,
+            };
+          }
+          throw new Error(msg);
         }
 
         const startNsu = resetNsu ? '000000000000000' : state.ultimoNsu;
@@ -1329,6 +1393,7 @@ export class NfeRecebidaService {
         periodFrom: period.from ?? null,
         periodTo: period.to ?? null,
         resetNsu,
+        skippedDueToCooldown: false,
       };
     })();
 
@@ -1347,6 +1412,7 @@ export class NfeRecebidaService {
       periodFrom: string | null;
       periodTo: string | null;
       resetNsu: boolean;
+      skippedDueToCooldown?: boolean;
     }>;
   }
 
