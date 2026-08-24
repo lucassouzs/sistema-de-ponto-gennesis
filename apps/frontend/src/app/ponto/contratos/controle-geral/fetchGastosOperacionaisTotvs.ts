@@ -38,7 +38,7 @@ export type GastosOperacionaisTotvsQueryData = {
 
 /** Query key compartilhada entre Controle Geral e o módulo Gastos Operacionais. */
 export const GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY = [
-  'gastos-operacionais-module-totvs-v41-natureza-by-contract'
+  'gastos-operacionais-module-totvs-v42-natureza-by-contract-parceiros-lote5'
 ] as const;
 
 /** Cache em memória + disco (localStorage). Mantém dados ao reabrir o navegador. */

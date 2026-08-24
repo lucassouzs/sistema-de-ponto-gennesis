@@ -19,9 +19,6 @@ import {
   type GastosOperacionaisLocalityOverrideMap
 } from './gastosOperacionaisLocalityOverrides';
 import {
-  shouldShowInGastosNaturezaModal
-} from './gastosOperacionaisNaturezaModal';
-import {
   normalizeGastosOperacionaisNaturezaKey,
   resolveGastosNaturezaModalEntry,
   gastosNaturezaTotalContribution,
@@ -112,6 +109,37 @@ export const EMPTY_GASTOS_OPERACIONAIS_FILTERS: GastosOperacionaisFilters = {
   recebimentoPeriodTo: '',
   contracts: []
 };
+
+/** Primeiro e último dia do mês civil da data informada (YYYY-MM-DD). */
+export function getCurrentCalendarMonthPeriodBounds(now: Date = new Date()): {
+  from: string;
+  to: string;
+} {
+  const year = now.getFullYear();
+  const monthIndex = now.getMonth();
+  const month = String(monthIndex + 1).padStart(2, '0');
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+  return {
+    from: `${year}-${month}-01`,
+    to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`
+  };
+}
+
+/** Filtros iniciais do Controle Geral: emissão e recebimento no mês atual. */
+export function createControleGeralDefaultPeriodFilters(
+  now: Date = new Date()
+): GastosOperacionaisFilters {
+  const { from, to } = getCurrentCalendarMonthPeriodBounds(now);
+  return {
+    ...EMPTY_GASTOS_OPERACIONAIS_FILTERS,
+    periodFrom: from,
+    periodTo: to,
+    emissaoPeriodFrom: from,
+    emissaoPeriodTo: to,
+    recebimentoPeriodFrom: from,
+    recebimentoPeriodTo: to
+  };
+}
 
 export function parseGastosPeriodYmd(ymd: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
@@ -273,10 +301,7 @@ export function getSingleYearFromPeriod(periodFrom: string, periodTo: string): n
 }
 
 function gastosContractsMatch(a: string, b: string): boolean {
-  return (
-    normalizeContractOrderKey(normalizeGastosOperacionaisContractName(a)) ===
-    normalizeContractOrderKey(normalizeGastosOperacionaisContractName(b))
-  );
+  return getGastosContractAggregateKey(a) === getGastosContractAggregateKey(b);
 }
 
 export function aggregateGastosNaturezaForContract(
@@ -289,6 +314,25 @@ export function aggregateGastosNaturezaForContract(
   return aggregateGastosNaturezaRows(filtered, periodFrom, periodTo);
 }
 
+/** Fecha o total do modal no valor da linha (planilha legado / arredondamento). */
+export function appendGastosNaturezaResidualToMatchRowTotal(
+  rows: readonly GastosNaturezaAggRow[],
+  rowTotalAcumulado: number
+): GastosNaturezaAggRow[] {
+  if (!Number.isFinite(rowTotalAcumulado)) return [...rows];
+  const currentTotal = rows.reduce((sum, row) => sum + row.total, 0);
+  const residual = rowTotalAcumulado - currentTotal;
+  if (Math.abs(residual) < 0.01) return [...rows];
+
+  return [
+    ...rows,
+    {
+      natureza: 'Demais gastos (planilha até 2024 / sem natureza TOTVS)',
+      total: residual
+    }
+  ].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+}
+
 export function aggregateGastosNaturezaRows(
   naturezaDetailRows: readonly QueryGastosNaturezaDetailRow[],
   periodFrom: string,
@@ -298,19 +342,22 @@ export function aggregateGastosNaturezaRows(
 
   for (const row of naturezaDetailRows) {
     if (!rowPaymentDateIntersectsGastosPeriod(row, periodFrom, periodTo)) continue;
-    if (!shouldShowInGastosNaturezaModal(row.natureza)) continue;
+    const naturezaLabel = (row.natureza ?? '').trim();
+    if (!naturezaLabel || naturezaLabel === '—' || naturezaLabel === '-') continue;
 
+    // Inclui todas as naturezas que entram no total da linha (já filtradas no TOTVS).
+    // Naturezas fora do mapa DFC aparecem em "Outros" no agrupamento.
     const dfcEntry = resolveGastosNaturezaModalEntry(row.natureza);
     const key = dfcEntry
       ? `${dfcEntry.leafBlockId}:${normalizeGastosOperacionaisNaturezaKey(dfcEntry.canonicalLabel)}`
-      : normalizeGastosOperacionaisNaturezaKey(row.natureza) || '—';
-    const contribution = gastosNaturezaTotalContribution(row.natureza, row.total);
+      : normalizeGastosOperacionaisNaturezaKey(naturezaLabel) || '—';
+    const contribution = gastosNaturezaTotalContribution(naturezaLabel, row.total);
     const current = map.get(key);
     if (current) {
       current.total += contribution;
     } else {
       map.set(key, {
-        natureza: dfcEntry?.canonicalLabel ?? row.natureza,
+        natureza: dfcEntry?.canonicalLabel ?? naturezaLabel,
         total: contribution,
         dfcLeafBlockId: dfcEntry?.leafBlockId
       });

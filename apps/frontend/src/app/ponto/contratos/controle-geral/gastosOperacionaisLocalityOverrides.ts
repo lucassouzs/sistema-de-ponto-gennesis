@@ -151,6 +151,10 @@ function migrateMergedContractLocalityOverrides(
     {
       from: normalizeContractOrderKey('JUSTIÇA FEDERAL DE GOIÁS'),
       to: normalizeContractOrderKey('JUSTIÇA FEDERAL GOIAS')
+    },
+    {
+      from: normalizeContractOrderKey('TJGO RETROFIT PARCEIROS - LOTE 5'),
+      to: normalizeContractOrderKey('TJGO RETROFIT PARCEIROS - LOTES 5')
     }
   ];
 

@@ -2,21 +2,13 @@ import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from './build
 import type { RecebidoMensalByGastosContractEntry } from './recebidoMensalTypes';
 import {
   normalizeContractOrderKey,
-  normalizeGastosOperacionaisContractName
+  normalizeGastosOperacionaisContractName,
+  getGastosContractAggregateKey
 } from './gastosOperacionaisContractOrder';
-import { shouldShowInGastosNaturezaModal } from './gastosOperacionaisNaturezaModal';
 import { gastosNaturezaTotalContribution } from './gastosOperacionaisAllowedNaturezas';
 
 export type ControleGeralFluxoPoint = {
   monthKey: string;
-  label: string;
-  entrada: number;
-  saida: number;
-  valor: number;
-};
-
-export type ControleGeralFluxoDiarioPoint = {
-  dayKey: string;
   label: string;
   entrada: number;
   saida: number;
@@ -45,10 +37,20 @@ export type ControleGeralFluxoBuildInput = {
   recebidoMensal?: readonly RecebidoMensalByGastosContractEntry[];
 };
 
+/** Totais exibidos na linha da tabela — o modal deve espelhar estes valores. */
+export type ControleGeralFluxoRowSnapshot = {
+  gastos: number;
+  recebido: number;
+  lucroLiquido: number;
+};
+
 type MonthlyPeriodoRow = {
   monthKey: string;
   label: string;
   entradaMes: number;
+  /** Soma assinada DFC do mês (despesa negativa / crédito positivo). */
+  gastoSignedMes: number;
+  /** Gasto do mês na mesma convenção da tabela: −gastoSigned. */
   saidaMes: number;
   valorMes: number;
 };
@@ -57,7 +59,7 @@ const EXCLUDE_FIRST_MONTHS = 3;
 const WEIGHT_WINDOW = 6;
 
 function contractLookupKey(contract: string): string {
-  return normalizeContractOrderKey(normalizeGastosOperacionaisContractName(contract));
+  return getGastosContractAggregateKey(contract);
 }
 
 /** Chave alternativa (espelha o backend) para casar nomes de contrato. */
@@ -112,9 +114,11 @@ export function filterGastosDetailRowsForContract(
 ): QueryGastosDetailRow[] {
   const monthFilter = filters?.months?.length ? new Set(filters.months) : null;
   const yearFilter = filters?.years?.length ? new Set(filters.years) : null;
+  // Mesma chave da agregação da tabela (aliases + catálogo).
+  const targetKey = contractLookupKey(contract);
 
   return detailRows.filter((row) => {
-    if (!contractsMatch(row.contract, contract)) return false;
+    if (contractLookupKey(row.contract) !== targetKey) return false;
     if (monthFilter && !monthFilter.has(row.month)) return false;
     if (yearFilter && !yearFilter.has(row.year)) return false;
     return true;
@@ -254,7 +258,6 @@ export function aggregateGastosNaturezaMonthlyTotals(
   const porMes = new Array(12).fill(0);
   for (const row of rows) {
     if (row.year !== year || row.month < 1 || row.month > 12) continue;
-    if (!shouldShowInGastosNaturezaModal(row.natureza)) continue;
     porMes[row.month - 1] += gastosNaturezaTotalContribution(row.natureza, row.total);
   }
   return porMes;
@@ -268,7 +271,6 @@ export function aggregateGastosNaturezaYearlyTotals(
   const porAno: Record<number, number> = {};
   for (const row of rows) {
     if (!allowed.has(row.year)) continue;
-    if (!shouldShowInGastosNaturezaModal(row.natureza)) continue;
     porAno[row.year] =
       (porAno[row.year] ?? 0) + gastosNaturezaTotalContribution(row.natureza, row.total);
   }
@@ -291,32 +293,106 @@ export function filterRecebidoMensalForContract(
   });
 }
 
+/** Evita somar o mesmo mês mais de uma vez (aliases / abas NF's — espelha Math.max da linha). */
+export function mergeRecebidoMensalByMonth(
+  entries: readonly RecebidoMensalByGastosContractEntry[]
+): RecebidoMensalByGastosContractEntry[] {
+  const map = new Map<string, RecebidoMensalByGastosContractEntry>();
+
+  for (const entry of entries) {
+    const monthKey = `${entry.year}-${String(entry.month).padStart(2, '0')}`;
+    const existing = map.get(monthKey);
+    if (!existing) {
+      map.set(monthKey, { ...entry });
+      continue;
+    }
+    existing.recebido = Math.max(existing.recebido, entry.recebido);
+  }
+
+  return Array.from(map.values()).sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    if (a.month !== b.month) return a.month - b.month;
+    return a.contract.localeCompare(b.contract, 'pt-BR');
+  });
+}
+
+/** Casamento exato por chave canônica — evita duplicar recebidos de aliases na série mensal. */
+export function filterRecebidoMensalForContractExact(
+  entries: readonly RecebidoMensalByGastosContractEntry[],
+  contract: string,
+  filters?: { months?: number[]; years?: number[] }
+): RecebidoMensalByGastosContractEntry[] {
+  const targetKey = contractLookupKey(contract);
+  const monthFilter = filters?.months?.length ? new Set(filters.months) : null;
+  const yearFilter = filters?.years?.length ? new Set(filters.years) : null;
+
+  return mergeRecebidoMensalByMonth(
+    entries.filter((entry) => {
+      if (contractLookupKey(entry.contract) !== targetKey) return false;
+      if (monthFilter && !monthFilter.has(entry.month)) return false;
+      if (yearFilter && !yearFilter.has(entry.year)) return false;
+      return true;
+    })
+  );
+}
+
+/** Ajusta a série mensal para fechar no total da linha (mesma regra agregada da tabela). */
+export function alignRecebidoMensalSeriesToTotal(
+  entries: readonly RecebidoMensalByGastosContractEntry[],
+  targetTotal: number
+): RecebidoMensalByGastosContractEntry[] {
+  if (!entries.length || !Number.isFinite(targetTotal) || targetTotal <= 0) {
+    return [...entries];
+  }
+
+  const currentTotal = entries.reduce((sum, entry) => sum + entry.recebido, 0);
+  if (!Number.isFinite(currentTotal) || currentTotal <= 0) {
+    return [...entries];
+  }
+  if (Math.abs(currentTotal - targetTotal) < 0.01) {
+    return [...entries];
+  }
+
+  const factor = targetTotal / currentTotal;
+  return entries.map((entry) => ({
+    ...entry,
+    recebido: entry.recebido * factor
+  }));
+}
+
 function buildMonthlyPeriodoRows(input: ControleGeralFluxoBuildInput): MonthlyPeriodoRow[] {
-  const map = new Map<string, { entrada: number; saida: number }>();
+  const map = new Map<string, { entrada: number; gastoSigned: number }>();
 
   for (const row of input.gastosRows) {
     const key = monthKeyFromRow(row);
-    const cur = map.get(key) ?? { entrada: 0, saida: 0 };
-    cur.saida += Math.abs(row.total);
+    const cur = map.get(key) ?? { entrada: 0, gastoSigned: 0 };
+    // Não usar Math.abs por linha: créditos DFC reduziriam o total da tabela
+    // (Math.abs(soma)) mas inflariam o gráfico (soma(Math.abs)).
+    cur.gastoSigned += row.total;
     map.set(key, cur);
   }
 
   for (const entry of input.recebidoMensal ?? []) {
     const key = monthKeyFromRecebido(entry);
-    const cur = map.get(key) ?? { entrada: 0, saida: 0 };
+    const cur = map.get(key) ?? { entrada: 0, gastoSigned: 0 };
     cur.entrada += entry.recebido;
     map.set(key, cur);
   }
 
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([monthKey, totals]) => ({
-      monthKey,
-      label: formatMonthChartLabel(monthKey),
-      entradaMes: totals.entrada,
-      saidaMes: totals.saida,
-      valorMes: totals.entrada - totals.saida
-    }));
+    .map(([monthKey, totals]) => {
+      // Despesa negativa → saida positiva (mesmo sentido da coluna Gastos).
+      const saidaMes = -totals.gastoSigned;
+      return {
+        monthKey,
+        label: formatMonthChartLabel(monthKey),
+        entradaMes: totals.entrada,
+        gastoSignedMes: totals.gastoSigned,
+        saidaMes,
+        valorMes: totals.entrada - Math.abs(totals.gastoSigned)
+      };
+    });
 }
 
 export function buildControleGeralFluxoMensalPeriodoSeries(
@@ -337,42 +413,19 @@ export function buildControleGeralFluxoMensalSeries(
   const monthly = buildMonthlyPeriodoRows(input);
 
   let entradaAcumulada = 0;
-  let saidaAcumulada = 0;
-  let valorAcumulado = 0;
+  let gastoSignedAcumulado = 0;
 
   return monthly.map((row) => {
     entradaAcumulada += row.entradaMes;
-    saidaAcumulada += row.saidaMes;
-    valorAcumulado += row.valorMes;
+    gastoSignedAcumulado += row.gastoSignedMes;
+    // Espelha a linha: Gastos = |soma assinada|; Lucro = Recebido − |Gastos|.
+    const saidaAcumulada = Math.abs(gastoSignedAcumulado);
     return {
       monthKey: row.monthKey,
       label: row.label,
       entrada: entradaAcumulada,
       saida: saidaAcumulada,
-      valor: valorAcumulado
-    };
-  });
-}
-
-export function buildControleGeralFluxoDiarioSeries(
-  input: ControleGeralFluxoBuildInput
-): ControleGeralFluxoDiarioPoint[] {
-  const monthly = buildMonthlyPeriodoRows(input);
-
-  let entradaAcumulada = 0;
-  let saidaAcumulada = 0;
-  let valorAcumulado = 0;
-
-  return monthly.map((row) => {
-    entradaAcumulada += row.entradaMes;
-    saidaAcumulada += row.saidaMes;
-    valorAcumulado += row.valorMes;
-    return {
-      dayKey: `${row.monthKey}-01`,
-      label: row.label,
-      entrada: entradaAcumulada,
-      saida: saidaAcumulada,
-      valor: valorAcumulado
+      valor: entradaAcumulada - saidaAcumulada
     };
   });
 }
@@ -524,15 +577,30 @@ export function buildControleGeralFluxoProjecaoAnualSeries(
 
 export function summarizeControleGeralGastosFluxo(
   input: ControleGeralFluxoBuildInput,
-  nfsTotals?: { faturamento: number; recebido: number }
+  nfsTotals?: { faturamento: number; recebido: number },
+  rowSnapshot?: ControleGeralFluxoRowSnapshot
 ) {
-  const totalGastos = input.gastosRows.reduce((sum, row) => sum + Math.abs(row.total), 0);
+  if (rowSnapshot) {
+    return {
+      totalSaida: rowSnapshot.gastos,
+      totalEntrada: rowSnapshot.recebido,
+      totalValor: rowSnapshot.lucroLiquido
+    };
+  }
+
+  // Mesma regra da coluna Gastos: |soma assinada|, não soma de |cada linha|.
+  const signedGastos = input.gastosRows.reduce((sum, row) => sum + row.total, 0);
+  const totalGastos = Math.abs(signedGastos);
   const totalRecebidoSerie = (input.recebidoMensal ?? []).reduce(
     (sum, entry) => sum + entry.recebido,
     0
   );
   const totalEntrada =
-    totalRecebidoSerie > 0 ? totalRecebidoSerie : (nfsTotals?.recebido ?? nfsTotals?.faturamento ?? 0);
+    nfsTotals != null && Number.isFinite(nfsTotals.recebido)
+      ? nfsTotals.recebido
+      : totalRecebidoSerie > 0
+        ? totalRecebidoSerie
+        : (nfsTotals?.faturamento ?? 0);
 
   return {
     totalSaida: totalGastos,

@@ -7,7 +7,7 @@ import type { QueryGastosDetailRow } from './buildQueryGastosRows';
 import type { NfsContractTotals } from './buildFaturamentoByContractLookup';
 import type { RecebidoMensalByGastosContractEntry } from './recebidoMensalTypes';
 import { ControleGeralGastosFluxoCharts } from './ControleGeralGastosFluxoCharts';
-import { summarizeControleGeralGastosFluxo } from './controleGeralGastosFluxo';
+import { summarizeControleGeralGastosFluxo, type ControleGeralFluxoRowSnapshot } from './controleGeralGastosFluxo';
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', {
@@ -67,6 +67,8 @@ type ControleGeralFluxoDetalheModalProps = {
   rows: QueryGastosDetailRow[];
   recebidoMensal?: RecebidoMensalByGastosContractEntry[];
   nfsTotals?: NfsContractTotals;
+  /** Totais da linha selecionada na tabela (prioridade sobre recálculo da série). */
+  rowSnapshot?: ControleGeralFluxoRowSnapshot;
   titleSuffix?: string;
   loadingRecebido?: boolean;
 };
@@ -78,6 +80,7 @@ export function ControleGeralFluxoDetalheModal({
   rows,
   recebidoMensal = [],
   nfsTotals,
+  rowSnapshot,
   titleSuffix,
   loadingRecebido = false
 }: ControleGeralFluxoDetalheModalProps) {
@@ -87,9 +90,17 @@ export function ControleGeralFluxoDetalheModal({
   );
 
   const stats = useMemo(
-    () => summarizeControleGeralGastosFluxo(fluxoInput, nfsTotals),
-    [fluxoInput, nfsTotals]
+    () => summarizeControleGeralGastosFluxo(fluxoInput, nfsTotals, rowSnapshot),
+    [fluxoInput, nfsTotals, rowSnapshot]
   );
+
+  const gastosMonthCount = useMemo(() => {
+    const keys = new Set<string>();
+    for (const row of rows) {
+      keys.add(`${row.year}-${String(row.month).padStart(2, '0')}`);
+    }
+    return keys.size;
+  }, [rows]);
 
   if (!isOpen) return null;
 
@@ -115,7 +126,7 @@ export function ControleGeralFluxoDetalheModal({
       ) : (
         <>
           <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-            {rows.length} mês(es) de apuração com gastos · {recebidoMensal.length} mês(es) com
+            {gastosMonthCount} mês(es) de apuração com gastos · {recebidoMensal.length} mês(es) com
             recebimentos na coluna Recebido das NF&apos;s.
           </p>
           <ControleGeralGastosFluxoCharts input={fluxoInput} titleSuffix={titleSuffix} />

@@ -16,13 +16,11 @@ import {
   formatExtratoFluxoCurrency
 } from '../../financeiro/analise-extrato/extratoFluxoDiario';
 import {
-  buildControleGeralFluxoDiarioSeries,
   buildControleGeralFluxoMensalPeriodoSeries,
   buildControleGeralFluxoMensalSeries,
   buildControleGeralFluxoProjecaoAnualSeries,
   formatControleGeralFluxoMensalTooltipLabel,
   type ControleGeralFluxoBuildInput,
-  type ControleGeralFluxoDiarioPoint,
   type ControleGeralFluxoPoint
 } from './controleGeralGastosFluxo';
 
@@ -31,13 +29,6 @@ function seriesLabel(mode: 'acumulado' | 'periodo', kind: 'entrada' | 'saida' | 
   if (kind === 'entrada') return `Recebidos (${suffix})`;
   if (kind === 'saida') return `Gastos (${suffix})`;
   return `Lucro líquido (${suffix})`;
-}
-
-function fluxLabel(kind: 'entrada' | 'saida' | 'valor', acumulado = false): string {
-  const suffix = acumulado ? ' (acumulado)' : ' (mês)';
-  if (kind === 'entrada') return `Recebidos${suffix}`;
-  if (kind === 'saida') return `Gastos${suffix}`;
-  return `Lucro líquido${suffix}`;
 }
 
 function GastosFluxoMensalChart({
@@ -159,120 +150,6 @@ function GastosFluxoMensalChart({
               stroke="#2563eb"
               strokeWidth={2}
               dot={series.length <= 24}
-              activeDot={{ r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function GastosFluxoDiarioChart({
-  input,
-  title = 'Evolução diária',
-  titleSuffix
-}: {
-  input: ControleGeralFluxoBuildInput;
-  title?: string;
-  titleSuffix?: string;
-}) {
-  const suffix = titleSuffix ? ` — ${titleSuffix}` : '';
-  const series = useMemo(() => buildControleGeralFluxoDiarioSeries(input), [input]);
-
-  if (series.length === 0) {
-    return (
-      <div className="mb-4 rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-4 py-6 text-center dark:border-gray-700 dark:bg-gray-900/30">
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Sem dados no período para exibir o gráfico.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-4 rounded-lg border border-gray-200 bg-white px-3 py-4 dark:border-gray-700 dark:bg-gray-900/20 sm:px-4">
-      <div className="mb-3">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-          {title}
-          {suffix}
-        </h4>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-          Recebidos, gastos e lucro líquido acumulados por mês de apuração.
-        </p>
-      </div>
-
-      <div className="h-[240px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={series as ControleGeralFluxoDiarioPoint[]}
-            margin={{ top: 8, right: 12, left: 4, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-            <XAxis
-              dataKey="label"
-              tick={{ fontSize: 10, fill: 'currentColor' }}
-              className="text-gray-500 dark:text-gray-400"
-              interval="preserveStartEnd"
-              minTickGap={24}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: 'currentColor' }}
-              className="text-gray-500 dark:text-gray-400"
-              tickFormatter={formatExtratoFluxoAxisValue}
-              width={52}
-            />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                const kind = name === 'entrada' ? 'entrada' : name === 'saida' ? 'saida' : 'valor';
-                return [formatExtratoFluxoCurrency(value), fluxLabel(kind, true)];
-              }}
-              labelFormatter={(_, payload) => {
-                const dayKey = payload?.[0]?.payload?.dayKey as string | undefined;
-                if (!dayKey) return '';
-                return formatControleGeralFluxoMensalTooltipLabel(dayKey.slice(0, 7));
-              }}
-              contentStyle={{
-                borderRadius: 8,
-                fontSize: 12,
-                border: '1px solid #e5e7eb',
-                backgroundColor: 'rgba(255,255,255,0.96)'
-              }}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: 11 }}
-              formatter={(value) =>
-                fluxLabel(
-                  value === 'entrada' ? 'entrada' : value === 'saida' ? 'saida' : 'valor',
-                  true
-                )
-              }
-            />
-            <Line
-              type="monotone"
-              dataKey="entrada"
-              name="entrada"
-              stroke="#16a34a"
-              strokeWidth={2}
-              dot={series.length <= 31}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="saida"
-              name="saida"
-              stroke="#dc2626"
-              strokeWidth={2}
-              dot={series.length <= 31}
-              activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="valor"
-              name="valor"
-              stroke="#2563eb"
-              strokeWidth={2}
-              dot={series.length <= 31}
               activeDot={{ r: 4 }}
             />
           </LineChart>
@@ -502,7 +379,6 @@ export function ControleGeralGastosFluxoCharts({
     <>
       <GastosFluxoMensalChart input={input} titleSuffix={titleSuffix} />
       <GastosFluxoMensalChart input={input} mode="periodo" titleSuffix={titleSuffix} />
-      <GastosFluxoDiarioChart input={input} titleSuffix={titleSuffix} />
       <GastosFluxoProjecaoAnualChart input={input} titleSuffix={titleSuffix} />
     </>
   );
