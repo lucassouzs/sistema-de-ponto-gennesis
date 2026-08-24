@@ -59,6 +59,16 @@ function sefazBloqueioRestanteMin(): number | null {
   return Math.max(1, Math.ceil(restante / 60_000));
 }
 
+/** Restaura o cooldown 656 após restart do processo (usa lastFetchAt + mensagem). */
+function restoreSefazBlockFromState(lastFetchAt: Date | null | undefined, lastMessage: string | null | undefined) {
+  if (!lastFetchAt || !lastMessage) return;
+  if (!/consumo indevido|bloquead/i.test(lastMessage)) return;
+  const until = lastFetchAt.getTime() + SEFAZ_BLOQUEIO_MS;
+  if (until > Date.now()) {
+    sefazBlockedUntil = until;
+  }
+}
+
 function dataDir(): string {
   const configured = process.env.NFE_DATA_DIR?.trim();
   if (configured) return path.resolve(configured);
@@ -1218,6 +1228,7 @@ export class NfeRecebidaService {
     const run = (async () => {
       const period = normalizePeriod(input);
       const state = await getOrCreateState();
+      restoreSefazBlockFromState(state.lastFetchAt, state.lastMessage);
       const outDir = ensureDataDir();
       let imported = 0;
       let skipped = 0;

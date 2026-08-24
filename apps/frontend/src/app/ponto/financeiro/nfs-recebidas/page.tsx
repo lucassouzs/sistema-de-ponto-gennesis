@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Download,
-  DownloadCloud,
   FileText,
   Filter,
   Info,
@@ -263,21 +262,6 @@ const ACTIONS_COL_TH =
 const ACTIONS_COL_TD =
   'w-[5%] min-w-[3.75rem] whitespace-nowrap px-2 py-3 text-center align-middle sm:px-3';
 
-function todayYmd() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function yearPeriodForFetch() {
-  return {
-    periodFrom: `${NFE_YEAR}-01-01`,
-    periodTo: todayYmd()
-  };
-}
-
 function statusBuscaVisivel(
   msg: string | null | undefined,
   totalAno: number,
@@ -302,17 +286,16 @@ function statusBuscaVisivel(
   const nsuPart = nsuMatch ? ` Último NSU: ${nsuMatch[1]}.` : '';
   const novasTxt =
     novas == null
-      ? 'Última consulta à SEFAZ concluída.'
+      ? 'Última atualização automática concluída.'
       : novas === 1
-        ? '1 nota nova nesta consulta.'
-        : `${novas} nota(s) nova(s) nesta consulta.`;
+        ? '1 nota nova na última atualização automática.'
+        : `${novas} nota(s) nova(s) na última atualização automática.`;
 
   return `${novasTxt}${nsuPart} ${totais}`;
 }
 
 export default function NfsRecebidasPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -326,35 +309,6 @@ export default function NfsRecebidasPage() {
   const [detailNfe, setDetailNfe] = useState<NfeItem | null>(null);
   const [listaScope, setListaScope] = useState<'ano' | 'outros'>('ano');
   const [draftListaScope, setDraftListaScope] = useState<'ano' | 'outros'>('ano');
-  const [buscarProgress, setBuscarProgress] = useState<number | null>(null);
-  const buscarProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stopBuscarProgressTimer = () => {
-    if (buscarProgressTimerRef.current) {
-      clearInterval(buscarProgressTimerRef.current);
-      buscarProgressTimerRef.current = null;
-    }
-  };
-
-  const startBuscarProgress = () => {
-    stopBuscarProgressTimer();
-    setBuscarProgress(4);
-    buscarProgressTimerRef.current = setInterval(() => {
-      setBuscarProgress((prev) => {
-        if (prev == null) return prev;
-        const next = prev + Math.max(0.35, (92 - prev) * 0.045);
-        return Math.min(92, next);
-      });
-    }, 400);
-  };
-
-  const finishBuscarProgress = () => {
-    stopBuscarProgressTimer();
-    setBuscarProgress(100);
-    window.setTimeout(() => setBuscarProgress(null), 450);
-  };
-
-  useEffect(() => () => stopBuscarProgressTimer(), []);
 
   const { data: nfeDetalhe, isLoading: loadingDetalhe } = useQuery({
     queryKey: ['nfe-recebida-detalhe', detailNfe?.id],
@@ -473,40 +427,10 @@ export default function NfsRecebidasPage() {
       });
       return res.data?.data as NfeListResponse;
     },
+    // Notas entram via busca automática no backend; atualiza a lista sem botão manual.
+    refetchInterval: 2 * 60_000,
+    refetchOnWindowFocus: true,
   });
-
-  const buscarMutation = useMutation({
-    mutationFn: async () => {
-      const period = yearPeriodForFetch();
-      const res = await api.post('/nfe-recebidas/buscar', period, { timeout: 600_000 });
-      return res.data?.data as { imported: number; message: string };
-    },
-    onSuccess: (result) => {
-      finishBuscarProgress();
-      toast.success(result?.message || 'Busca concluída');
-      setPage(1);
-      void queryClient.invalidateQueries({ queryKey: ['nfe-recebidas'] });
-      void queryClient.invalidateQueries({ queryKey: ['nfe-recebidas-emitentes'] });
-    },
-    onError: (err: {
-      response?: { data?: { error?: string; message?: string } };
-      message?: string;
-    }) => {
-      stopBuscarProgressTimer();
-      setBuscarProgress(null);
-      toast.error(
-        err?.response?.data?.error ||
-          err?.response?.data?.message ||
-          err?.message ||
-          'Falha ao buscar notas'
-      );
-    }
-  });
-
-  const handleBuscarNotas = () => {
-    startBuscarProgress();
-    buscarMutation.mutate();
-  };
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -568,44 +492,6 @@ export default function NfsRecebidasPage() {
               Consulte e acompanhe as notas fiscais da empresa.
             </p>
           </div>
-
-          <Modal
-            isOpen={buscarProgress != null}
-            onClose={() => {
-              /* bloqueado enquanto busca */
-            }}
-            title="Buscando notas"
-            size="sm"
-            confirmBeforeClose={false}
-            closeOnOverlayClick={false}
-            closeOnEscape={false}
-            showCloseButton={false}
-          >
-            <div className="space-y-5 py-4">
-              <p className="text-center text-sm font-medium text-gray-800 dark:text-gray-200">
-                Consultando a SEFAZ por novas notas…
-              </p>
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
-                  <span>Progresso</span>
-                  <span className="font-semibold tabular-nums text-gray-800 dark:text-gray-100">
-                    {Math.round(buscarProgress ?? 0)}%
-                  </span>
-                </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-                  <div
-                    className="h-full rounded-full bg-red-600 transition-all duration-300 ease-out"
-                    style={{
-                      width: `${Math.min(100, buscarProgress ?? 0)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-              <p className="text-center text-xs text-gray-500 dark:text-gray-400">
-                Aguarde, não feche esta página. A consulta pode levar alguns minutos.
-              </p>
-            </div>
-          </Modal>
 
           <Modal
             isOpen={filtersOpen}
@@ -783,18 +669,6 @@ export default function NfsRecebidasPage() {
                       <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                     ) : null}
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={handleBuscarNotas}
-                    disabled={buscarMutation.isPending}
-                    className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                  >
-                    <DownloadCloud
-                      className={`h-4 w-4 shrink-0 ${buscarMutation.isPending ? 'animate-pulse' : ''}`}
-                    />
-                    <span>{buscarMutation.isPending ? 'Buscando…' : 'Buscar notas'}</span>
-                  </button>
                 </div>
               </div>
             </CardHeader>
@@ -817,7 +691,7 @@ export default function NfsRecebidasPage() {
                       ? 'Ajuste a busca ou o período e tente novamente.'
                       : viewingOutros
                         ? 'Aqui aparecem as notas que a SEFAZ enviou com emissão fora do ano atual.'
-                        : 'Clique em Buscar notas para consultar a SEFAZ.'
+                        : 'As notas novas entram automaticamente a cada hora, quando a SEFAZ permitir.'
                   }
                 />
               ) : (

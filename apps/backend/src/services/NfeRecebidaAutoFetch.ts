@@ -10,6 +10,14 @@ import { prisma } from '../lib/prisma';
 
 const service = new NfeRecebidaService();
 let started = false;
+let fetchInFlight = false;
+
+/** Intervalo mínimo entre consultas SEFAZ (padrão ~55 min — abaixo de 1h para alinhar ao cron horário). */
+function minIntervalMs(): number {
+  const raw = Number(process.env.NFE_AUTO_FETCH_MIN_INTERVAL_MS?.trim());
+  if (Number.isFinite(raw) && raw >= 60_000) return raw;
+  return 55 * 60 * 1000;
+}
 
 function envBool(key: string, fallback = false): boolean {
   const v = process.env[key]?.trim().toLowerCase();
@@ -32,37 +40,57 @@ function nfeWorkerJarReady(): boolean {
   ].some((p) => fs.existsSync(p));
 }
 
-function todayInSaoPaulo(): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.TZ || 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-async function alreadyFetchedToday(): Promise<boolean> {
+/**
+ * Só consulta a SEFAZ se a última busca (sucesso ou bloqueio) já passou do intervalo mínimo.
+ * Evita cStat 656 por consultas repetidas no mesmo CNPJ.
+ */
+export async function canFetchSefazNow(): Promise<{
+  ok: boolean;
+  waitMin?: number;
+  lastFetchAt?: string | null;
+}> {
   const state = await prisma.nfeDistribuicaoState.findUnique({ where: { id: 'default' } });
-  if (!state?.lastFetchAt) return false;
-  const lastDay = new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.TZ || 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(state.lastFetchAt);
-  return lastDay === todayInSaoPaulo();
+  if (!state?.lastFetchAt) {
+    return { ok: true, lastFetchAt: null };
+  }
+  const elapsed = Date.now() - state.lastFetchAt.getTime();
+  const minMs = minIntervalMs();
+  if (elapsed >= minMs) {
+    return { ok: true, lastFetchAt: state.lastFetchAt.toISOString() };
+  }
+  const waitMin = Math.max(1, Math.ceil((minMs - elapsed) / 60_000));
+  return {
+    ok: false,
+    waitMin,
+    lastFetchAt: state.lastFetchAt.toISOString(),
+  };
 }
 
 /**
- * Busca automática diária (ano configurado → hoje).
+ * Busca automática horário (respeitando intervalo mínimo da SEFAZ).
  * Liga com NFE_AUTO_FETCH_ENABLED=1 (padrão: ligado se NFE_JAVA_ENABLED=1).
+ * Cron padrão: a cada hora (minuto 5).
  */
 export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron') {
+  if (fetchInFlight) {
+    console.log(`[nfe-auto] ignorado (${trigger}) — já há busca em andamento`);
+    return null;
+  }
+
   if (javaEnabled() && !nfeJavaAvailable()) {
     console.error('[nfe-auto] Java ainda não está disponível — busca adiada');
     return null;
   }
 
+  const gate = await canFetchSefazNow();
+  if (!gate.ok) {
+    console.log(
+      `[nfe-auto] ignorado (${trigger}) — aguardando intervalo SEFAZ (~${gate.waitMin} min). Última: ${gate.lastFetchAt}`
+    );
+    return null;
+  }
+
+  fetchInFlight = true;
   const period = nfeAutoFetchPeriod();
   console.log(
     `[nfe-auto] início (${trigger}) período ${period.periodFrom} → ${period.periodTo}`
@@ -78,6 +106,8 @@ export async function runNfeAutoFetch(trigger: 'cron' | 'boot' | 'http' = 'cron'
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[nfe-auto] falha: ${msg}`);
     return null;
+  } finally {
+    fetchInFlight = false;
   }
 }
 
@@ -103,7 +133,8 @@ export function startNfeAutoFetchScheduler(): void {
     return;
   }
 
-  const expression = process.env.NFE_AUTO_FETCH_CRON?.trim() || '0 6 * * *';
+  // A cada hora, no minuto 5 — alinhado ao limite de ~1h da SEFAZ após consulta sem novidade / 656.
+  const expression = process.env.NFE_AUTO_FETCH_CRON?.trim() || '5 * * * *';
   if (!cron.validate(expression)) {
     console.error(`[nfe-auto] cron inválido: ${expression}`);
     return;
@@ -111,6 +142,7 @@ export function startNfeAutoFetchScheduler(): void {
 
   started = true;
   const tz = process.env.TZ || 'America/Sao_Paulo';
+  const intervalMin = Math.round(minIntervalMs() / 60_000);
 
   cron.schedule(
     expression,
@@ -122,7 +154,9 @@ export function startNfeAutoFetchScheduler(): void {
     { timezone: tz }
   );
 
-  console.log(`[nfe-auto] agendado: "${expression}" (${tz}) — ano ${nfeAutoFetchPeriod().periodFrom.slice(0, 4)}`);
+  console.log(
+    `[nfe-auto] agendado: "${expression}" (${tz}) — intervalo mín. ${intervalMin} min — ano ${nfeAutoFetchPeriod().periodFrom.slice(0, 4)}`
+  );
 
   const defaultOnBoot =
     !!process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production';
@@ -130,18 +164,10 @@ export function startNfeAutoFetchScheduler(): void {
     const delayMs = Number(process.env.NFE_AUTO_FETCH_BOOT_DELAY_MS || 90_000);
     const wait = Number.isFinite(delayMs) ? delayMs : 90_000;
     setTimeout(() => {
-      void (async () => {
-        try {
-          if (await alreadyFetchedToday()) {
-            console.log('[nfe-auto] boot ignorado — já houve busca hoje');
-            return;
-          }
-          await runNfeAutoFetch('boot');
-        } catch {
-          /* já logado */
-        }
-      })();
+      void runNfeAutoFetch('boot');
     }, wait);
-    console.log(`[nfe-auto] também rodará ~${Math.round(wait / 1000)}s após o boot se ainda não buscou hoje`);
+    console.log(
+      `[nfe-auto] também tenta ~${Math.round(wait / 1000)}s após o boot se o intervalo SEFAZ permitir`
+    );
   }
 }
