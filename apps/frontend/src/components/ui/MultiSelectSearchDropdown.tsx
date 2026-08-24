@@ -380,7 +380,7 @@ function MenuPanel({
   return (
     <div
       id={panelId}
-      ref={panelRef}
+      ref={panelRef as React.RefObject<HTMLDivElement>}
       role="listbox"
       className={`flex flex-col overflow-hidden ${SINGLE_SELECT_PANEL_CLS}`}
       onClick={(e) => e.stopPropagation()}
@@ -393,7 +393,7 @@ function MenuPanel({
             aria-hidden
           />
           <input
-            ref={searchInputRef}
+            ref={searchInputRef as React.RefObject<HTMLInputElement>}
             type="text"
             placeholder={searchPlaceholder}
             value={search}
@@ -446,7 +446,7 @@ function MenuPanel({
       ) : null}
 
       <div
-        ref={listRef}
+        ref={listRef as React.RefObject<HTMLDivElement>}
         className="overflow-y-auto overflow-x-hidden px-1.5 py-1"
         style={{ maxHeight: listMaxHeight }}
       >

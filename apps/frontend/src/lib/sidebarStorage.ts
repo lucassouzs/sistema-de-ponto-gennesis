@@ -7,6 +7,8 @@ export const SIDEBAR_WIDTH_EXPANDED = '23rem';
 export const SIDEBAR_WIDTH_COLLAPSED = '5rem';
 
 export const SIDEBAR_TRANSITION_CLASS = 'duration-500 ease-in-out';
+/** ms — alinhado a duration-500 (borda do painel só some após fechar) */
+export const SIDEBAR_TRANSITION_MS = 500;
 
 /** Atalhos do rodapé do rail — recolhem o painel tier 2 automaticamente */
 export const RAIL_FOOTER_ROUTES = ['/ponto/agenda', '/ponto/conversas', '/ponto/kanban', '/ponto/drive', '/ponto/flow'] as const;

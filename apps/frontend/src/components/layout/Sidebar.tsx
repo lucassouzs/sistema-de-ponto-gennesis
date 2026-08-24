@@ -82,6 +82,7 @@ import {
   readSelectedModuleId,
   readSidebarCollapsed,
   SIDEBAR_TRANSITION_CLASS,
+  SIDEBAR_TRANSITION_MS,
   writeSelectedModuleId,
   writeSidebarCollapsed,
   isHomeRoute,
@@ -116,7 +117,15 @@ interface SidebarProps {
   onOpenChangePassword?: () => void;
 }
 
-function SidebarRailTooltip({ label, children }: { label: string; children: React.ReactNode }) {
+function SidebarRailTooltip({
+  label,
+  children,
+  enterIndex,
+}: {
+  label: string;
+  children: React.ReactNode;
+  enterIndex?: number;
+}) {
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -173,7 +182,12 @@ function SidebarRailTooltip({ label, children }: { label: string; children: Reac
     <>
       <div
         ref={triggerRef}
-        className="relative flex justify-center"
+        className="sidebar-rail-enter-item relative flex justify-center"
+        style={
+          enterIndex != null
+            ? ({ ['--rail-i' as string]: enterIndex } as React.CSSProperties)
+            : undefined
+        }
         onPointerEnter={showTooltip}
         onPointerLeave={hideIfNotHovering}
         onFocusCapture={(event) => {
@@ -1599,11 +1613,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
   /** Anima entrada só ao abrir o painel ou trocar de módulo — nunca ao navegar entre páginas. */
   const [navEnterClass, setNavEnterClass] = useState(false);
+  const [railEnterClass, setRailEnterClass] = useState(false);
+  /** Borda do painel: permanece durante o fechamento e some só no fim da animação. */
+  const [tier2BorderVisible, setTier2BorderVisible] = useState(false);
   const [railPop, setRailPop] = useState<{ id: string; n: number }>({ id: '', n: 0 });
   const [navPopHref, setNavPopHref] = useState('');
   const railPopRafRef = useRef<number | null>(null);
   const navPopRafRef = useRef<number | null>(null);
   const navEnterTimeoutRef = useRef<number | null>(null);
+  const railEnterTimeoutRef = useRef<number | null>(null);
+  const railEnterPlayedRef = useRef(false);
+  const tier2BorderHideTimeoutRef = useRef<number | null>(null);
 
   const bumpRailPop = useCallback((id: string) => {
     if (railPopRafRef.current != null) cancelAnimationFrame(railPopRafRef.current);
@@ -1657,6 +1677,61 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
       }
     };
   }, [displayedModuleId, tier2Visible, replayNavEnter]);
+
+  /** Rail: stagger uma vez quando os módulos carregam (entrada no sistema). */
+  useEffect(() => {
+    if (!sidebarHydrated) return;
+    if (isLoading && menuItems.length === 0) return;
+    if (railEnterPlayedRef.current) return;
+    if (menuItems.length === 0 && !canAccessCollaborationTools) return;
+
+    railEnterPlayedRef.current = true;
+    setRailEnterClass(false);
+    const raf = requestAnimationFrame(() => setRailEnterClass(true));
+    if (railEnterTimeoutRef.current != null) window.clearTimeout(railEnterTimeoutRef.current);
+    railEnterTimeoutRef.current = window.setTimeout(() => {
+      setRailEnterClass(false);
+      railEnterTimeoutRef.current = null;
+    }, 1000);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (railEnterTimeoutRef.current != null) {
+        window.clearTimeout(railEnterTimeoutRef.current);
+        railEnterTimeoutRef.current = null;
+      }
+    };
+  }, [sidebarHydrated, isLoading, menuItems.length, canAccessCollaborationTools]);
+
+  useLayoutEffect(() => {
+    if (tier2BorderHideTimeoutRef.current != null) {
+      window.clearTimeout(tier2BorderHideTimeoutRef.current);
+      tier2BorderHideTimeoutRef.current = null;
+    }
+
+    if (tier2Visible) {
+      setTier2BorderVisible(true);
+      return;
+    }
+
+    // Mantém a borda enquanto a largura anima; só remove após o duration-500.
+    if (!sidebarHydrated) {
+      setTier2BorderVisible(false);
+      return;
+    }
+
+    tier2BorderHideTimeoutRef.current = window.setTimeout(() => {
+      setTier2BorderVisible(false);
+      tier2BorderHideTimeoutRef.current = null;
+    }, SIDEBAR_TRANSITION_MS);
+
+    return () => {
+      if (tier2BorderHideTimeoutRef.current != null) {
+        window.clearTimeout(tier2BorderHideTimeoutRef.current);
+        tier2BorderHideTimeoutRef.current = null;
+      }
+    };
+  }, [tier2Visible, sidebarHydrated]);
 
   /** Rail: painel aberto → módulo exibido; recolhido → rota ativa; na home recolhida → nenhum (só logo) */
   const railModuleActiveId: string | null = tier2Visible
@@ -1857,8 +1932,16 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         } lg:translate-x-0`}
       >
         {/* Tier 1 — Rail de módulos */}
-        <div className="flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-x-visible overflow-y-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+        <div
+          className={`flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-x-visible overflow-y-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900${
+            railEnterClass ? ' sidebar-rail-list--enter' : ''
+          }`}
+        >
           <div className="relative z-0 isolate flex flex-shrink-0 flex-col items-center p-5 pb-3 [@media(max-height:820px)]:p-2.5 [@media(max-height:820px)]:pb-1.5">
+            <div
+              className="sidebar-rail-enter-item"
+              style={{ ['--rail-i' as string]: 0 } as React.CSSProperties}
+            >
             <Link
               href="/ponto/home"
               prefetch={navLinkPrefetch}
@@ -1873,12 +1956,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                 className="sidebar-logo-btn__img h-full w-full object-contain"
               />
             </Link>
+            </div>
           </div>
 
           {/* pt reserva a folga que o badge do primeiro ícone ocupa acima do botão: como o nav
               rola, qualquer coisa acima do topo do conteúdo é cortada. */}
           <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2">
-            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? menuItems.map((category) => {
+            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? menuItems.map((category, railIndex) => {
               const CategoryIcon = category.icon;
               const isRailActive = category.id === railModuleActiveId;
               const visibleItems = category.items.filter((item) =>
@@ -1887,13 +1971,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               const forceAsGroup = !(category as { preferDirectLink?: boolean }).preferDirectLink;
               const isSingleItem = visibleItems.length === 1 && !forceAsGroup;
               const singleItem = isSingleItem ? visibleItems[0] : null;
+              const enterIndex = railIndex + 1;
 
               if (isSingleItem && singleItem) {
                 const active = isActive(singleItem.href);
                 const SingleItemIcon = singleItem.icon || CategoryIcon;
                 const singleBadge = navBadgeCountForHref(singleItem.href);
                 return (
-                  <SidebarRailTooltip key={category.id} label={singleItem.name}>
+                  <SidebarRailTooltip key={category.id} label={singleItem.name} enterIndex={enterIndex}>
                     <Link
                       href={singleItem.href}
                       prefetch={navLinkPrefetch}
@@ -1922,7 +2007,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
               const moduleBadge = moduleBadgeCountForVisibleItems(visibleItems);
               return (
-                <SidebarRailTooltip key={category.id} label={category.name}>
+                <SidebarRailTooltip key={category.id} label={category.name} enterIndex={enterIndex}>
                   <button
                     type="button"
                     onClick={() => handleSelectModule(category.id)}
@@ -1954,7 +2039,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
           {canAccessCollaborationTools ? (
           <div className="relative z-20 flex flex-shrink-0 flex-col items-center overflow-visible px-2 pb-4 [@media(max-height:820px)]:pb-2">
             <div className="flex flex-col items-center gap-2 [@media(max-height:820px)]:gap-1">
-              <SidebarRailTooltip label="Conversas">
+              <SidebarRailTooltip label="Conversas" enterIndex={menuItems.length + 1}>
                 <Link
                   href="/ponto/conversas"
                   prefetch={navLinkPrefetch}
@@ -1978,7 +2063,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   <NotificationCountBadge count={chatUnreadCount} rail />
                 </Link>
               </SidebarRailTooltip>
-              <SidebarRailTooltip label="Tasks">
+              <SidebarRailTooltip label="Tasks" enterIndex={menuItems.length + 2}>
                 <Link
                   href="/ponto/kanban"
                   prefetch={navLinkPrefetch}
@@ -2001,7 +2086,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   <SquareKanban className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
-              <SidebarRailTooltip label="Agenda">
+              <SidebarRailTooltip label="Agenda" enterIndex={menuItems.length + 3}>
                 <Link
                   href="/ponto/agenda"
                   prefetch={navLinkPrefetch}
@@ -2024,7 +2109,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   <CalendarRange className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
-              <SidebarRailTooltip label="Flow">
+              <SidebarRailTooltip label="Flow" enterIndex={menuItems.length + 4}>
                 <Link
                   href="/ponto/flow"
                   prefetch={navLinkPrefetch}
@@ -2047,7 +2132,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
                   <Workflow className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
                 </Link>
               </SidebarRailTooltip>
-              <SidebarRailTooltip label="Drive">
+              <SidebarRailTooltip label="Drive" enterIndex={menuItems.length + 5}>
                 <Link
                   href="/ponto/drive"
                   prefetch={navLinkPrefetch}
@@ -2077,9 +2162,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
         {/* Tier 2 — Painel de páginas do módulo */}
         <div
-          className={`flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 ${
+          className={`flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden bg-white dark:bg-gray-900 ${
             sidebarHydrated ? `transition-[width,opacity] ${SIDEBAR_TRANSITION_CLASS}` : 'transition-none'
-          } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-100 pointer-events-none'}`}
+          } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-100 pointer-events-none'} ${
+            tier2BorderVisible
+              ? 'border-r border-gray-200 dark:border-gray-800'
+              : 'border-r-0'
+          }`}
         >
           {/* Largura fixa: o painel só revela o conteúdo, sem o texto refluir no meio da abertura. */}
           <div className="flex h-full min-h-0 w-72 shrink-0 flex-col">

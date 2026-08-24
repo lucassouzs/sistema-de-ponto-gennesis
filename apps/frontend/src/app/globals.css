@@ -773,6 +773,23 @@ body::-webkit-scrollbar:vertical {
   animation: sidebar-rail-icon-pop 0.45s cubic-bezier(0.34, 1.45, 0.64, 1);
 }
 
+/* Rail — entrada em stagger (igual às páginas do painel) */
+@keyframes sidebar-rail-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.sidebar-rail-list--enter .sidebar-rail-enter-item {
+  animation: sidebar-rail-item-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--rail-i, 0) * 40ms);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sidebar-rail-btn,
   .sidebar-rail-btn .sidebar-rail-btn__icon {
@@ -781,6 +798,10 @@ body::-webkit-scrollbar:vertical {
 
   .sidebar-rail-btn--pop,
   .sidebar-rail-btn--pop .sidebar-rail-btn__icon {
+    animation: none;
+  }
+
+  .sidebar-rail-list--enter .sidebar-rail-enter-item {
     animation: none;
   }
 
