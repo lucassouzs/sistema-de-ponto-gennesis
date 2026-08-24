@@ -520,11 +520,13 @@ export default function NfsRecebidasPage() {
   );
   const hasActiveSearch = Boolean(search.trim());
   const hasActiveEmitente = filterEmitentes.length > 0;
-  const hasActivePeriod =
-    listaScope === 'outros' ||
-    filterPeriodFrom !== YEAR_FROM ||
-    filterPeriodTo !== YEAR_TO;
-  const hasActiveFilters = hasActiveSearch || hasActiveEmitente || hasActivePeriod;
+  const viewingOutros = listaScope === 'outros';
+  const hasCustomPeriod =
+    filterPeriodFrom !== YEAR_FROM || filterPeriodTo !== YEAR_TO;
+  // Escopo "outros" também marca filtro ativo (badge), mas não estreita o tipo de listaScope.
+  const hasActiveFilters =
+    hasActiveSearch || hasActiveEmitente || viewingOutros || hasCustomPeriod;
+  const emptyIsFiltered = hasActiveSearch || hasActiveEmitente || hasCustomPeriod;
 
   const listSubtitle = useMemo(() => {
     if (isLoading && !data) {
@@ -804,16 +806,16 @@ export default function NfsRecebidasPage() {
                 <CadastroListEmpty
                   icon={FileText}
                   title={
-                    hasActiveFilters
+                    emptyIsFiltered
                       ? 'Nenhum resultado encontrado'
-                      : listaScope === 'outros'
+                      : viewingOutros
                         ? `Nenhuma nota fora de ${NFE_YEAR}`
                         : `Nenhuma nota de ${NFE_YEAR} ainda`
                   }
                   hint={
-                    hasActiveFilters
+                    emptyIsFiltered
                       ? 'Ajuste a busca ou o período e tente novamente.'
-                      : listaScope === 'outros'
+                      : viewingOutros
                         ? 'Aqui aparecem as notas que a SEFAZ enviou com emissão fora do ano atual.'
                         : 'Clique em Buscar notas para consultar a SEFAZ.'
                   }
