@@ -34,7 +34,8 @@ import {
   materialItemLabel,
   rmContractDisplay,
   rmOsDisplay,
-  rmSolicitante
+  rmSolicitante,
+  rmSolicitanteId
 } from './_lib/display';
 import { getCoveredRmItemIds, canUserCancelRmItem, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 import { RmItemSituationCell } from '@/components/material-requests/RmItemSituationCell';
@@ -872,6 +873,9 @@ export default function GerenciarMateriaisPage() {
             selectedRequest.id.slice(0, 8);
           const fdFiles = getDemandSheetFiles(selectedRequest);
           const isCommentsTab = rmDetailTab === 'comentarios';
+          const canManageDemandSheetAttachments =
+            isAdministrator ||
+            (!!userData?.data?.id && userData.data.id === rmSolicitanteId(selectedRequest));
 
           const infoRows: { label: string; value: React.ReactNode; stacked?: boolean }[] = [
             { label: 'Status', value: (
@@ -1159,7 +1163,7 @@ export default function GerenciarMateriaisPage() {
                       <RmDetailDocSection
                         title="Ficha de Demanda"
                         headerRight={
-                          isAdministrator ? (
+                          canManageDemandSheetAttachments ? (
                             <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
                               <Paperclip className="h-3.5 w-3.5" />
                               Anexar
@@ -1194,7 +1198,7 @@ export default function GerenciarMateriaisPage() {
                               url={file.url}
                               fileName={file.name}
                               actions={
-                                isAdministrator ? (
+                                canManageDemandSheetAttachments ? (
                                   <span className="inline-flex items-center gap-1">
                                     <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
                                       Trocar

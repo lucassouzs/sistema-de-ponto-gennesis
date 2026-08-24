@@ -489,13 +489,30 @@ router.get('/:id', async (req: AuthRequest, res: Response, next: NextFunction) =
   }
 });
 
-/** Administrador: troca anexos da ficha de demanda (lista completa). */
+/** ADM ou solicitante: troca anexos da ficha de demanda (lista completa). */
 router.patch(
   '/:id/admin/demand-sheet-attachments',
-  requireAdministrator,
   async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
+      if (!req.user?.id) throw createError('Usuário não autenticado', 401);
       const { id } = req.params;
+      const existing = await prisma.materialRequest.findUnique({
+        where: { id },
+        select: { id: true, requestedBy: true, costCenterId: true },
+      });
+      if (!existing) throw createError('Requisição não encontrada', 404);
+
+      const isOwner = existing.requestedBy === req.user.id;
+      if (!req.user.isAdmin && !isOwner) {
+        throw createError('Sem permissão para alterar anexos da ficha de demanda', 403);
+      }
+
+      await assertCostCenterAllowedForUnbUser(
+        req.user.id,
+        !!req.user.isAdmin,
+        existing.costCenterId
+      );
+
       const raw = req.body?.attachments;
       if (!Array.isArray(raw)) {
         throw createError('Informe a lista de anexos', 400);

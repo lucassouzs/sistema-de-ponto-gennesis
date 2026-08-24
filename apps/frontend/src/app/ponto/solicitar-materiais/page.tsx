@@ -19,7 +19,8 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Info
+  Info,
+  Paperclip
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -96,17 +97,20 @@ const SOLICITACAO_DETAIL_TABS: { id: SolicitacaoDetailTab; label: string }[] = [
 
 function SolicitacaoDetailDocSection({
   title,
+  headerRight,
   children
 }: {
   title: string;
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="space-y-0 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
-      <div className="border-b border-gray-200 pb-3 dark:border-gray-700">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
         <h3 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
           {title}
         </h3>
+        {headerRight}
       </div>
       <div className="divide-y divide-gray-200 dark:divide-gray-700">{children}</div>
     </section>
@@ -118,13 +122,15 @@ function SolicitacaoDetailDocumentItem({
   subtitle,
   url,
   fileName,
-  pending = false
+  pending = false,
+  actions
 }: {
   label: string;
   subtitle?: string;
   url?: string | null;
   fileName?: string | null;
   pending?: boolean;
+  actions?: React.ReactNode;
 }) {
   const trimmedUrl = (url || '').trim();
   const isPending = pending || !trimmedUrl;
@@ -149,6 +155,7 @@ function SolicitacaoDetailDocumentItem({
             variant="buttons"
           />
         )}
+        {actions}
       </div>
     </div>
   );
@@ -906,6 +913,7 @@ function SolicitarMateriaisPage() {
     null
   );
   const [uploadingDemandSheetAttachment, setUploadingDemandSheetAttachment] = useState<'new' | 'edit' | null>(null);
+  const [detailFdAttachmentBusy, setDetailFdAttachmentBusy] = useState(false);
   const [newItemMaterialLabels, setNewItemMaterialLabels] = useState<string[]>(['']);
   const [editItemMaterialLabels, setEditItemMaterialLabels] = useState<string[]>(['']);
 
@@ -936,7 +944,7 @@ function SolicitarMateriaisPage() {
   });
 
   const { costCenters, isLoading: loadingCostCenters } = useCostCenters();
-  const { isUnbUser, unbCostCenterIds, isElevatedUser, canApproveMaterialRequests } = usePermissions();
+  const { isUnbUser, unbCostCenterIds, isElevatedUser, isAdministrator, canApproveMaterialRequests } = usePermissions();
 
   const lockedUnbCostCenterId = useMemo(() => {
     if (!isUnbUser) return null;
@@ -1881,6 +1889,62 @@ function SolicitarMateriaisPage() {
         demandSheetAttachments: prev.demandSheetAttachments.filter((_, i) => i !== index),
       }));
     }
+  };
+
+  const saveDetailDemandSheetAttachments = async (
+    requestId: string,
+    attachments: FdAttachment[]
+  ) => {
+    setDetailFdAttachmentBusy(true);
+    try {
+      await api.patch(`/material-requests/${requestId}/admin/demand-sheet-attachments`, {
+        attachments,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['material-request-detail', requestId] });
+      await queryClient.invalidateQueries({ queryKey: ['material-requests'] });
+      toast.success('Anexos atualizados');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err.response?.data?.message || err.message || 'Não foi possível atualizar os anexos');
+    } finally {
+      setDetailFdAttachmentBusy(false);
+    }
+  };
+
+  const handleDetailReplaceDemandFile = async (
+    requestId: string,
+    current: FdAttachment[],
+    replaceIndex: number | null,
+    file: File
+  ) => {
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post('/material-requests/upload-item-attachment', fd);
+      const uploaded = res.data?.data as { url?: string; originalName?: string } | undefined;
+      if (!uploaded?.url) throw new Error('Resposta inválida do servidor');
+      const nextFile: FdAttachment = {
+        url: uploaded.url,
+        name: fixMojibakeFileName(uploaded.originalName || file.name) || 'Arquivo anexado',
+      };
+      const next =
+        replaceIndex === null
+          ? [...current, nextFile]
+          : current.map((item, index) => (index === replaceIndex ? nextFile : item));
+      await saveDetailDemandSheetAttachments(requestId, next);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err.response?.data?.message || err.message || 'Não foi possível enviar o arquivo');
+    }
+  };
+
+  const handleDetailRemoveDemandFile = async (
+    requestId: string,
+    current: FdAttachment[],
+    removeIndex: number
+  ) => {
+    const next = current.filter((_, index) => index !== removeIndex);
+    await saveDetailDemandSheetAttachments(requestId, next);
   };
 
   const handleEditRemoveItem = (index: number) => {
@@ -2958,6 +3022,14 @@ function SolicitarMateriaisPage() {
                     const statusInfo = getStatusInfo(statusKey || 'PENDING');
                     const priorityInfo = getPriorityInfo(String(d.priority || 'MEDIUM'));
                     const fdAttachments = parseFdAttachments(d as Parameters<typeof parseFdAttachments>[0]);
+                    const canManageDemandSheetAttachments =
+                      isAdministrator ||
+                      (!!userData?.data?.id &&
+                        !!requestedById &&
+                        userData.data.id === requestedById);
+                    const detailRequestId = String(
+                      (d as { id?: string }).id || detailViewId || ''
+                    );
 
                     const infoRows: { label: string; value: React.ReactNode; stacked?: boolean }[] = [
                       {
@@ -3172,7 +3244,34 @@ function SolicitarMateriaisPage() {
 
                         {detailTab === 'documentos' ? (
                           <div className="space-y-4">
-                            <SolicitacaoDetailDocSection title="Ficha de Demanda">
+                            <SolicitacaoDetailDocSection
+                              title="Ficha de Demanda"
+                              headerRight={
+                                canManageDemandSheetAttachments && detailRequestId ? (
+                                  <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                                    <Paperclip className="h-3.5 w-3.5" />
+                                    Anexar
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      disabled={detailFdAttachmentBusy}
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        e.target.value = '';
+                                        if (file) {
+                                          void handleDetailReplaceDemandFile(
+                                            detailRequestId,
+                                            fdAttachments,
+                                            null,
+                                            file
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                ) : null
+                              }
+                            >
                               {fdAttachments.length === 0 ? (
                                 <SolicitacaoDetailDocumentItem
                                   label="Arquivo"
@@ -3191,6 +3290,46 @@ function SolicitarMateriaisPage() {
                                     subtitle={file.name || 'Anexo'}
                                     url={file.url}
                                     fileName={file.name}
+                                    actions={
+                                      canManageDemandSheetAttachments && detailRequestId ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <label className="inline-flex cursor-pointer items-center rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700/80">
+                                            Trocar
+                                            <input
+                                              type="file"
+                                              className="hidden"
+                                              disabled={detailFdAttachmentBusy}
+                                              onChange={(e) => {
+                                                const nextFile = e.target.files?.[0];
+                                                e.target.value = '';
+                                                if (nextFile) {
+                                                  void handleDetailReplaceDemandFile(
+                                                    detailRequestId,
+                                                    fdAttachments,
+                                                    index,
+                                                    nextFile
+                                                  );
+                                                }
+                                              }}
+                                            />
+                                          </label>
+                                          <button
+                                            type="button"
+                                            disabled={detailFdAttachmentBusy}
+                                            onClick={() =>
+                                              void handleDetailRemoveDemandFile(
+                                                detailRequestId,
+                                                fdAttachments,
+                                                index
+                                              )
+                                            }
+                                            className="rounded-md border border-red-200 px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                          >
+                                            Remover
+                                          </button>
+                                        </span>
+                                      ) : null
+                                    }
                                   />
                                 ))
                               )}

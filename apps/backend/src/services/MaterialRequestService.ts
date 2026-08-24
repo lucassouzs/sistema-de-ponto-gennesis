@@ -1549,7 +1549,7 @@ export class MaterialRequestService {
     return this.getMaterialRequestById(requestId);
   }
 
-  /** Administrador: substitui a lista de anexos da ficha de demanda da RM. */
+  /** ADM ou solicitante: substitui a lista de anexos da ficha de demanda da RM. */
   async adminReplaceDemandSheetAttachments(
     id: string,
     attachments: DemandSheetAttachment[]
