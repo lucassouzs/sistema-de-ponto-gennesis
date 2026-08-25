@@ -416,9 +416,9 @@ export class FuelRefuelRequestController {
       if (!cityCode) throw createError('Informe o contrato ou a cidade', 400);
 
       const rows = await listActiveFuelGasStationsByCity(cityCode);
-      res.json({ success: true, data: rows });
+      return res.json({ success: true, data: rows });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 

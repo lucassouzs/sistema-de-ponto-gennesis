@@ -136,9 +136,9 @@ export class FuelGasStationController {
         include: stationContractsInclude,
       });
 
-      res.json({ success: true, data: rows.map(mapStationRow) });
+      return res.json({ success: true, data: rows.map(mapStationRow) });
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 

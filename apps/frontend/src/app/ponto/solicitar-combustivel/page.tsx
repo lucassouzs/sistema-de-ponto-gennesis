@@ -24,7 +24,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, useModalRequestClose } from '@/components/ui/Modal';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -254,19 +254,96 @@ function mapFrotaParticToFuelType(frotaPartic?: VehicleUsageType | null): FuelVe
   return frotaPartic === 'PARTICULAR' ? 'PRIVATE' : 'COMPANY';
 }
 
+const FUEL_FORM_LABEL_CLS =
+  'mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400';
+
+function FuelCreateFormHeader({
+  disabled,
+  onClose,
+}: {
+  disabled?: boolean;
+  onClose: () => void;
+}) {
+  const requestClose = useModalRequestClose();
+  return (
+    <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
+      <h3 className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100">
+        Nova solicitação de combustível
+      </h3>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          if (requestClose) requestClose();
+          else onClose();
+        }}
+        className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+        aria-label="Fechar"
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+function FuelCreateFormFooter({
+  isPending,
+  onSubmit,
+}: {
+  isPending: boolean;
+  onSubmit: () => void;
+}) {
+  const requestClose = useModalRequestClose();
+  return (
+    <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => requestClose?.()}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={onSubmit}
+        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
+      >
+        {isPending ? 'Enviando…' : 'Enviar solicitação'}
+      </button>
+    </div>
+  );
+}
+
 function FormSection({
   title,
+  description,
+  headerRight,
   children,
 }: {
   title: string;
+  description?: string;
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        {title}
-      </h3>
-      {children}
+    <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-gray-200 pb-3 dark:border-gray-700">
+        <div className="min-w-0">
+          <h4 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+            {title}
+          </h4>
+          {description ? (
+            <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {description}
+            </p>
+          ) : null}
+        </div>
+        {headerRight}
+      </div>
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }
@@ -1190,14 +1267,21 @@ export default function SolicitarCombustivelPage() {
             if (createMutation.isPending) return;
             setShowForm(false);
           }}
-          title="Nova solicitação de combustível"
           size="lg"
+          showCloseButton={false}
+          scrollContent={false}
+          contentClassName="!p-0"
+          confirmBeforeClose
         >
-          <div className="space-y-5">
+          <FuelCreateFormHeader
+            disabled={createMutation.isPending}
+            onClose={() => setShowForm(false)}
+          />
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <FormSection title="Abastecimento">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className={FUEL_FORM_LABEL_CLS}>
                     Data do abastecimento *
                   </label>
                   <DatePickerField
@@ -1206,7 +1290,7 @@ export default function SolicitarCombustivelPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className={FUEL_FORM_LABEL_CLS}>
                     Rota *
                   </label>
                   <input
@@ -1220,7 +1304,7 @@ export default function SolicitarCombustivelPage() {
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className={FUEL_FORM_LABEL_CLS}>
                     Estado *
                   </label>
                   <SingleSelectSearchDropdown
@@ -1240,7 +1324,7 @@ export default function SolicitarCombustivelPage() {
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className={FUEL_FORM_LABEL_CLS}>
                     Cidade *
                   </label>
                   <SingleSelectSearchDropdown
@@ -1266,7 +1350,7 @@ export default function SolicitarCombustivelPage() {
                 </div>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className={FUEL_FORM_LABEL_CLS}>
                   Contrato *
                 </label>
                 <SingleSelectSearchDropdown
@@ -1282,7 +1366,7 @@ export default function SolicitarCombustivelPage() {
 
             <FormSection title="Condutor">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className={FUEL_FORM_LABEL_CLS}>
                   Colaborador *
                 </label>
                 <SingleSelectSearchDropdown
@@ -1319,7 +1403,7 @@ export default function SolicitarCombustivelPage() {
 
             <FormSection title="Veículo">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className={FUEL_FORM_LABEL_CLS}>
                   Buscar por placa *
                 </label>
                 <SingleSelectSearchDropdown
@@ -1360,7 +1444,7 @@ export default function SolicitarCombustivelPage() {
 
             <FormSection title="Painel e observações">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className={FUEL_FORM_LABEL_CLS}>
                   Foto do painel *
                 </label>
                 <VehicleReturnPhotoField
@@ -1371,7 +1455,7 @@ export default function SolicitarCombustivelPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label className={FUEL_FORM_LABEL_CLS}>
                   Observações
                 </label>
                 <textarea
@@ -1382,26 +1466,12 @@ export default function SolicitarCombustivelPage() {
                 />
               </div>
             </FormSection>
-
-            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
-              <button
-                type="button"
-                disabled={createMutation.isPending}
-                onClick={() => setShowForm(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={createMutation.isPending}
-                onClick={submitForm}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {createMutation.isPending ? 'Enviando…' : 'Enviar solicitação'}
-              </button>
-            </div>
           </div>
+
+          <FuelCreateFormFooter
+            isPending={createMutation.isPending}
+            onSubmit={submitForm}
+          />
         </Modal>
 
         <Modal
