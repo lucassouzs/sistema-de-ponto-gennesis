@@ -17,9 +17,9 @@ export function serviceOrderFallbackLabel(numero: number, ano: number): string {
   return `OS ${numero}/${ano}`;
 }
 
-export function pickPleitoLabelSource(
-  pleitos: Array<{ divSe: string | null; folderNumber: string | null; reportsBilling: string | null }>
-): { divSe: string | null; folderNumber: string | null } | null {
+export function pickPleitoLabelSource<
+  T extends { divSe: string | null; folderNumber: string | null; reportsBilling: string | null }
+>(pleitos: T[]): T | null {
   const main = pleitos.find(
     (p) =>
       (p.divSe || '').trim() &&

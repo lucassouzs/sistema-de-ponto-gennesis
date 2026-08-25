@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { getUserUnbCostCenterScope } from '../lib/unbCostCenterScope';
-import { buildServiceOrderDisplayLabel } from '../utils/serviceOrderLabel';
+import { buildServiceOrderDisplayLabel, pickPleitoLabelSource } from '../utils/serviceOrderLabel';
 
 export type ServiceOrderContractOption = {
   id: string;
@@ -19,6 +19,8 @@ export type ServiceOrderListItem = {
   costCenterId: string;
   divSe: string | null;
   folderNumber: string | null;
+  /** Descrição do serviço no cadastro da OS (pleito). */
+  serviceDescription: string | null;
   contractName: string | null;
   contractNumber: string | null;
 };
@@ -91,6 +93,7 @@ export class ServiceOrderService {
             divSe: true,
             folderNumber: true,
             reportsBilling: true,
+            serviceDescription: true,
             updatedContract: {
               select: { name: true, number: true }
             }
@@ -102,8 +105,10 @@ export class ServiceOrderService {
     const mapped = rows.map((so) => {
       const pleitos = so.pleitos;
       const label = buildServiceOrderDisplayLabel(so.numero, so.ano, pleitos);
-      const src = pleitos.find((p) => (p.divSe || '').trim()) ?? pleitos[0];
+      const src = pickPleitoLabelSource(pleitos) ?? pleitos[0] ?? null;
       const contract = src?.updatedContract;
+      const serviceDescription =
+        (src?.serviceDescription || '').trim() || (so.descricao || '').trim() || null;
       return {
         id: so.id,
         numero: so.numero,
@@ -113,6 +118,7 @@ export class ServiceOrderService {
         costCenterId: so.costCenterId,
         divSe: src?.divSe?.trim() || null,
         folderNumber: src?.folderNumber?.trim() || null,
+        serviceDescription,
         contractName: contract?.name ?? null,
         contractNumber: contract?.number ?? null
       };
@@ -148,6 +154,7 @@ export class ServiceOrderService {
             divSe: true,
             folderNumber: true,
             reportsBilling: true,
+            serviceDescription: true,
             updatedContract: {
               select: { name: true, number: true },
             },
@@ -159,8 +166,10 @@ export class ServiceOrderService {
     const mapped = rows.map((so) => {
       const pleitos = so.pleitos;
       const label = buildServiceOrderDisplayLabel(so.numero, so.ano, pleitos);
-      const src = pleitos.find((p) => (p.divSe || '').trim()) ?? pleitos[0];
+      const src = pickPleitoLabelSource(pleitos) ?? pleitos[0] ?? null;
       const contractRow = src?.updatedContract;
+      const serviceDescription =
+        (src?.serviceDescription || '').trim() || (so.descricao || '').trim() || null;
       return {
         id: so.id,
         numero: so.numero,
@@ -170,6 +179,7 @@ export class ServiceOrderService {
         costCenterId: so.costCenterId,
         divSe: src?.divSe?.trim() || null,
         folderNumber: src?.folderNumber?.trim() || null,
+        serviceDescription,
         contractName: contractRow?.name ?? null,
         contractNumber: contractRow?.number ?? null,
       };

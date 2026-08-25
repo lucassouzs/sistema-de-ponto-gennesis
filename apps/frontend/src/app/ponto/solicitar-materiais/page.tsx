@@ -1025,11 +1025,18 @@ function SolicitarMateriaisPage() {
 
   const handleNewServiceOrderSelect = (serviceOrderId: string, serviceOrder: string) => {
     const os = newFormServiceOrders.find((o) => o.id === serviceOrderId);
+    const osDescription = (os?.serviceDescription || '').trim();
     setFormData((prev) => ({
       ...prev,
       serviceOrderId,
       serviceOrder,
       costCenterId: os?.costCenterId || prev.costCenterId,
+      ...(osDescription
+        ? {
+            obra: osDescription,
+            description: osDescription,
+          }
+        : {}),
     }));
   };
 
@@ -1039,11 +1046,18 @@ function SolicitarMateriaisPage() {
 
   const handleEditServiceOrderSelect = (serviceOrderId: string, serviceOrder: string) => {
     const os = editFormServiceOrders.find((o) => o.id === serviceOrderId);
+    const osDescription = (os?.serviceDescription || '').trim();
     setEditFormData((prev) => ({
       ...prev,
       serviceOrderId,
       serviceOrder,
       costCenterId: os?.costCenterId || prev.costCenterId,
+      ...(osDescription
+        ? {
+            obra: osDescription,
+            description: osDescription,
+          }
+        : {}),
     }));
   };
 

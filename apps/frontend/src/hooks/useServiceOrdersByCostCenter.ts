@@ -10,6 +10,8 @@ export type ServiceOrderOption = {
   costCenterId?: string;
   divSe: string | null;
   folderNumber: string | null;
+  /** Descrição do serviço no cadastro da OS (pleito). */
+  serviceDescription?: string | null;
   contractName: string | null;
   contractNumber: string | null;
 };
