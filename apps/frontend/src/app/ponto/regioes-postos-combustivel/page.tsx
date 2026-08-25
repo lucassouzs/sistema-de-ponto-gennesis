@@ -16,7 +16,10 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
-import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
+import {
+  MultiSelectSearchDropdown,
+  type MultiSelectSearchOption,
+} from '@/components/ui/MultiSelectSearchDropdown';
 import {
   CadastroListEmpty,
   CadastroListLoading,
@@ -26,9 +29,10 @@ import {
 import api from '@/lib/api';
 import {
   cadastroListClasses,
-  listTableRowClasses,
+  ListRowNavigableLabel,
   RowActionMenuCell,
   RowActionMenuPortal,
+  getListTableRowClassName,
 } from '@/components/ui/RowActionMenu';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import {
@@ -45,6 +49,12 @@ type SatelliteCity = {
   name: string;
 };
 
+type StationContract = {
+  id: string;
+  name: string;
+  number: string;
+};
+
 type GasStation = {
   id: string;
   displayNumber: number;
@@ -54,6 +64,7 @@ type GasStation = {
   sortOrder: number;
   isActive: boolean;
   city?: SatelliteCity | null;
+  contracts?: StationContract[];
   _count?: { requests: number };
 };
 
@@ -62,6 +73,7 @@ type StationFormState = {
   name: string;
   address: string;
   isActive: boolean;
+  contractIds: string[];
 };
 
 const EMPTY_STATION_FORM = (cityCode = ''): StationFormState => ({
@@ -69,6 +81,7 @@ const EMPTY_STATION_FORM = (cityCode = ''): StationFormState => ({
   name: '',
   address: '',
   isActive: true,
+  contractIds: [],
 });
 
 const ITEMS_PER_PAGE = 20;
@@ -85,6 +98,7 @@ export default function RegioesPostosCombustivelPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [formStateCode, setFormStateCode] = useState<FuelStateCode>('DF');
   const [editingStation, setEditingStation] = useState<GasStation | null>(null);
+  const [detailStation, setDetailStation] = useState<GasStation | null>(null);
   const [deleteStationId, setDeleteStationId] = useState<string | null>(null);
   const [stationForm, setStationForm] = useState<StationFormState>(EMPTY_STATION_FORM());
 
@@ -139,6 +153,28 @@ export default function RegioesPostosCombustivelPage() {
     enabled: !loadingUser,
   });
 
+  const { data: contractsRes } = useQuery({
+    queryKey: ['contracts-for-fuel-stations'],
+    queryFn: async () =>
+      (await api.get('/contracts', { params: { limit: 500, page: 1 } })).data,
+    enabled: showStationForm && !loadingUser,
+  });
+
+  const contractOptions = useMemo((): MultiSelectSearchOption[] => {
+    const list = (contractsRes?.data ?? []) as Array<{
+      id: string;
+      name: string;
+      number?: string;
+    }>;
+    return list
+      .map((c) => ({
+        value: c.id,
+        label: c.name,
+        searchText: `${c.name} ${c.number ?? ''}`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+  }, [contractsRes]);
+
   const cityFilterOptions = useMemo((): MultiSelectSearchOption[] => {
     return cities.map((city) => ({
       value: city.code,
@@ -163,7 +199,12 @@ export default function RegioesPostosCombustivelPage() {
         String(station.displayNumber).includes(term) ||
         station.name.toLowerCase().includes(term) ||
         (station.address ?? '').toLowerCase().includes(term) ||
-        (station.city?.name ?? '').toLowerCase().includes(term),
+        (station.city?.name ?? '').toLowerCase().includes(term) ||
+        (station.contracts ?? []).some(
+          (c) =>
+            c.name.toLowerCase().includes(term) ||
+            c.number.toLowerCase().includes(term),
+        ),
     );
   }, [stations, searchTerm]);
 
@@ -217,6 +258,7 @@ export default function RegioesPostosCombustivelPage() {
           name: stationForm.name.trim(),
           address: stationForm.address.trim() || null,
           isActive: stationForm.isActive,
+          contractIds: stationForm.contractIds,
         });
       }
       return api.post('/fuel-gas-stations', {
@@ -224,6 +266,7 @@ export default function RegioesPostosCombustivelPage() {
         name: stationForm.name.trim(),
         address: stationForm.address.trim() || null,
         isActive: stationForm.isActive,
+        contractIds: stationForm.contractIds,
       });
     },
     onSuccess: () => {
@@ -274,6 +317,7 @@ export default function RegioesPostosCombustivelPage() {
       name: station.name,
       address: station.address || '',
       isActive: station.isActive,
+      contractIds: (station.contracts ?? []).map((c) => c.id),
     });
     setShowStationForm(true);
   };
@@ -436,9 +480,15 @@ export default function RegioesPostosCombustivelPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                         {paginatedStations.map((station) => (
-                          <tr key={station.id} className={listTableRowClasses.tr}>
+                          <tr
+                            key={station.id}
+                            className={getListTableRowClassName(true)}
+                            onClick={() => setDetailStation(station)}
+                          >
                             <td className={`${cadastroListClasses.tdCenter} font-mono tabular-nums`}>
-                              {station.displayNumber}
+                              <ListRowNavigableLabel className="font-mono tabular-nums">
+                                {station.displayNumber}
+                              </ListRowNavigableLabel>
                             </td>
                             <td className={`${cadastroListClasses.tdTruncate} min-w-[12rem]`}>
                               <span className="block whitespace-normal break-words text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -502,6 +552,98 @@ export default function RegioesPostosCombustivelPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Modal
+          isOpen={!!detailStation}
+          onClose={() => setDetailStation(null)}
+          confirmBeforeClose={false}
+          title={
+            detailStation
+              ? `Posto ${detailStation.displayNumber}`
+              : 'Detalhes do posto'
+          }
+        >
+          {detailStation ? (
+            <div className="space-y-4 text-sm">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">ID</span>
+                  <p className="font-mono tabular-nums text-gray-900 dark:text-gray-100">
+                    {detailStation.displayNumber}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Status</span>
+                  <p className="mt-1">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                        detailStation.isActive
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400'
+                      }`}
+                    >
+                      {detailStation.isActive ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Nome</span>
+                  <p className="text-gray-900 dark:text-gray-100">{detailStation.name}</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Endereço</span>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {detailStation.address?.trim() || '—'}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Cidade</span>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {detailStation.city?.name ?? detailStation.cityCode}
+                    {detailStation.city?.stateCode
+                      ? ` (${detailStation.city.stateCode})`
+                      : ''}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">
+                    Solicitações vinculadas
+                  </span>
+                  <p className="text-gray-900 dark:text-gray-100">
+                    {detailStation._count?.requests ?? 0}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="font-medium text-gray-500 dark:text-gray-400">Contratos</span>
+                  {(detailStation.contracts ?? []).length ? (
+                    <ul className="mt-1 list-inside list-disc space-y-0.5 text-gray-900 dark:text-gray-100">
+                      {(detailStation.contracts ?? []).map((contract) => (
+                        <li key={contract.id}>{contract.name}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-900 dark:text-gray-100">—</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Button type="button" variant="outline" onClick={() => setDetailStation(null)}>
+                  Fechar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const station = detailStation;
+                    setDetailStation(null);
+                    openEditStation(station);
+                  }}
+                >
+                  Editar
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
 
         <Modal
           isOpen={!!deleteStationId}
@@ -608,11 +750,7 @@ export default function RegioesPostosCombustivelPage() {
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 Código: <span className="font-semibold">{editingStation.displayNumber}</span>
               </p>
-            ) : (
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                O código numérico será gerado automaticamente ao salvar.
-              </p>
-            )}
+            ) : null}
             {!editingStation ? (
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-800 dark:text-gray-200">
@@ -656,6 +794,22 @@ export default function RegioesPostosCombustivelPage() {
               placeholder="Ex.: Posto credenciado — Taguatinga Norte"
               required
             />
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Contratos
+              </label>
+              <MultiSelectSearchDropdown
+                options={contractOptions}
+                selected={stationForm.contractIds}
+                onChange={(contractIds) =>
+                  setStationForm((current) => ({ ...current, contractIds }))
+                }
+                placeholder="Selecionar um ou mais contratos..."
+                searchPlaceholder="Pesquisar contrato..."
+                emptyOptionsMessage="Nenhum contrato encontrado."
+                className="w-full"
+              />
+            </div>
             <Input
               label="Endereço"
               value={stationForm.address}

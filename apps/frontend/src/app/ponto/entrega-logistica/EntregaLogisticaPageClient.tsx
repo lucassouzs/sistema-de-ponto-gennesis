@@ -30,6 +30,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { fetchEmployeeSelectOptions } from '@/lib/employeeSelectOptions';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import { FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
   getListTableRowClassName,
@@ -377,11 +378,14 @@ export default function EntregaLogisticaPageClient() {
 
   const employeeOptions = useMemo(
     () =>
-      (employeesRes ?? []).map((employee) => ({
-        value: employee.name,
-        label: employee.name,
-        searchText: employee.name,
-      })),
+      toPersonSelectOptions(
+        (employeesRes ?? []).map((employee) => ({
+          value: employee.name,
+          name: employee.name,
+          cpf: employee.cpf,
+          profilePhotoUrl: employee.profilePhotoUrl,
+        }))
+      ),
     [employeesRes],
   );
 

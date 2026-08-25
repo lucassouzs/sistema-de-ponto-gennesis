@@ -12,6 +12,7 @@ import {
   Clock,
   Eye,
   Filter,
+  Fuel,
   MoreVertical,
   Search,
   Users,
@@ -28,6 +29,7 @@ import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListEmpty, CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { hasFuelStoredPhoto, resolveFuelPhotoSrc } from '@/lib/resolveMediaUrl';
@@ -35,8 +37,10 @@ import { FuelRequestPhoto } from '@/components/fuel/FuelRequestPhoto';
 import {
   getListTableRowClassName,
   ListRowNavigableLabel,
+  listTableRowClasses,
   rowActionMenuButtonClass,
 } from '@/components/ui/listTableUi';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
@@ -54,22 +58,22 @@ type FuelRefuelStatus =
   | 'REJECTED'
   | 'CANCELLED';
 
-type SuppliesCardFilter = 'all' | 'pending' | 'CONCLUDED' | 'CANCELLED';
+type SuppliesCardFilter = 'all' | 'analysis' | 'awaiting_refuel' | 'CONCLUDED' | 'CANCELLED';
 
 type DetailStatusFilter = 'ALL' | 'SUPPLIES_QUEUE' | FuelRefuelStatus;
 
 const DETAIL_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'ALL', label: 'Todos do card selecionado' },
-  { value: 'SUPPLIES_QUEUE', label: 'Aguardando e Aguardando abastecimento' },
-  { value: 'PENDING_SUPPLIES', label: 'Aguardando Suprimentos' },
-  { value: 'AWAITING_REFUEL', label: 'Aguardando abastecimento' },
-  { value: 'PENDING_MANAGER', label: 'Aguardando gestor' },
+  { value: 'SUPPLIES_QUEUE', label: 'Pendentes e Abastecimento Liberado' },
+  { value: 'PENDING_SUPPLIES', label: 'Pendente' },
+  { value: 'AWAITING_REFUEL', label: 'Abastecimento Liberado' },
+  { value: 'PENDING_MANAGER', label: 'Aguardando aprovação' },
   { value: 'COMPLETED', label: 'Concluídas' },
   { value: 'REJECTED', label: 'Rejeitadas' },
   { value: 'CANCELLED', label: 'Canceladas' },
 ]);
 
-const DEFAULT_CARD_FILTER: SuppliesCardFilter = 'pending';
+const DEFAULT_CARD_FILTER: SuppliesCardFilter = 'all';
 
 const FUEL_SUPPLIES_ACTION_MENU_WIDTH_PX = 224;
 const MENU_ITEM_CLASS =
@@ -87,28 +91,35 @@ const SUPPLIES_CARD_LIST_CONFIG: Record<
   }
 > = {
   all: {
-    title: 'Todas as solicitações de abastecimento',
-    subtitle: 'Todas as solicitações de abastecimento registradas no sistema.',
+    title: 'Todas as solicitações',
+    subtitle: 'Todas as solicitações de abastecimento.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
   },
-  pending: {
-    title: 'Solicitações Pendentes',
-    subtitle: 'Aguardando análise do Suprimentos ou informe de abastecimento.',
+  analysis: {
+    title: 'Pendentes',
+    subtitle: 'Aguardando liberação do posto.',
     Icon: Clock,
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
   },
+  awaiting_refuel: {
+    title: 'Abastecimento Liberado',
+    subtitle: 'Posto definido — colaborador pode abastecer.',
+    Icon: Fuel,
+    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+  },
   CONCLUDED: {
-    title: 'Solicitações Concluídas',
-    subtitle: 'Abastecimentos informados e finalizados.',
+    title: 'Concluídas',
+    subtitle: 'Solicitações finalizadas.',
     Icon: CheckCircle,
     iconBg: 'bg-green-100 dark:bg-green-900/30',
     iconColor: 'text-green-600 dark:text-green-400',
   },
   CANCELLED: {
-    title: 'Solicitações Canceladas',
+    title: 'Canceladas',
     subtitle: 'Solicitações canceladas ou rejeitadas.',
     Icon: XCircle,
     iconBg: 'bg-red-100 dark:bg-red-900/30',
@@ -122,23 +133,37 @@ const SUPPLIES_STAT_CARDS: {
   iconBg: string;
   iconColor: string;
   Icon: LucideIcon;
-  countKey: keyof { total: number; pending: number; concluded: number; cancelled: number };
+  countKey: keyof {
+    total: number;
+    analysis: number;
+    awaitingRefuel: number;
+    concluded: number;
+    cancelled: number;
+  };
 }[] = [
   {
     filter: 'all',
-    label: 'Registros',
+    label: 'Todas',
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
     Icon: Users,
     countKey: 'total',
   },
   {
-    filter: 'pending',
+    filter: 'analysis',
     label: 'Pendentes',
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
     Icon: Clock,
-    countKey: 'pending',
+    countKey: 'analysis',
+  },
+  {
+    filter: 'awaiting_refuel',
+    label: 'Abastecimento Liberado',
+    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    Icon: Fuel,
+    countKey: 'awaitingRefuel',
   },
   {
     filter: 'CONCLUDED',
@@ -160,13 +185,26 @@ const SUPPLIES_STAT_CARDS: {
 
 function cardFilterToApiParam(filter: SuppliesCardFilter): string | undefined {
   if (filter === 'all') return undefined;
-  if (filter === 'pending') return 'PENDING_SUPPLIES,AWAITING_REFUEL,APPROVED';
+  if (filter === 'analysis') return 'PENDING_MANAGER,PENDING_SUPPLIES,APPROVED';
+  if (filter === 'awaiting_refuel') return 'AWAITING_REFUEL';
   if (filter === 'CONCLUDED') return 'COMPLETED';
   return 'CANCELLED,REJECTED';
 }
 
+function isFuelAnalysisStatus(status: FuelRefuelStatus): boolean {
+  return (
+    status === 'PENDING_MANAGER' ||
+    status === 'PENDING_SUPPLIES' ||
+    status === 'APPROVED'
+  );
+}
+
+function isFuelAwaitingRefuelStatus(status: FuelRefuelStatus): boolean {
+  return status === 'AWAITING_REFUEL';
+}
+
 function isFuelSuppliesQueueStatus(status: FuelRefuelStatus): boolean {
-  return status === 'PENDING_SUPPLIES' || status === 'AWAITING_REFUEL' || status === 'APPROVED';
+  return isFuelAnalysisStatus(status) || isFuelAwaitingRefuelStatus(status);
 }
 
 function matchesDetailStatusFilter(status: FuelRefuelStatus, filter: DetailStatusFilter): boolean {
@@ -250,15 +288,15 @@ const TANK_LEVEL_LABELS: Record<FuelTankLevelAfter, string> = {
 
 const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
-  COMPANY: 'Frota / empresa',
+  COMPANY: 'Frota',
 };
 
 const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
-  PENDING_MANAGER: 'Aguardando gestor',
-  PENDING_SUPPLIES: 'Aguardando Suprimentos',
-  AWAITING_REFUEL: 'Aguardando abastecimento',
+  PENDING_MANAGER: 'Aguardando aprovação',
+  PENDING_SUPPLIES: 'Pendente',
+  AWAITING_REFUEL: 'Abastecimento Liberado',
   COMPLETED: 'Concluída',
-  APPROVED: 'Aguardando Suprimentos',
+  APPROVED: 'Pendente',
   REJECTED: 'Rejeitada',
   CANCELLED: 'Cancelada',
 };
@@ -267,12 +305,12 @@ const STATUS_BADGE: Record<FuelRefuelStatus, string> = {
   PENDING_MANAGER:
     'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
   PENDING_SUPPLIES:
-    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
   AWAITING_REFUEL:
     'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
   COMPLETED:
     'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
-  APPROVED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  APPROVED: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
   REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   CANCELLED: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 };
@@ -442,17 +480,17 @@ export default function SolicitacoesCombustivelPage() {
     },
   });
 
-  const regionId = selected?.satelliteCityCode ?? selected?.administrativeRegion?.code;
+  const contractId = selected?.contract?.id;
 
   const { data: gasStations = [], isLoading: loadingGasStations } = useQuery({
-    queryKey: ['fuel-gas-stations', regionId],
+    queryKey: ['fuel-gas-stations-by-contract', contractId],
     queryFn: async () => {
       const res = await api.get('/fuel-gas-stations', {
-        params: { cityCode: regionId },
+        params: { contractId },
       });
       return (res.data?.data || []) as FuelGasStation[];
     },
-    enabled: Boolean(regionId && selected?.status === 'PENDING_SUPPLIES'),
+    enabled: Boolean(contractId && selected?.status === 'PENDING_SUPPLIES'),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -460,10 +498,9 @@ export default function SolicitacoesCombustivelPage() {
     () =>
       gasStations.map((station) => ({
         value: station.id,
-        label: station.address
-          ? `${station.displayNumber} — ${station.name} — ${station.address}`
-          : `${station.displayNumber} — ${station.name}`,
-        searchText: [String(station.displayNumber), station.name, station.address]
+        label: station.name,
+        description: station.address?.trim() || undefined,
+        searchText: [station.name, station.address, String(station.displayNumber)]
           .filter(Boolean)
           .join(' '),
       })),
@@ -478,12 +515,13 @@ export default function SolicitacoesCombustivelPage() {
 
   const suppliesStats = useMemo(() => {
     const list = statsData || [];
-    const pending = list.filter((row) => isFuelSuppliesQueueStatus(row.status)).length;
+    const analysis = list.filter((row) => isFuelAnalysisStatus(row.status)).length;
+    const awaitingRefuel = list.filter((row) => isFuelAwaitingRefuelStatus(row.status)).length;
     const concluded = list.filter((row) => row.status === 'COMPLETED').length;
     const cancelled = list.filter(
       (row) => row.status === 'CANCELLED' || row.status === 'REJECTED',
     ).length;
-    return { total: list.length, pending, concluded, cancelled };
+    return { total: list.length, analysis, awaitingRefuel, concluded, cancelled };
   }, [statsData]);
 
   const listHeader = SUPPLIES_CARD_LIST_CONFIG[cardFilter];
@@ -540,7 +578,13 @@ export default function SolicitacoesCombustivelPage() {
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/solicitacoes-combustivel">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (
@@ -552,12 +596,11 @@ export default function SolicitacoesCombustivelPage() {
               Fila de Abastecimento
             </h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Fila do Suprimentos: veículos de frota entram direto; particulares após aprovação do
-              gestor.
+              Acompanhe e atenda as solicitações de combustível.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 2xl:grid-cols-4">
+          <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             {SUPPLIES_STAT_CARDS.map((card) => (
               <FilterStatCard
                 key={card.filter}
@@ -630,14 +673,7 @@ export default function SolicitacoesCombustivelPage() {
 
             <CardContent>
               {loadingList ? (
-                <div className="py-8 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="loading-spinner h-6 w-6" />
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Carregando solicitações...
-                    </span>
-                  </div>
-                </div>
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : listError ? (
                 <div className="py-8 text-center">
                   <p className="text-gray-600 dark:text-gray-400">
@@ -652,17 +688,15 @@ export default function SolicitacoesCombustivelPage() {
                   </button>
                 </div>
               ) : isListEmpty ? (
-                <div className="py-8 text-center">
-                  <ListHeaderIcon
-                    className={`mx-auto mb-4 h-12 w-12 ${listHeader.iconColor} opacity-60`}
-                  />
-                  <p className="text-gray-600 dark:text-gray-400">Nenhuma solicitação encontrada</p>
-                  {cardFilter === 'pending' ? (
-                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
-                      Colaboradores podem solicitar em Abastecimento ou via Conversas → Gennecy → opção 1
-                    </p>
-                  ) : null}
-                </div>
+                <CadastroListEmpty
+                  icon={ListHeaderIcon}
+                  title="Nenhuma solicitação encontrada"
+                  hint={
+                    cardFilter === 'all' || cardFilter === 'analysis'
+                      ? 'Colaboradores podem solicitar em Abastecimento ou via Conversas → Gennecy → opção 1'
+                      : undefined
+                  }
+                />
               ) : (
                 <>
                   <div className="mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
@@ -674,31 +708,18 @@ export default function SolicitacoesCombustivelPage() {
                       Página {currentPage} de {totalPages}
                     </span>
                   </div>
-                  <div className="table-scroll">
-                    <table className="w-full text-sm">
+                  <div className={cadastroListClasses.tableScroll}>
+                    <table className={cadastroListClasses.table}>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            ID
-                          </th>
-                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Solicitante
-                          </th>
-                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Data abast.
-                          </th>
-                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Contrato
-                          </th>
-                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Veículo
-                          </th>
-                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Status
-                          </th>
-                          <th className="min-w-[7rem] px-3 py-4 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Ação
-                          </th>
+                          <th className={`${cadastroListClasses.th} w-[7%]`}>ID</th>
+                          <th className={`${cadastroListClasses.th} w-[16%]`}>Solicitante</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[12%]`}>Data abast.</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Contrato</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Veículo</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[12%]`}>Tipo</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[15%]`}>Status</th>
+                          <th className={listTableRowClasses.actionTh}>Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
@@ -708,15 +729,15 @@ export default function SolicitacoesCombustivelPage() {
                             onClick={() => openRequestDetail(row)}
                             className={getListTableRowClassName(true)}
                           >
-                            <td className="px-3 py-4 sm:px-6">
+                            <td className={cadastroListClasses.tdMono}>
                               <ListRowNavigableLabel className="font-medium">
                                 {row.displayNumber}
                               </ListRowNavigableLabel>
                             </td>
-                            <td className="px-3 py-4 text-gray-900 dark:text-gray-100 sm:px-6">
+                            <td className={`${cadastroListClasses.tdTruncate} truncate`} title={row.requester.name}>
                               {row.requester.name}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
+                            <td className={cadastroListClasses.tdCenter}>
                               <div className="leading-snug">
                                 <p>
                                   {format(new Date(row.requestedAt || row.refuelDate), 'dd/MM/yyyy', {
@@ -731,23 +752,35 @@ export default function SolicitacoesCombustivelPage() {
                               </div>
                             </td>
                             <td
-                              className="max-w-[220px] truncate px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6"
+                              className={`${cadastroListClasses.tdCenter} truncate`}
                               title={fuelContractLabel(row)}
                             >
                               {fuelContractLabel(row)}
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
-                              {row.vehiclePlate}
+                            <td className={cadastroListClasses.tdCenter}>
+                              <div className="leading-snug">
+                                <p className="font-medium text-gray-900 dark:text-gray-100">
+                                  {row.vehiclePlate}
+                                </p>
+                                {row.vehicleDescription?.trim() ? (
+                                  <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={row.vehicleDescription}>
+                                    {row.vehicleDescription.trim()}
+                                  </p>
+                                ) : null}
+                              </div>
                             </td>
-                            <td className="px-3 py-4 text-center sm:px-6">
+                            <td className={cadastroListClasses.tdCenter}>
+                              {row.vehicleType ? VEHICLE_TYPE_LABELS[row.vehicleType] : '—'}
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
                               <span
-                                className={`inline-flex max-w-[220px] rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[row.status]}`}
+                                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[row.status]}`}
                               >
                                 {STATUS_LABELS[row.status]}
                               </span>
                             </td>
                             <td
-                              className="px-3 py-4 text-right sm:px-6"
+                              className={listTableRowClasses.actionTd}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <div className="flex justify-end">
@@ -1082,17 +1115,8 @@ export default function SolicitacoesCombustivelPage() {
                   {!showRejectForm ? (
                     <>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Libere o abastecimento informando o posto da região{' '}
-                        <span className="font-medium text-gray-900 dark:text-gray-100">
-                          {selected.administrativeRegion
-                      ? `${selected.administrativeRegion.name}${
-                          selected.administrativeRegion.stateCode
-                            ? ` (${selected.administrativeRegion.stateCode})`
-                            : ''
-                        }`
-                      : '—'}
-                        </span>{' '}
-                        e o prazo para o solicitante ir ao posto.
+                        Libere o abastecimento informando um posto do contrato da solicitação e o
+                        prazo para o solicitante ir ao posto.
                       </p>
                       <div>
                         <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1102,17 +1126,17 @@ export default function SolicitacoesCombustivelPage() {
                           value={approveGasStationId}
                           onChange={setApproveGasStationId}
                           options={gasStationSelectOptions}
-                          disabled={loadingGasStations || approveMutation.isPending || !regionId}
+                          disabled={loadingGasStations || approveMutation.isPending || !contractId}
                           allowEmpty={false}
                           placeholder={
-                            !regionId
-                              ? 'Solicitação sem região administrativa'
+                            !contractId
+                              ? 'Solicitação sem contrato'
                               : loadingGasStations
                                 ? 'Carregando postos...'
-                                : 'Selecionar posto da região...'
+                                : 'Selecionar posto do contrato...'
                           }
                           searchPlaceholder="Pesquisar posto..."
-                          emptyOptionsMessage="Nenhum posto cadastrado para esta região."
+                          emptyOptionsMessage="Nenhum posto vinculado a este contrato."
                           noFocusRing
                         />
                       </div>
@@ -1125,6 +1149,7 @@ export default function SolicitacoesCombustivelPage() {
                           value={refuelDeadlineAmount}
                           onChange={(e) => setRefuelDeadlineAmount(e.target.value)}
                           placeholder="Ex.: 24"
+                          className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         />
                         <div>
                           <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">

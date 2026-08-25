@@ -42,6 +42,7 @@ import * as XLSX from 'xlsx';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import api from '@/lib/api';
 import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import { Modal } from '@/components/ui/Modal';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
@@ -1261,6 +1262,8 @@ function classeValorTotalCondicional(valorPct: number): string {
 type EmployeeOption = {
   id: string;
   name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
 };
 
 /** Estado da montagem do orçamento (persistido por contrato). */
@@ -3502,7 +3505,9 @@ export function OrcamentoPageView({
         const options = employees
           .map((e: any) => ({
             id: String(e?.id ?? ''),
-            name: String(e?.name ?? '').trim()
+            name: String(e?.name ?? '').trim(),
+            cpf: e?.cpf ? String(e.cpf) : null,
+            profilePhotoUrl: e?.profilePhotoUrl ? String(e.profilePhotoUrl) : null,
           }))
           .filter((e: EmployeeOption) => e.id && e.name);
         const uniqueMap = new Map<string, EmployeeOption>();
@@ -3528,11 +3533,14 @@ export function OrcamentoPageView({
 
   const employeeSelectOptions = useMemo(
     () =>
-      employeeOptions.map((employee) => ({
-        value: employee.name,
-        label: employee.name,
-        searchText: employee.name,
-      })),
+      toPersonSelectOptions(
+        employeeOptions.map((employee) => ({
+          value: employee.name,
+          name: employee.name,
+          cpf: employee.cpf,
+          profilePhotoUrl: employee.profilePhotoUrl,
+        })),
+      ),
     [employeeOptions],
   );
 

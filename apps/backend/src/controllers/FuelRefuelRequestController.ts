@@ -11,6 +11,7 @@ import {
 import { assertUserHasFuelSuppliesAccess } from '../lib/fuelSuppliesAccess';
 import {
   listActiveFuelGasStationsByCity,
+  listActiveFuelGasStationsByContract,
   listFuelSatelliteCities,
 } from '../lib/fuelAdministrativeRegions';
 import { FUEL_ABASTECIMENTO_STATE_CODES } from '../constants/fuelSatelliteCities';
@@ -79,6 +80,7 @@ const createSchema = z.object({
   refuelDate: z.string().min(1, 'Informe a data do abastecimento'),
   route: z.string().min(2, 'Informe a rota'),
   satelliteCityCode: z.string().min(1, 'Selecione a cidade de abastecimento'),
+  contractId: z.string().min(1, 'Selecione o contrato'),
   vehiclePlate: z.string().min(1, 'Informe a placa do veículo'),
   vehicleDescription: z.string().optional(),
   vehicleType: z.enum(['PRIVATE', 'COMPANY']),
@@ -258,6 +260,7 @@ export class FuelRefuelRequestController {
           id: true,
           name: true,
           cpf: true,
+          profilePhotoUrl: true,
           employee: {
             select: {
               id: true,
@@ -292,6 +295,7 @@ export class FuelRefuelRequestController {
             cpf: cpfMasked,
             cpfDigits,
             costCenter: u.employee?.costCenter?.trim() || null,
+            profilePhotoUrl: u.profilePhotoUrl || null,
           };
         })
         .filter((row) => row.id && row.name)
@@ -358,6 +362,7 @@ export class FuelRefuelRequestController {
         refuelDate,
         route: body.route,
         satelliteCityCode: body.satelliteCityCode,
+        contractId: body.contractId,
         costCenter: costCenterLabel,
         driverName,
         vehiclePlate: body.vehiclePlate,
@@ -401,8 +406,14 @@ export class FuelRefuelRequestController {
       if (!user) throw createError('Usuário não autenticado', 401);
       await assertUserHasFuelSuppliesAccess(user.id, user.isAdmin);
 
+      const contractId = String(req.query.contractId || '').trim();
+      if (contractId) {
+        const rows = await listActiveFuelGasStationsByContract(contractId);
+        return res.json({ success: true, data: rows });
+      }
+
       const cityCode = String(req.query.cityCode || req.params.regionId || '').trim();
-      if (!cityCode) throw createError('Informe a cidade', 400);
+      if (!cityCode) throw createError('Informe o contrato ou a cidade', 400);
 
       const rows = await listActiveFuelGasStationsByCity(cityCode);
       res.json({ success: true, data: rows });

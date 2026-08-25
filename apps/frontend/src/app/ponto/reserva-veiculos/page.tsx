@@ -47,6 +47,7 @@ import {
   vehicleReservationStatusBadgeClass,
   type VehicleReservationStatus
 } from '@/lib/vehicleReservationLabels';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 
@@ -54,6 +55,7 @@ type DriverSelectOption = {
   id: string;
   name: string;
   cpf: string;
+  profilePhotoUrl?: string | null;
 };
 
 type VehicleOption = {
@@ -395,12 +397,14 @@ export default function ReservaVeiculosPage() {
 
   const employeeSelectOptions = useMemo<MultiSelectSearchOption[]>(
     () =>
-      employeeOptions.map((employee) => ({
-        value: employee.name,
-        label: employee.name,
-        description: employee.cpf || undefined,
-        searchText: `${employee.name} ${employee.cpf || ''}`
-      })),
+      toPersonSelectOptions(
+        employeeOptions.map((employee) => ({
+          value: employee.name,
+          name: employee.name,
+          cpf: employee.cpf,
+          profilePhotoUrl: employee.profilePhotoUrl,
+        }))
+      ),
     [employeeOptions]
   );
 
@@ -618,7 +622,13 @@ export default function ReservaVeiculosPage() {
   const isListEmpty = !isLoading && reservations.length === 0;
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/reserva-veiculos">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (

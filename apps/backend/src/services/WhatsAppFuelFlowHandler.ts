@@ -103,7 +103,7 @@ function todayIso(): string {
 
 function vehicleTypeLabel(type?: FuelVehicleType): string {
   if (type === FuelVehicleType.PRIVATE) return 'Particular';
-  if (type === FuelVehicleType.COMPANY) return 'Frota / empresa';
+  if (type === FuelVehicleType.COMPANY) return 'Frota';
   return '—';
 }
 
@@ -145,7 +145,7 @@ async function buildCityListAction(stateCode: string): Promise<SendAction> {
     );
   }
   return waList(
-    `Selecione a cidade satélite em ${stateCode} (conforme origem da rota):`,
+    `Selecione a cidade em ${stateCode}:`,
     cities.map((city) => ({
       id: `fuel_region_${city.code}`,
       title: city.name.length > 24 ? `${city.name.slice(0, 21)}...` : city.name,
@@ -404,6 +404,22 @@ export async function processWhatsAppFuelFlow(params: {
       }
 
       const cities = listFuelSatelliteCities(stateCode);
+      if (!cities.length) {
+        return {
+          sendAction: {
+            type: 'buttons',
+            body: `Não há cidades cadastradas para ${stateCode}. Fale com o Suprimentos.`,
+            buttons: [
+              { id: 'fuel_state_DF', title: 'DF' },
+              { id: 'fuel_state_GO', title: 'GO' },
+              { id: 'MENU', title: 'Menu' },
+            ],
+          },
+          newStatus,
+          newPayload,
+        };
+      }
+
       newPayload.fuelStateCode = stateCode;
       newPayload.adminRegionOptions = cities.map((city) => ({
         id: city.code,

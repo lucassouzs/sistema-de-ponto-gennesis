@@ -18,9 +18,65 @@ const stationBodySchema = z.object({
   address: z.string().max(240).optional().nullable(),
   sortOrder: z.coerce.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
+  contractIds: z.array(z.string().min(1)).optional(),
 });
 
 const stationUpdateSchema = stationBodySchema.partial().omit({ cityCode: true });
+
+const stationContractSelect = {
+  id: true,
+  name: true,
+  number: true,
+} as const;
+
+const stationContractsInclude = {
+  contracts: {
+    include: {
+      contract: { select: stationContractSelect },
+    },
+    orderBy: { contract: { name: 'asc' as const } },
+  },
+  _count: { select: { requests: true } },
+};
+
+function mapStationRow<
+  T extends {
+    cityCode: string;
+    contracts?: Array<{ contract: { id: string; name: string; number: string } }>;
+  },
+>(row: T) {
+  const { contracts, ...rest } = row;
+  return {
+    ...rest,
+    city: getFuelSatelliteCityByCode(row.cityCode) ?? null,
+    contracts: (contracts ?? []).map((link) => link.contract),
+  };
+}
+
+async function assertContractIdsExist(contractIds: string[]) {
+  const unique = [...new Set(contractIds.map((id) => id.trim()).filter(Boolean))];
+  if (!unique.length) return [] as string[];
+  const found = await prisma.contract.findMany({
+    where: { id: { in: unique } },
+    select: { id: true },
+  });
+  if (found.length !== unique.length) {
+    throw createError('Um ou mais contratos selecionados são inválidos', 400);
+  }
+  return unique;
+}
+
+async function replaceStationContracts(stationId: string, contractIds: string[]) {
+  const unique = await assertContractIdsExist(contractIds);
+  await prisma.$transaction(async (tx) => {
+    await tx.fuelGasStationContract.deleteMany({ where: { stationId } });
+    if (unique.length) {
+      await tx.fuelGasStationContract.createMany({
+        data: unique.map((contractId) => ({ stationId, contractId })),
+      });
+    }
+  });
+}
 
 export class FuelGasStationController {
   private async assertAccess(req: AuthRequest) {
@@ -48,7 +104,20 @@ export class FuelGasStationController {
       await this.assertAccess(req);
       const stateCode = String(req.query.stateCode ?? '').trim().toUpperCase();
       const cityCode = String(req.query.cityCode ?? '').trim().toUpperCase();
+      const contractId = String(req.query.contractId ?? '').trim();
       const includeInactive = req.query.includeInactive === 'true';
+
+      if (contractId) {
+        const rows = await prisma.fuelGasStation.findMany({
+          where: {
+            contracts: { some: { contractId } },
+            ...(includeInactive ? {} : { isActive: true }),
+          },
+          orderBy: [{ displayNumber: 'asc' }],
+          include: stationContractsInclude,
+        });
+        return res.json({ success: true, data: rows.map(mapStationRow) });
+      }
 
       const cityCodes = cityCode
         ? [cityCode]
@@ -64,15 +133,10 @@ export class FuelGasStationController {
           ...(includeInactive ? {} : { isActive: true }),
         },
         orderBy: [{ displayNumber: 'asc' }],
-        include: { _count: { select: { requests: true } } },
+        include: stationContractsInclude,
       });
 
-      const data = rows.map((row) => ({
-        ...row,
-        city: getFuelSatelliteCityByCode(row.cityCode) ?? null,
-      }));
-
-      res.json({ success: true, data });
+      res.json({ success: true, data: rows.map(mapStationRow) });
     } catch (error) {
       next(error);
     }
@@ -83,6 +147,7 @@ export class FuelGasStationController {
       await this.assertAccess(req);
       const body = stationBodySchema.parse(req.body);
       assertValidSatelliteCityCode(body.cityCode);
+      const contractIds = await assertContractIdsExist(body.contractIds ?? []);
 
       const [displayNumber] = await reserveFuelGasStationDisplayNumbers(1);
       if (!displayNumber) throw createError('Não foi possível gerar o código do posto', 500);
@@ -95,12 +160,20 @@ export class FuelGasStationController {
           address: body.address?.trim() || null,
           sortOrder: body.sortOrder ?? 0,
           isActive: body.isActive ?? true,
+          ...(contractIds.length
+            ? {
+                contracts: {
+                  create: contractIds.map((contractId) => ({ contractId })),
+                },
+              }
+            : {}),
         },
+        include: stationContractsInclude,
       });
 
       res.status(201).json({
         success: true,
-        data: { ...row, city: getFuelSatelliteCityByCode(row.cityCode) ?? null },
+        data: mapStationRow(row),
       });
     } catch (error) {
       if (error instanceof Error && error.message === 'Cidade satélite inválida') {
@@ -187,7 +260,7 @@ export class FuelGasStationController {
       const existing = await prisma.fuelGasStation.findUnique({ where: { id: req.params.id } });
       if (!existing) throw createError('Posto não encontrado', 404);
 
-      const row = await prisma.fuelGasStation.update({
+      await prisma.fuelGasStation.update({
         where: { id: existing.id },
         data: {
           ...(body.name !== undefined && { name: body.name.trim() }),
@@ -197,9 +270,18 @@ export class FuelGasStationController {
         },
       });
 
+      if (body.contractIds !== undefined) {
+        await replaceStationContracts(existing.id, body.contractIds);
+      }
+
+      const row = await prisma.fuelGasStation.findUniqueOrThrow({
+        where: { id: existing.id },
+        include: stationContractsInclude,
+      });
+
       res.json({
         success: true,
-        data: { ...row, city: getFuelSatelliteCityByCode(row.cityCode) ?? null },
+        data: mapStationRow(row),
       });
     } catch (error) {
       next(error);

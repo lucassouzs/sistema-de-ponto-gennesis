@@ -22,6 +22,7 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import { ConstructionMaterialSearchDropdown } from '@/components/suprimentos/ConstructionMaterialSearchDropdown';
 import { ButtonSeg } from '@/app/ponto/solicitacoes-dp/DpSolicitacaoTypeFields';
 import { fetchEmployeeSelectOptions } from '@/lib/employeeSelectOptions';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
   maskCurrencyInputBrOrEmpty,
@@ -361,7 +362,15 @@ export default function EntregasLogisticaPageClient() {
   );
 
   const driverOptions = useMemo(
-    () => (driversRes ?? []).map((d) => ({ value: d.name, label: d.name, searchText: d.name })),
+    () =>
+      toPersonSelectOptions(
+        (driversRes ?? []).map((d) => ({
+          value: d.name,
+          name: d.name,
+          cpf: d.cpf,
+          profilePhotoUrl: d.profilePhotoUrl,
+        }))
+      ),
     [driversRes]
   );
 

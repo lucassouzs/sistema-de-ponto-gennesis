@@ -2,19 +2,41 @@ import * as XLSX from 'xlsx';
 
 /** Cidades satélites (espelho do backend) — usadas no modelo e na validação do parse. */
 export const FUEL_IMPORT_CITIES = [
-  { code: 'DF_TAGUATINGA', stateCode: 'DF', name: 'Taguatinga' },
+  // DF — 33 regiões administrativas
+  { code: 'DF_AGUAS_CLARAS', stateCode: 'DF', name: 'Águas Claras' },
+  { code: 'DF_ARNIQUEIRA', stateCode: 'DF', name: 'Arniqueira' },
+  { code: 'DF_BRAZLANDIA', stateCode: 'DF', name: 'Brazlândia' },
+  { code: 'DF_CANDANGOLANDIA', stateCode: 'DF', name: 'Candangolândia' },
   { code: 'DF_CEILANDIA', stateCode: 'DF', name: 'Ceilândia' },
-  { code: 'DF_SAMAMBAIA', stateCode: 'DF', name: 'Samambaia' },
-  { code: 'DF_SAMAMBAIA_NORTE', stateCode: 'DF', name: 'Samambaia Norte' },
-  { code: 'DF_GUARA', stateCode: 'DF', name: 'Guará' },
-  { code: 'DF_ZONA_INDUSTRIAL_GUARA', stateCode: 'DF', name: 'Zona Industrial (Guará)' },
-  { code: 'DF_PLANALTINA', stateCode: 'DF', name: 'Planaltina' },
-  { code: 'DF_SAO_SEBASTIAO', stateCode: 'DF', name: 'São Sebastião' },
+  { code: 'DF_CRUZEIRO', stateCode: 'DF', name: 'Cruzeiro' },
+  { code: 'DF_FERCAL', stateCode: 'DF', name: 'Fercal' },
   { code: 'DF_GAMA', stateCode: 'DF', name: 'Gama' },
-  { code: 'DF_SETOR_CENTRAL_GAMA', stateCode: 'DF', name: 'Setor Central (Gama)' },
+  { code: 'DF_GUARA', stateCode: 'DF', name: 'Guará' },
+  { code: 'DF_ITAPOA', stateCode: 'DF', name: 'Itapoã' },
+  { code: 'DF_JARDIM_BOTANICO', stateCode: 'DF', name: 'Jardim Botânico' },
+  { code: 'DF_LAGO_NORTE', stateCode: 'DF', name: 'Lago Norte' },
+  { code: 'DF_LAGO_SUL', stateCode: 'DF', name: 'Lago Sul' },
+  { code: 'DF_NUCLEO_BANDEIRANTE', stateCode: 'DF', name: 'Núcleo Bandeirante' },
+  { code: 'DF_PARANOA', stateCode: 'DF', name: 'Paranoá' },
+  { code: 'DF_PARK_WAY', stateCode: 'DF', name: 'Park Way' },
+  { code: 'DF_PLANALTINA', stateCode: 'DF', name: 'Planaltina' },
+  { code: 'DF_PLANO_PILOTO', stateCode: 'DF', name: 'Plano Piloto' },
+  { code: 'DF_RECANTO_DAS_EMAS', stateCode: 'DF', name: 'Recanto das Emas' },
+  { code: 'DF_RIACHO_FUNDO', stateCode: 'DF', name: 'Riacho Fundo' },
+  { code: 'DF_RIACHO_FUNDO_II', stateCode: 'DF', name: 'Riacho Fundo II' },
+  { code: 'DF_SAMAMBAIA', stateCode: 'DF', name: 'Samambaia' },
   { code: 'DF_SANTA_MARIA', stateCode: 'DF', name: 'Santa Maria' },
-  { code: 'DF_ASA_NORTE', stateCode: 'DF', name: 'Asa Norte' },
-  { code: 'DF_ARNIQUEIRAS', stateCode: 'DF', name: 'Arniqueiras' },
+  { code: 'DF_SAO_SEBASTIAO', stateCode: 'DF', name: 'São Sebastião' },
+  { code: 'DF_SCIA', stateCode: 'DF', name: 'SCIA' },
+  { code: 'DF_SIA', stateCode: 'DF', name: 'SIA' },
+  { code: 'DF_SOBRADINHO', stateCode: 'DF', name: 'Sobradinho' },
+  { code: 'DF_SOBRADINHO_II', stateCode: 'DF', name: 'Sobradinho II' },
+  { code: 'DF_SOL_NASCENTE_POR_DO_SOL', stateCode: 'DF', name: 'Sol Nascente/Pôr do Sol' },
+  { code: 'DF_SUDOESTE_OCTOGONAL', stateCode: 'DF', name: 'Sudoeste/Octogonal' },
+  { code: 'DF_TAGUATINGA', stateCode: 'DF', name: 'Taguatinga' },
+  { code: 'DF_VARJAO', stateCode: 'DF', name: 'Varjão' },
+  { code: 'DF_VICENTE_PIRES', stateCode: 'DF', name: 'Vicente Pires' },
+  // GO
   { code: 'GO_GOIANIA', stateCode: 'GO', name: 'Goiânia' },
   { code: 'GO_APARECIDA', stateCode: 'GO', name: 'Aparecida de Goiânia' },
   { code: 'GO_ANAPOLIS', stateCode: 'GO', name: 'Anápolis' },
@@ -23,12 +45,34 @@ export const FUEL_IMPORT_CITIES = [
   { code: 'GO_RIO_VERDE', stateCode: 'GO', name: 'Rio Verde' },
 ] as const;
 
+/** Códigos/nomes antigos aceitos na importação → código atual. */
+const FUEL_IMPORT_CITY_ALIASES: Array<{
+  code?: string;
+  name?: string;
+  mapsTo: (typeof FUEL_IMPORT_CITIES)[number]['code'];
+}> = [
+  { code: 'DF_ARNIQUEIRAS', mapsTo: 'DF_ARNIQUEIRA' },
+  { name: 'Arniqueiras', mapsTo: 'DF_ARNIQUEIRA' },
+  { code: 'DF_ASA_NORTE', mapsTo: 'DF_PLANO_PILOTO' },
+  { name: 'Asa Norte', mapsTo: 'DF_PLANO_PILOTO' },
+  { code: 'DF_SAMAMBAIA_NORTE', mapsTo: 'DF_SAMAMBAIA' },
+  { name: 'Samambaia Norte', mapsTo: 'DF_SAMAMBAIA' },
+  { code: 'DF_SETOR_CENTRAL_GAMA', mapsTo: 'DF_GAMA' },
+  { name: 'Setor Central (Gama)', mapsTo: 'DF_GAMA' },
+  { code: 'DF_ZONA_INDUSTRIAL_GUARA', mapsTo: 'DF_GUARA' },
+  { name: 'Zona Industrial (Guará)', mapsTo: 'DF_GUARA' },
+  { name: 'Sol Nascente', mapsTo: 'DF_SOL_NASCENTE_POR_DO_SOL' },
+  { name: 'Pôr do Sol', mapsTo: 'DF_SOL_NASCENTE_POR_DO_SOL' },
+  { name: 'Por do Sol', mapsTo: 'DF_SOL_NASCENTE_POR_DO_SOL' },
+  { name: 'Sudoeste', mapsTo: 'DF_SUDOESTE_OCTOGONAL' },
+  { name: 'Octogonal', mapsTo: 'DF_SUDOESTE_OCTOGONAL' },
+];
+
 export const FUEL_STATION_IMPORT_COLUMNS = [
   { name: 'Estado', required: true, hint: 'DF ou GO' },
-  { name: 'Cidade', required: true, hint: 'Nome da cidade (ex.: Taguatinga, Goiânia)' },
+  { name: 'Cidade', required: true, hint: 'Nome da região administrativa (ex.: Taguatinga, Goiânia)' },
   { name: 'Nome', required: true, hint: 'Nome do posto' },
   { name: 'Endereço', required: false },
-  { name: 'Ordem', required: false, hint: 'Posição na lista (opcional; vazio = 0)' },
   { name: 'Ativo', required: false, hint: 'Sim / Não' },
 ] as const;
 
@@ -39,7 +83,6 @@ export const FUEL_STATION_IMPORT_TEMPLATE_EXAMPLE = [
   'Taguatinga',
   'Posto Exemplo',
   'QS 01 Conjunto A Lote 10',
-  '0',
   'Sim',
 ];
 
@@ -75,10 +118,30 @@ export function resolveFuelCityCode(cityRaw: string, stateRaw?: string): string 
     return byCode.code;
   }
 
+  const aliasByCode = FUEL_IMPORT_CITY_ALIASES.find((a) => a.code === upper);
+  if (aliasByCode) {
+    if (stateRaw?.trim()) {
+      const state = parseStateCode(stateRaw);
+      const target = FUEL_IMPORT_CITIES.find((c) => c.code === aliasByCode.mapsTo);
+      if (state && target && target.stateCode !== state) return null;
+    }
+    return aliasByCode.mapsTo;
+  }
+
   const state = stateRaw?.trim() ? parseStateCode(stateRaw) : null;
   if (stateRaw?.trim() && !state) return null;
 
   const norm = normalizeKey(cityTrimmed);
+
+  const aliasByName = FUEL_IMPORT_CITY_ALIASES.find(
+    (a) => a.name && normalizeKey(a.name) === norm
+  );
+  if (aliasByName) {
+    const target = FUEL_IMPORT_CITIES.find((c) => c.code === aliasByName.mapsTo);
+    if (state && target && target.stateCode !== state) return null;
+    return aliasByName.mapsTo;
+  }
+
   const candidates = FUEL_IMPORT_CITIES.filter((c) => {
     if (state && c.stateCode !== state) return false;
     return (
@@ -123,13 +186,6 @@ function parseActive(raw: string): boolean | undefined {
   return undefined;
 }
 
-function parseSortOrder(raw: string): number | undefined {
-  if (!raw) return undefined;
-  const n = Number(String(raw).replace(',', '.'));
-  if (!Number.isFinite(n) || n < 0) return undefined;
-  return Math.floor(n);
-}
-
 type ImportRowResult = {
   station: Record<string, unknown> | null;
   skipReasons: string[];
@@ -141,7 +197,6 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
   const cityRaw = pickRowValue(row, 'Cidade', 'cityCode', 'Código da cidade', 'Codigo da cidade');
   const name = pickRowValue(row, 'Nome', 'name', 'Posto');
   const address = pickRowValue(row, 'Endereço', 'Endereco', 'address');
-  const ordemRaw = pickRowValue(row, 'Ordem', 'sortOrder');
   const ativoRaw = pickRowValue(row, 'Ativo', 'isActive');
 
   const skipReasons: string[] = [];
@@ -170,9 +225,6 @@ function analyzeImportRow(row: Record<string, unknown>, lineNumber: number): Imp
     name,
     address: address || undefined,
   };
-
-  const sortOrder = parseSortOrder(ordemRaw);
-  if (sortOrder !== undefined) station.sortOrder = sortOrder;
 
   const isActive = parseActive(ativoRaw);
   if (isActive !== undefined) station.isActive = isActive;

@@ -42,6 +42,8 @@ import { DatePickerField } from '@/components/ui/DatePickerField';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { gestaoOsTechnicianSelectOptions } from '@/components/gestao-os/GestaoOsModalUi';
+import type { GestaoOsTechnicianOption } from '@/components/gestao-os/GestaoOsModalUi';
 import { GestaoOsAssetQrLabel } from '@/components/gestao-os/GestaoOsAssetQrLabel';
 import { GestaoOsAssetQrLabelsPickerModal } from '@/components/gestao-os/GestaoOsAssetQrLabelsPickerModal';
 import { useBrandingLogo } from '@/hooks/useBrandingLogo';
@@ -313,7 +315,7 @@ export default function GestaoOsLocaisPageClient() {
   const { data: technicians = [] } = useQuery({
     queryKey: ['gestao-os-technicians'],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+      const res = await api.get<{ success: boolean; data: GestaoOsTechnicianOption[] }>(
         '/gestao-os/technicians'
       );
       return res.data?.data ?? [];
@@ -321,10 +323,7 @@ export default function GestaoOsLocaisPageClient() {
   });
 
   const personOptions = useMemo(
-    () =>
-      labeledToSelectOptions(
-        technicians.map((t) => ({ value: t.id, label: t.name, searchText: t.name }))
-      ),
+    () => gestaoOsTechnicianSelectOptions(technicians),
     [technicians]
   );
 

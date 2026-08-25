@@ -41,6 +41,7 @@ export type SolicitacaoPayrollEmp = {
   id: string;
   name: string;
   cpf?: string;
+  profilePhotoUrl?: string | null;
   department?: string;
   position?: string;
   company?: string | null;

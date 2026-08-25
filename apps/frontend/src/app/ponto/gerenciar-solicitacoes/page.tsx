@@ -31,6 +31,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
@@ -374,20 +375,24 @@ export default function GerenciarSolicitacoesPage() {
     });
   };
 
-  if (loadingUser || loadingRequests) {
-    return (
-      <Loading 
-        message="Carregando solicitações..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/gerenciar-solicitacoes">
+        <MainLayout
+          userRole={user.role}
+          userName={user.name}
+          onLogout={handleLogout}
+        >
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/gerenciar-solicitacoes">
@@ -648,7 +653,9 @@ export default function GerenciarSolicitacoesPage() {
 
               {/* Lista de solicitações */}
               <div className="space-y-3">
-              {filteredRequests.length === 0 ? (
+              {loadingRequests ? (
+                <CadastroListLoading message="Carregando solicitações..." />
+              ) : filteredRequests.length === 0 ? (
                 <Card>
                   <CardContent className="p-6 text-center">
                   <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />

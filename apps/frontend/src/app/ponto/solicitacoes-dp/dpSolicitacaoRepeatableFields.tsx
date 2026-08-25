@@ -13,6 +13,7 @@ import { DEPARTMENTS_LIST } from '@/constants/payrollFilters';
 import { maskCurrencyInputBrOrEmpty } from '@/lib/maskCurrencyBr';
 import { formatDateBr } from '@/lib/dateTimeBr';
 import { DP_SOLICITACOES_NO_FOCUS_CLS } from '@/lib/dpSolicitacoesUi';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import {
   AddMoreButton,
   RepeatableCard,
@@ -28,6 +29,7 @@ type PayrollEmp = {
   id: string;
   name: string;
   cpf?: string;
+  profilePhotoUrl?: string | null;
   department?: string;
   position?: string;
   company?: string | null;
@@ -218,11 +220,15 @@ type RepeatableWithEmployeesProps = RepeatableBaseProps & {
 };
 
 function getEmployeeOptions(employees: PayrollEmp[]): MultiSelectSearchOption[] {
-  return employees.map((em) => ({
-    value: em.id,
-    label: em.name,
-    searchText: [em.name, em.cpf, em.department, em.position].filter(Boolean).join(' '),
-  }));
+  return toPersonSelectOptions(
+    employees.map((em) => ({
+      value: em.id,
+      name: em.name,
+      cpf: em.cpf,
+      profilePhotoUrl: em.profilePhotoUrl,
+      extraSearchText: [em.department, em.position].filter(Boolean).join(' '),
+    }))
+  );
 }
 
 function toPositiveInt(value: unknown): number {

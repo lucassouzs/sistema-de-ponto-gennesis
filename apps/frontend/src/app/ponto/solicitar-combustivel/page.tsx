@@ -47,6 +47,8 @@ import {
   isBlankVehiclePhoto,
 } from '@/components/ui/VehicleReturnPhotoField';
 import { formatPlacaDisplay } from '@/lib/brazilianVehiclePlate';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
 type VehicleUsageType = 'FROTA' | 'PARTICULAR';
@@ -110,6 +112,7 @@ type SatelliteCity = {
   code: string;
   stateCode: string;
   name: string;
+  stationCount?: number;
 };
 
 type FleetVehicle = {
@@ -130,6 +133,7 @@ type DriverOption = {
   cpf: string;
   cpfDigits?: string;
   costCenter: string | null;
+  profilePhotoUrl?: string | null;
 };
 
 type FormState = {
@@ -137,6 +141,7 @@ type FormState = {
   route: string;
   stateCode: string;
   satelliteCityCode: string;
+  contractId: string;
   driverUserId: string;
   driverNamePreview: string;
   driverCpfPreview: string;
@@ -149,12 +154,12 @@ type FormState = {
   observations: string;
 };
 
-type CardFilter = 'all' | 'pending' | 'concluded' | 'cancelled';
+type CardFilter = 'all' | 'analysis' | 'awaiting_refuel' | 'concluded' | 'cancelled';
 
 const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
-  PENDING_MANAGER: 'Aguardando gestor',
+  PENDING_MANAGER: 'Aguardando aprovação',
   PENDING_SUPPLIES: 'Aguardando Suprimentos',
-  AWAITING_REFUEL: 'Aguardando abastecimento',
+  AWAITING_REFUEL: 'Abastecimento Liberado',
   COMPLETED: 'Concluída',
   APPROVED: 'Aguardando Suprimentos',
   REJECTED: 'Rejeitada',
@@ -173,7 +178,7 @@ const STATUS_BADGE: Record<FuelRefuelStatus, string> = {
 
 const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
-  COMPANY: 'Frota / empresa',
+  COMPANY: 'Frota',
 };
 
 const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
@@ -188,9 +193,6 @@ const TANK_LEVEL_LABELS: Record<FuelTankLevelAfter, string> = Object.fromEntries
   TANK_LEVEL_OPTIONS.map((o) => [o.value, o.label]),
 ) as Record<FuelTankLevelAfter, string>;
 
-const fieldClassName =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
-
 function todayInputValue() {
   return format(new Date(), 'yyyy-MM-dd');
 }
@@ -201,6 +203,7 @@ function EMPTY_FORM(): FormState {
     route: '',
     stateCode: '',
     satelliteCityCode: '',
+    contractId: '',
     driverUserId: '',
     driverNamePreview: '',
     driverCpfPreview: '',
@@ -247,19 +250,6 @@ function formatVehicleModel(vehicle: FleetVehicle): string {
   return modelo || marca || '—';
 }
 
-function formatFrotaParticLabel(value?: VehicleUsageType | null): string {
-  if (value === 'FROTA') return 'Frota';
-  if (value === 'PARTICULAR') return 'Particular';
-  return '—';
-}
-
-function formatContratoLabel(value?: string | null): string {
-  const trimmed = (value || '').trim();
-  if (!trimmed) return '—';
-  const withoutCode = trimmed.replace(/^\d+(?:\.\d+)+\s*[-–—]\s*/, '').trim();
-  return withoutCode || trimmed;
-}
-
 function mapFrotaParticToFuelType(frotaPartic?: VehicleUsageType | null): FuelVehicleType {
   return frotaPartic === 'PARTICULAR' ? 'PRIVATE' : 'COMPANY';
 }
@@ -272,21 +262,12 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40">
-      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{title}</h4>
+    <section className="space-y-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        {title}
+      </h3>
       {children}
     </section>
-  );
-}
-
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="mb-1 text-xs font-medium text-gray-500 dark:text-gray-400">{label}</p>
-      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-100/90 px-3 py-2 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-950/60 dark:text-gray-300">
-        {value || '—'}
-      </div>
-    </div>
   );
 }
 
@@ -341,13 +322,16 @@ const tdCenterWrap =
 const thCenterCompact =
   'px-2 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-3';
 
-function isPendingStatus(status: FuelRefuelStatus): boolean {
+function isAnalysisStatus(status: FuelRefuelStatus): boolean {
   return (
     status === 'PENDING_MANAGER' ||
     status === 'PENDING_SUPPLIES' ||
-    status === 'AWAITING_REFUEL' ||
     status === 'APPROVED'
   );
+}
+
+function isAwaitingRefuelStatus(status: FuelRefuelStatus): boolean {
+  return status === 'AWAITING_REFUEL';
 }
 
 function isCancelledStatus(status: FuelRefuelStatus): boolean {
@@ -359,21 +343,28 @@ const CARD_LIST_CONFIG: Record<
   { title: string; subtitle: string; Icon: LucideIcon; iconBg: string; iconColor: string }
 > = {
   all: {
-    title: 'Minhas solicitações',
-    subtitle: 'Acompanhe pedidos de abastecimento feitos por você.',
+    title: 'Todas as solicitações',
+    subtitle: 'Todas as solicitações de abastecimento.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
   },
-  pending: {
-    title: 'Solicitações pendentes',
-    subtitle: 'Aguardando gestor, Suprimentos ou abastecimento.',
+  analysis: {
+    title: 'Em análise',
+    subtitle: 'Aguardando aprovação ou Suprimentos.',
     Icon: Clock,
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
   },
+  awaiting_refuel: {
+    title: 'Abastecimento Liberado',
+    subtitle: 'Posto definido — abasteça e informe.',
+    Icon: Fuel,
+    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+  },
   concluded: {
-    title: 'Solicitações concluídas',
+    title: 'Concluídas',
     subtitle: 'Abastecimentos finalizados.',
     Icon: CheckCircle,
     iconBg: 'bg-green-100 dark:bg-green-900/30',
@@ -394,23 +385,31 @@ const STAT_CARDS: {
   iconBg: string;
   iconColor: string;
   Icon: LucideIcon;
-  countKey: 'total' | 'pending' | 'concluded' | 'cancelled';
+  countKey: 'total' | 'analysis' | 'awaitingRefuel' | 'concluded' | 'cancelled';
 }[] = [
   {
     filter: 'all',
-    label: 'Registros',
+    label: 'Todas',
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
     Icon: Users,
     countKey: 'total',
   },
   {
-    filter: 'pending',
-    label: 'Pendentes',
+    filter: 'analysis',
+    label: 'Em análise',
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
     Icon: Clock,
-    countKey: 'pending',
+    countKey: 'analysis',
+  },
+  {
+    filter: 'awaiting_refuel',
+    label: 'Abastecimento Liberado',
+    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    Icon: Fuel,
+    countKey: 'awaitingRefuel',
   },
   {
     filter: 'concluded',
@@ -463,14 +462,6 @@ export default function SolicitarCombustivelPage() {
   const currentUserId =
     typeof userData?.data?.id === 'string' ? userData.data.id : '';
 
-  const driverInfo = formData.driverUserId
-    ? {
-        name: formData.driverNamePreview || '—',
-        cpf: formData.driverCpfPreview || '—',
-        costCenter: formData.driverCostCenterPreview || '—',
-      }
-    : null;
-
   const { data: allRows = [], isLoading: loadingList } = useQuery({
     queryKey: ['fuel-refuel-requests-mine'],
     queryFn: async () => {
@@ -487,8 +478,28 @@ export default function SolicitarCombustivelPage() {
       return res.data?.data as { states: string[]; cities: SatelliteCity[] };
     },
     enabled: showForm,
-    staleTime: 30 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
+
+  const { data: contractsRes } = useQuery({
+    queryKey: ['contracts-for-fuel-request'],
+    queryFn: async () =>
+      (await api.get('/contracts', { params: { limit: 500, page: 1 } })).data,
+    enabled: showForm,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const contractSelectOptions = useMemo(
+    () =>
+      ((contractsRes?.data ?? []) as Array<{ id: string; name: string; number?: string }>).map(
+        (c) => ({
+          value: c.id,
+          label: c.name,
+          searchText: `${c.name} ${c.number ?? ''}`,
+        }),
+      ),
+    [contractsRes],
+  );
 
   const { data: driverOptions = [], isLoading: loadingDrivers } = useQuery({
     queryKey: ['fuel-request-driver-options'],
@@ -514,11 +525,15 @@ export default function SolicitarCombustivelPage() {
 
   const driverSelectOptions = useMemo(
     () =>
-      driverOptions.map((d) => ({
-        value: d.id,
-        label: d.name,
-        searchText: `${d.name} ${d.cpf || ''} ${d.costCenter || ''}`,
-      })),
+      toPersonSelectOptions(
+        driverOptions.map((d) => ({
+          value: d.id,
+          name: d.name,
+          cpf: d.cpf,
+          profilePhotoUrl: d.profilePhotoUrl,
+          extraSearchText: d.costCenter || undefined,
+        })),
+      ),
     [driverOptions],
   );
 
@@ -549,18 +564,18 @@ export default function SolicitarCombustivelPage() {
     });
   }, [showForm, driverOptions, currentUserId]);
 
-  const selectedVehicle = useMemo(
-    () => fleetVehicles.find((v) => v.id === formData.vehicleId) ?? null,
-    [fleetVehicles, formData.vehicleId],
-  );
-
   const vehicleOptions = useMemo(
     () =>
-      fleetVehicles.map((v) => ({
-        value: v.id,
-        label: formatVehicleLabel(v),
-        searchText: formatPlacaDisplay(v.placaVeic).replace(/[^a-zA-Z0-9]/g, ''),
-      })),
+      fleetVehicles.map((v) => {
+        const model = formatVehicleModel(v);
+        const plate = formatVehicleLabel(v);
+        return {
+          value: v.id,
+          label: plate,
+          description: model !== '—' ? model : undefined,
+          searchText: `${plate} ${model}`.replace(/[^a-zA-Z0-9]/g, ' '),
+        };
+      }),
     [fleetVehicles],
   );
   const citiesForState = useMemo(() => {
@@ -570,16 +585,19 @@ export default function SolicitarCombustivelPage() {
   }, [citiesPayload?.cities, formData.stateCode]);
 
   const stats = useMemo(() => {
-    const pending = allRows.filter((r) => isPendingStatus(r.status)).length;
+    const analysis = allRows.filter((r) => isAnalysisStatus(r.status)).length;
+    const awaitingRefuel = allRows.filter((r) => isAwaitingRefuelStatus(r.status)).length;
     const concluded = allRows.filter((r) => r.status === 'COMPLETED').length;
     const cancelled = allRows.filter((r) => isCancelledStatus(r.status)).length;
-    return { total: allRows.length, pending, concluded, cancelled };
+    return { total: allRows.length, analysis, awaitingRefuel, concluded, cancelled };
   }, [allRows]);
 
   const filteredRows = useMemo(() => {
     let rows = allRows;
-    if (cardFilter === 'pending') rows = rows.filter((r) => isPendingStatus(r.status));
-    else if (cardFilter === 'concluded') rows = rows.filter((r) => r.status === 'COMPLETED');
+    if (cardFilter === 'analysis') rows = rows.filter((r) => isAnalysisStatus(r.status));
+    else if (cardFilter === 'awaiting_refuel') {
+      rows = rows.filter((r) => isAwaitingRefuelStatus(r.status));
+    } else if (cardFilter === 'concluded') rows = rows.filter((r) => r.status === 'COMPLETED');
     else if (cardFilter === 'cancelled') rows = rows.filter((r) => isCancelledStatus(r.status));
 
     const q = searchTerm.trim().toLowerCase();
@@ -717,7 +735,11 @@ export default function SolicitarCombustivelPage() {
       return;
     }
     if (!formData.satelliteCityCode) {
-      toast.error('Selecione a cidade de abastecimento');
+      toast.error('Selecione a cidade');
+      return;
+    }
+    if (!formData.contractId) {
+      toast.error('Selecione o contrato');
       return;
     }
     if (!formData.driverUserId) {
@@ -741,6 +763,7 @@ export default function SolicitarCombustivelPage() {
       refuelDate: formData.refuelDate,
       route: formData.route.trim(),
       satelliteCityCode: formData.satelliteCityCode,
+      contractId: formData.contractId,
       vehiclePlate: formData.vehiclePlate.trim().toUpperCase(),
       vehicleDescription: formData.vehicleDescription.trim() || undefined,
       vehicleType: formData.vehicleType,
@@ -751,7 +774,13 @@ export default function SolicitarCombustivelPage() {
   };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/solicitar-combustivel">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (
@@ -767,7 +796,7 @@ export default function SolicitarCombustivelPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
             {STAT_CARDS.map((card) => (
               <FilterStatCard
                 key={card.filter}
@@ -777,6 +806,7 @@ export default function SolicitarCombustivelPage() {
                 iconBg={card.iconBg}
                 iconColor={card.iconColor}
                 isActive={cardFilter === card.filter}
+                loading={loadingList}
                 onClick={() => setCardFilter(card.filter)}
               />
             ))}
@@ -1163,7 +1193,7 @@ export default function SolicitarCombustivelPage() {
           title="Nova solicitação de combustível"
           size="lg"
         >
-          <div className="space-y-4">
+          <div className="space-y-5">
             <FormSection title="Abastecimento">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -1183,8 +1213,8 @@ export default function SolicitarCombustivelPage() {
                     type="text"
                     value={formData.route}
                     onChange={(e) => setFormData((f) => ({ ...f, route: e.target.value }))}
-                    className={fieldClassName}
-                    placeholder="Ex.: Obra X → Escritório"
+                    className={FORM_FIELD_INPUT_CLS}
+                    placeholder="Descreva a rota do abastecimento"
                   />
                 </div>
               </div>
@@ -1211,7 +1241,7 @@ export default function SolicitarCombustivelPage() {
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Cidade de abastecimento *
+                    Cidade *
                   </label>
                   <SingleSelectSearchDropdown
                     value={formData.satelliteCityCode}
@@ -1221,13 +1251,32 @@ export default function SolicitarCombustivelPage() {
                     options={citiesForState.map((c) => ({
                       value: c.code,
                       label: c.name,
+                      searchText: c.name,
                     }))}
                     placeholder={
-                      formData.stateCode ? 'Selecione a cidade' : 'Selecione o estado antes'
+                      formData.stateCode
+                        ? citiesForState.length
+                          ? 'Selecione a cidade'
+                          : 'Nenhuma cidade neste estado'
+                        : 'Selecione o estado antes'
                     }
+                    emptyOptionsMessage="Nenhuma cidade disponível neste estado."
                     disabled={!formData.stateCode}
                   />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Contrato *
+                </label>
+                <SingleSelectSearchDropdown
+                  value={formData.contractId}
+                  onChange={(contractId) => setFormData((f) => ({ ...f, contractId }))}
+                  options={contractSelectOptions}
+                  placeholder="Selecione o contrato"
+                  searchPlaceholder="Pesquisar contrato..."
+                  emptyOptionsMessage="Nenhum contrato disponível."
+                />
               </div>
             </FormSection>
 
@@ -1266,13 +1315,6 @@ export default function SolicitarCombustivelPage() {
                   disabled={loadingDrivers}
                 />
               </div>
-              {driverInfo ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <ReadOnlyField label="Nome" value={driverInfo.name} />
-                  <ReadOnlyField label="CPF" value={driverInfo.cpf} />
-                  <ReadOnlyField label="Centro de custo" value={driverInfo.costCenter} />
-                </div>
-              ) : null}
             </FormSection>
 
             <FormSection title="Veículo">
@@ -1314,28 +1356,6 @@ export default function SolicitarCombustivelPage() {
                   disabled={loadingVehicles}
                 />
               </div>
-              {selectedVehicle ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <ReadOnlyField
-                    label="Placa"
-                    value={formatPlacaDisplay(selectedVehicle.placaVeic)}
-                  />
-                  <ReadOnlyField label="Modelo" value={formatVehicleModel(selectedVehicle)} />
-                  <ReadOnlyField
-                    label="Tipo"
-                    value={formatFrotaParticLabel(selectedVehicle.frotaPartic)}
-                  />
-                  <ReadOnlyField label="Polo" value={selectedVehicle.polo?.trim() || '—'} />
-                  <ReadOnlyField
-                    label="Contrato"
-                    value={formatContratoLabel(selectedVehicle.contrato)}
-                  />
-                  <ReadOnlyField
-                    label="Responsável"
-                    value={selectedVehicle.responsavel?.trim() || '—'}
-                  />
-                </div>
-              ) : null}
             </FormSection>
 
             <FormSection title="Painel e observações">
@@ -1357,7 +1377,7 @@ export default function SolicitarCombustivelPage() {
                 <textarea
                   value={formData.observations}
                   onChange={(e) => setFormData((f) => ({ ...f, observations: e.target.value }))}
-                  className={`${fieldClassName} min-h-[80px]`}
+                  className={FORM_FIELD_TEXTAREA_CLS}
                   placeholder="Opcional"
                 />
               </div>
@@ -1368,7 +1388,7 @@ export default function SolicitarCombustivelPage() {
                 type="button"
                 disabled={createMutation.isPending}
                 onClick={() => setShowForm(false)}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Cancelar
               </button>
@@ -1398,19 +1418,20 @@ export default function SolicitarCombustivelPage() {
           size="lg"
         >
           {reportTarget ? (
-            <div className="space-y-4">
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm dark:border-emerald-800/50 dark:bg-emerald-950/20">
+            <div className="space-y-5">
+              <section className="space-y-2 text-sm">
                 {reportTarget.gasStation ? (
                   <p className="text-gray-900 dark:text-gray-100">
-                    <span className="font-medium">Posto:</span> {reportTarget.gasStation.name}
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Posto:</span>{' '}
+                    {reportTarget.gasStation.name}
                     {reportTarget.gasStation.address
                       ? ` — ${reportTarget.gasStation.address}`
                       : ''}
                   </p>
                 ) : null}
                 {reportTarget.refuelDeadlineAmount ? (
-                  <p className="mt-1 text-gray-800 dark:text-gray-200">
-                    <span className="font-medium">Prazo:</span>{' '}
+                  <p className="text-gray-900 dark:text-gray-100">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Prazo:</span>{' '}
                     {formatRefuelDeadline(
                       reportTarget.refuelDeadlineAmount,
                       reportTarget.refuelDeadlineUnit,
@@ -1418,10 +1439,10 @@ export default function SolicitarCombustivelPage() {
                     )}
                   </p>
                 ) : null}
-                <p className="mt-1 text-gray-600 dark:text-gray-300">
+                <p className="text-gray-600 dark:text-gray-400">
                   {reportTarget.vehiclePlate} · {reportTarget.route}
                 </p>
-              </div>
+              </section>
 
               <FormSection title="Dados do abastecimento">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1439,7 +1460,7 @@ export default function SolicitarCombustivelPage() {
                           odometerKm: e.target.value.replace(/\D/g, ''),
                         }))
                       }
-                      className={fieldClassName}
+                      className={FORM_FIELD_INPUT_CLS}
                       placeholder="Ex.: 45230"
                     />
                   </div>
@@ -1447,23 +1468,22 @@ export default function SolicitarCombustivelPage() {
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Tanque após abastecimento *
                     </label>
-                    <select
+                    <SingleSelectSearchDropdown
                       value={reportForm.tankLevelAfter}
-                      onChange={(e) =>
+                      onChange={(tankLevelAfter) =>
                         setReportForm((f) => ({
                           ...f,
-                          tankLevelAfter: e.target.value as FuelTankLevelAfter | '',
+                          tankLevelAfter: tankLevelAfter as FuelTankLevelAfter | '',
                         }))
                       }
-                      className={fieldClassName}
-                    >
-                      <option value="">Selecione…</option>
-                      {TANK_LEVEL_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                      options={TANK_LEVEL_OPTIONS.map((opt) => ({
+                        value: opt.value,
+                        label: opt.label,
+                      }))}
+                      placeholder="Selecione…"
+                      allowEmpty={false}
+                      disableSearch
+                    />
                   </div>
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1476,7 +1496,7 @@ export default function SolicitarCombustivelPage() {
                       onChange={(e) =>
                         setReportForm((f) => ({ ...f, litersRefueled: e.target.value }))
                       }
-                      className={fieldClassName}
+                      className={FORM_FIELD_INPUT_CLS}
                       placeholder="Ex.: 45,500"
                     />
                   </div>
@@ -1491,7 +1511,7 @@ export default function SolicitarCombustivelPage() {
                       onChange={(e) =>
                         setReportForm((f) => ({ ...f, pricePerLiter: e.target.value }))
                       }
-                      className={fieldClassName}
+                      className={FORM_FIELD_INPUT_CLS}
                       placeholder="Ex.: 5,89"
                     />
                   </div>
@@ -1519,7 +1539,7 @@ export default function SolicitarCombustivelPage() {
                     onChange={(e) =>
                       setReportForm((f) => ({ ...f, observations: e.target.value }))
                     }
-                    className={`${fieldClassName} min-h-[80px]`}
+                    className={FORM_FIELD_TEXTAREA_CLS}
                     placeholder="Opcional"
                   />
                 </div>
@@ -1530,7 +1550,7 @@ export default function SolicitarCombustivelPage() {
                   type="button"
                   disabled={reportMutation.isPending}
                   onClick={() => setReportTarget(null)}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
                   Cancelar
                 </button>
@@ -1538,7 +1558,7 @@ export default function SolicitarCombustivelPage() {
                   type="button"
                   disabled={reportMutation.isPending}
                   onClick={submitReportForm}
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {reportMutation.isPending ? 'Enviando…' : 'Confirmar abastecimento'}
                 </button>

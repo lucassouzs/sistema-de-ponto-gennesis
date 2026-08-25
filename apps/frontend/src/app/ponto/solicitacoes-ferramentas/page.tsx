@@ -310,7 +310,13 @@ function SolicitacoesFerramentasPage() {
     [summaryData]
   );
 
-  if (!user) return <Loading />;
+  if (!user) {
+    return (
+      <MainLayout userRole="EMPLOYEE" userName="" onLogout={handleLogout}>
+        <Loading message="Carregando..." fullScreen size="lg" />
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>

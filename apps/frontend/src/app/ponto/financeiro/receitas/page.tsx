@@ -20,6 +20,7 @@ import toast from 'react-hot-toast';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import {
   CadastroListEmpty,
+  CadastroListLoading,
   CadastroListSummary,
   getCadastroListRange,
 } from '@/components/ui/CadastroListSummary';
@@ -803,10 +804,6 @@ export default function ReceitasPage() {
     }
   };
 
-  if (loadingUser || loadingReceitas || loadingRepasses) {
-    return <Loading message="Carregando receitas..." fullScreen size="lg" />;
-  }
-
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
   const listTitle = isResumo ? 'Resumo das receitas' : tipo === 'receitas' ? 'Receitas' : 'Repasses';
   const listSubtitle = isResumo
@@ -814,6 +811,25 @@ export default function ReceitasPage() {
     : tipo === 'receitas'
       ? `${rowsTotal} ${rowsTotal === 1 ? 'lançamento' : 'lançamentos'}`
       : `${rowsTotal} ${rowsTotal === 1 ? 'repasse' : 'repasses'}`;
+  const loadingLista = isResumo
+    ? loadingReceitas || loadingRepasses
+    : tipo === 'receitas'
+      ? loadingReceitas
+      : loadingRepasses;
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/financeiro/receitas">
+        <MainLayout
+          userRole={user.role || 'EMPLOYEE'}
+          userName={user.name}
+          onLogout={handleLogout}
+        >
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/financeiro/receitas">
@@ -1116,7 +1132,9 @@ export default function ReceitasPage() {
             </CardHeader>
 
             <CardContent className={cadastroListClasses.cardContent}>
-              {rowsTotal === 0 ? (
+              {loadingLista ? (
+                <CadastroListLoading message="Carregando receitas..." />
+              ) : rowsTotal === 0 ? (
                 <CadastroListEmpty
                   icon={isResumo || tipo === 'receitas' ? CircleDollarSign : Wallet}
                   title={

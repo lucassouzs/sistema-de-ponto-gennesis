@@ -7,7 +7,7 @@ import {
 } from '@prisma/client';
 import { resolveFuelPhotoViewUrl } from '../lib/fuelPhotoStorage';
 import { getFuelSatelliteCityByCode } from '../constants/fuelSatelliteCities';
-import { getFuelGasStationInCity } from '../lib/fuelAdministrativeRegions';
+import { getFuelGasStationForContract } from '../lib/fuelAdministrativeRegions';
 import {
   computeRefuelDeadlineAt,
   formatRefuelDeadlineLabel,
@@ -120,7 +120,7 @@ export class FuelRefuelRequestService {
     const contractId = input.contractId?.trim() || null;
 
     if (!costCenter && !contractId) {
-      throw createError('Centro de custo é obrigatório', 400);
+      throw createError('Centro de custo ou contrato é obrigatório', 400);
     }
 
     if (contractId) {
@@ -133,7 +133,7 @@ export class FuelRefuelRequestService {
 
     const satelliteCityCode = input.satelliteCityCode?.trim().toUpperCase() || null;
     if (!satelliteCityCode) {
-      throw createError('Cidade de abastecimento é obrigatória', 400);
+      throw createError('Cidade é obrigatória', 400);
     }
     if (!getFuelSatelliteCityByCode(satelliteCityCode)) {
       throw createError('Cidade satélite inválida', 400);
@@ -321,12 +321,9 @@ export class FuelRefuelRequestService {
     if (row.status !== FuelRefuelRequestStatus.PENDING_SUPPLIES) {
       throw createError('Esta solicitação não está aguardando aprovação do Suprimentos', 400);
     }
-    const cityCode =
-      row.satelliteCityCode?.trim().toUpperCase() ||
-      row.administrativeRegion?.code?.trim().toUpperCase() ||
-      null;
-    if (!cityCode) {
-      throw createError('Solicitação sem cidade de abastecimento definida', 400);
+    const contractId = row.contractId?.trim() || null;
+    if (!contractId) {
+      throw createError('Solicitação sem contrato definido', 400);
     }
 
     const amount = Math.trunc(input.refuelDeadlineAmount);
@@ -337,9 +334,9 @@ export class FuelRefuelRequestService {
       throw createError('Prazo para abastecer inválido', 400);
     }
 
-    const gasStation = await getFuelGasStationInCity(input.gasStationId, cityCode);
+    const gasStation = await getFuelGasStationForContract(input.gasStationId, contractId);
     if (!gasStation) {
-      throw createError('Selecione um posto da região administrativa da solicitação', 400);
+      throw createError('Selecione um posto vinculado ao contrato da solicitação', 400);
     }
 
     const refuelDeadlineAt = computeRefuelDeadlineAt(amount, input.refuelDeadlineUnit);

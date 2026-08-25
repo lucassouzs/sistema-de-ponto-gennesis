@@ -44,6 +44,7 @@ import {
   parseAsosFromFile,
 } from '@/lib/asoImport';
 import api from '@/lib/api';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 
 type AsoResultado = 'APTO' | 'APTO_COM_RESTRICAO' | 'INAPTO';
 type AsoGrauRisco = 'BAIXO' | 'MEDIO' | 'ALTO';
@@ -97,6 +98,8 @@ type AsoRegistro = {
 type EmployeeOption = {
   id: string;
   name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
   position: string;
   department: string;
   employeeId: string;
@@ -463,6 +466,8 @@ export default function SegurancaDoTrabalhoPage() {
         .map((u: any) => ({
           id: String(u.employee.id),
           name: String(u.name || '').trim(),
+          cpf: u.cpf ? String(u.cpf) : null,
+          profilePhotoUrl: u.profilePhotoUrl ? String(u.profilePhotoUrl) : null,
           position: String(u.employee.position || '').trim(),
           department: String(u.employee.department || '').trim(),
           employeeId: String(u.employee.employeeId || '').trim(),
@@ -709,11 +714,15 @@ export default function SegurancaDoTrabalhoPage() {
 
   const employeeOptions = useMemo(
     () =>
-      employees.map((e) => ({
-        value: e.id,
-        label: e.name,
-        searchText: `${e.name} ${e.employeeId} ${e.position} ${e.department}`,
-      })),
+      toPersonSelectOptions(
+        employees.map((e) => ({
+          value: e.id,
+          name: e.name,
+          cpf: e.cpf,
+          profilePhotoUrl: e.profilePhotoUrl,
+          extraSearchText: [e.employeeId, e.position, e.department].filter(Boolean).join(' '),
+        }))
+      ),
     [employees]
   );
 

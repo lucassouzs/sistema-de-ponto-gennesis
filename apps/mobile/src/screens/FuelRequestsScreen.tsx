@@ -88,7 +88,7 @@ type ReportFormState = {
   observations: string;
 };
 
-type SatelliteCity = { code: string; stateCode: string; name: string };
+type SatelliteCity = { code: string; stateCode: string; name: string; stationCount?: number };
 type DriverOption = { id: string; name: string; cpf: string; costCenter: string | null };
 type FleetVehicle = {
   id: string;
@@ -103,6 +103,7 @@ type FormState = {
   route: string;
   stateCode: string;
   satelliteCityCode: string;
+  contractId: string;
   driverUserId: string;
   driverNamePreview: string;
   vehicleId: string;
@@ -125,7 +126,7 @@ const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
 
 const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
-  COMPANY: 'Frota / empresa',
+  COMPANY: 'Frota',
 };
 
 const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
@@ -150,6 +151,7 @@ function EMPTY_FORM(): FormState {
     route: '',
     stateCode: '',
     satelliteCityCode: '',
+    contractId: '',
     driverUserId: '',
     driverNamePreview: '',
     vehicleId: '',
@@ -342,6 +344,9 @@ export default function FuelRequestsScreen() {
 
   const [states, setStates] = useState<string[]>([]);
   const [cities, setCities] = useState<SatelliteCity[]>([]);
+  const [contracts, setContracts] = useState<Array<{ id: string; name: string; number?: string }>>(
+    [],
+  );
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
@@ -378,18 +383,23 @@ export default function FuelRequestsScreen() {
   const loadFormOptions = useCallback(async () => {
     setLoadingOptions(true);
     try {
-      const [citiesRes, driversRes, vehiclesRes] = await Promise.all([
+      const [citiesRes, driversRes, vehiclesRes, contractsRes] = await Promise.all([
         api.get('/api/fuel-refuel-requests/satellite-cities'),
         api.get('/api/fuel-refuel-requests/driver-options'),
         api.get('/api/vehicles?isActive=true&limit=100&page=1'),
+        api.get('/api/contracts?limit=500&page=1'),
       ]);
       const citiesJson = await citiesRes.json();
       const driversJson = await driversRes.json();
       const vehiclesJson = await vehiclesRes.json();
+      const contractsJson = await contractsRes.json();
 
       if (citiesRes.ok) {
         setStates(citiesJson?.data?.states || []);
         setCities(citiesJson?.data?.cities || []);
+      }
+      if (contractsRes.ok) {
+        setContracts(contractsJson?.data || []);
       }
       if (driversRes.ok) {
         const list = (driversJson?.data || []) as DriverOption[];
@@ -552,6 +562,10 @@ export default function FuelRequestsScreen() {
       Toast.show({ type: 'error', text1: 'Selecione a cidade' });
       return;
     }
+    if (!form.contractId) {
+      Toast.show({ type: 'error', text1: 'Selecione o contrato' });
+      return;
+    }
     if (!form.driverUserId) {
       Toast.show({ type: 'error', text1: 'Selecione o condutor' });
       return;
@@ -575,6 +589,7 @@ export default function FuelRequestsScreen() {
         refuelDate: form.refuelDate,
         route: form.route.trim(),
         satelliteCityCode: form.satelliteCityCode,
+        contractId: form.contractId,
         vehiclePlate: form.vehiclePlate.trim().toUpperCase(),
         vehicleDescription: form.vehicleDescription.trim() || undefined,
         vehicleType: form.vehicleType,
@@ -1010,7 +1025,7 @@ export default function FuelRequestsScreen() {
                     style={styles.input}
                     value={form.route}
                     onChangeText={(route) => setForm((f) => ({ ...f, route }))}
-                    placeholder="Ex.: Obra X → Posto"
+                    placeholder="Descreva a rota do abastecimento"
                     placeholderTextColor={colors.textSecondary}
                   />
 
@@ -1037,7 +1052,7 @@ export default function FuelRequestsScreen() {
                   />
 
                   <SelectField
-                    label="Cidade de abastecimento"
+                    label="Cidade"
                     valueLabel={
                       cities.find((c) => c.code === form.satelliteCityCode)?.name || ''
                     }
@@ -1051,7 +1066,6 @@ export default function FuelRequestsScreen() {
                         options: citiesForState.map((c) => ({
                           value: c.code,
                           label: c.name,
-                          subtitle: c.stateCode,
                         })),
                         onSelect: (satelliteCityCode) => {
                           const city = cities.find((c) => c.code === satelliteCityCode);
@@ -1060,6 +1074,31 @@ export default function FuelRequestsScreen() {
                             satelliteCityCode,
                             stateCode: city?.stateCode || f.stateCode,
                           }));
+                        },
+                      });
+                    }}
+                  />
+
+                  <SelectField
+                    label="Contrato"
+                    valueLabel={(() => {
+                      const c = contracts.find((item) => item.id === form.contractId);
+                      return c?.name || '';
+                    })()}
+                    placeholder="Selecione o contrato"
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      setPickerSearch('');
+                      setPicker({
+                        title: 'Contrato',
+                        options: contracts.map((c) => ({
+                          value: c.id,
+                          label: c.name,
+                          subtitle: '',
+                        })),
+                        onSelect: (contractId) => {
+                          setForm((f) => ({ ...f, contractId }));
                         },
                       });
                     }}
@@ -1129,7 +1168,7 @@ export default function FuelRequestsScreen() {
                   {form.vehicleType ? (
                     <View style={styles.hintChip}>
                       <Text style={styles.hintChipText}>
-                        {form.vehicleType === 'PRIVATE' ? 'Particular' : 'Frota / empresa'}
+                        {form.vehicleType === 'PRIVATE' ? 'Particular' : 'Frota'}
                         {form.vehicleDescription ? ` · ${form.vehicleDescription}` : ''}
                       </Text>
                     </View>

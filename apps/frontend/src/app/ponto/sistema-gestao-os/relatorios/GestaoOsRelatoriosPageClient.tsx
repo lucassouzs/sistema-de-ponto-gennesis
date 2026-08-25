@@ -38,6 +38,10 @@ import {
   type GestaoOsStatus
 } from '../gestaoOsTypes';
 import { useGestaoOsCompany } from '../useGestaoOsCompany';
+import {
+  gestaoOsTechnicianSelectOptions,
+  type GestaoOsTechnicianOption
+} from '@/components/gestao-os/GestaoOsModalUi';
 import { exportGestaoOsReportsPdf } from '@/lib/exportGestaoOsReportsPdf';
 import toast from 'react-hot-toast';
 import { DatePickerField } from '@/components/ui/DatePickerField';
@@ -174,12 +178,17 @@ export default function GestaoOsRelatoriosPageClient() {
     queryKey: ['gestao-os-technicians'],
     enabled: !loadingCompany,
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+      const res = await api.get<{ success: boolean; data: GestaoOsTechnicianOption[] }>(
         '/gestao-os/technicians'
       );
       return res.data?.data ?? [];
     }
   });
+
+  const technicianSelectOptions = useMemo(
+    () => gestaoOsTechnicianSelectOptions(technicians),
+    [technicians]
+  );
 
   const { data, isLoading } = useQuery({
     queryKey: ['gestao-os-reports-summary', reportParams],
@@ -295,9 +304,7 @@ export default function GestaoOsRelatoriosPageClient() {
               <StringSingleSelectDropdown
                 value={assigneeId}
                 onChange={setAssigneeId}
-                options={labeledToSelectOptions(
-                  technicians.map((t) => ({ value: t.id, label: t.name }))
-                )}
+                options={technicianSelectOptions}
                 placeholder="Todos"
                 emptyOptionLabel="Todos"
                 allowEmpty

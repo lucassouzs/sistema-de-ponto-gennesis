@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { getListTableRowClassName, ListRowNavigableLabel, listTableRowClasses, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { RowActionMenuCell, RowActionMenuPortal } from '@/components/ui/RowActionMenu';
@@ -19,7 +20,7 @@ import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchD
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
-import { ArrowLeft, ChevronRight, ClipboardList, FileText, Filter, Loader2, MailPlus, MoreVertical, Plus, RotateCcw, Search, Users, X, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ClipboardList, FileText, Filter, MailPlus, MoreVertical, Plus, RotateCcw, Search, Users, X, type LucideIcon } from 'lucide-react';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { ButtonSeg, DpSolicitacaoTypeFields, type DpFormRequestType } from './DpSolicitacaoTypeFields';
 import {
@@ -466,6 +467,7 @@ export function SolicitacoesGeraisPage() {
         id: string;
         name: string;
         cpf?: string;
+        profilePhotoUrl?: string | null;
         department?: string;
         position?: string;
         company?: string | null;
@@ -975,7 +977,11 @@ export function SolicitacoesGeraisPage() {
 
   if (loadingUser) {
     return (
-      <Loading message="Carregando..." fullScreen size="lg" />
+      <ProtectedRoute route="/ponto/solicitacoes-gerais">
+        <MainLayout userRole={'EMPLOYEE'} userName={user?.name || ''} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 
@@ -1073,10 +1079,7 @@ export function SolicitacoesGeraisPage() {
             <CardContent>
               <div className="space-y-4">
                   {loadingMy ? (
-                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-gray-600 dark:text-gray-400">
-                      <Loader2 className="h-8 w-8 shrink-0 animate-spin text-red-600 dark:text-red-400" aria-hidden />
-                      <span className="text-sm font-medium">Carregando solicitações…</span>
-                    </div>
+                    <CadastroListLoading message="Carregando solicitações…" />
                   ) : myRequests.length === 0 ? (
                     <div className="py-10 text-center">
                       <ClipboardList

@@ -99,7 +99,7 @@ function fuelContractLabel(row: {
 
 const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
-  COMPANY: 'Frota / empresa',
+  COMPANY: 'Frota',
 };
 
 export function FuelApprovalsSection() {

@@ -1272,6 +1272,7 @@ model Contract {
   materialDeliveries   MaterialDelivery[]
   fuelRefuelRequests   FuelRefuelRequest[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
+  fuelGasStations      FuelGasStationContract[]
 
   @@index([costCenterId])
   @@index([number])
@@ -3202,13 +3203,30 @@ model FuelGasStation {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  region   FuelAdministrativeRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  requests FuelRefuelRequest[]
+  region    FuelAdministrativeRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  requests  FuelRefuelRequest[]
+  contracts FuelGasStationContract[]
 
   @@index([cityCode])
   @@index([regionId])
   @@index([isActive])
   @@map("fuel_gas_stations")
+}
+
+/// Contratos vinculados a um posto de combustÃ­vel (multi-select no cadastro).
+model FuelGasStationContract {
+  id         String   @id @default(cuid())
+  stationId  String
+  contractId String
+  createdAt  DateTime @default(now())
+
+  station  FuelGasStation @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  contract Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([stationId, contractId])
+  @@index([stationId])
+  @@index([contractId])
+  @@map("fuel_gas_station_contracts")
 }
 
 /// SolicitaÃ§Ã£o de abastecimento de combustÃ­vel (espelho do AppSheet tb solicitAbast).

@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import {
   OsPleitosPanel,
@@ -49,11 +50,17 @@ export default function AndamentoDaOsPage() {
   );
   const tabCounts = useMemo(() => computeOsTabCounts(allPleitos), [allPleitos]);
 
-  if (loadingUser || loadingPleitos) {
-    return <Loading message="Carregando ordens de serviço..." fullScreen size="lg" />;
-  }
-
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/andamento-da-os">
+        <MainLayout userRole={user.role || 'EMPLOYEE'} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/andamento-da-os">
@@ -79,14 +86,18 @@ export default function AndamentoDaOsPage() {
             <OsFluxTabsNav activeTab={osTab} onActiveTab={setOsTab} tabCounts={tabCounts} />
 
             <div className="mt-4">
-              <OsPleitosPanel
-                embedded
-                hideTabs
-                hideSearch
-                activeTab={osTab}
-                searchTerm={searchTerm}
-                onSearchChange={setSearchTerm}
-              />
+              {loadingPleitos ? (
+                <CadastroListLoading message="Carregando ordens de serviço..." />
+              ) : (
+                <OsPleitosPanel
+                  embedded
+                  hideTabs
+                  hideSearch
+                  activeTab={osTab}
+                  searchTerm={searchTerm}
+                  onSearchChange={setSearchTerm}
+                />
+              )}
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { FileSpreadsheet, RotateCcw, Truck, Wrench, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -1205,16 +1206,6 @@ export default function MapaCotacaoPage() {
     },
   });
 
-  if (loadingUser || loadingRequests) {
-    return (
-      <Loading
-        message="Carregando mapa de cotação..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
   const handleLogout = () => {
@@ -1222,6 +1213,16 @@ export default function MapaCotacaoPage() {
     sessionStorage.removeItem('token');
     router.push('/auth/login');
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/mapa-cotacao">
+        <MainLayout userRole={user.role || 'EMPLOYEE'} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/mapa-cotacao">
@@ -1285,7 +1286,9 @@ export default function MapaCotacaoPage() {
             </CardHeader>
 
             <CardContent className="pt-4">
-              {approvedRequests.length === 0 ? (
+              {loadingRequests ? (
+                <CadastroListLoading message="Carregando RMs..." />
+              ) : approvedRequests.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50/80 px-6 py-12 text-center dark:border-gray-600 dark:bg-gray-900/30">
                   <Truck className="mx-auto mb-3 h-10 w-10 text-gray-400 dark:text-gray-500" />
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">

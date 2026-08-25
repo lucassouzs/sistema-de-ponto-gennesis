@@ -1,6 +1,8 @@
 export type EmployeeSelectOption = {
   id: string;
   name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
 };
 
 export function mapUsersToEmployeeOptions(users: any[]): EmployeeSelectOption[] {
@@ -16,7 +18,9 @@ export function mapUsersToEmployeeOptions(users: any[]): EmployeeSelectOption[] 
     })
     .map((user) => ({
       id: String(user.employee.id),
-      name: String(user.name || '').trim()
+      name: String(user.name || '').trim(),
+      cpf: user.cpf ? String(user.cpf) : null,
+      profilePhotoUrl: user.profilePhotoUrl ? String(user.profilePhotoUrl) : null,
     }))
     .filter((employee) => employee.id && employee.name)
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));

@@ -40,6 +40,7 @@ import {
   downloadVehicleImportTemplate,
   parseVehiclesFromFile,
 } from '@/lib/vehicleImport';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import { ListPagination } from '@/components/ui/ListPagination';
 
@@ -53,6 +54,8 @@ type FipeOption = {
 type EmployeeOption = {
   id: string;
   name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
   costCenter: string | null;
   polo: string | null;
 };
@@ -229,6 +232,8 @@ export default function VeiculosPage() {
         .map((user: any) => ({
           id: String(user.employee.id),
           name: String(user.name || '').trim(),
+          cpf: user.cpf ? String(user.cpf) : null,
+          profilePhotoUrl: user.profilePhotoUrl ? String(user.profilePhotoUrl) : null,
           costCenter: user.employee.costCenter ? String(user.employee.costCenter).trim() : null,
           polo: user.employee.polo ? String(user.employee.polo).trim() : null
         }))
@@ -334,13 +339,15 @@ export default function VeiculosPage() {
 
   const employeeSelectOptions = useMemo<MultiSelectSearchOption[]>(
     () =>
-      employeeOptions.map((employee) => ({
-        value: employee.name,
-        label: employee.name,
-        searchText: [employee.name, employee.costCenter, employee.polo]
-          .filter(Boolean)
-          .join(' ')
-      })),
+      toPersonSelectOptions(
+        employeeOptions.map((employee) => ({
+          value: employee.name,
+          name: employee.name,
+          cpf: employee.cpf,
+          profilePhotoUrl: employee.profilePhotoUrl,
+          extraSearchText: [employee.costCenter, employee.polo].filter(Boolean).join(' '),
+        }))
+      ),
     [employeeOptions]
   );
 

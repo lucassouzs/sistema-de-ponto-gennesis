@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListEmpty, CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 import {
@@ -539,7 +540,13 @@ export default function SolicitacoesReservaVeiculosPage() {
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/solicitacoes-reserva-veiculos">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (
@@ -628,12 +635,7 @@ export default function SolicitacoesReservaVeiculosPage() {
 
             <CardContent>
               {loadingList ? (
-                <div className="py-8 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="loading-spinner h-6 w-6" />
-                    <span className="text-gray-600 dark:text-gray-400">Carregando reservas...</span>
-                  </div>
-                </div>
+                <CadastroListLoading message="Carregando reservas..." />
               ) : listError ? (
                 <div className="py-8 text-center">
                   <p className="text-gray-600 dark:text-gray-400">Não foi possível carregar as reservas.</p>
@@ -646,12 +648,7 @@ export default function SolicitacoesReservaVeiculosPage() {
                   </button>
                 </div>
               ) : isListEmpty ? (
-                <div className="py-8 text-center">
-                  <ListHeaderIcon
-                    className={`mx-auto mb-4 h-12 w-12 ${listHeader.iconColor} opacity-60`}
-                  />
-                  <p className="text-gray-600 dark:text-gray-400">Nenhuma reserva encontrada</p>
-                </div>
+                <CadastroListEmpty icon={ListHeaderIcon} title="Nenhuma reserva encontrada" />
               ) : (
                 <>
                   <div className="mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
