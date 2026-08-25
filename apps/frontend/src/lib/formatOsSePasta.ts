@@ -40,7 +40,7 @@ export function parseOsSeSortParts(divSe: string | null | undefined): {
   rest: string;
 } {
   const s = stripOsSePrefix(divSe);
-  const m = s.match(/^([A-Za-zÀ-ÿ]+)?[-_\s]*(\d+)(.*)$/u);
+  const m = s.match(/^([A-Za-zÀ-ÿ]+)?[-_\s]*(\d+)(.*)$/);
   if (m) {
     return {
       prefix: (m[1] || '').toLowerCase(),
