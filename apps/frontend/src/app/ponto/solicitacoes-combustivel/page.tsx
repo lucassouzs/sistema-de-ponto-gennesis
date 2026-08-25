@@ -105,7 +105,7 @@ const SUPPLIES_CARD_LIST_CONFIG: Record<
     iconColor: 'text-yellow-600 dark:text-yellow-400',
   },
   awaiting_refuel: {
-    title: 'Abastecimento Liberado',
+    title: 'Liberado',
     subtitle: 'Posto definido — colaborador pode abastecer.',
     Icon: Fuel,
     iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
@@ -159,7 +159,7 @@ const SUPPLIES_STAT_CARDS: {
   },
   {
     filter: 'awaiting_refuel',
-    label: 'Abastecimento Liberado',
+    label: 'Liberado',
     iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
     iconColor: 'text-emerald-600 dark:text-emerald-400',
     Icon: Fuel,
