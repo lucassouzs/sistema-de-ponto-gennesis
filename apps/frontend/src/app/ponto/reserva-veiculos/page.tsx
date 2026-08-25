@@ -8,7 +8,8 @@ import { ptBR } from 'date-fns/locale';
 import { Car, CheckCircle, ClipboardCheck, Clock, Eye, FileText, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
-import { Modal } from '@/components/ui/Modal';
+import { Modal, useModalRequestClose } from '@/components/ui/Modal';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -128,8 +129,89 @@ const EMPTY_FORM = (): ReservationFormState => ({
   contrato: ''
 });
 
-const fieldClassName =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+const RESERVATION_FORM_LABEL_CLS =
+  'mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400';
+
+const fieldClassName = FORM_FIELD_INPUT_CLS;
+
+function ReservationFormSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="mb-4 border-b border-gray-200 pb-3 dark:border-gray-700">
+        <h4 className="text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-50">
+          {title}
+        </h4>
+        {description ? (
+          <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function ReservationCreateFormHeader({
+  disabled,
+  onClose,
+}: {
+  disabled?: boolean;
+  onClose: () => void;
+}) {
+  const requestClose = useModalRequestClose();
+  return (
+    <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-4 pb-2">
+      <h3 className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100">
+        Nova reserva de veículo
+      </h3>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          if (requestClose) requestClose();
+          else onClose();
+        }}
+        className="shrink-0 rounded-lg p-2 text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+        aria-label="Fechar"
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  );
+}
+
+function ReservationCreateFormFooter({ isPending }: { isPending: boolean }) {
+  const requestClose = useModalRequestClose();
+  return (
+    <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => requestClose?.()}
+        className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+      >
+        Cancelar
+      </button>
+      <button
+        type="submit"
+        disabled={isPending}
+        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50 dark:bg-red-700 dark:hover:bg-red-800"
+      >
+        {isPending ? 'Salvando...' : 'Salvar reserva'}
+      </button>
+    </div>
+  );
+}
 
 function formatVehicleLabel(vehicle: VehicleOption): string {
   const placa = formatPlacaDisplay(vehicle.placaVeic);
@@ -997,204 +1079,174 @@ export default function ReservaVeiculosPage() {
           <Modal
             isOpen={showForm}
             onClose={() => {
+              if (createMutation.isPending) return;
               setShowForm(false);
               setFormData(EMPTY_FORM());
             }}
-            title="Nova reserva de veículo"
             size="lg"
+            showCloseButton={false}
+            scrollContent={false}
+            contentClassName="!p-0"
+            confirmBeforeClose
           >
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <section className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Pessoas
-                </h3>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Motorista *
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={formData.motorista}
-                    onChange={(motorista) => setFormData((current) => ({ ...current, motorista }))}
-                    options={employeeSelectOptions}
-                    disabled={loadingEmployees}
-                    allowEmpty={false}
-                    placeholder={
-                      loadingEmployees ? 'Carregando funcionários...' : 'Selecionar motorista...'
-                    }
-                    searchPlaceholder="Pesquisar por nome ou CPF..."
-                    noFocusRing
-                  />
-                  {selectedMotoristaCpf ? (
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      CPF: {selectedMotoristaCpf}
-                    </p>
-                  ) : null}
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Atividade
-                </h3>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Atividade *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.atividade}
-                    onChange={(e) =>
-                      setFormData((current) => ({ ...current, atividade: e.target.value }))
-                    }
-                    className={fieldClassName}
-                    placeholder="Descreva a atividade"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Local de destino *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.localDestino}
-                    onChange={(e) =>
-                      setFormData((current) => ({ ...current, localDestino: e.target.value }))
-                    }
-                    className={fieldClassName}
-                    placeholder="Informe o destino"
-                  />
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Agenda
-                </h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ReservationCreateFormHeader
+              disabled={createMutation.isPending}
+              onClose={() => {
+                setShowForm(false);
+                setFormData(EMPTY_FORM());
+              }}
+            />
+            <form
+              onSubmit={handleSubmit}
+              className="flex min-h-0 flex-1 flex-col [&_*:focus]:outline-none [&_*:focus]:ring-0 [&_*:focus-visible]:outline-none [&_*:focus-visible]:ring-0"
+            >
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+                <ReservationFormSection title="Pessoas">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Início do uso *
-                    </label>
-                    <DateTimePickerField
-                      value={formData.dataUsoInicio}
-                      onChange={(dataUsoInicio) =>
-                        setFormData((current) => ({
-                          ...current,
-                          dataUsoInicio,
-                          dataUsoFim:
-                            current.dataUsoFim && current.dataUsoFim < dataUsoInicio
-                              ? dataUsoInicio
-                              : current.dataUsoFim
-                        }))
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Motorista *</label>
+                    <SingleSelectSearchDropdown
+                      value={formData.motorista}
+                      onChange={(motorista) => setFormData((current) => ({ ...current, motorista }))}
+                      options={employeeSelectOptions}
+                      disabled={loadingEmployees}
+                      allowEmpty={false}
+                      placeholder={
+                        loadingEmployees ? 'Carregando funcionários...' : 'Selecionar motorista...'
                       }
-                      placeholder="Selecione data e hora"
-                      aria-label="Início do uso"
+                      searchPlaceholder="Pesquisar por nome ou CPF..."
                       noFocusRing
+                    />
+                    {selectedMotoristaCpf ? (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        CPF: {selectedMotoristaCpf}
+                      </p>
+                    ) : null}
+                  </div>
+                </ReservationFormSection>
+
+                <ReservationFormSection title="Atividade">
+                  <div>
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Atividade *</label>
+                    <input
+                      type="text"
+                      value={formData.atividade}
+                      onChange={(e) =>
+                        setFormData((current) => ({ ...current, atividade: e.target.value }))
+                      }
+                      className={fieldClassName}
+                      placeholder="Descreva a atividade"
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Fim do uso *
-                    </label>
-                    <DateTimePickerField
-                      value={formData.dataUsoFim}
-                      onChange={(dataUsoFim) =>
-                        setFormData((current) => ({
-                          ...current,
-                          dataUsoFim:
-                            current.dataUsoInicio && dataUsoFim < current.dataUsoInicio
-                              ? current.dataUsoInicio
-                              : dataUsoFim
-                        }))
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Local de destino *</label>
+                    <input
+                      type="text"
+                      value={formData.localDestino}
+                      onChange={(e) =>
+                        setFormData((current) => ({ ...current, localDestino: e.target.value }))
                       }
-                      min={formData.dataUsoInicio || undefined}
-                      placeholder="Selecione data e hora"
-                      aria-label="Fim do uso"
-                      noFocusRing
+                      className={fieldClassName}
+                      placeholder="Informe o destino"
                     />
                   </div>
-                </div>
-              </section>
+                </ReservationFormSection>
 
-              <section className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  Extras
-                </h3>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Polo (opcional)
-                  </label>
-                  <div className="flex gap-2">
-                    {POLO_OPTIONS.map((option) => (
-                      <ButtonSeg
-                        key={option.value}
-                        active={formData.polo === option.value}
-                        onClick={() =>
-                          setFormData((current) => ({ ...current, polo: option.value }))
+                <ReservationFormSection title="Agenda">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className={RESERVATION_FORM_LABEL_CLS}>Início do uso *</label>
+                      <DateTimePickerField
+                        value={formData.dataUsoInicio}
+                        onChange={(dataUsoInicio) =>
+                          setFormData((current) => ({
+                            ...current,
+                            dataUsoInicio,
+                            dataUsoFim:
+                              current.dataUsoFim && current.dataUsoFim < dataUsoInicio
+                                ? dataUsoInicio
+                                : current.dataUsoFim
+                          }))
                         }
-                        label={option.label}
+                        placeholder="Selecione data e hora"
+                        aria-label="Início do uso"
+                        noFocusRing
                       />
-                    ))}
+                    </div>
+                    <div>
+                      <label className={RESERVATION_FORM_LABEL_CLS}>Fim do uso *</label>
+                      <DateTimePickerField
+                        value={formData.dataUsoFim}
+                        onChange={(dataUsoFim) =>
+                          setFormData((current) => ({
+                            ...current,
+                            dataUsoFim:
+                              current.dataUsoInicio && dataUsoFim < current.dataUsoInicio
+                                ? current.dataUsoInicio
+                                : dataUsoFim
+                          }))
+                        }
+                        min={formData.dataUsoInicio || undefined}
+                        placeholder="Selecione data e hora"
+                        aria-label="Fim do uso"
+                        noFocusRing
+                      />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Contrato (opcional)
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={formData.contrato}
-                    onChange={(contrato) => setFormData((current) => ({ ...current, contrato }))}
-                    options={contractSelectOptions}
-                    disabled={loadingCostCenters}
-                    placeholder={
-                      loadingCostCenters ? 'Carregando contratos...' : 'Selecionar contrato...'
-                    }
-                    searchPlaceholder="Pesquisar..."
-                    emptyOptionsMessage="Nenhum contrato disponível."
-                    noFocusRing
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Observações (opcional)
-                  </label>
-                  <textarea
-                    value={formData.observacaoCapacidadeVeiculo}
-                    onChange={(e) =>
-                      setFormData((current) => ({
-                        ...current,
-                        observacaoCapacidadeVeiculo: e.target.value
-                      }))
-                    }
-                    className={`${fieldClassName} min-h-[80px] resize-y`}
-                    placeholder="Ex.: necessário veículo para 5 passageiros, com caçamba, etc. (opcional)"
-                    rows={3}
-                  />
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    O veículo será definido pelo setor de Suprimentos ao atender a solicitação.
-                  </p>
-                </div>
-              </section>
+                </ReservationFormSection>
 
-              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setFormData(EMPTY_FORM());
-                  }}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                <ReservationFormSection
+                  title="Extras"
+                  description="O veículo será definido pelo setor de Suprimentos ao atender a solicitação."
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  {createMutation.isPending ? 'Salvando...' : 'Salvar reserva'}
-                </button>
+                  <div>
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Polo (opcional)</label>
+                    <div className="flex gap-2">
+                      {POLO_OPTIONS.map((option) => (
+                        <ButtonSeg
+                          key={option.value}
+                          active={formData.polo === option.value}
+                          onClick={() =>
+                            setFormData((current) => ({ ...current, polo: option.value }))
+                          }
+                          label={option.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Contrato (opcional)</label>
+                    <SingleSelectSearchDropdown
+                      value={formData.contrato}
+                      onChange={(contrato) => setFormData((current) => ({ ...current, contrato }))}
+                      options={contractSelectOptions}
+                      disabled={loadingCostCenters}
+                      placeholder={
+                        loadingCostCenters ? 'Carregando contratos...' : 'Selecionar contrato...'
+                      }
+                      searchPlaceholder="Pesquisar..."
+                      emptyOptionsMessage="Nenhum contrato disponível."
+                      noFocusRing
+                    />
+                  </div>
+                  <div>
+                    <label className={RESERVATION_FORM_LABEL_CLS}>Observações (opcional)</label>
+                    <textarea
+                      value={formData.observacaoCapacidadeVeiculo}
+                      onChange={(e) =>
+                        setFormData((current) => ({
+                          ...current,
+                          observacaoCapacidadeVeiculo: e.target.value
+                        }))
+                      }
+                      className={FORM_FIELD_TEXTAREA_CLS}
+                      placeholder="Ex.: necessário veículo para 5 passageiros, com caçamba, etc. (opcional)"
+                      rows={3}
+                    />
+                  </div>
+                </ReservationFormSection>
               </div>
+
+              <ReservationCreateFormFooter isPending={createMutation.isPending} />
             </form>
           </Modal>
 
