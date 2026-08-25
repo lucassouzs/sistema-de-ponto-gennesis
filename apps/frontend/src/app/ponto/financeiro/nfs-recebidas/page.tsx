@@ -365,7 +365,8 @@ function statusBuscaVisivel(
 
   const schedule = fetchScheduleLabels(lastFetchAt, nextFetchAt);
   const nsuMatch = msg?.match(/Último NSU:\s*([0-9]+)/i);
-  const nsu = nsuMatch?.[1];
+  const nsuRaw = nsuMatch?.[1];
+  const nsu = nsuRaw ? nsuRaw.replace(/^0+(?=\d)/, '') : undefined;
 
   if (msg && /consumo indevido|bloquead/i.test(msg)) {
     return {
@@ -515,7 +516,7 @@ function StatusBuscaTooltip({ info }: { info: StatusBuscaInfo }) {
           {info.nsu ? (
             <span className="flex justify-between gap-3">
               <span className="font-medium opacity-80">Último NSU</span>
-              <span className="truncate font-mono text-[10px] tabular-nums">{info.nsu}</span>
+              <span className="truncate tabular-nums font-semibold text-current">{info.nsu}</span>
             </span>
           ) : null}
         </span>
