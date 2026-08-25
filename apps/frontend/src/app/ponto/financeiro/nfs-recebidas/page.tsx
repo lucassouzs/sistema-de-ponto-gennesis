@@ -389,7 +389,7 @@ function statusBuscaVisivel(
     return {
       kind: 'ok',
       title: 'Atualização automática',
-      detail: 'Busca automática na SEFAZ (a cada hora, quando permitido).',
+      detail: 'Busca automática na SEFAZ.',
       nsu,
       novas: null,
       totalAno,
@@ -419,7 +419,7 @@ function statusBuscaVisivel(
   return {
     kind: 'ok',
     title,
-    detail: 'Busca automática na SEFAZ (a cada hora, quando permitido).',
+    detail: 'Busca automática na SEFAZ.',
     nsu,
     novas,
     totalAno,
