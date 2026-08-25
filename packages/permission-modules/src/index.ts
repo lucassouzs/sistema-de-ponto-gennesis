@@ -453,6 +453,20 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   },
 ] as const;
 
+/**
+ * Módulos com acesso (VER) concedido por padrão a todo usuário do sistema —
+ * existentes (backfill no boot) e novos cadastros.
+ */
+export const DEFAULT_EMPLOYEE_ACCESS_MODULE_HREFS = [
+  '/ponto/solicitacoes-dp',
+  '/ponto/reserva-veiculos',
+  '/ponto/solicitar-combustivel',
+] as const;
+
+export const DEFAULT_EMPLOYEE_ACCESS_MODULE_KEYS = DEFAULT_EMPLOYEE_ACCESS_MODULE_HREFS.map(
+  (href) => pathToModuleKey(href)
+);
+
 const keySet = new Set(PERMISSION_MODULES.map((m) => m.key));
 
 export function getPermissionModuleKeys(): string[] {

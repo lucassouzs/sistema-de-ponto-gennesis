@@ -119,7 +119,7 @@ import { ensureNfeJavaRuntime } from './lib/ensureNfeJavaRuntime';
 import { logNfeRuntimeStatus } from './services/NfeRecebidaService';
 import { LicitacaoController } from './controllers/LicitacaoController';
 import { authenticate, AuthRequest } from './middleware/auth';
-import { removeOrphanUserPermissions } from './lib/permissionRegistrySync';
+import { removeOrphanUserPermissions, ensureDefaultEmployeeAccessPermissions } from './lib/permissionRegistrySync';
 import { getPrismaPoolConfig, prisma } from './lib/prisma';
 import { getPasswordHashImplementation } from './lib/passwordHash';
 import { ensureProductionSchema } from './lib/ensureProductionSchema';
@@ -501,6 +501,12 @@ try {
         const { removed } = await removeOrphanUserPermissions();
         if (removed > 0) {
           console.log(`🧹 Permissões de módulos removidos do registro: ${removed} registro(s) limpo(s).`);
+        }
+        const { granted } = await ensureDefaultEmployeeAccessPermissions();
+        if (granted > 0) {
+          console.log(
+            `🔑 Permissões padrão (DP/ADM/TST, Reserva de Veículos, Solicitar Combustível): ${granted} concessão(ões).`
+          );
         }
       } catch (e) {
         console.error('Erro ao sincronizar permissões com o registro de módulos:', e);

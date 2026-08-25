@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma';
 import { hashPassword } from '../lib/passwordHash';
 import { gennecyBotUserWhereExclude } from '../lib/gennecyBotUser';
 import { releaseUserIdentity, buildReleasedIdentity } from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
 
 export class UserController {
   async updateUserPassword(req: AuthRequest, res: Response, next: NextFunction) {
@@ -348,6 +349,8 @@ export class UserController {
 
         return user;
       });
+
+      await ensureDefaultEmployeeAccessPermissions([result.id]);
 
       const newUser = await prisma.user.findUnique({
         where: { id: result.id },

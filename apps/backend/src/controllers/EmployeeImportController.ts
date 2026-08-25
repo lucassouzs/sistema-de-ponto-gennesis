@@ -7,6 +7,7 @@ import {
   cpfMatchVariants,
   releaseInactiveUsersHoldingIdentity,
 } from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
 
 interface ImportRow {
   Nome: string;
@@ -452,6 +453,8 @@ export const importEmployees = async (req: Request, res: Response) => {
           return { user, employee };
         });
 
+        await ensureDefaultEmployeeAccessPermissions([result.user.id]);
+
         successes.push({
           linha: lineNumber,
           nome: row.Nome,
@@ -736,6 +739,8 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
 
           return { user, employee };
         });
+
+        await ensureDefaultEmployeeAccessPermissions([result.user.id]);
 
         successes.push({
           linha: lineNumber,

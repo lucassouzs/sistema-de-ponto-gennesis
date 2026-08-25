@@ -5,6 +5,7 @@ import {
   cpfMatchVariants,
   releaseInactiveUsersHoldingIdentity,
 } from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
 
 export const getAllEmployees = async (req: Request, res: Response) => {
   try {
@@ -236,6 +237,8 @@ export const createEmployee = async (req: Request, res: Response) => {
 
       return employee;
     });
+
+    await ensureDefaultEmployeeAccessPermissions([result.userId]);
 
     return res.status(201).json(result);
   } catch (error) {
