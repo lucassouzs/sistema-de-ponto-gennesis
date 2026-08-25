@@ -273,38 +273,95 @@ type StatusBuscaInfo = {
   totalAno: number;
   totalOutros: number;
   year: number;
+  lastFetchLabel?: string;
+  nextFetchLabel?: string;
 };
+
+/** Alinhado ao SEFAZ_COOLDOWN_MS do backend (65 min). */
+const SEFAZ_COOLDOWN_MS = 65 * 60 * 1000;
+
+function formatDateTimeBr(isoOrDate: string | Date): string {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d);
+}
+
+function fetchScheduleLabels(lastFetchAt: string | null | undefined): {
+  lastFetchLabel?: string;
+  nextFetchLabel?: string;
+  waitHintFromCooldown?: string;
+} {
+  if (!lastFetchAt) return {};
+  const last = new Date(lastFetchAt);
+  if (Number.isNaN(last.getTime())) return {};
+
+  const next = new Date(last.getTime() + SEFAZ_COOLDOWN_MS);
+  const remainingMs = next.getTime() - Date.now();
+  const lastFetchLabel = formatDateTimeBr(last);
+  if (remainingMs <= 0) {
+    return {
+      lastFetchLabel,
+      nextFetchLabel: 'Assim que o agendador rodar',
+    };
+  }
+  const waitMin = Math.max(1, Math.ceil(remainingMs / 60_000));
+  return {
+    lastFetchLabel,
+    nextFetchLabel: formatDateTimeBr(next),
+    waitHintFromCooldown: `Próxima tentativa em cerca de ${waitMin} min`,
+  };
+}
 
 function statusBuscaVisivel(
   msg: string | null | undefined,
   totalAno: number,
   totalOutros: number,
-  year: number
+  year: number,
+  lastFetchAt?: string | null
 ): StatusBuscaInfo | null {
-  if (!msg) return null;
-  if (/reimporta/i.test(msg)) return null;
+  if (!msg && !lastFetchAt) return null;
+  if (msg && /reimporta/i.test(msg)) return null;
 
-  const nsuMatch = msg.match(/Último NSU:\s*([0-9]+)/i);
+  const schedule = fetchScheduleLabels(lastFetchAt);
+  const nsuMatch = msg?.match(/Último NSU:\s*([0-9]+)/i);
   const nsu = nsuMatch?.[1];
-  const waitMatch = msg.match(/Libera em\s*~?\s*(\d+)\s*min/i);
-  const waitHint = waitMatch
-    ? `Libera em cerca de ${waitMatch[1]} minutos`
-    : /~60\s*min/i.test(msg)
-      ? 'Libera em cerca de 60 minutos'
-      : undefined;
 
-  if (/consumo indevido|bloquead/i.test(msg)) {
+  if (msg && /consumo indevido|bloquead/i.test(msg)) {
     return {
       kind: 'blocked',
       title: 'Consulta temporariamente pausada',
       detail:
         'A SEFAZ limitou novas consultas deste CNPJ por excesso de requisições. A atualização automática volta sozinha após o intervalo.',
-      waitHint,
+      waitHint: schedule.waitHintFromCooldown || 'Aguardando liberação da SEFAZ',
       nsu,
       novas: null,
       totalAno,
       totalOutros,
       year,
+      lastFetchLabel: schedule.lastFetchLabel,
+      nextFetchLabel: schedule.nextFetchLabel,
+    };
+  }
+
+  if (!msg) {
+    return {
+      kind: 'ok',
+      title: 'Atualização automática',
+      detail: 'Busca automática na SEFAZ (a cada hora, quando permitido).',
+      nsu,
+      novas: null,
+      totalAno,
+      totalOutros,
+      year,
+      lastFetchLabel: schedule.lastFetchLabel,
+      nextFetchLabel: schedule.nextFetchLabel,
     };
   }
 
@@ -333,6 +390,8 @@ function statusBuscaVisivel(
     totalAno,
     totalOutros,
     year,
+    lastFetchLabel: schedule.lastFetchLabel,
+    nextFetchLabel: schedule.nextFetchLabel,
   };
 }
 
@@ -391,6 +450,22 @@ function StatusBuscaTooltip({ info }: { info: StatusBuscaInfo }) {
               : 'border-gray-100 text-gray-600 dark:border-gray-700 dark:text-gray-400'
           }`}
         >
+          {info.lastFetchLabel ? (
+            <span className="flex justify-between gap-3">
+              <span className="font-medium opacity-80">Última busca</span>
+              <span className="text-right tabular-nums font-semibold text-current">
+                {info.lastFetchLabel}
+              </span>
+            </span>
+          ) : null}
+          {info.nextFetchLabel ? (
+            <span className="flex justify-between gap-3">
+              <span className="font-medium opacity-80">Próxima</span>
+              <span className="text-right tabular-nums font-semibold text-current">
+                {info.nextFetchLabel}
+              </span>
+            </span>
+          ) : null}
           <span className="flex justify-between gap-3">
             <span className="font-medium opacity-80">{info.year}</span>
             <span className="tabular-nums font-semibold text-current">
@@ -561,7 +636,8 @@ export default function NfsRecebidasPage() {
     data?.lastMessage,
     data?.totalAno ?? (listaScope === 'ano' ? total : 0),
     data?.totalOutros ?? (listaScope === 'outros' ? total : 0),
-    NFE_YEAR
+    NFE_YEAR,
+    data?.lastFetchAt
   );
   const hasActiveSearch = Boolean(search.trim());
   const hasActiveEmitente = filterEmitentes.length > 0;
