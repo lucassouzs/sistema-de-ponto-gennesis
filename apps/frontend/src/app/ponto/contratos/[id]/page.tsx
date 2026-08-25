@@ -80,6 +80,7 @@ import {
   type DivSeOptionRow
 } from '@/lib/formatOsSePasta';
 import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
+import { isUnbRelatedLabel } from '@/lib/unbBranding';
 import { exportHistoricoOsPdf, exportPleitosOsToXlsx, getOsFaturamentoAcumulado, getOsPleiteadoPct, getOsRestantePleitear, getOsStatus, getOsStatusFaturamento, isOsConcluida, isOsPleiteada100, osStatusBadgeClass, sumOsPleiteadoTotal, type BillingForOsCheck, type PleitoOsExportRow } from '@/lib/pleitoOsExport';
 import {
   billingAndamentoBadgeClass,
@@ -692,6 +693,27 @@ function parseCurrencyInput(value: string): number {
   const cleaned = value.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
   const num = parseFloat(cleaned);
   return isNaN(num) ? 0 : num;
+}
+
+/** Fator fixo das NFs do contrato UNB: líquido = bruto × 86,65%. */
+const BILLING_NET_FROM_GROSS_RATE = 0.8665;
+
+function formatBillingCurrencyFromDigits(digits: string): string {
+  return digits
+    ? (Number(digits) / 100).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
+    : '';
+}
+
+/** Sugere o líquido a partir do bruto; o usuário ainda pode corrigir na mão. */
+function calcBillingNetFromGrossFormatted(grossFormatted: string): string {
+  if (!grossFormatted.trim()) return '';
+  const gross = parseCurrencyInput(grossFormatted);
+  if (!(gross > 0)) return '';
+  const net = Math.round(gross * BILLING_NET_FROM_GROSS_RATE * 100) / 100;
+  return net.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function isNetValueMissing(b: ContractBilling): boolean {
@@ -1440,6 +1462,16 @@ export default function ContractDetailPage() {
   });
 
   const contract = contractData?.data as Contract | undefined;
+
+  /** Cálculo automático líquido = bruto × 86,65% só no contrato UNB. */
+  const usesUnbBillingNetFactor = useMemo(() => {
+    if (!contract) return false;
+    return (
+      isUnbRelatedLabel(contract.name) ||
+      isUnbRelatedLabel(contract.costCenter?.name) ||
+      isUnbRelatedLabel(contract.costCenter?.code)
+    );
+  }, [contract]);
 
   useDocumentTitle(contract?.name ? `Contratos - ${contract.name}` : null);
 
@@ -6230,9 +6262,16 @@ export default function ContractDetailPage() {
                         required
                         value={billingForm.grossValue}
                         onChange={(e) => {
-                          const v = e.target.value.replace(/\D/g, '');
-                          const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                          setBillingForm({ ...billingForm, grossValue: formatted });
+                          const formatted = formatBillingCurrencyFromDigits(
+                            e.target.value.replace(/\D/g, '')
+                          );
+                          setBillingForm({
+                            ...billingForm,
+                            grossValue: formatted,
+                            ...(usesUnbBillingNetFactor
+                              ? { netValue: calcBillingNetFromGrossFormatted(formatted) }
+                              : {})
+                          });
                         }}
                         className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                         placeholder="0,00"
@@ -6566,9 +6605,16 @@ export default function ContractDetailPage() {
                           required
                           value={billingEditForm.grossValue}
                           onChange={(e) => {
-                            const v = e.target.value.replace(/\D/g, '');
-                            const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                            setBillingEditForm({ ...billingEditForm, grossValue: formatted });
+                            const formatted = formatBillingCurrencyFromDigits(
+                              e.target.value.replace(/\D/g, '')
+                            );
+                            setBillingEditForm({
+                              ...billingEditForm,
+                              grossValue: formatted,
+                              ...(usesUnbBillingNetFactor
+                                ? { netValue: calcBillingNetFromGrossFormatted(formatted) }
+                                : {})
+                            });
                           }}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                           placeholder="0,00"
