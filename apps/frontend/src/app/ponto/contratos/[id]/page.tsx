@@ -956,7 +956,10 @@ export default function ContractDetailPage() {
     isElevatedUser || permissions.canCreateContracts || hasThisContractAccess;
   const canEditContrato =
     isElevatedUser || permissions.canEditContracts || hasThisContractAccess;
+  /** Excluir o contrato na listagem — só matriz Contratos → Excluir (ou admin). */
   const canDeleteContrato = isElevatedUser || permissions.canDeleteContracts;
+  /** Excluir OS na aba do contrato — quem pode criar OS também pode excluir. */
+  const canDeleteOs = canCreateContrato;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -2956,8 +2959,8 @@ export default function ContractDetailPage() {
   });
 
   const handleExcluirPleitosSelecionados = () => {
-    if (!canDeleteContrato) {
-      toast.error('Você não tem permissão para excluir no módulo Contratos.');
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
       return;
     }
     const ids = Array.from(selectedForPleito).filter((id) => pleitos.some((p) => p.id === id));
@@ -3037,8 +3040,8 @@ export default function ContractDetailPage() {
   };
 
   const handleExcluirPleitoOs = (pleito: ContractPleito) => {
-    if (!canDeleteContrato) {
-      toast.error('Você não tem permissão para excluir no módulo Contratos.');
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
       return;
     }
     const label = formatOsSePastaOrDash(pleito.divSe, pleito.folderNumber);
@@ -4818,14 +4821,14 @@ export default function ContractDetailPage() {
                       ? 'Excluindo...'
                       : 'Excluir selecionadas',
                     onClick: handleExcluirPleitosSelecionados,
-                    disabled: !canDeleteContrato || deletePleitosSelecionadosMutation.isPending,
+                    disabled: !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
                     disabledTitle: deletePleitosSelecionadosMutation.isPending
                       ? 'Excluindo...'
-                      : 'Sem permissão para excluir',
+                      : 'Sem permissão para excluir OS',
                     icon: (
                       <Trash2
                         className={`h-4 w-4 shrink-0 ${
-                          !canDeleteContrato || deletePleitosSelecionadosMutation.isPending
+                          !canDeleteOs || deletePleitosSelecionadosMutation.isPending
                             ? 'text-gray-400 dark:text-gray-500'
                             : 'text-red-600 dark:text-red-400'
                         }`}
@@ -5053,10 +5056,10 @@ export default function ContractDetailPage() {
                           onClick: () =>
                             handleExcluirPleitoOs(pleitoRowForActionMenu as ContractPleito),
                           disabled:
-                            !canDeleteContrato || deletePleitosSelecionadosMutation.isPending,
+                            !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
                           disabledTitle: deletePleitosSelecionadosMutation.isPending
                             ? 'Excluindo...'
-                            : 'Sem permissão para excluir',
+                            : 'Sem permissão para excluir OS',
                           icon: (
                             <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
                           ),
