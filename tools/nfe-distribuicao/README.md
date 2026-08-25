@@ -28,11 +28,11 @@ NFE_UF=SP
 NFE_AMBIENTE=PRODUCAO
 NFE_MAX_CONSULTAS=50
 
-# Busca automática diária (local e Railway — mesmo processo do backend)
+# Busca automática horária (local e Railway — mesmo processo do backend)
 NFE_AUTO_FETCH_ENABLED=1
 NFE_AUTO_FETCH_YEAR=2026
 # Cron: 06:00 todo dia (timezone America/Sao_Paulo)
-NFE_AUTO_FETCH_CRON=0 6 * * *
+NFE_AUTO_FETCH_CRON=5 * * * *
 # Opcional: rodar também ao subir o servidor
 # NFE_AUTO_FETCH_ON_BOOT=1
 # NFE_AUTO_FETCH_BOOT_DELAY_MS=60000
@@ -80,7 +80,7 @@ NFE_AMBIENTE=PRODUCAO
 NFE_MAX_CONSULTAS=80
 NFE_AUTO_FETCH_ENABLED=1
 NFE_AUTO_FETCH_YEAR=2026
-NFE_AUTO_FETCH_CRON=0 6 * * *
+NFE_AUTO_FETCH_CRON=5 * * * *
 NFE_CRON_SECRET=troque-por-um-segredo-longo-e-aleatorio
 NFE_CERT_PASSWORD=sua_senha_do_p12
 NFE_CADEIA_PASSWORD=changeit

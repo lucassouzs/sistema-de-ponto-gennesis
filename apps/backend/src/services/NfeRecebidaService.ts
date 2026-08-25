@@ -1005,6 +1005,9 @@ export class NfeRecebidaService {
       })
     );
 
+    const { getNfeAutoFetchSchedule } = await import('./NfeRecebidaAutoFetch');
+    const schedule = await getNfeAutoFetchSchedule();
+
     return {
       items,
       total,
@@ -1014,7 +1017,9 @@ export class NfeRecebidaService {
       pageSize,
       ultimoNsu: state.ultimoNsu,
       lastFetchAt: state.lastFetchAt?.toISOString() ?? null,
-      lastMessage: state.lastMessage
+      lastMessage: state.lastMessage,
+      nextFetchAt: schedule.nextFetchAt,
+      autoFetchCron: schedule.cron,
     };
   }
 

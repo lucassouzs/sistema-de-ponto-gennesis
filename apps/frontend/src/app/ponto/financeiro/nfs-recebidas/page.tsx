@@ -106,6 +106,8 @@ type NfeListResponse = {
   ultimoNsu: string;
   lastFetchAt: string | null;
   lastMessage: string | null;
+  nextFetchAt?: string | null;
+  autoFetchCron?: string | null;
 };
 
 function formatMoney(value: number | null) {
@@ -293,29 +295,60 @@ function formatDateTimeBr(isoOrDate: string | Date): string {
   }).format(d);
 }
 
-function fetchScheduleLabels(lastFetchAt: string | null | undefined): {
+function fetchScheduleLabels(
+  lastFetchAt: string | null | undefined,
+  nextFetchAt?: string | null
+): {
   lastFetchLabel?: string;
   nextFetchLabel?: string;
   waitHintFromCooldown?: string;
 } {
-  if (!lastFetchAt) return {};
+  if (!lastFetchAt && !nextFetchAt) return {};
+
+  const lastFetchLabel = lastFetchAt ? formatDateTimeBr(lastFetchAt) : undefined;
+
+  if (nextFetchAt) {
+    const next = new Date(nextFetchAt);
+    if (!Number.isNaN(next.getTime())) {
+      const remainingMs = next.getTime() - Date.now();
+      if (remainingMs <= 0) {
+        return {
+          lastFetchLabel,
+          nextFetchLabel: 'Em instantes (agendador)',
+        };
+      }
+      const waitMin = Math.max(1, Math.ceil(remainingMs / 60_000));
+      return {
+        lastFetchLabel,
+        nextFetchLabel: formatDateTimeBr(next),
+        waitHintFromCooldown: `Próxima tentativa em cerca de ${waitMin} min`,
+      };
+    }
+  }
+
+  if (!lastFetchAt) return { lastFetchLabel };
   const last = new Date(lastFetchAt);
   if (Number.isNaN(last.getTime())) return {};
 
-  const next = new Date(last.getTime() + SEFAZ_COOLDOWN_MS);
+  // Fallback local: última + 65 min, arredondado para o próximo :05
+  const eligible = new Date(last.getTime() + SEFAZ_COOLDOWN_MS);
+  const next = new Date(Math.max(Date.now(), eligible.getTime()));
+  next.setSeconds(0, 0);
+  next.setMinutes(5);
+  if (next.getTime() <= Math.max(Date.now(), eligible.getTime())) {
+    next.setHours(next.getHours() + 1);
+  }
   const remainingMs = next.getTime() - Date.now();
-  const lastFetchLabel = formatDateTimeBr(last);
   if (remainingMs <= 0) {
     return {
-      lastFetchLabel,
-      nextFetchLabel: 'Assim que o agendador rodar',
+      lastFetchLabel: formatDateTimeBr(last),
+      nextFetchLabel: 'Em instantes (agendador)',
     };
   }
-  const waitMin = Math.max(1, Math.ceil(remainingMs / 60_000));
   return {
-    lastFetchLabel,
+    lastFetchLabel: formatDateTimeBr(last),
     nextFetchLabel: formatDateTimeBr(next),
-    waitHintFromCooldown: `Próxima tentativa em cerca de ${waitMin} min`,
+    waitHintFromCooldown: `Próxima tentativa em cerca de ${Math.max(1, Math.ceil(remainingMs / 60_000))} min`,
   };
 }
 
@@ -324,12 +357,13 @@ function statusBuscaVisivel(
   totalAno: number,
   totalOutros: number,
   year: number,
-  lastFetchAt?: string | null
+  lastFetchAt?: string | null,
+  nextFetchAt?: string | null
 ): StatusBuscaInfo | null {
   if (!msg && !lastFetchAt) return null;
   if (msg && /reimporta/i.test(msg)) return null;
 
-  const schedule = fetchScheduleLabels(lastFetchAt);
+  const schedule = fetchScheduleLabels(lastFetchAt, nextFetchAt);
   const nsuMatch = msg?.match(/Último NSU:\s*([0-9]+)/i);
   const nsu = nsuMatch?.[1];
 
@@ -637,7 +671,8 @@ export default function NfsRecebidasPage() {
     data?.totalAno ?? (listaScope === 'ano' ? total : 0),
     data?.totalOutros ?? (listaScope === 'outros' ? total : 0),
     NFE_YEAR,
-    data?.lastFetchAt
+    data?.lastFetchAt,
+    data?.nextFetchAt
   );
   const hasActiveSearch = Boolean(search.trim());
   const hasActiveEmitente = filterEmitentes.length > 0;

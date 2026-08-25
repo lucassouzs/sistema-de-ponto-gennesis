@@ -8,10 +8,17 @@ import {
   nfeJavaAvailable,
   SEFAZ_COOLDOWN_MS,
 } from './NfeRecebidaService';
+import { prisma } from '../lib/prisma';
 
 const service = new NfeRecebidaService();
 let started = false;
 let fetchInFlight = false;
+/** Expressão cron efetiva (após normalizar legado diário → horário). */
+let activeCronExpression = '5 * * * *';
+
+const DEFAULT_HOURLY_CRON = '5 * * * *';
+/** Cron diário antigo; se ainda estiver no Railway, forçamos horário. */
+const LEGACY_DAILY_CRONS = new Set(['0 6 * * *']);
 
 function envBool(key: string, fallback = false): boolean {
   const v = process.env[key]?.trim().toLowerCase();
@@ -32,6 +39,63 @@ function nfeWorkerJarReady(): boolean {
     path.resolve(process.cwd(), 'dist', 'nfe-distribuicao.jar'),
     path.resolve(process.cwd(), '../../apps/backend/vendor/nfe-distribuicao.jar'),
   ].some((p) => fs.existsSync(p));
+}
+
+function resolveCronExpression(): string {
+  const raw = process.env.NFE_AUTO_FETCH_CRON?.trim();
+  if (!raw) return DEFAULT_HOURLY_CRON;
+  if (LEGACY_DAILY_CRONS.has(raw)) {
+    console.warn(
+      `[nfe-auto] NFE_AUTO_FETCH_CRON="${raw}" é o agendamento diário antigo — usando "${DEFAULT_HOURLY_CRON}" (a cada hora). Remova ou atualize a variável no Railway.`
+    );
+    return DEFAULT_HOURLY_CRON;
+  }
+  return raw;
+}
+
+/**
+ * Próximo disparo aproximado do cron horário `M * * * *` (minuto M de cada hora).
+ */
+export function nextHourlyCronFire(after: Date = new Date(), expression = activeCronExpression): Date | null {
+  const m = /^(\d{1,2})\s+\*\s+\*\s+\*\s+\*$/.exec(expression.trim());
+  if (!m) return null;
+  const minute = Number(m[1]);
+  if (!Number.isFinite(minute) || minute < 0 || minute > 59) return null;
+
+  const next = new Date(after.getTime());
+  next.setSeconds(0, 0);
+  next.setMilliseconds(0);
+  next.setMinutes(minute);
+  if (next.getTime() <= after.getTime()) {
+    next.setHours(next.getHours() + 1);
+  }
+  return next;
+}
+
+/**
+ * Momento em que a próxima busca automática pode ocorrer:
+ * o próximo tick do cron que já esteja após lastFetchAt + cooldown.
+ */
+export async function getNfeAutoFetchSchedule(): Promise<{
+  cron: string;
+  lastFetchAt: string | null;
+  nextFetchAt: string | null;
+}> {
+  const state = await prisma.nfeDistribuicaoState.findUnique({
+    where: { id: 'default' },
+  });
+  const last = state?.lastFetchAt ?? null;
+  const now = new Date();
+  const eligibleFrom = last
+    ? new Date(Math.max(now.getTime(), last.getTime() + SEFAZ_COOLDOWN_MS))
+    : now;
+  const cronAt = nextHourlyCronFire(eligibleFrom, activeCronExpression);
+
+  return {
+    cron: activeCronExpression,
+    lastFetchAt: last?.toISOString() ?? null,
+    nextFetchAt: cronAt?.toISOString() ?? eligibleFrom.toISOString(),
+  };
 }
 
 /**
@@ -105,21 +169,22 @@ export function startNfeAutoFetchScheduler(): void {
     );
     return;
   }
+
+  // Não aborta o cron se o Java ainda estiver instalando: cada tick revalida.
   if (javaEnabled() && !nfeJavaAvailable()) {
     console.warn(
-      '[nfe-auto] Java não encontrado — a busca automática fica pendente até o JRE ser instalado no boot'
+      '[nfe-auto] Java ainda não está no PATH — agenda ligada mesmo assim; cada tentativa revalida o runtime'
     );
-    return;
   }
 
-  // A cada hora; a gate (65 min) pode pular uma execução se ainda estiver cedo.
-  const expression = process.env.NFE_AUTO_FETCH_CRON?.trim() || '5 * * * *';
+  const expression = resolveCronExpression();
   if (!cron.validate(expression)) {
     console.error(`[nfe-auto] cron inválido: ${expression}`);
     return;
   }
 
   started = true;
+  activeCronExpression = expression;
   const tz = process.env.TZ || 'America/Sao_Paulo';
   const intervalMin = Math.round(SEFAZ_COOLDOWN_MS / 60_000);
 
