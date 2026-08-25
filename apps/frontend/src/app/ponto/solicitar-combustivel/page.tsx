@@ -693,6 +693,7 @@ export default function SolicitarCombustivelPage() {
   const listRange = getCadastroListRange(page, ITEMS_PER_PAGE, filteredRows.length);
   const listHeader = CARD_LIST_CONFIG[cardFilter];
   const isListEmpty = !loadingList && pageRows.length === 0;
+  const showStationDeadlineColumns = cardFilter !== 'analysis';
 
   const {
     rowActionMenu,
@@ -973,8 +974,12 @@ export default function SolicitarCombustivelPage() {
                           <th className={thCenterCompact}>Condutor</th>
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Placa</th>
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Tipo</th>
-                          <th className={thCenterCompact}>Posto</th>
-                          <th className={thCenterCompact}>Prazo</th>
+                          {showStationDeadlineColumns ? (
+                            <>
+                              <th className={thCenterCompact}>Posto</th>
+                              <th className={thCenterCompact}>Prazo</th>
+                            </>
+                          ) : null}
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Status</th>
                           <th className={`${thCenterCompact} w-14`}>Ação</th>
                         </tr>
@@ -1023,48 +1028,52 @@ export default function SolicitarCombustivelPage() {
                             <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
                               {VEHICLE_TYPE_LABELS[row.vehicleType] || row.vehicleType}
                             </td>
-                            <td className={tdCenterWrap}>
-                              {row.gasStation ? (
-                                <div className="space-y-0.5 break-words text-center leading-snug">
-                                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                                    {row.gasStation.name}
-                                  </p>
-                                  {row.gasStation.address ? (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {row.gasStation.address}
-                                    </p>
-                                  ) : null}
-                                  {row.suppliesApprovalComment ? (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {row.suppliesApprovalComment}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500">—</span>
-                              )}
-                            </td>
-                            <td className={tdCenterWrap}>
-                              {deadlineLines ? (
-                                <div className="leading-snug">
-                                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                                    {deadlineLines.amountLabel}
-                                  </p>
-                                  {deadlineLines.dateLabel ? (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {deadlineLines.dateLabel}
-                                    </p>
-                                  ) : null}
-                                  {deadlineLines.timeLabel ? (
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                      {deadlineLines.timeLabel}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 dark:text-gray-500">—</span>
-                              )}
-                            </td>
+                            {showStationDeadlineColumns ? (
+                              <>
+                                <td className={tdCenterWrap}>
+                                  {row.gasStation ? (
+                                    <div className="space-y-0.5 break-words text-center leading-snug">
+                                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                                        {row.gasStation.name}
+                                      </p>
+                                      {row.gasStation.address ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                          {row.gasStation.address}
+                                        </p>
+                                      ) : null}
+                                      {row.suppliesApprovalComment ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                          {row.suppliesApprovalComment}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-gray-500">—</span>
+                                  )}
+                                </td>
+                                <td className={tdCenterWrap}>
+                                  {deadlineLines ? (
+                                    <div className="leading-snug">
+                                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                                        {deadlineLines.amountLabel}
+                                      </p>
+                                      {deadlineLines.dateLabel ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                          {deadlineLines.dateLabel}
+                                        </p>
+                                      ) : null}
+                                      {deadlineLines.timeLabel ? (
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                          {deadlineLines.timeLabel}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-gray-500">—</span>
+                                  )}
+                                </td>
+                              </>
+                            ) : null}
                             <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
                               <span
                                 className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[row.status]}`}
