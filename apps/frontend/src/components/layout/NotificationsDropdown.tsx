@@ -263,7 +263,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     if (canSeeFuelSupplies && fuelSuppliesPendingCount > 0) {
       list.push({
         id: 'fuel-supplies',
-        title: 'Solicitações de Combustível',
+        title: 'Fila de Abastecimento',
         description: 'Abastecimentos pendentes',
         count: fuelSuppliesPendingCount,
         href: '/ponto/solicitacoes-combustivel',

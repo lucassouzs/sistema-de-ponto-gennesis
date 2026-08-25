@@ -681,14 +681,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               canApproveMaterialRequests,
           },
           {
-            name: 'Solicitações DP/ADM/TST',
+            name: 'Solicitações Internas',
             href: '/ponto/solicitacoes-gerais',
             icon: MailPlus,
             description: 'Minhas solicitações ao DP',
             permission: isAdministrator || can(pk('/ponto/solicitacoes-dp'))
           },
           {
-            name: 'Reserva de Veículos',
+            name: 'Reservar Veículo',
             href: '/ponto/reserva-veiculos',
             icon: Car,
             description: 'Solicitar reserva de veículos da frota',
@@ -696,7 +696,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/reserva-veiculos'))
           },
           {
-            name: 'Solicitar Combustível',
+            name: 'Abastecimento',
             href: '/ponto/solicitar-combustivel',
             icon: Fuel,
             description: 'Solicitar abastecimento de veículos',
@@ -1160,7 +1160,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/fds-aprovadas'))
           },
           {
-            name: 'Solicitações de Combustível',
+            name: 'Fila de Abastecimento',
             href: '/ponto/solicitacoes-combustivel',
             icon: Fuel,
             description: 'Pedidos de abastecimento (sistema e Gennecy)',
@@ -1176,7 +1176,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos'))
           },
           {
-            name: 'Solicitações de Ferramentas',
+            name: 'Pedidos de Ferramentas',
             href: '/ponto/solicitacoes-ferramentas',
             icon: Wrench,
             description: 'Analisar solicitações de locação, renovação, devolução ou compra',

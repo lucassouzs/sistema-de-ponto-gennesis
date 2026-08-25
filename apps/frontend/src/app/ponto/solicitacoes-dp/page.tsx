@@ -988,10 +988,10 @@ export function SolicitacoesGeraisPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-              Solicitações DP/ADM/TST
+              Solicitações Internas
             </h1>
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Crie e acompanhe solicitações ao DP e ADM/TST
+              Crie e acompanhe pedidos para Departamento Pessoal e ADM/TST
             </p>
           </div>
 

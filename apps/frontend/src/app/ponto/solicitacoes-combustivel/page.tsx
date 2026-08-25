@@ -87,7 +87,7 @@ const SUPPLIES_CARD_LIST_CONFIG: Record<
   }
 > = {
   all: {
-    title: 'Todas as Solicitações de Combustível',
+    title: 'Todas as solicitações de abastecimento',
     subtitle: 'Todas as solicitações de abastecimento registradas no sistema.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
@@ -549,7 +549,7 @@ export default function SolicitacoesCombustivelPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Solicitações de Combustível
+              Fila de Abastecimento
             </h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
               Fila do Suprimentos: veículos de frota entram direto; particulares após aprovação do
@@ -659,7 +659,7 @@ export default function SolicitacoesCombustivelPage() {
                   <p className="text-gray-600 dark:text-gray-400">Nenhuma solicitação encontrada</p>
                   {cardFilter === 'pending' ? (
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
-                      Colaboradores podem solicitar em Solicitar Combustível ou via Conversas → Gennecy → opção 1
+                      Colaboradores podem solicitar em Abastecimento ou via Conversas → Gennecy → opção 1
                     </p>
                   ) : null}
                 </div>
@@ -1221,7 +1221,7 @@ export default function SolicitacoesCombustivelPage() {
         <Modal
           isOpen={isFiltersOpen}
           onClose={() => setIsFiltersOpen(false)}
-          title="Filtros — Solicitações de Combustível"
+          title="Filtros — Fila de Abastecimento"
           size="md"
         >
           <div className="space-y-4">

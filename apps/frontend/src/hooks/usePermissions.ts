@@ -381,7 +381,7 @@ export function usePermissions() {
   /** Alias legado — mesmo escopo da RM (aprovação por contrato). */
   const gestorScopedCostCenterIds = rmGestorScopedCostCenterIds;
 
-  /** Bloco «Solicitações de Combustível» na tela de Aprovações (somente permissão Controle). */
+  /** Bloco «Fila de Abastecimento» na tela de Aprovações (somente permissão Controle). */
   const canApproveFuel =
     isAdministrator ||
     !!permissionData?.isAdmin ||

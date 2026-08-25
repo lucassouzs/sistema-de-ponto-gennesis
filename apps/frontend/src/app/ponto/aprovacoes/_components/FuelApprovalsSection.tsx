@@ -576,7 +576,7 @@ export function FuelApprovalsSection() {
       <Modal
         isOpen={isFuelFiltersOpen}
         onClose={() => setIsFuelFiltersOpen(false)}
-        title="Filtro — Solicitações de Combustível"
+        title="Filtro — Fila de Abastecimento"
         size="sm"
       >
         <div className="space-y-4">

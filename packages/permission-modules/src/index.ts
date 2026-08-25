@@ -70,9 +70,9 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/dashboard'), name: 'Painel do Sistema', href: '/ponto/painel-do-sistema', category: 'Principal' },
   { key: pathToModuleKey('/ponto/financeiro/gestao-solicitacoes'), name: 'Fluig - Processos', href: '/ponto/financeiro/gestao-solicitacoes', category: 'Principal' },
   { key: pathToModuleKey('/ponto/fluig/aprovacoes-workflow'), name: 'Fluig - Aprovações', href: '/ponto/fluig/aprovacoes-workflow', category: 'Principal' },
-  { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações DP/ADM/TST', href: '/ponto/solicitacoes-dp', category: 'Principal' },
-  { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Reserva de Veículos', href: '/ponto/reserva-veiculos', category: 'Principal' },
-  { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Solicitar Combustível', href: '/ponto/solicitar-combustivel', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações Internas', href: '/ponto/solicitacoes-dp', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Reservar Veículo', href: '/ponto/reserva-veiculos', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Abastecimento', href: '/ponto/solicitar-combustivel', category: 'Principal' },
   { key: pathToModuleKey('/ponto/meus-chamados'), name: 'Meus Chamados', href: '/ponto/meus-chamados', category: 'Principal' },
   { key: pathToModuleKey('/ponto/entrega-logistica'), name: 'Entrega da Logística', href: '/ponto/entrega-logistica', category: 'Principal' },
   /** Acesso livre — oculto na matriz «Acesso» (ver PERMISSION_MODULE_KEYS_OPEN_ACCESS). */
@@ -216,7 +216,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/fds-aprovadas'), name: "FD's Aprovadas", href: '/ponto/fds-aprovadas', category: 'Suprimentos' },
   {
     key: pathToModuleKey('/ponto/solicitacoes-combustivel'),
-    name: 'Solicitações de Combustível',
+    name: 'Fila de Abastecimento',
     href: '/ponto/solicitacoes-combustivel',
     category: 'Suprimentos',
   },
@@ -228,7 +228,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   },
   {
     key: pathToModuleKey('/ponto/solicitacoes-ferramentas'),
-    name: 'Solicitações de Ferramentas',
+    name: 'Pedidos de Ferramentas',
     href: '/ponto/solicitacoes-ferramentas',
     category: 'Suprimentos',
   },
@@ -348,7 +348,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   },
   {
     key: pathToModuleKey('/ponto/controle/aprovar-combustivel'),
-    name: 'Aprovar Solicitações de Combustível',
+    name: 'Aprovar Abastecimento',
     href: '/ponto/controle/aprovar-combustivel',
     category: 'Controle',
     group: 'Aprovações',

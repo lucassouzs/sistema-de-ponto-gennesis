@@ -760,7 +760,7 @@ export default function SolicitarCombustivelPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Solicitar Combustível
+              Abastecimento
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
               Frota vai direto ao Suprimentos; particular passa pelo gestor antes.
