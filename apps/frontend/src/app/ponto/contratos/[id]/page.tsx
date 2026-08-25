@@ -77,6 +77,8 @@ import {
   formatOsSePastaOrDash,
   folderForDivSe,
   enrichDivSeOptionsWithPleitos,
+  compareOsSeNatural,
+  osSeSearchRank,
   type DivSeOptionRow
 } from '@/lib/formatOsSePasta';
 import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
@@ -2552,7 +2554,14 @@ export default function ContractDetailPage() {
     }
 
     if (searchTermPleitos.trim()) {
-      result = result.filter((p) => pleitoMatchesSearchTerm(p, searchTermPleitos));
+      const q = searchTermPleitos.trim();
+      result = result.filter((p) => pleitoMatchesSearchTerm(p, q));
+      result = [...result].sort((a, b) => {
+        const ra = osSeSearchRank(a.divSe, q);
+        const rb = osSeSearchRank(b.divSe, q);
+        if (ra !== rb) return ra - rb;
+        return compareOsSeNatural(a.divSe, b.divSe);
+      });
     }
 
     return result;
