@@ -28,6 +28,7 @@ import {
   kanbanInputNumber,
 } from '@/components/kanban/kanbanFormStyles';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { useKanbanDragScrollAssist } from '@/hooks/useKanbanDragScrollAssist';
 import { useRightClickPanScroll } from '@/hooks/useRightClickPanScroll';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -3558,9 +3559,9 @@ function KanbanPage() {
       const filteredCards = targetColumn.cards.filter((card) => {
         const matchSearch =
           !search ||
-          card.title.toLowerCase().includes(search.toLowerCase()) ||
-          card.description.toLowerCase().includes(search.toLowerCase()) ||
-          card.assignee.toLowerCase().includes(search.toLowerCase());
+          textMatchesSearch(card.title, search) ||
+          textMatchesSearch(card.description, search) ||
+          textMatchesSearch(card.assignee, search);
         const matchPriority =
           multiselectFilterShowsAll(filterPriorities, KANBAN_PRIORITY_ALL_VALUES) ||
           filterPriorities.includes(card.priority);
@@ -3976,9 +3977,9 @@ function KanbanPage() {
         cards: col.cards.filter((card) => {
           const matchSearch =
             !search ||
-            card.title.toLowerCase().includes(search.toLowerCase()) ||
-            card.description.toLowerCase().includes(search.toLowerCase()) ||
-            card.assignee.toLowerCase().includes(search.toLowerCase());
+            textMatchesSearch(card.title, search) ||
+            textMatchesSearch(card.description, search) ||
+            textMatchesSearch(card.assignee, search);
           const matchPriority =
             multiselectFilterShowsAll(filterPriorities, KANBAN_PRIORITY_ALL_VALUES) ||
             filterPriorities.includes(card.priority);

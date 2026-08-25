@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import AWS from 'aws-sdk';
 import { prisma } from '../lib/prisma';
+import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 const medicalCertificateService = new MedicalCertificateService();
 
@@ -200,24 +201,8 @@ export class MedicalCertificateController {
       }
 
       if (search) {
-        where.OR = [
-          {
-            user: {
-              name: {
-                contains: search as string,
-                mode: 'insensitive'
-              }
-            }
-          },
-          {
-            user: {
-              email: {
-                contains: search as string,
-                mode: 'insensitive'
-              }
-            }
-          }
-        ];
+        const matchedIds = await findUserIdsMatchingSearch(String(search));
+        where.userId = { in: matchedIds.length > 0 ? matchedIds : ['__none__'] };
       }
 
       const certificates = await prisma.medicalCertificate.findMany({

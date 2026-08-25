@@ -10,6 +10,7 @@ import {
   normalizeAsoKey,
   normalizeCargoSetorAso,
 } from '../lib/asoFuncao';
+import { findEmployeeIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 const DEFAULT_PERIODICIDADE_MESES = 12;
 
@@ -574,7 +575,7 @@ export class AsoService {
     criadoPor: { select: { id: true, name: true } },
   } satisfies Prisma.AsoRegistroInclude;
 
-  private buildRegistroWhere(filters: AsoListFilters): Prisma.AsoRegistroWhereInput {
+  private async buildRegistroWhere(filters: AsoListFilters): Promise<Prisma.AsoRegistroWhereInput> {
     const where: Prisma.AsoRegistroWhereInput = {};
 
     if (filters.tipoAsoId) where.tipoAsoId = filters.tipoAsoId;
@@ -631,20 +632,15 @@ export class AsoService {
 
     if (filters.search?.trim()) {
       const q = filters.search.trim();
+      const matchedEmployeeIds = await findEmployeeIdsMatchingSearch(q);
       where.OR = [
         { medicoResponsavel: { contains: q, mode: 'insensitive' } },
         { clinica: { contains: q, mode: 'insensitive' } },
         { crmMedico: { contains: q, mode: 'insensitive' } },
         { observacoes: { contains: q, mode: 'insensitive' } },
         {
-          funcionario: {
-            OR: [
-              { employeeId: { contains: q, mode: 'insensitive' } },
-              { position: { contains: q, mode: 'insensitive' } },
-              { department: { contains: q, mode: 'insensitive' } },
-              { user: { name: { contains: q, mode: 'insensitive' } } },
-              { user: { cpf: { contains: q, mode: 'insensitive' } } },
-            ],
+          funcionarioId: {
+            in: matchedEmployeeIds.length > 0 ? matchedEmployeeIds : ['__none__'],
           },
         },
         { tipoAso: { nome: { contains: q, mode: 'insensitive' } } },
@@ -659,7 +655,7 @@ export class AsoService {
     const limit = Math.min(100, Math.max(1, filters.limit || 20));
     const skip = (page - 1) * limit;
 
-    const where = this.buildRegistroWhere(filters);
+    const where = await this.buildRegistroWhere(filters);
 
     const [total, items] = await Promise.all([
       prisma.asoRegistro.count({ where }),
@@ -685,7 +681,7 @@ export class AsoService {
 
   /** Mesmos filtros de listRegistros, mas sem paginação (limite de segurança de 5000) — usado na exportação Excel. */
   async exportRegistros(filters: AsoListFilters = {}) {
-    const where = this.buildRegistroWhere(filters);
+    const where = await this.buildRegistroWhere(filters);
     return prisma.asoRegistro.findMany({
       where,
       include: this.registroInclude,
@@ -969,14 +965,8 @@ export class AsoService {
       where.position = { equals: filters.position.trim(), mode: 'insensitive' };
     }
     if (filters.search?.trim()) {
-      const q = filters.search.trim();
-      where.OR = [
-        { employeeId: { contains: q, mode: 'insensitive' } },
-        { position: { contains: q, mode: 'insensitive' } },
-        { department: { contains: q, mode: 'insensitive' } },
-        { user: { name: { contains: q, mode: 'insensitive' } } },
-        { user: { cpf: { contains: q, mode: 'insensitive' } } },
-      ];
+      const matchedIds = await findEmployeeIdsMatchingSearch(filters.search.trim());
+      where.id = { in: matchedIds.length > 0 ? matchedIds : ['__none__'] };
     }
 
     const employees = await prisma.employee.findMany({

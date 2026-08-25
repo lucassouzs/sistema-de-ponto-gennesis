@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { TimeRecordService } from '../services/TimeRecordService';
 import { prisma } from '../lib/prisma';
+import { findEmployeeIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 const timeRecordService = new TimeRecordService();
 
@@ -72,25 +73,10 @@ export class BankHoursController {
         whereClause.polo = { contains: polo as string, mode: 'insensitive' };
       }
 
-      // Aplicar busca geral (se não for filtro manual)
+      // Aplicar busca geral (se não for filtro manual) — sem acento: "antonio" encontra "Antônio"
       if (search && !shouldFilterManually) {
-        whereClause.AND = [
-          {
-            OR: [
-              { user: { name: { contains: search as string, mode: 'insensitive' } } },
-              { user: { cpf: { contains: search as string, mode: 'insensitive' } } },
-              { user: { email: { contains: search as string, mode: 'insensitive' } } },
-              { employeeId: { contains: search as string, mode: 'insensitive' } },
-              { department: { contains: search as string, mode: 'insensitive' } },
-              { position: { contains: search as string, mode: 'insensitive' } },
-              { company: { contains: search as string, mode: 'insensitive' } },
-              { costCenter: { contains: search as string, mode: 'insensitive' } },
-              { client: { contains: search as string, mode: 'insensitive' } },
-              { modality: { contains: search as string, mode: 'insensitive' } },
-              { polo: { contains: search as string, mode: 'insensitive' } }
-            ]
-          }
-        ];
+        const matchedIds = await findEmployeeIdsMatchingSearch(String(search));
+        whereClause.id = { in: matchedIds.length > 0 ? matchedIds : ['__none__'] };
       }
 
       // Adicionar filtro para funcionários que precisam bater ponto

@@ -1310,8 +1310,20 @@ async function ensureQuoteMapUnitPricePrecision(prisma: PrismaClient): Promise<v
  * Corrige drift conhecido entre Prisma schema e bancos de produção onde migrate deploy não aplicou tudo.
  * DDL idempotente (IF NOT EXISTS / duplicate_object).
  */
+async function ensureUnaccentExtension(prisma: PrismaClient): Promise<void> {
+  try {
+    await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS unaccent`);
+  } catch (e) {
+    console.warn(
+      '[Schema] Não foi possível criar a extensão unaccent (busca sem acento pode falhar):',
+      e instanceof Error ? e.message : e
+    );
+  }
+}
+
 export async function ensureProductionSchema(prisma: PrismaClient): Promise<void> {
   try {
+    await ensureUnaccentExtension(prisma);
     await ensureContractAddendaTable(prisma);
     await ensureMaterialRequestColumns(prisma);
     await ensureMaterialRequestItemColumns(prisma);

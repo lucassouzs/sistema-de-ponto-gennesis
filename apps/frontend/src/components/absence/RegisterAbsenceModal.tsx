@@ -8,6 +8,7 @@ import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 interface RegisterAbsenceModalProps {
   isOpen: boolean;
@@ -194,11 +195,11 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
   const selectedEmployee = employees.find(emp => emp.id === formData.employeeId);
   const isLoading = registerSingleAbsence.isPending || registerMultipleAbsences.isPending;
 
-  // Filtrar funcionários por busca (apenas nome, cargo e setor)
-  const filteredEmployees = employees.filter(emp => 
-    emp.user.name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-    (emp.position && emp.position.toLowerCase().includes(employeeSearch.toLowerCase())) ||
-    (emp.department && emp.department.toLowerCase().includes(employeeSearch.toLowerCase()))
+  // Filtrar funcionários por busca (apenas nome, cargo e setor) — sem acento/caixa
+  const filteredEmployees = employees.filter(emp =>
+    textMatchesSearch(emp.user.name, employeeSearch) ||
+    textMatchesSearch(emp.position, employeeSearch) ||
+    textMatchesSearch(emp.department, employeeSearch)
   );
 
   const handleEmployeeSelect = (employeeId: string, employeeName: string) => {

@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
@@ -188,12 +189,11 @@ export default function GerenciarSolicitacoesPage() {
       if (request.status !== activeStatusTab) return false;
     }
 
-    // Filtro de busca
+    // Filtro de busca (sem acento/caixa)
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const matchesName = request.employee.user.name.toLowerCase().includes(searchLower);
-      const matchesTitle = request.title.toLowerCase().includes(searchLower);
-      const matchesJustification = request.justification.toLowerCase().includes(searchLower);
+      const matchesName = textMatchesSearch(request.employee.user.name, filters.search);
+      const matchesTitle = textMatchesSearch(request.title, filters.search);
+      const matchesJustification = textMatchesSearch(request.justification, filters.search);
       if (!matchesName && !matchesTitle && !matchesJustification) return false;
     }
 

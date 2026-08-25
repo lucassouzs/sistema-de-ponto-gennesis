@@ -1,5 +1,6 @@
 import { isGennecyBotUser } from './gennecyBot';
 import { GENNECY_BOT_AVATAR_PATH } from './resolveMediaUrl';
+import { normalizeSearchText, textMatchesSearch } from './normalizeSearchText';
 
 export const GENNECY_MENTION_HANDLE = 'Gennecy';
 
@@ -50,7 +51,7 @@ export function buildChatMentionOptions(
   query: string,
   options?: { includeGennecyAssistant?: boolean },
 ): ChatMentionOption[] {
-  const q = query.trim().toLowerCase();
+  const q = normalizeSearchText(query);
 
   const gennecy: ChatMentionOption = {
     id: 'gennecy',
@@ -80,9 +81,11 @@ export function buildChatMentionOptions(
   if (!q) return all;
 
   return all.filter((o) => {
-    const label = o.label.toLowerCase();
-    const handle = o.insertText.slice(1).trim().toLowerCase();
-    return label.includes(q) || handle.startsWith(q);
+    const handle = o.insertText.slice(1).trim();
+    return (
+      textMatchesSearch(o.label, q) ||
+      normalizeSearchText(handle).startsWith(q)
+    );
   });
 }
 

@@ -25,6 +25,7 @@ import {
 } from '@/components/fluig/fluigWorkflowAprovadoresShared';
 import { FluigApproverViewersModal } from '@/components/fluig/FluigApproverViewersModal';
 import { usePermissions } from '@/hooks/usePermissions';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export function FluigWorkflowAprovadoresPage() {
   const router = useRouter();
@@ -109,9 +110,9 @@ export function FluigWorkflowAprovadoresPage() {
   }, [accessibleApprovers]);
 
   const filteredApprovers = useMemo(() => {
-    const term = deferredSearch.trim().toLowerCase();
+    const term = deferredSearch.trim();
     if (!term) return accessibleApprovers;
-    return accessibleApprovers.filter((item) => item.name.toLowerCase().includes(term));
+    return accessibleApprovers.filter((item) => textMatchesSearch(item.name, term));
   }, [accessibleApprovers, deferredSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApprovers.length / APPROVERS_LIST_PAGE_SIZE));

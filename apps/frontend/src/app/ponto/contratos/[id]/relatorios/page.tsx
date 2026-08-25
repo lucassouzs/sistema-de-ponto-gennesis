@@ -13,6 +13,7 @@ import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 
 interface RelatorioEntry {
@@ -151,15 +152,15 @@ export default function ContratoRelatoriosPage() {
   }, [employeesData]);
 
   const filteredNovoSolicitantes = useMemo(() => {
-    const q = novoSolicitanteSearch.trim().toLowerCase();
+    const q = novoSolicitanteSearch.trim();
     if (!q) return employeeOptions;
-    return employeeOptions.filter((u) => u.name.toLowerCase().includes(q));
+    return employeeOptions.filter((u) => textMatchesSearch(u.name, q));
   }, [employeeOptions, novoSolicitanteSearch]);
 
   const filteredEditarSolicitantes = useMemo(() => {
-    const q = editarSolicitanteSearch.trim().toLowerCase();
+    const q = editarSolicitanteSearch.trim();
     if (!q) return employeeOptions;
-    return employeeOptions.filter((u) => u.name.toLowerCase().includes(q));
+    return employeeOptions.filter((u) => textMatchesSearch(u.name, q));
   }, [employeeOptions, editarSolicitanteSearch]);
 
   const criarMutation = useMutation({

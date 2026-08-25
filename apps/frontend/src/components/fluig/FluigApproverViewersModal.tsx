@@ -18,6 +18,7 @@ import {
 } from '@/components/kanban/KanbanMemberPickerModal';
 import { kanbanInput } from '@/components/kanban/kanbanFormStyles';
 import { KanbanUserAvatar } from '@/components/kanban/KanbanUserAvatar';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 type FluigApproverViewersModalProps = {
   isOpen: boolean;
@@ -91,12 +92,12 @@ export function FluigApproverViewersModal({
   }, [viewers, excludeUserIds]);
 
   const filteredViewers = useMemo(() => {
-    const term = filter.trim().toLowerCase();
+    const term = filter.trim();
     if (!term) return viewers;
     return viewers.filter(
       (viewer) =>
-        viewer.user.name.toLowerCase().includes(term) ||
-        viewer.user.email.toLowerCase().includes(term)
+        textMatchesSearch(viewer.user.name, term) ||
+        textMatchesSearch(viewer.user.email, term)
     );
   }, [viewers, filter]);
 

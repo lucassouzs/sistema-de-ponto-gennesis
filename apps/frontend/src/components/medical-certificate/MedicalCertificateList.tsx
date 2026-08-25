@@ -21,6 +21,7 @@ import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppT
 import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 interface MedicalCertificate {
   id: string;
@@ -189,11 +190,10 @@ export const MedicalCertificateList: React.FC<MedicalCertificateListProps> = ({
   const filteredCertificates = certificates.filter(cert => {
     // Filtro de busca
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const matchesSearch = 
-        cert.user.name.toLowerCase().includes(searchLower) ||
-        cert.user.email.toLowerCase().includes(searchLower) ||
-        cert.employee.employeeId.toLowerCase().includes(searchLower);
+      const matchesSearch =
+        textMatchesSearch(cert.user.name, filters.search) ||
+        textMatchesSearch(cert.user.email, filters.search) ||
+        textMatchesSearch(cert.employee.employeeId, filters.search);
       if (!matchesSearch) return false;
     }
 

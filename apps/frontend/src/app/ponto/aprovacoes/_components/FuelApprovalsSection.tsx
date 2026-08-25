@@ -7,6 +7,7 @@ import { ptBR } from 'date-fns/locale';
 import { Check, Eye, Filter, Fuel, MoreVertical, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { FuelRequestPhoto } from '@/components/fuel/FuelRequestPhoto';
 import { hasFuelStoredPhoto, resolveFuelPhotoSrc } from '@/lib/resolveMediaUrl';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -135,16 +136,16 @@ export function FuelApprovalsSection() {
   const fuelList = fuelResp ?? [];
 
   const fuelFiltered = useMemo(() => {
-    const q = searchFuel.trim().toLowerCase();
+    const q = searchFuel.trim();
     if (!q) return fuelList;
     return fuelList.filter((r) => {
       return (
         String(r.displayNumber).includes(q) ||
-        r.route.toLowerCase().includes(q) ||
-        r.driverName.toLowerCase().includes(q) ||
-        r.vehiclePlate.toLowerCase().includes(q) ||
-        r.requester.name.toLowerCase().includes(q) ||
-        fuelContractLabel(r).toLowerCase().includes(q)
+        textMatchesSearch(r.route, q) ||
+        textMatchesSearch(r.driverName, q) ||
+        textMatchesSearch(r.vehiclePlate, q) ||
+        textMatchesSearch(r.requester.name, q) ||
+        textMatchesSearch(fuelContractLabel(r), q)
       );
     });
   }, [fuelList, searchFuel]);

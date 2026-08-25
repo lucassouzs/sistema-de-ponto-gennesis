@@ -41,6 +41,7 @@ import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import {
   buildLinkedOcStockDocuments,
   buildStockPaymentSlipsForOrder,
@@ -1446,17 +1447,18 @@ export default function EstoquePage() {
     return map;
   }, [balances]);
   const filteredMovements = useMemo(() => {
-    const term = historySearch.trim().toLowerCase();
+    const term = historySearch.trim();
     const list = [...movements].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     if (!term) return list;
     return list.filter((mov) => {
-      const oc = extractOcNumberFromNotes(mov.notes).toLowerCase();
-      const material = mov.material.name.toLowerCase();
-      const user = mov.user.name.toLowerCase();
-      const cc = (mov.costCenter?.name || mov.costCenter?.code || '').toLowerCase();
-      return oc.includes(term) || material.includes(term) || user.includes(term) || cc.includes(term);
+      return (
+        textMatchesSearch(extractOcNumberFromNotes(mov.notes), term) ||
+        textMatchesSearch(mov.material.name, term) ||
+        textMatchesSearch(mov.user.name, term) ||
+        textMatchesSearch(mov.costCenter?.name || mov.costCenter?.code, term)
+      );
     });
   }, [movements, historySearch]);
 

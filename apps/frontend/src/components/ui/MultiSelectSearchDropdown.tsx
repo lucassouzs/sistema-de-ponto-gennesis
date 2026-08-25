@@ -11,6 +11,7 @@ import {
   singleSelectTriggerBorderClass,
   singleSelectTriggerTextClass,
 } from '@/components/ui/singleSelectDropdownUi';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export type MultiSelectSearchOption = {
   value: string;
@@ -523,11 +524,11 @@ export function MultiSelectSearchDropdown({
   const selectedSet = useMemo(() => new Set(selected), [selected]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (!q) return options;
     return options.filter((o) => {
-      const hay = `${o.label} ${o.description ?? ''} ${o.searchText ?? ''} ${o.value}`.toLowerCase();
-      return hay.includes(q);
+      const hay = `${o.label} ${o.description ?? ''} ${o.searchText ?? ''} ${o.value}`;
+      return textMatchesSearch(hay, q);
     });
   }, [options, search]);
 

@@ -98,6 +98,7 @@ import { syncConversasActiveChatId } from '@/hooks/useChatSounds';
 import { AUTH_TOKEN_REFRESHED_EVENT, hasStoredAuthToken } from '@/lib/authSession';
 import { visibleTabRefetchInterval } from '@/hooks/useVisibleTabRefetchInterval';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 const SELECTED_CHAT_STORAGE_KEY = 'conversas-selected-chat-id';
 
@@ -2430,10 +2431,10 @@ function ConversasContent() {
 
   const filteredGroupParticipants = useMemo(() => {
     if (!activeChat || activeChat.chatType !== 'GROUP') return [];
-    const search = groupMemberSearch.trim().toLowerCase();
+    const search = groupMemberSearch.trim();
     const participants = activeChat.participants ?? [];
     if (!search) return participants;
-    return participants.filter((p) => p.user?.name?.toLowerCase().includes(search));
+    return participants.filter((p) => textMatchesSearch(p.user?.name, search));
   }, [activeChat, groupMemberSearch]);
 
   /** Membro do grupo: pode editar nome e descrição (igual à API). */
@@ -2454,12 +2455,12 @@ function ConversasContent() {
   }, [users, participantIdSet]);
 
   const filteredUsersToAdd = useMemo(() => {
-    const q = addMemberPickSearch.trim().toLowerCase();
+    const q = addMemberPickSearch.trim();
     if (!q) return usersAvailableToAdd;
     return usersAvailableToAdd.filter(
       (u) =>
-        u.name.toLowerCase().includes(q) ||
-        (u.employee?.department ?? '').toLowerCase().includes(q)
+        textMatchesSearch(u.name, q) ||
+        textMatchesSearch(u.employee?.department, q)
     );
   }, [usersAvailableToAdd, addMemberPickSearch]);
 
@@ -2484,12 +2485,12 @@ function ConversasContent() {
   );
 
   const filteredChats = chats.filter(chat => {
-    return getChatDisplayName(chat).toLowerCase().includes(searchTerm.toLowerCase());
+    return textMatchesSearch(getChatDisplayName(chat), searchTerm);
   });
 
   const filteredUsers = users.filter(u =>
-    u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-    (u.employee?.department ?? '').toLowerCase().includes(userSearch.toLowerCase())
+    textMatchesSearch(u.name, userSearch) ||
+    textMatchesSearch(u.employee?.department, userSearch)
   );
 
   const usersByLetter = useMemo(() => {
@@ -5488,8 +5489,10 @@ function ConversasContent() {
                 {users
                   .filter(u => {
                     if (!newGroupMemberSearch.trim()) return true;
-                    const q = newGroupMemberSearch.toLowerCase();
-                    return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+                    return (
+                      textMatchesSearch(u.name, newGroupMemberSearch) ||
+                      textMatchesSearch(u.email, newGroupMemberSearch)
+                    );
                   })
                   .map((u) => {
                     const selected = groupMembers.includes(u.id);

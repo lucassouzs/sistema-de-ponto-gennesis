@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Vacation, ComplianceReport } from '@/types';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 function GerenciarFeriasPageContent() {
   const router = useRouter();
@@ -561,10 +562,9 @@ function GerenciarFeriasPageContent() {
               {(() => {
                 const filtered = expiringList.filter((item: any) => {
                   if (!searchExpiring.trim()) return true;
-                  const searchLower = searchExpiring.toLowerCase();
                   return (
-                    item.employeeName?.toLowerCase().includes(searchLower) ||
-                    item.department?.toLowerCase().includes(searchLower)
+                    textMatchesSearch(item.employeeName, searchExpiring) ||
+                    textMatchesSearch(item.department, searchExpiring)
                   );
                 });
                 
@@ -643,12 +643,11 @@ function GerenciarFeriasPageContent() {
                 const expiredList = compliance?.expiredVacations || [];
                 const filtered = expiredList.filter((item: any) => {
                   if (!searchExpired.trim()) return true;
-                  const searchLower = searchExpired.toLowerCase();
                   return (
-                    item.employeeName?.toLowerCase().includes(searchLower) ||
-                    item.employee?.name?.toLowerCase().includes(searchLower) ||
-                    item.department?.toLowerCase().includes(searchLower) ||
-                    item.employee?.department?.toLowerCase().includes(searchLower)
+                    textMatchesSearch(item.employeeName, searchExpired) ||
+                    textMatchesSearch(item.employee?.name, searchExpired) ||
+                    textMatchesSearch(item.department, searchExpired) ||
+                    textMatchesSearch(item.employee?.department, searchExpired)
                   );
                 });
                 

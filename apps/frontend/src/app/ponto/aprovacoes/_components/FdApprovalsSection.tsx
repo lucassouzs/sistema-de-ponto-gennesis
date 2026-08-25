@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardCheck, FileText, Filter, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -73,15 +74,15 @@ export function FdApprovalsSection() {
   const fdList = fdResp ?? [];
 
   const fdFiltered = useMemo(() => {
-    const q = searchFd.trim().toLowerCase();
+    const q = searchFd.trim();
     if (!q) return fdList;
     return fdList.filter((r) => {
       return (
-        r.codFichaDemanda.toLowerCase().includes(q) ||
-        r.codigoPedido.toLowerCase().includes(q) ||
-        r.contratoNome.toLowerCase().includes(q) ||
-        r.solicitanteNome.toLowerCase().includes(q) ||
-        r.obra.toLowerCase().includes(q)
+        textMatchesSearch(r.codFichaDemanda, q) ||
+        textMatchesSearch(r.codigoPedido, q) ||
+        textMatchesSearch(r.contratoNome, q) ||
+        textMatchesSearch(r.solicitanteNome, q) ||
+        textMatchesSearch(r.obra, q)
       );
     });
   }, [fdList, searchFd]);

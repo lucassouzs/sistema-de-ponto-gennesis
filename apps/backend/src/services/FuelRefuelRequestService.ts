@@ -13,6 +13,7 @@ import {
   formatRefuelDeadlineLabel,
 } from '../lib/fuelSuppliesSla';
 import { prisma } from '../lib/prisma';
+import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
 import { createError } from '../middleware/errorHandler';
 import {
   notifyFuelRequesterApprovedBySupplies,
@@ -193,11 +194,16 @@ export class FuelRefuelRequestService {
     const search = params.search?.trim();
     if (search) {
       const asNumber = parseInt(search, 10);
+      const matchedRequesterIds = await findUserIdsMatchingSearch(search);
       where.OR = [
         { route: { contains: search, mode: 'insensitive' } },
         { driverName: { contains: search, mode: 'insensitive' } },
         { vehiclePlate: { contains: search, mode: 'insensitive' } },
-        { requester: { name: { contains: search, mode: 'insensitive' } } },
+        {
+          requesterId: {
+            in: matchedRequesterIds.length > 0 ? matchedRequesterIds : ['__none__'],
+          },
+        },
         { contract: { name: { contains: search, mode: 'insensitive' } } },
         { contract: { number: { contains: search, mode: 'insensitive' } } },
         { costCenter: { contains: search, mode: 'insensitive' } },

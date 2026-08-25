@@ -16,6 +16,7 @@ import {
 } from '@/components/permissions/UserPermissionsEditor';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 type ContractLite = {
   id: string;
@@ -174,7 +175,7 @@ export default function ContractPermissionsPage() {
   );
 
   const filteredRows = useMemo(() => {
-    const q = listSearch.trim().toLowerCase();
+    const q = listSearch.trim();
     if (!q) return usersWithContractsModule;
     return usersWithContractsModule.filter((u) => {
       const dept = u.employee?.department || '';
@@ -182,10 +183,10 @@ export default function ContractPermissionsPage() {
       const cpf = (u.cpf || '').replace(/\D/g, '');
       const qNumbers = q.replace(/\D/g, '');
       return (
-        u.name.toLowerCase().includes(q) ||
+        textMatchesSearch(u.name, q) ||
         (!!qNumbers && cpf.includes(qNumbers)) ||
-        dept.toLowerCase().includes(q) ||
-        pos.toLowerCase().includes(q)
+        textMatchesSearch(dept, q) ||
+        textMatchesSearch(pos, q)
       );
     });
   }, [usersWithContractsModule, listSearch]);

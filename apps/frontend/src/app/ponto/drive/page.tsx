@@ -48,6 +48,7 @@ import {
 import { DriveListView } from '@/components/drive/DriveListView';
 import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
 import { getDropdownPortalRoot } from '@/lib/zIndex';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import {
   DriveUploadPanel,
   type DriveUploadItem,
@@ -457,14 +458,14 @@ function DrivePageContent() {
 
   const shareCandidateUsers = useMemo(() => {
     const sharedIds = new Set(shareRows.map((r) => r.userId));
-    const q = shareListFilter.trim().toLowerCase();
+    const q = shareListFilter.trim();
     return allUsersForShare
       .filter((u) => u.id !== user?.id && !sharedIds.has(u.id))
       .filter(
         (u) =>
           !q ||
-          u.name.toLowerCase().includes(q) ||
-          (u.email && u.email.toLowerCase().includes(q)),
+          textMatchesSearch(u.name, q) ||
+          textMatchesSearch(u.email, q),
       )
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }, [allUsersForShare, shareRows, shareListFilter, user?.id]);

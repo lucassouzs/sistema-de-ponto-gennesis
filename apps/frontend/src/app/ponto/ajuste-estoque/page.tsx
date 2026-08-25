@@ -42,6 +42,7 @@ import toast from 'react-hot-toast';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { resolveLockedUnbCostCenterId } from '@/lib/unbBranding';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface Material {
@@ -381,7 +382,7 @@ export default function AjusteEstoquePage() {
   const movements: StockMovement[] = movementsData?.data || [];
 
   const adjustmentMovements = useMemo(() => {
-    const term = historySearch.trim().toLowerCase();
+    const term = historySearch.trim();
     return movements
       .filter((mov) => mov.notes?.includes(ADJUSTMENT_MARKER))
       .filter((mov) => {
@@ -396,11 +397,12 @@ export default function AjusteEstoquePage() {
           if (year !== Number(filtersYear)) return false;
         }
         if (!term) return true;
-        const material = mov.material.name.toLowerCase();
-        const user = mov.user.name.toLowerCase();
-        const cc = (mov.costCenter?.name || '').toLowerCase();
-        const notes = cleanAdjustmentNotes(mov.notes).toLowerCase();
-        return material.includes(term) || user.includes(term) || cc.includes(term) || notes.includes(term);
+        return (
+          textMatchesSearch(mov.material.name, term) ||
+          textMatchesSearch(mov.user.name, term) ||
+          textMatchesSearch(mov.costCenter?.name, term) ||
+          textMatchesSearch(cleanAdjustmentNotes(mov.notes), term)
+        );
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [movements, historySearch, typeFilter, filtersCostCenterId, filtersMonth, filtersYear]);

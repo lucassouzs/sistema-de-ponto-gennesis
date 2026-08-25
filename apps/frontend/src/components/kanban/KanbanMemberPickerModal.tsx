@@ -10,6 +10,7 @@ import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import { Modal } from '@/components/ui/Modal';
 import { kanbanInput } from './kanbanFormStyles';
 import { getKanbanInitials, resolveKanbanAvatarBg } from './kanbanAvatar';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export interface KanbanPickerUser {
   id: string;
@@ -93,7 +94,7 @@ export function KanbanMemberPickerModal({
       if (currentUser && u.id === currentUser.id) return false;
       if (excludeUserIds.includes(u.id)) return false;
       if (!q) return true;
-      return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      return textMatchesSearch(u.name, q) || textMatchesSearch(u.email, q);
     });
   }, [users, search, excludeUserIds, currentUser]);
 
@@ -102,8 +103,8 @@ export function KanbanMemberPickerModal({
     !isGennecyBotUser(currentUser) &&
     !excludeUserIds.includes(currentUser.id) &&
     (!search.trim() ||
-      currentUser.name.toLowerCase().includes(search.trim().toLowerCase()) ||
-      currentUser.email.toLowerCase().includes(search.trim().toLowerCase()));
+      textMatchesSearch(currentUser.name, search) ||
+      textMatchesSearch(currentUser.email, search));
 
   async function handleSelect(user: KanbanPickerUser) {
     await onSelect(user);

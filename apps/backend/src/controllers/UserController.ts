@@ -6,6 +6,7 @@ import { hashPassword } from '../lib/passwordHash';
 import { gennecyBotUserWhereExclude } from '../lib/gennecyBotUser';
 import { releaseUserIdentity, buildReleasedIdentity } from '../lib/userIdentityRelease';
 import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
+import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 export class UserController {
   async updateUserPassword(req: AuthRequest, res: Response, next: NextFunction) {
@@ -92,28 +93,14 @@ export class UserController {
       }
 
       // Construir condições de busca (usuário + campos do vínculo employee)
-      const searchConditions: any[] = [];
+      // Sem acento: "antonio" encontra "Antônio"
       if (search) {
-        const q = String(search).trim();
-        searchConditions.push(
-          { name: { contains: q, mode: 'insensitive' } },
-          { email: { contains: q, mode: 'insensitive' } },
-          { cpf: { contains: q } },
-          { employee: { employeeId: { contains: q, mode: 'insensitive' } } },
-          { employee: { department: { contains: q, mode: 'insensitive' } } },
-          { employee: { position: { contains: q, mode: 'insensitive' } } },
-          { employee: { company: { contains: q, mode: 'insensitive' } } },
-          { employee: { polo: { contains: q, mode: 'insensitive' } } },
-          { employee: { costCenter: { contains: q, mode: 'insensitive' } } },
-          { employee: { client: { contains: q, mode: 'insensitive' } } },
-          { employee: { categoriaFinanceira: { contains: q, mode: 'insensitive' } } },
-          { employee: { modality: { contains: q, mode: 'insensitive' } } }
-        );
-      }
-
-      // Se houver busca, adicionar OR ao where
-      if (searchConditions.length > 0) {
-        where.OR = searchConditions;
+        const matchedIds = await findUserIdsMatchingSearch(String(search));
+        if (matchedIds.length === 0) {
+          where.id = { in: [] };
+        } else {
+          where.id = { in: matchedIds };
+        }
       }
 
       const employeeFilters: Record<string, unknown> = {};
@@ -130,12 +117,7 @@ export class UserController {
       }
 
       if (Object.keys(employeeFilters).length > 0) {
-        if (where.OR) {
-          where.AND = [{ OR: where.OR }, { employee: employeeFilters }];
-          delete where.OR;
-        } else {
-          where.employee = employeeFilters;
-        }
+        where.employee = employeeFilters;
       }
 
       const employeeSelectLight = {

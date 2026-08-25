@@ -6,6 +6,7 @@ import {
   releaseInactiveUsersHoldingIdentity,
 } from '../lib/userIdentityRelease';
 import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
+import { findEmployeeIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 export const getAllEmployees = async (req: Request, res: Response) => {
   try {
@@ -436,28 +437,10 @@ export const getBirthdayEmployees = async (req: Request, res: Response) => {
       whereClause.department = department as string;
     }
     
-    // Filtro por nome ou departamento (busca)
+    // Filtro por nome ou departamento (busca) — sem acento
     if (search && search !== '') {
-      whereClause.AND = [
-        {
-          OR: [
-            {
-              user: {
-                name: {
-                  contains: search as string,
-                  mode: 'insensitive'
-                }
-              }
-            },
-            {
-              department: {
-                contains: search as string,
-                mode: 'insensitive'
-              }
-            }
-          ]
-        }
-      ];
+      const matchedIds = await findEmployeeIdsMatchingSearch(String(search));
+      whereClause.id = { in: matchedIds };
     }
     
     // Buscar funcionários com aniversário

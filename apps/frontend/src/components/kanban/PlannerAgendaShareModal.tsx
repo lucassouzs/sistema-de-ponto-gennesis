@@ -19,6 +19,7 @@ import {
 } from './KanbanMemberPickerModal';
 import { kanbanInput } from './kanbanFormStyles';
 import { KanbanUserAvatar } from './KanbanUserAvatar';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export interface PlannerAgendaShareModalProps {
   isOpen: boolean;
@@ -125,22 +126,18 @@ export function PlannerAgendaShareModal({
   }, [sharedUserIds, currentUserId]);
 
   const filteredShares = useMemo(() => {
-    const q = filter.trim().toLowerCase();
+    const q = filter.trim();
     if (!q) return shares;
     return shares.filter(
-      (s) =>
-        s.user.name.toLowerCase().includes(q) || s.user.email.toLowerCase().includes(q)
+      (s) => textMatchesSearch(s.user.name, q) || textMatchesSearch(s.user.email, q)
     );
   }, [shares, filter]);
 
   const ownerMatchesFilter = useMemo(() => {
     if (!ownerUser) return false;
-    const q = filter.trim().toLowerCase();
+    const q = filter.trim();
     if (!q) return true;
-    return (
-      ownerUser.name.toLowerCase().includes(q) ||
-      ownerUser.email.toLowerCase().includes(q)
-    );
+    return textMatchesSearch(ownerUser.name, q) || textMatchesSearch(ownerUser.email, q);
   }, [ownerUser, filter]);
 
   const hasVisiblePeople = ownerMatchesFilter || filteredShares.length > 0;

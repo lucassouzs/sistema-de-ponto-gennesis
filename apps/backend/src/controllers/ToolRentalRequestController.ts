@@ -9,6 +9,7 @@ import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { assertUserHasToolRentalSuppliesAccess } from '../lib/toolRentalSuppliesAccess';
+import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 const include = {
   assignedUser: { select: { id: true, name: true, email: true } },
@@ -235,14 +236,19 @@ export class ToolRentalRequestController {
 
       if (search) {
         const term = String(search);
-        const searchOr = [
+        const matchedUserIds = await findUserIdsMatchingSearch(term);
+        const searchOr: Record<string, unknown>[] = [
           { code: { contains: term, mode: 'insensitive' } },
           { titulo: { contains: term, mode: 'insensitive' } },
           { obra: { contains: term, mode: 'insensitive' } },
           { contrato: { contains: term, mode: 'insensitive' } },
           { equipamento: { contains: term, mode: 'insensitive' } },
           { supplierName: { contains: term, mode: 'insensitive' } },
-          { assignedUser: { name: { contains: term, mode: 'insensitive' } } },
+          {
+            assignedUserId: {
+              in: matchedUserIds.length > 0 ? matchedUserIds : ['__none__'],
+            },
+          },
         ];
         if (where.OR) {
           where.AND = [{ OR: where.OR }, { OR: searchOr }];

@@ -14,6 +14,7 @@ import {
   singleSelectTriggerTextClass,
 } from '@/components/ui/singleSelectDropdownUi';
 import type { MultiSelectSearchOption } from './MultiSelectSearchDropdown';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export type SingleSelectSearchDropdownProps = {
   value: string;
@@ -278,12 +279,12 @@ export function SingleSelectSearchDropdown({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = search.trim();
     if (!q) return options;
     return options.filter((o) => {
       const statusText = (o.statusSegments ?? []).map((s) => s.text).join(' ');
-      const hay = `${o.label} ${o.triggerLabel ?? ''} ${statusText} ${o.description ?? ''} ${o.searchText ?? ''} ${o.value}`.toLowerCase();
-      return hay.includes(q);
+      const hay = `${o.label} ${o.triggerLabel ?? ''} ${statusText} ${o.description ?? ''} ${o.searchText ?? ''} ${o.value}`;
+      return textMatchesSearch(hay, q);
     });
   }, [options, search]);
 
