@@ -77,11 +77,14 @@ import {
   formatOsSePastaOrDash,
   folderForDivSe,
   enrichDivSeOptionsWithPleitos,
+  compareOsSeNatural,
+  osSeSearchRank,
   type DivSeOptionRow
 } from '@/lib/formatOsSePasta';
 import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
 import { isUnbRelatedLabel } from '@/lib/unbBranding';
 import { exportHistoricoOsPdf, exportPleitosOsToXlsx, getOsFaturamentoAcumulado, getOsPleiteadoPct, getOsRestantePleitear, getOsStatus, getOsStatusFaturamento, isOsConcluida, isOsPleiteada100, osStatusBadgeClass, sumOsPleiteadoTotal, type BillingForOsCheck, type PleitoOsExportRow } from '@/lib/pleitoOsExport';
+import { exportContractBillingsToXlsx } from '@/lib/contractBillingExport';
 import {
   billingAndamentoBadgeClass,
   buildDisplayIdMap,
@@ -955,7 +958,10 @@ export default function ContractDetailPage() {
     isElevatedUser || permissions.canCreateContracts || hasThisContractAccess;
   const canEditContrato =
     isElevatedUser || permissions.canEditContracts || hasThisContractAccess;
+  /** Excluir o contrato na listagem — só matriz Contratos → Excluir (ou admin). */
   const canDeleteContrato = isElevatedUser || permissions.canDeleteContracts;
+  /** Excluir OS na aba do contrato — quem pode criar OS também pode excluir. */
+  const canDeleteOs = canCreateContrato;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -2548,7 +2554,14 @@ export default function ContractDetailPage() {
     }
 
     if (searchTermPleitos.trim()) {
-      result = result.filter((p) => pleitoMatchesSearchTerm(p, searchTermPleitos));
+      const q = searchTermPleitos.trim();
+      result = result.filter((p) => pleitoMatchesSearchTerm(p, q));
+      result = [...result].sort((a, b) => {
+        const ra = osSeSearchRank(a.divSe, q);
+        const rb = osSeSearchRank(b.divSe, q);
+        if (ra !== rb) return ra - rb;
+        return compareOsSeNatural(a.divSe, b.divSe);
+      });
     }
 
     return result;
@@ -2955,8 +2968,8 @@ export default function ContractDetailPage() {
   });
 
   const handleExcluirPleitosSelecionados = () => {
-    if (!canDeleteContrato) {
-      toast.error('Você não tem permissão para excluir no módulo Contratos.');
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
       return;
     }
     const ids = Array.from(selectedForPleito).filter((id) => pleitos.some((p) => p.id === id));
@@ -3036,8 +3049,8 @@ export default function ContractDetailPage() {
   };
 
   const handleExcluirPleitoOs = (pleito: ContractPleito) => {
-    if (!canDeleteContrato) {
-      toast.error('Você não tem permissão para excluir no módulo Contratos.');
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
       return;
     }
     const label = formatOsSePastaOrDash(pleito.divSe, pleito.folderNumber);
@@ -3123,6 +3136,36 @@ export default function ContractDetailPage() {
       setShowOsExportModal(false);
     } catch {
       toast.error('Erro ao exportar para Excel.');
+    }
+  };
+
+  const handleExportFaturamentoExcel = () => {
+    if (filteredBillings.length === 0) {
+      toast.error('Não há faturamentos para exportar.');
+      return;
+    }
+    try {
+      const contractSlug = contract?.number?.replace(/[^\w-]+/g, '_') || contractId.slice(0, 8);
+      exportContractBillingsToXlsx(
+        filteredBillings.map((b) => {
+          const liquidoMissing = isNetValueMissing(b);
+          return {
+            id: b.id,
+            displayId: formatDisplayId(billingDisplayIds, b.id),
+            osSe: formatOsSePastaOrDash(b.serviceOrder, folderForDivSe(allPleitos, b.serviceOrder)),
+            pleitoLabel: b.pleitoId ? formatDisplayId(pleitoDisplayIds, b.pleitoId) : '—',
+            invoiceNumber: (b.invoiceNumber || '').trim() || '—',
+            issueDateLabel: formatDate(b.issueDate),
+            grossValue: Number(b.grossValue) || 0,
+            netValue: liquidoMissing ? null : Number(b.netValue) || 0,
+            status: liquidoMissing ? 'Líquido pendente' : 'Faturado',
+          };
+        }),
+        `faturamento-${contractSlug}`
+      );
+      toast.success(`${filteredBillings.length} registro(s) de faturamento exportado(s).`);
+    } catch {
+      toast.error('Erro ao exportar faturamento para Excel.');
     }
   };
 
@@ -4787,14 +4830,14 @@ export default function ContractDetailPage() {
                       ? 'Excluindo...'
                       : 'Excluir selecionadas',
                     onClick: handleExcluirPleitosSelecionados,
-                    disabled: !canDeleteContrato || deletePleitosSelecionadosMutation.isPending,
+                    disabled: !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
                     disabledTitle: deletePleitosSelecionadosMutation.isPending
                       ? 'Excluindo...'
-                      : 'Sem permissão para excluir',
+                      : 'Sem permissão para excluir OS',
                     icon: (
                       <Trash2
                         className={`h-4 w-4 shrink-0 ${
-                          !canDeleteContrato || deletePleitosSelecionadosMutation.isPending
+                          !canDeleteOs || deletePleitosSelecionadosMutation.isPending
                             ? 'text-gray-400 dark:text-gray-500'
                             : 'text-red-600 dark:text-red-400'
                         }`}
@@ -5022,10 +5065,10 @@ export default function ContractDetailPage() {
                           onClick: () =>
                             handleExcluirPleitoOs(pleitoRowForActionMenu as ContractPleito),
                           disabled:
-                            !canDeleteContrato || deletePleitosSelecionadosMutation.isPending,
+                            !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
                           disabledTitle: deletePleitosSelecionadosMutation.isPending
                             ? 'Excluindo...'
-                            : 'Sem permissão para excluir',
+                            : 'Sem permissão para excluir OS',
                           icon: (
                             <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
                           ),
@@ -5133,6 +5176,17 @@ export default function ContractDetailPage() {
                     {hasActiveBillingFilter ? (
                       <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white dark:ring-gray-900" />
                     ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFaturamentoExcel}
+                    disabled={filteredBillings.length === 0}
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    title="Exportar Excel"
+                    aria-label="Exportar faturamento em Excel"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="hidden sm:inline">Exportar</span>
                   </button>
                   <button
                     type="button"
