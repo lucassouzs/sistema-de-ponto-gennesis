@@ -291,7 +291,7 @@ const RESERVATION_CARD_LIST_CONFIG: Record<
   }
 > = {
   all: {
-    title: 'Minhas reservas',
+    title: 'Minhas Reservas',
     subtitle: 'Visão geral das suas solicitações de uso da frota.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
@@ -830,7 +830,7 @@ export default function ReservaVeiculosPage() {
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
                           <th className={cadastroListClasses.th}>ID</th>
-                          <th className={cadastroListClasses.th}>Motorista</th>
+                          <th className={cadastroListClasses.thCenter}>Motorista</th>
                           <th className={cadastroListClasses.thCenter}>Veículo</th>
                           <th className={cadastroListClasses.thCenter}>Uso</th>
                           <th className={cadastroListClasses.thCenter}>Contrato</th>
@@ -853,8 +853,11 @@ export default function ReservaVeiculosPage() {
                                 )}
                               </ListRowNavigableLabel>
                             </td>
-                            <td className={cadastroListClasses.tdTruncate}>
-                              <span className="block truncate text-sm text-gray-900 dark:text-gray-100">
+                            <td className={cadastroListClasses.tdCenter}>
+                              <span
+                                className="block truncate text-sm text-gray-900 dark:text-gray-100"
+                                title={reservation.motorista}
+                              >
                                 {reservation.motorista}
                               </span>
                             </td>

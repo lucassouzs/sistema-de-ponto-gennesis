@@ -440,8 +440,8 @@ const CARD_LIST_CONFIG: Record<
   { title: string; subtitle: string; Icon: LucideIcon; iconBg: string; iconColor: string }
 > = {
   all: {
-    title: 'Todas as solicitações',
-    subtitle: 'Todas as solicitações de abastecimento.',
+    title: 'Meus Abastecimentos',
+    subtitle: 'Visão geral das suas solicitações de abastecimento.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',

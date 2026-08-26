@@ -207,7 +207,7 @@ const DESTINATION_LIST_CONFIG: Record<
   }
 > = {
   all: {
-    title: 'Todas as solicitações',
+    title: 'Minhas Solicitações',
     subtitle: 'Suas solicitações para Departamento Pessoal e ADM/TST.',
     Icon: MailPlus,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',

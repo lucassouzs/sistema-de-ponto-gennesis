@@ -231,6 +231,11 @@ function formatVehicleLabel(vehicle?: VehicleOption | null): string {
   return modelo ? `${placa} · ${modelo}` : placa;
 }
 
+function vehicleModelLabel(vehicle?: VehicleOption | null): string {
+  if (!vehicle) return '';
+  return [vehicle.marcaVeic, vehicle.modeloVeic].filter(Boolean).join(' ').trim();
+}
+
 function formatVehicleSelectLabel(vehicle: VehicleOption): string {
   const placa = formatPlacaDisplay(vehicle.placaVeic);
   const modelo = [vehicle.marcaVeic, vehicle.modeloVeic].filter(Boolean).join(' ').trim();
@@ -674,7 +679,10 @@ export default function SolicitacoesReservaVeiculosPage() {
                             Uso
                           </th>
                           <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
-                            Veículo / Motorista
+                            Veículo
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
+                            Motorista
                           </th>
                           <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6">
                             Contrato
@@ -719,8 +727,28 @@ export default function SolicitacoesReservaVeiculosPage() {
                               </div>
                             </td>
                             <td className="px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
-                              <div>{formatVehicleLabel(row.vehicle)}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">{row.motorista}</div>
+                              {row.vehicle ? (
+                                <div className="leading-snug">
+                                  <p className="font-medium">
+                                    {formatPlacaDisplay(row.vehicle.placaVeic)}
+                                  </p>
+                                  {vehicleModelLabel(row.vehicle) ? (
+                                    <p
+                                      className="truncate text-xs text-gray-500 dark:text-gray-400"
+                                      title={vehicleModelLabel(row.vehicle)}
+                                    >
+                                      {vehicleModelLabel(row.vehicle)}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-gray-500 dark:text-gray-400">A definir</span>
+                              )}
+                            </td>
+                            <td className="max-w-[12rem] px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
+                              <span className="block truncate" title={row.motorista}>
+                                {row.motorista}
+                              </span>
                             </td>
                             <td className="max-w-[180px] truncate px-3 py-4 text-center text-gray-900 dark:text-gray-100 sm:px-6">
                               {row.contrato || '—'}
