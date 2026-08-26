@@ -83,14 +83,86 @@ export async function listActiveFuelGasStationsByCity(cityCode: string) {
   });
 }
 
-/** Postos ativos vinculados ao contrato da solicitação. */
-export async function listActiveFuelGasStationsByContract(contractId: string) {
+/** Inclui contratos com o mesmo nome/número (cadastros duplicados). */
+async function resolveRelatedContractIds(contractId: string): Promise<string[]> {
   const id = contractId.trim();
   if (!id) return [];
+
+  const contract = await prisma.contract.findUnique({
+    where: { id },
+    select: { id: true, name: true, number: true },
+  });
+  if (!contract) return [id];
+
+  const or: Array<Record<string, unknown>> = [{ id: contract.id }];
+  const name = contract.name?.trim();
+  const number = contract.number?.trim();
+  if (name) {
+    or.push({ name: { equals: name, mode: 'insensitive' } });
+  }
+  if (number) {
+    or.push({ number: { equals: number, mode: 'insensitive' } });
+  }
+
+  const siblings = await prisma.contract.findMany({
+    where: { OR: or },
+    select: { id: true },
+  });
+  return [...new Set(siblings.map((row) => row.id))];
+}
+
+/** Resolve contratos a partir do rótulo exibido (ex.: centro de custo / nome). */
+export async function resolveContractIdsFromLabel(label: string): Promise<string[]> {
+  const raw = label.trim();
+  if (!raw) return [];
+
+  const parts = raw.split(/\s*[—–-]\s*/).map((part) => part.trim()).filter(Boolean);
+  const candidates = [...new Set([raw, ...parts])];
+
+  const rows = await prisma.contract.findMany({
+    where: {
+      OR: candidates.flatMap((value) => [
+        { name: { equals: value, mode: 'insensitive' as const } },
+        { number: { equals: value, mode: 'insensitive' as const } },
+      ]),
+    },
+    select: { id: true },
+  });
+  return [...new Set(rows.map((row) => row.id))];
+}
+
+/** Postos ativos vinculados ao contrato da solicitação. */
+export async function listActiveFuelGasStationsByContract(contractId: string) {
+  const ids = await resolveRelatedContractIds(contractId);
+  if (!ids.length) return [];
   return prisma.fuelGasStation.findMany({
     where: {
       isActive: true,
-      contracts: { some: { contractId: id } },
+      contracts: { some: { contractId: { in: ids } } },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { displayNumber: 'asc' }],
+    select: fuelGasStationListSelect,
+  });
+}
+
+/** Postos para atender: usa contractId e, se vazio, tenta pelo rótulo do centro/contrato. */
+export async function listActiveFuelGasStationsForRequest(opts: {
+  contractId?: string | null;
+  costCenter?: string | null;
+}) {
+  const contractId = opts.contractId?.trim() || '';
+  if (contractId) {
+    const byContract = await listActiveFuelGasStationsByContract(contractId);
+    if (byContract.length) return byContract;
+  }
+
+  const labelIds = await resolveContractIdsFromLabel(opts.costCenter || '');
+  if (!labelIds.length) return [];
+
+  return prisma.fuelGasStation.findMany({
+    where: {
+      isActive: true,
+      contracts: { some: { contractId: { in: labelIds } } },
     },
     orderBy: [{ sortOrder: 'asc' }, { displayNumber: 'asc' }],
     select: fuelGasStationListSelect,
@@ -106,13 +178,13 @@ export async function getFuelGasStationInCity(stationId: string, cityCode: strin
 }
 
 export async function getFuelGasStationForContract(stationId: string, contractId: string) {
-  const cid = contractId.trim();
-  if (!cid) return null;
+  const ids = await resolveRelatedContractIds(contractId);
+  if (!ids.length) return null;
   return prisma.fuelGasStation.findFirst({
     where: {
       id: stationId,
       isActive: true,
-      contracts: { some: { contractId: cid } },
+      contracts: { some: { contractId: { in: ids } } },
     },
     select: { id: true, displayNumber: true, cityCode: true, name: true, address: true },
   });

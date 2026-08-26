@@ -55,6 +55,9 @@ router.put('/:id/supplies-approve', requireFuelSuppliesAccess, (req, res, next) 
 router.put('/:id/supplies-reject', requireFuelSuppliesAccess, (req, res, next) =>
   fuelRefuelRequestController.suppliesReject(req, res, next),
 );
+router.put('/:id/admin-update', requireFuelSuppliesAccess, (req, res, next) =>
+  fuelRefuelRequestController.adminUpdate(req, res, next),
+);
 router.get('/:id', (req, res, next) => fuelRefuelRequestController.getById(req, res, next));
 router.put('/:id/manager-approve', requireFuelApproverAccess, (req, res, next) =>
   fuelRefuelRequestController.approve(req, res, next),

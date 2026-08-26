@@ -7,6 +7,7 @@ import { assertUserHasFuelSuppliesAccess } from '../lib/fuelSuppliesAccess';
 import {
   FUEL_ABASTECIMENTO_STATE_CODES,
   assertValidSatelliteCityCode,
+  listActiveFuelGasStationsByContract,
   listFuelSatelliteCities,
   reserveFuelGasStationDisplayNumbers,
 } from '../lib/fuelAdministrativeRegions';
@@ -108,9 +109,14 @@ export class FuelGasStationController {
       const includeInactive = req.query.includeInactive === 'true';
 
       if (contractId) {
+        const activeRows = await listActiveFuelGasStationsByContract(contractId);
+        const ids = activeRows.map((row) => row.id);
+        if (!ids.length) {
+          return res.json({ success: true, data: [] });
+        }
         const rows = await prisma.fuelGasStation.findMany({
           where: {
-            contracts: { some: { contractId } },
+            id: { in: ids },
             ...(includeInactive ? {} : { isActive: true }),
           },
           orderBy: [{ displayNumber: 'asc' }],

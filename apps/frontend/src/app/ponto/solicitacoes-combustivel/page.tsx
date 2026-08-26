@@ -14,6 +14,7 @@ import {
   Filter,
   Fuel,
   MoreVertical,
+  Pencil,
   Search,
   Users,
   X,
@@ -45,6 +46,7 @@ import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDr
 import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { usePermissions } from '@/hooks/usePermissions';
 
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
 type FuelTankLevelAfter = 'RESERVE' | 'QUARTER' | 'HALF' | 'THREE_QUARTERS' | 'FULL';
@@ -321,12 +323,13 @@ function fuelContractLabel(row: {
   costCenter?: string | null;
   contract?: { number?: string; name?: string } | null;
 }): string {
-  if (row.contract?.number && row.contract?.name) {
-    return `${row.contract.number} — ${row.contract.name}`;
+  if (row.contract?.name?.trim()) return row.contract.name.trim();
+  if (row.costCenter?.trim()) {
+    const label = row.costCenter.trim();
+    const parts = label.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 1] : label;
   }
-  if (row.contract?.name) return row.contract.name;
-  if (row.contract?.number) return row.contract.number;
-  if (row.costCenter?.trim()) return row.costCenter.trim();
+  if (row.contract?.number?.trim()) return row.contract.number.trim();
   return '—';
 }
 
@@ -367,6 +370,7 @@ function formatRefuelDeadline(
 export default function SolicitacoesCombustivelPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isAdministrator } = usePermissions();
   const [searchTerm, setSearchTerm] = useState('');
   const [cardFilter, setCardFilter] = useState<SuppliesCardFilter>(DEFAULT_CARD_FILTER);
   const [detailStatusFilter, setDetailStatusFilter] = useState<DetailStatusFilter>('ALL');
@@ -375,6 +379,8 @@ export default function SolicitacoesCombustivelPage() {
   const [selected, setSelected] = useState<FuelRefuelRequest | null>(null);
   const [suppliesComment, setSuppliesComment] = useState('');
   const [approveGasStationId, setApproveGasStationId] = useState('');
+  const [adminEditing, setAdminEditing] = useState(false);
+  const [editContractId, setEditContractId] = useState('');
   const [refuelDeadlineAmount, setRefuelDeadlineAmount] = useState('24');
   const [refuelDeadlineUnit, setRefuelDeadlineUnit] = useState<FuelRefuelDeadlineUnit>('HOURS');
   const [rejectReason, setRejectReason] = useState('');
@@ -488,17 +494,70 @@ export default function SolicitacoesCombustivelPage() {
     },
   });
 
+  const adminUpdateMutation = useMutation({
+    mutationFn: async ({ id, contractId }: { id: string; contractId: string }) => {
+      const res = await api.put(`/fuel-refuel-requests/${id}/admin-update`, { contractId });
+      return res.data?.data as FuelRefuelRequest;
+    },
+    onSuccess: (updated) => {
+      toast.success('Solicitação atualizada');
+      setSelected(updated);
+      setAdminEditing(false);
+      setApproveGasStationId('');
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests-supplies'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-gas-stations-by-contract'] });
+    },
+    onError: (err: { response?: { data?: { error?: string; message?: string } } }) => {
+      toast.error(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Erro ao atualizar solicitação',
+      );
+    },
+  });
+
   const contractId = selected?.contract?.id;
+  const costCenterLabel = selected?.costCenter || selected?.contract?.name || '';
+
+  const canAdminEditSelected =
+    isAdministrator &&
+    (selected?.status === 'PENDING_SUPPLIES' || selected?.status === 'PENDING_MANAGER');
+
+  const { data: contractsRes } = useQuery({
+    queryKey: ['contracts-for-fuel-admin-edit'],
+    queryFn: async () =>
+      (await api.get('/contracts', { params: { limit: 500, page: 1 } })).data,
+    enabled: adminEditing && canAdminEditSelected,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const contractEditOptions = useMemo(
+    () =>
+      ((contractsRes?.data ?? []) as Array<{ id: string; name: string; number?: string }>).map(
+        (c) => ({
+          value: c.id,
+          label: c.name,
+          searchText: `${c.name} ${c.number ?? ''}`,
+        }),
+      ),
+    [contractsRes],
+  );
 
   const { data: gasStations = [], isLoading: loadingGasStations } = useQuery({
-    queryKey: ['fuel-gas-stations-by-contract', contractId],
+    queryKey: ['fuel-gas-stations-by-contract', contractId, costCenterLabel],
     queryFn: async () => {
-      const res = await api.get('/fuel-gas-stations', {
-        params: { contractId },
+      const res = await api.get('/fuel-refuel-requests/gas-stations', {
+        params: {
+          contractId: contractId || undefined,
+          costCenter: costCenterLabel || undefined,
+        },
       });
       return (res.data?.data || []) as FuelGasStation[];
     },
-    enabled: Boolean(contractId && selected?.status === 'PENDING_SUPPLIES'),
+    enabled: Boolean(
+      selected?.status === 'PENDING_SUPPLIES' && (contractId || costCenterLabel),
+    ),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -558,6 +617,8 @@ export default function SolicitacoesCombustivelPage() {
     setSelected(row);
     setShowRejectForm(!!opts?.reject);
     if (!opts?.reject) setRejectReason('');
+    setAdminEditing(false);
+    setEditContractId(row.contract?.id || '');
   };
 
   useEffect(() => {
@@ -721,11 +782,10 @@ export default function SolicitacoesCombustivelPage() {
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
                           <th className={`${cadastroListClasses.th} w-[7%]`}>ID</th>
-                          <th className={`${cadastroListClasses.th} w-[16%]`}>Solicitante</th>
+                          <th className={`${cadastroListClasses.th} w-[18%]`}>Solicitante</th>
                           <th className={`${cadastroListClasses.thCenter} w-[12%]`}>Data abast.</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Contrato</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Veículo</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[12%]`}>Tipo</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[16%]`}>Contrato</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[16%]`}>Veículo</th>
                           <th className={`${cadastroListClasses.thCenter} w-[15%]`}>Status</th>
                           <th className={listTableRowClasses.actionTh}>Ação</th>
                         </tr>
@@ -770,15 +830,20 @@ export default function SolicitacoesCombustivelPage() {
                                 <p className="font-medium text-gray-900 dark:text-gray-100">
                                   {row.vehiclePlate}
                                 </p>
+                                {row.vehicleType ? (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                                    {VEHICLE_TYPE_LABELS[row.vehicleType]}
+                                  </p>
+                                ) : null}
                                 {row.vehicleDescription?.trim() ? (
-                                  <p className="truncate text-xs text-gray-500 dark:text-gray-400" title={row.vehicleDescription}>
+                                  <p
+                                    className="truncate text-xs text-gray-500 dark:text-gray-400"
+                                    title={row.vehicleDescription}
+                                  >
                                     {row.vehicleDescription.trim()}
                                   </p>
                                 ) : null}
                               </div>
-                            </td>
-                            <td className={cadastroListClasses.tdCenter}>
-                              {row.vehicleType ? VEHICLE_TYPE_LABELS[row.vehicleType] : '—'}
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
                               <span
@@ -886,6 +951,8 @@ export default function SolicitacoesCombustivelPage() {
             setApproveGasStationId('');
             setRejectReason('');
             setShowRejectForm(false);
+            setAdminEditing(false);
+            setEditContractId('');
           }}
           title={`Solicitação ${selected?.displayNumber ?? ''}`}
           size="lg"
@@ -965,10 +1032,71 @@ export default function SolicitacoesCombustivelPage() {
                   </div>
                 ) : null}
                 <div className="sm:col-span-2">
-                  <span className="font-medium text-gray-500 dark:text-gray-400">Contrato</span>
-                  <p className="text-gray-900 dark:text-gray-100">
-                    {fuelContractLabel(selected)}
-                  </p>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-medium text-gray-500 dark:text-gray-400">Contrato</span>
+                    {canAdminEditSelected && !adminEditing ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditContractId(selected.contract?.id || '');
+                          setAdminEditing(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Editar
+                      </button>
+                    ) : null}
+                  </div>
+                  {adminEditing && canAdminEditSelected ? (
+                    <div className="space-y-2">
+                      <SingleSelectSearchDropdown
+                        value={editContractId}
+                        onChange={setEditContractId}
+                        options={contractEditOptions}
+                        allowEmpty={false}
+                        placeholder="Selecionar contrato..."
+                        searchPlaceholder="Pesquisar contrato..."
+                        disabled={adminUpdateMutation.isPending}
+                        noFocusRing
+                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={adminUpdateMutation.isPending}
+                          onClick={() => {
+                            setAdminEditing(false);
+                            setEditContractId(selected.contract?.id || '');
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={
+                            adminUpdateMutation.isPending ||
+                            !editContractId ||
+                            editContractId === selected.contract?.id
+                          }
+                          onClick={() =>
+                            adminUpdateMutation.mutate({
+                              id: selected.id,
+                              contractId: editContractId,
+                            })
+                          }
+                        >
+                          {adminUpdateMutation.isPending ? 'Salvando…' : 'Salvar contrato'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {fuelContractLabel(selected)}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className="font-medium text-gray-500 dark:text-gray-400">Condutor</span>
@@ -1134,10 +1262,14 @@ export default function SolicitacoesCombustivelPage() {
                           value={approveGasStationId}
                           onChange={setApproveGasStationId}
                           options={gasStationSelectOptions}
-                          disabled={loadingGasStations || approveMutation.isPending || !contractId}
+                          disabled={
+                            loadingGasStations ||
+                            approveMutation.isPending ||
+                            (!contractId && !costCenterLabel)
+                          }
                           allowEmpty={false}
                           placeholder={
-                            !contractId
+                            !contractId && !costCenterLabel
                               ? 'Solicitação sem contrato'
                               : loadingGasStations
                                 ? 'Carregando postos...'

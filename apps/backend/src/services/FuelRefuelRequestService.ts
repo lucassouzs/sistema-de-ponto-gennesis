@@ -232,6 +232,36 @@ export class FuelRefuelRequestService {
     return presentFuelRowPhotos(await this.getById(id));
   }
 
+  async adminUpdateContract(id: string, contractId: string) {
+    const row = await this.getById(id);
+    const editable: FuelRefuelRequestStatus[] = [
+      FuelRefuelRequestStatus.PENDING_MANAGER,
+      FuelRefuelRequestStatus.PENDING_SUPPLIES,
+    ];
+    if (!editable.includes(row.status)) {
+      throw createError('Só é possível editar solicitações pendentes de análise', 400);
+    }
+
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId.trim() },
+      select: { id: true, name: true, number: true },
+    });
+    if (!contract) throw createError('Contrato não encontrado', 404);
+
+    const costCenterLabel = [contract.number, contract.name].filter(Boolean).join(' — ') || contract.name;
+
+    const updated = await prisma.fuelRefuelRequest.update({
+      where: { id },
+      data: {
+        contractId: contract.id,
+        costCenter: costCenterLabel,
+      },
+      include: fuelRefuelInclude,
+    });
+
+    return presentFuelRowPhotos(updated);
+  }
+
   async managerApprove(id: string, managerId: string, comment?: string) {
     const row = await this.getById(id);
     if (row.status !== FuelRefuelRequestStatus.PENDING_MANAGER) {

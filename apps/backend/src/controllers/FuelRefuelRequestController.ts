@@ -11,7 +11,7 @@ import {
 import { assertUserHasFuelSuppliesAccess } from '../lib/fuelSuppliesAccess';
 import {
   listActiveFuelGasStationsByCity,
-  listActiveFuelGasStationsByContract,
+  listActiveFuelGasStationsForRequest,
   listFuelSatelliteCities,
 } from '../lib/fuelAdministrativeRegions';
 import { FUEL_ABASTECIMENTO_STATE_CODES } from '../constants/fuelSatelliteCities';
@@ -74,6 +74,10 @@ const suppliesApproveSchema = z.object({
 const rejectSchema = z.object({
   reason: z.string().min(1, 'Informe o motivo da rejeição'),
   comment: z.string().optional(),
+});
+
+const adminUpdateSchema = z.object({
+  contractId: z.string().min(1, 'Selecione o contrato'),
 });
 
 const createSchema = z.object({
@@ -407,8 +411,12 @@ export class FuelRefuelRequestController {
       await assertUserHasFuelSuppliesAccess(user.id, user.isAdmin);
 
       const contractId = String(req.query.contractId || '').trim();
-      if (contractId) {
-        const rows = await listActiveFuelGasStationsByContract(contractId);
+      const costCenter = String(req.query.costCenter || '').trim();
+      if (contractId || costCenter) {
+        const rows = await listActiveFuelGasStationsForRequest({
+          contractId: contractId || null,
+          costCenter: costCenter || null,
+        });
         return res.json({ success: true, data: rows });
       }
 
@@ -619,6 +627,26 @@ export class FuelRefuelRequestController {
       const reason = body.reason?.trim() || body.comment?.trim() || '';
       const row = await fuelRefuelRequestService.suppliesReject(req.params.id, user.id, reason);
       res.json({ success: true, data: row, message: 'Solicitação rejeitada' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async adminUpdate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = req.user;
+      if (!user) throw createError('Usuário não autenticado', 401);
+      if (!user.isAdmin) {
+        throw createError('Apenas administradores podem editar a solicitação', 403);
+      }
+      await assertUserHasFuelSuppliesAccess(user.id, user.isAdmin);
+
+      const body = adminUpdateSchema.parse(req.body);
+      const row = await fuelRefuelRequestService.adminUpdateContract(
+        req.params.id,
+        body.contractId,
+      );
+      res.json({ success: true, data: row, message: 'Solicitação atualizada' });
     } catch (error) {
       next(error);
     }

@@ -79,6 +79,11 @@ type FuelRequestRow = {
   satelliteCityCode?: string | null;
   satelliteCityName?: string | null;
   costCenter?: string | null;
+  contract?: {
+    id: string;
+    name: string;
+    number?: string | null;
+  } | null;
   observations?: string | null;
   gasStation?: {
     id: string;
@@ -415,6 +420,20 @@ function isCancelledStatus(status: FuelRefuelStatus): boolean {
   return status === 'CANCELLED' || status === 'REJECTED';
 }
 
+function fuelContractLabel(row: {
+  costCenter?: string | null;
+  contract?: { number?: string | null; name?: string | null } | null;
+}): string {
+  if (row.contract?.name?.trim()) return row.contract.name.trim();
+  if (row.costCenter?.trim()) {
+    const label = row.costCenter.trim();
+    const parts = label.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
+    return parts.length > 1 ? parts[parts.length - 1] : label;
+  }
+  if (row.contract?.number?.trim()) return row.contract.number.trim();
+  return '—';
+}
+
 const CARD_LIST_CONFIG: Record<
   CardFilter,
   { title: string; subtitle: string; Icon: LucideIcon; iconBg: string; iconColor: string }
@@ -680,7 +699,7 @@ export default function SolicitarCombustivelPage() {
     const q = searchTerm.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) => {
-        const hay = `${r.displayNumber} ${r.route} ${r.driverName} ${r.vehiclePlate} ${r.costCenter || ''}`.toLowerCase();
+        const hay = `${r.displayNumber} ${r.route} ${r.driverName} ${r.vehiclePlate} ${r.costCenter || ''} ${r.contract?.name || ''}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -973,7 +992,7 @@ export default function SolicitarCombustivelPage() {
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Data</th>
                           <th className={thCenterCompact}>Condutor</th>
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Placa</th>
-                          <th className={`${thCenterCompact} whitespace-nowrap`}>Tipo</th>
+                          <th className={thCenterCompact}>Contrato</th>
                           {showStationDeadlineColumns ? (
                             <>
                               <th className={thCenterCompact}>Posto</th>
@@ -1023,10 +1042,19 @@ export default function SolicitarCombustivelPage() {
                               <span className="block break-words leading-snug">{row.driverName}</span>
                             </td>
                             <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
-                              {row.vehiclePlate}
+                              <div className="leading-snug">
+                                <p className="font-medium text-gray-900 dark:text-gray-100">
+                                  {row.vehiclePlate}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  {VEHICLE_TYPE_LABELS[row.vehicleType] || row.vehicleType}
+                                </p>
+                              </div>
                             </td>
-                            <td className={`${cadastroListClasses.tdCenter} px-2 sm:px-3`}>
-                              {VEHICLE_TYPE_LABELS[row.vehicleType] || row.vehicleType}
+                            <td className={tdCenterWrap}>
+                              <span className="block break-words leading-snug">
+                                {fuelContractLabel(row)}
+                              </span>
                             </td>
                             {showStationDeadlineColumns ? (
                               <>
