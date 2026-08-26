@@ -118,8 +118,9 @@ export class QuoteMapService {
 
   private async saveQuoteMapSnapshotPdf(
     quoteMapId: string,
-    options?: { purchaseOrderId?: string }
+    options?: { purchaseOrderId?: string; kind?: 'snapshot' | 'comparison' }
   ): Promise<string> {
+    const kind = options?.kind === 'comparison' ? 'comparison' : 'snapshot';
     const map = await this.db.quoteMap.findUnique({
       where: { id: quoteMapId },
       include: {
@@ -172,7 +173,7 @@ export class QuoteMapService {
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
-    const purchaseOrderId = options?.purchaseOrderId?.trim() || '';
+    const purchaseOrderId = kind === 'comparison' ? '' : options?.purchaseOrderId?.trim() || '';
     const allPurchaseOrders = Array.isArray(map.purchaseOrders) ? map.purchaseOrders : [];
     const purchaseOrders = purchaseOrderId
       ? allPurchaseOrders.filter((po: { id: string }) => po.id === purchaseOrderId)
@@ -181,7 +182,12 @@ export class QuoteMapService {
       throw new Error('OC não encontrada neste mapa de cotação');
     }
 
-    const snapshotFileName = purchaseOrderId ? `snapshot-${purchaseOrderId}.pdf` : 'snapshot.pdf';
+    const snapshotFileName =
+      kind === 'comparison'
+        ? 'comparison.pdf'
+        : purchaseOrderId
+          ? `snapshot-${purchaseOrderId}.pdf`
+          : 'snapshot.pdf';
     const publicUrl = `/uploads/quote-maps/${map.id}/${snapshotFileName}`;
     const mr = map.materialRequest;
     const contextLabels = [mr?.costCenter?.name, mr?.costCenter?.code, mr?.serviceOrder];
@@ -201,6 +207,8 @@ export class QuoteMapService {
       amountToPay?: number | null;
       notes?: string | null;
       buyerName?: string | null;
+      isQuoteComparison?: boolean;
+      wonItemCount?: number;
       supplier: any;
       items: Array<{
         label: string;
@@ -209,12 +217,69 @@ export class QuoteMapService {
         unitPrice: number;
         totalPrice: number;
         notes?: string | null;
+        isWinner?: boolean;
       }>;
     };
 
     const sections: SnapshotSection[] = [];
+    const winnerByItemId = new Map<string, string>(
+      (map.winners || [])
+        .filter((w: any) => w?.materialRequestItemId && w?.winnerSupplierId)
+        .map((w: any) => [String(w.materialRequestItemId), String(w.winnerSupplierId)])
+    );
 
-    if (purchaseOrders.length > 0) {
+    if (kind === 'comparison') {
+      // PDF separado: todas as cotações + ganhadora por item.
+      for (const qs of Array.isArray(map.suppliers) ? map.suppliers : []) {
+        const supplierId = String(qs.supplierId || '');
+        const supplier = qs.supplier;
+        if (!supplierId || !supplier) continue;
+
+        const quoted = (map.supplierItems || []).filter(
+          (si: any) => String(si.supplierId) === supplierId
+        );
+        if (quoted.length === 0) continue;
+
+        const items = quoted.map((si: any) => {
+          const mri = si.materialRequestItem;
+          const qty = this.toNumber(mri?.quantity);
+          const unitPrice = this.toNumber(si.unitPrice);
+          const itemId = String(si.materialRequestItemId || mri?.id || '');
+          const isWinner = itemId ? winnerByItemId.get(itemId) === supplierId : false;
+          const rmNote =
+            (typeof mri?.notes === 'string' && mri.notes.trim()) ||
+            (typeof mri?.observation === 'string' && mri.observation.trim()) ||
+            '';
+          return {
+            label:
+              mri?.material?.description?.trim() ||
+              mri?.material?.name?.trim() ||
+              itemId ||
+              '—',
+            quantity: qty,
+            unit: mri?.unit || '—',
+            unitPrice,
+            totalPrice: qty * unitPrice,
+            notes: rmNote || null,
+            isWinner,
+          };
+        });
+
+        sections.push({
+          isQuoteComparison: true,
+          wonItemCount: items.filter((it) => it.isWinner).length,
+          paymentType: qs.paymentType,
+          paymentCondition: qs.paymentCondition,
+          paymentDetails: qs.paymentDetails,
+          freightAmount: this.toNumber(qs.freight),
+          amountToPay: qs.amountToPay != null ? this.toNumber(qs.amountToPay) : null,
+          notes: qs.observations,
+          buyerName: map.creator?.name || null,
+          supplier,
+          items,
+        });
+      }
+    } else if (purchaseOrders.length > 0) {
       for (const po of purchaseOrders) {
         sections.push({
           orderNumber: po.orderNumber,
@@ -513,10 +578,39 @@ export class QuoteMapService {
           .fillColor('#64748B')
           .font('Helvetica')
           .fontSize(10)
-          .text('Nenhuma cotação vencedora ou OC vinculada a este mapa.', left, y, {
-            width: contentWidth,
-          });
+          .text(
+            kind === 'comparison'
+              ? 'Nenhuma cotação registrada neste mapa.'
+              : 'Nenhuma cotação vencedora ou OC vinculada a este mapa.',
+            left,
+            y,
+            {
+              width: contentWidth,
+            }
+          );
         y += 20;
+      }
+
+      if (kind === 'comparison' && sections.length > 0) {
+        ensureSpace(36);
+        doc
+          .fillColor('#0F172A')
+          .font('Helvetica-Bold')
+          .fontSize(14)
+          .text('Mapa de Cotação — Comparativo', left, y, {
+            width: contentWidth,
+            align: 'center',
+          });
+        y += 18;
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#475569')
+          .text('Todas as cotações registradas; itens ganhadores marcados como VENCEDOR.', left, y, {
+            width: contentWidth,
+            align: 'center',
+          });
+        y += 16;
       }
 
       sections.forEach((section, sectionIndex) => {
@@ -551,6 +645,33 @@ export class QuoteMapService {
             y += 18;
           }
           y += 10;
+        } else if (section.isQuoteComparison) {
+          const won = section.wonItemCount ?? 0;
+          const supplierName = (
+            section.supplier?.name ||
+            section.supplier?.tradeName ||
+            'Fornecedor'
+          ).trim();
+          ensureSpace(36);
+          doc
+            .fillColor('#0F172A')
+            .font('Helvetica-Bold')
+            .fontSize(12)
+            .text(`Cotação — ${supplierName}`, left, y, { width: contentWidth });
+          y += 14;
+          doc
+            .font('Helvetica')
+            .fontSize(8)
+            .fillColor(won > 0 ? '#047857' : '#64748B')
+            .text(
+              won > 0
+                ? `Vencedor em ${won} item${won === 1 ? '' : 's'} deste mapa.`
+                : 'Sem itens vencedores neste mapa.',
+              left,
+              y,
+              { width: contentWidth }
+            );
+          y += 12;
         }
 
         // Fornecedor — 2 colunas com label/valor afastados
@@ -696,7 +817,8 @@ export class QuoteMapService {
         const wUnit = 36;
         const wUnitPrice = 70;
         const wTotal = 72;
-        const wDesc = contentWidth - (wItem + wQty + wUnit + wUnitPrice + wTotal);
+        const wResult = section.isQuoteComparison ? 58 : 0;
+        const wDesc = contentWidth - (wItem + wQty + wUnit + wUnitPrice + wTotal + wResult);
         const col = {
           item: left,
           desc: left + wItem,
@@ -704,6 +826,7 @@ export class QuoteMapService {
           unit: left + wItem + wDesc + wQty,
           unitPrice: left + wItem + wDesc + wQty + wUnit,
           total: left + wItem + wDesc + wQty + wUnit + wUnitPrice,
+          result: left + wItem + wDesc + wQty + wUnit + wUnitPrice + wTotal,
         };
 
         const drawItemsHeader = () => {
@@ -723,6 +846,13 @@ export class QuoteMapService {
             align: 'right',
             lineBreak: false,
           });
+          if (section.isQuoteComparison) {
+            doc.text('RESULTADO', col.result, y + 5, {
+              width: wResult - 2,
+              align: 'center',
+              lineBreak: false,
+            });
+          }
           y += 20;
         };
         drawItemsHeader();
@@ -747,6 +877,9 @@ export class QuoteMapService {
             doc.font('Helvetica').fontSize(8);
           }
           const rowY = y + 4;
+          if (item.isWinner) {
+            doc.rect(left, y, contentWidth, rowH).fill('#ECFDF5');
+          }
           doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
           doc.text(String(idx + 1), col.item + 3, rowY, { width: wItem - 4, lineBreak: false });
           doc.text(item.label || '—', col.desc, rowY, { width: wDesc - 4 });
@@ -777,6 +910,31 @@ export class QuoteMapService {
             align: 'right',
             lineBreak: false,
           });
+          if (section.isQuoteComparison) {
+            if (item.isWinner) {
+              doc
+                .fillColor('#047857')
+                .font('Helvetica-Bold')
+                .fontSize(7)
+                .text('VENCEDOR', col.result, rowY, {
+                  width: wResult - 2,
+                  align: 'center',
+                  lineBreak: false,
+                });
+              doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
+            } else {
+              doc
+                .fillColor('#94A3B8')
+                .font('Helvetica')
+                .fontSize(7)
+                .text('—', col.result, rowY, {
+                  width: wResult - 2,
+                  align: 'center',
+                  lineBreak: false,
+                });
+              doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
+            }
+          }
           doc
             .moveTo(left, y + rowH)
             .lineTo(right, y + rowH)
@@ -869,10 +1027,17 @@ export class QuoteMapService {
     return publicUrl;
   }
 
-  private snapshotPdfAbsolutePath(quoteMapId: string, purchaseOrderId?: string): string {
-    const fileName = purchaseOrderId?.trim()
-      ? `snapshot-${purchaseOrderId.trim()}.pdf`
-      : 'snapshot.pdf';
+  private snapshotPdfAbsolutePath(
+    quoteMapId: string,
+    purchaseOrderId?: string,
+    kind: 'snapshot' | 'comparison' = 'snapshot'
+  ): string {
+    const fileName =
+      kind === 'comparison'
+        ? 'comparison.pdf'
+        : purchaseOrderId?.trim()
+          ? `snapshot-${purchaseOrderId.trim()}.pdf`
+          : 'snapshot.pdf';
     return path.join(backendUploadsRoot, 'quote-maps', quoteMapId, fileName);
   }
 
@@ -886,6 +1051,18 @@ export class QuoteMapService {
     const absPath = this.snapshotPdfAbsolutePath(quoteMapId, purchaseOrderId);
     // Regera para garantir layout mais atual do snapshot.
     await this.saveQuoteMapSnapshotPdf(quoteMapId, { purchaseOrderId });
+    return absPath;
+  }
+
+  async getOrCreateComparisonPdfPath(quoteMapId: string): Promise<string> {
+    const map = await this.db.quoteMap.findUnique({
+      where: { id: quoteMapId },
+      select: { id: true },
+    });
+    if (!map) throw new Error('Mapa de cotação não encontrado');
+
+    const absPath = this.snapshotPdfAbsolutePath(quoteMapId, undefined, 'comparison');
+    await this.saveQuoteMapSnapshotPdf(quoteMapId, { kind: 'comparison' });
     return absPath;
   }
 
@@ -1274,10 +1451,14 @@ export class QuoteMapService {
     });
 
     const snapshotPdfUrl = `/uploads/quote-maps/${quoteMapId}/snapshot.pdf`;
+    const comparisonPdfUrl = `/uploads/quote-maps/${quoteMapId}/comparison.pdf`;
     // PDF fora do caminho crítico — o download regenera sob demanda se ainda não existir.
     void this.saveQuoteMapSnapshotPdf(quoteMapId).catch((err) => {
       console.error('[QuoteMap] snapshot PDF em background falhou', quoteMapId, err);
     });
-    return { orders: createdOrders, snapshotPdfUrl };
+    void this.saveQuoteMapSnapshotPdf(quoteMapId, { kind: 'comparison' }).catch((err) => {
+      console.error('[QuoteMap] comparison PDF em background falhou', quoteMapId, err);
+    });
+    return { orders: createdOrders, snapshotPdfUrl, comparisonPdfUrl };
   }
 }

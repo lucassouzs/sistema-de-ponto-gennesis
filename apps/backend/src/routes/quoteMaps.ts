@@ -136,5 +136,23 @@ router.get('/:id/snapshot-pdf', async (req: AuthRequest, res: Response, next: Ne
   }
 });
 
+// PDF comparativo: todas as cotações + ganhadora (arquivo separado do PDF da OC)
+router.get('/:id/comparison-pdf', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+
+    const absPath = await service.getOrCreateComparisonPdfPath(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="mapa-cotacao-comparativo-${id}.pdf"`
+    );
+    res.sendFile(absPath);
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
 

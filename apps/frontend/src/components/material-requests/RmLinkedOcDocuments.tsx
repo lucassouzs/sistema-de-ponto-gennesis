@@ -63,6 +63,27 @@ async function downloadQuoteMapSnapshotPdf(
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
 
+async function openQuoteMapComparisonPdf(mapId: string) {
+  const response = await api.get(`/quote-maps/${mapId}/comparison-pdf`, {
+    responseType: 'blob',
+  });
+  const blobUrl = window.URL.createObjectURL(response.data);
+  window.open(blobUrl, '_blank', 'noopener,noreferrer');
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+}
+
+async function downloadQuoteMapComparisonPdf(mapId: string) {
+  const response = await api.get(`/quote-maps/${mapId}/comparison-pdf`, {
+    responseType: 'blob',
+  });
+  const blobUrl = window.URL.createObjectURL(response.data);
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = `mapa-cotacao-comparativo-${mapId}.pdf`;
+  anchor.click();
+  setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
+}
+
 function DocSection({
   title,
   description,
@@ -208,29 +229,49 @@ function SingleOcDocuments({
       <div className="space-y-3 pl-0 sm:pl-1">
         <DocSection title="Mapa de Cotação">
           {quoteMap ? (
-            <DocItem
-              label="Arquivo"
-              subtitle={`Criado em ${formatDate(quoteMap.createdAt)}`}
-              onView={async () => {
-                try {
-                  await openQuoteMapSnapshotPdf(quoteMap.id, order.id);
-                } catch {
-                  toast.error('Não foi possível abrir o mapa de cotação.');
-                }
-              }}
-              onDownload={async () => {
-                try {
-                  await downloadQuoteMapSnapshotPdf(
-                    quoteMap.id,
-                    order.orderNumber,
-                    order.supplier?.name,
-                    order.id
-                  );
-                } catch {
-                  toast.error('Não foi possível baixar o mapa de cotação.');
-                }
-              }}
-            />
+            <>
+              <DocItem
+                label="PDF da OC"
+                subtitle={`Criado em ${formatDate(quoteMap.createdAt)}`}
+                onView={async () => {
+                  try {
+                    await openQuoteMapSnapshotPdf(quoteMap.id, order.id);
+                  } catch {
+                    toast.error('Não foi possível abrir o PDF da OC.');
+                  }
+                }}
+                onDownload={async () => {
+                  try {
+                    await downloadQuoteMapSnapshotPdf(
+                      quoteMap.id,
+                      order.orderNumber,
+                      order.supplier?.name,
+                      order.id
+                    );
+                  } catch {
+                    toast.error('Não foi possível baixar o PDF da OC.');
+                  }
+                }}
+              />
+              <DocItem
+                label="Comparativo"
+                subtitle="Todas as cotações + vencedor"
+                onView={async () => {
+                  try {
+                    await openQuoteMapComparisonPdf(quoteMap.id);
+                  } catch {
+                    toast.error('Não foi possível abrir o PDF comparativo.');
+                  }
+                }}
+                onDownload={async () => {
+                  try {
+                    await downloadQuoteMapComparisonPdf(quoteMap.id);
+                  } catch {
+                    toast.error('Não foi possível baixar o PDF comparativo.');
+                  }
+                }}
+              />
+            </>
           ) : (
             <DocItem label="Arquivo" subtitle="Não anexado" pending />
           )}
