@@ -198,20 +198,12 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     pathname.startsWith('/ponto/flow')
   );
 
-  const isKanbanRoute =
-    pathname != null &&
-    (pathname === '/ponto/kanban' || pathname.startsWith('/ponto/kanban/'));
-
   return (
     <MainLayoutShellContext.Provider value={true}>
       <NativeCallProvider value={nativeCall}>
         <div
           ref={shellRef}
-          className={
-            isKanbanRoute
-              ? 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-white dark:bg-gray-900'
-              : 'h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden bg-gray-50 dark:bg-gray-900'
-          }
+          className="app-theme-bg h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden"
           // Foco em elemento fora da área visível pode rolar este container mesmo com
           // overflow hidden, escondendo a topbar e cortando a página.
           onScroll={(event) => {

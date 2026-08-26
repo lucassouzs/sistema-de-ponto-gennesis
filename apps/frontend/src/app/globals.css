@@ -85,6 +85,42 @@
   }
 }
 
+/** Fundo padrão engenharia — claro/escuro conforme o tema. */
+@layer components {
+  .app-theme-bg {
+    position: relative;
+    isolation: isolate;
+    background-color: #f4f6f8;
+  }
+
+  .app-theme-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: url('/backgrounds/padrao-engenharia-claro.png');
+    background-repeat: repeat;
+    background-position: top left;
+    background-size: 720px auto;
+    opacity: 1;
+  }
+
+  html.dark .app-theme-bg {
+    background-color: #111827;
+  }
+
+  html.dark .app-theme-bg::before {
+    background-image: url('/backgrounds/padrao-engenharia-escuro.png');
+    opacity: 0.55;
+  }
+
+  .app-theme-bg > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
 @layer components {
   /** Wrapper para tabelas/listas largas — scroll horizontal sem estourar a viewport no mobile. */
   .table-scroll {
