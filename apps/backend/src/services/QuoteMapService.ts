@@ -597,7 +597,7 @@ export class QuoteMapService {
           .fillColor('#0F172A')
           .font('Helvetica-Bold')
           .fontSize(14)
-          .text('Mapa de Cotação — Comparativo', left, y, {
+          .text('Comparativo', left, y, {
             width: contentWidth,
             align: 'center',
           });
@@ -657,7 +657,7 @@ export class QuoteMapService {
             .fillColor('#0F172A')
             .font('Helvetica-Bold')
             .fontSize(12)
-            .text(`Cotação — ${supplierName}`, left, y, { width: contentWidth });
+            .text(supplierName, left, y, { width: contentWidth });
           y += 14;
           doc
             .font('Helvetica')
