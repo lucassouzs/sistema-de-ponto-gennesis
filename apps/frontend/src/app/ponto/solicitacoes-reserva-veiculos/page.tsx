@@ -316,7 +316,7 @@ export default function SolicitacoesReservaVeiculosPage() {
     // usa `{ data, pagination }`, não um array — um `.map` ali quebrava o onSuccess
     // e disparava o toast de erro mesmo com a vistoria já salva.
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-detail'] });
-    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
+    void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-mine'] });
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
     void queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-vehicles'] });

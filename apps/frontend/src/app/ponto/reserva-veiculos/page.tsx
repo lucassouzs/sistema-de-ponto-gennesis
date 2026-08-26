@@ -291,7 +291,7 @@ const RESERVATION_CARD_LIST_CONFIG: Record<
   }
 > = {
   all: {
-    title: 'Todas as reservas',
+    title: 'Minhas reservas',
     subtitle: 'Visão geral das suas solicitações de uso da frota.',
     Icon: Users,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
@@ -416,18 +416,18 @@ export default function ReservaVeiculosPage() {
   });
 
   const { data: statsData, isLoading: loadingStats } = useQuery({
-    queryKey: ['vehicle-reservations', 'stats'],
+    queryKey: ['vehicle-reservations-mine', 'stats'],
     queryFn: async () => {
-      const res = await api.get('/vehicle-reservations', { params: { limit: 500, page: 1 } });
+      const res = await api.get('/vehicle-reservations/mine', { params: { limit: 500, page: 1 } });
       return (res.data?.data || []) as VehicleReservation[];
     },
     enabled: !loadingUser,
   });
 
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['vehicle-reservations', searchTerm, cardFilter, currentPage, itemsPerPage],
+    queryKey: ['vehicle-reservations-mine', searchTerm, cardFilter, currentPage, itemsPerPage],
     queryFn: async () => {
-      const res = await api.get('/vehicle-reservations', {
+      const res = await api.get('/vehicle-reservations/mine', {
         params: {
           search: searchTerm || undefined,
           status: cardFilterToApiParam(cardFilter),
@@ -535,7 +535,7 @@ export default function ReservaVeiculosPage() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-mine'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-pending-count'] });
       setShowForm(false);
@@ -551,7 +551,7 @@ export default function ReservaVeiculosPage() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-mine'] });
       setDeleteId(null);
       setRowActionMenu(null);
       toast.success('Reserva excluída com sucesso!');
@@ -571,7 +571,7 @@ export default function ReservaVeiculosPage() {
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations'] });
+      queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-mine'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservations-supplies'] });
       queryClient.invalidateQueries({ queryKey: ['vehicles'] });
       queryClient.invalidateQueries({ queryKey: ['vehicle-reservation-supplies-vehicles'] });

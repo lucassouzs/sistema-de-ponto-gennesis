@@ -3,7 +3,7 @@ import { VehicleReservationStatus } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { assertUserHasVehicleReservationSuppliesAccess } from '../lib/vehicleReservationSuppliesAccess';
+import { assertUserHasVehicleReservationSuppliesAccess, userHasVehicleReservationSuppliesAccess } from '../lib/vehicleReservationSuppliesAccess';
 import { PhotoService } from '../services/PhotoService';
 
 const PERIODO_USO_VALUES = new Set(['INTEGRAL', 'MATUTINO', 'VESPERTINO', 'NOTURNO']);
@@ -122,15 +122,74 @@ function parseDocumentContentType(dataUrl: string): string {
   return match?.[1] || 'application/pdf';
 }
 
+function userOwnsReservation(
+  reservation: { createdById: string | null; solicitante: string },
+  user: { id: string; name?: string }
+): boolean {
+  if (reservation.createdById && reservation.createdById === user.id) return true;
+  if (reservation.createdById) return false;
+  const userName = String(user.name ?? '').trim().toLowerCase();
+  const solicitante = reservation.solicitante.trim().toLowerCase();
+  return userName.length > 0 && userName === solicitante;
+}
+
 function userCanSubmitReturn(
   reservation: { createdById: string | null; solicitante: string },
   user: { id: string; name?: string; isAdmin?: boolean }
 ): boolean {
   if (user.isAdmin) return true;
-  if (reservation.createdById && reservation.createdById === user.id) return true;
-  const userName = String(user.name ?? '').trim().toLowerCase();
-  const solicitante = reservation.solicitante.trim().toLowerCase();
-  return userName.length > 0 && userName === solicitante;
+  return userOwnsReservation(reservation, user);
+}
+
+function buildListWhere(
+  query: AuthRequest['query'],
+  ownership?: { userId: string; userName?: string | null }
+): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
+  const { search, status } = query;
+
+  const statusFilter = parseStatusFilter(status);
+  if (statusFilter?.length === 1) {
+    where.status = statusFilter[0];
+  } else if (statusFilter && statusFilter.length > 1) {
+    where.status = { in: statusFilter };
+  }
+
+  if (search) {
+    const term = search as string;
+    where.OR = [
+      { code: { contains: term, mode: 'insensitive' } },
+      { solicitante: { contains: term, mode: 'insensitive' } },
+      { motorista: { contains: term, mode: 'insensitive' } },
+      { atividade: { contains: term, mode: 'insensitive' } },
+      { localDestino: { contains: term, mode: 'insensitive' } },
+      { contrato: { contains: term, mode: 'insensitive' } },
+      { observacaoCapacidadeVeiculo: { contains: term, mode: 'insensitive' } },
+      { vehicle: { placaVeic: { contains: term, mode: 'insensitive' } } },
+      { vehicle: { modeloVeic: { contains: term, mode: 'insensitive' } } },
+    ];
+  }
+
+  if (ownership) {
+    const userName = String(ownership.userName ?? '').trim();
+    where.AND = [
+      {
+        OR: [
+          { createdById: ownership.userId },
+          ...(userName
+            ? [
+                {
+                  createdById: null,
+                  solicitante: { equals: userName, mode: 'insensitive' as const },
+                },
+              ]
+            : []),
+        ],
+      },
+    ];
+  }
+
+  return where;
 }
 
 function buildReservationData(body: Record<string, unknown>) {
@@ -189,58 +248,63 @@ async function reserveReservationCodes(count: number): Promise<string[]> {
 }
 
 export class VehicleReservationController {
+  private async listReservations(
+    req: AuthRequest,
+    ownership?: { userId: string; userName?: string | null }
+  ) {
+    const { page = 1, limit = 20 } = req.query;
+    const where = buildListWhere(req.query, ownership);
+
+    const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 500);
+    const pageNum = Math.max(1, Number(page) || 1);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [reservations, total] = await Promise.all([
+      prisma.vehicleReservation.findMany({
+        where,
+        skip,
+        take: limitNum,
+        orderBy: [{ createdAt: 'desc' }],
+        include: reservationInclude,
+      }),
+      prisma.vehicleReservation.count({ where }),
+    ]);
+
+    return {
+      success: true as const,
+      data: reservations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum) || 1,
+      },
+    };
+  }
+
+  async getMine(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      const profile = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: { name: true },
+      });
+      const payload = await this.listReservations(req, {
+        userId: req.user.id,
+        userName: profile?.name,
+      });
+      res.json(payload);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { search, page = 1, limit = 20, status } = req.query;
-      const where: Record<string, unknown> = {};
-
-      const statusFilter = parseStatusFilter(status);
-      if (statusFilter?.length === 1) {
-        where.status = statusFilter[0];
-      } else if (statusFilter && statusFilter.length > 1) {
-        where.status = { in: statusFilter };
-      }
-
-      if (search) {
-        const term = search as string;
-        where.OR = [
-          { code: { contains: term, mode: 'insensitive' } },
-          { solicitante: { contains: term, mode: 'insensitive' } },
-          { motorista: { contains: term, mode: 'insensitive' } },
-          { atividade: { contains: term, mode: 'insensitive' } },
-          { localDestino: { contains: term, mode: 'insensitive' } },
-          { contrato: { contains: term, mode: 'insensitive' } },
-          { observacaoCapacidadeVeiculo: { contains: term, mode: 'insensitive' } },
-          { vehicle: { placaVeic: { contains: term, mode: 'insensitive' } } },
-          { vehicle: { modeloVeic: { contains: term, mode: 'insensitive' } } }
-        ];
-      }
-
-      const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 100);
-      const pageNum = Math.max(1, Number(page) || 1);
-      const skip = (pageNum - 1) * limitNum;
-
-      const [reservations, total] = await Promise.all([
-        prisma.vehicleReservation.findMany({
-          where,
-          skip,
-          take: limitNum,
-          orderBy: [{ createdAt: 'desc' }],
-          include: reservationInclude
-        }),
-        prisma.vehicleReservation.count({ where })
-      ]);
-
-      res.json({
-        success: true,
-        data: reservations,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum)
-        }
-      });
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      await assertUserHasVehicleReservationSuppliesAccess(req.user.id, req.user.isAdmin);
+      const payload = await this.listReservations(req);
+      res.json(payload);
     } catch (error) {
       next(error);
     }
@@ -285,11 +349,19 @@ export class VehicleReservationController {
 
   async delete(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
       const { id } = req.params;
       const existing = await prisma.vehicleReservation.findUnique({ where: { id } });
       if (!existing) throw createError('Reserva não encontrada', 404);
       if (existing.status !== VehicleReservationStatus.PENDING_SUPPLIES) {
         throw createError('Somente reservas pendentes podem ser excluídas', 400);
+      }
+      const canManageAll = await userHasVehicleReservationSuppliesAccess(
+        req.user.id,
+        req.user.isAdmin
+      );
+      if (!canManageAll && !userOwnsReservation(existing, req.user)) {
+        throw createError('Você só pode excluir suas próprias reservas', 403);
       }
 
       await prisma.vehicleReservation.delete({ where: { id } });

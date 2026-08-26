@@ -321,11 +321,19 @@ function fuelContractLabel(row: {
   costCenter?: string | null;
   contract?: { number?: string; name?: string } | null;
 }): string {
-  if (row.costCenter?.trim()) return row.costCenter.trim();
   if (row.contract?.number && row.contract?.name) {
     return `${row.contract.number} — ${row.contract.name}`;
   }
-  return row.contract?.number || row.contract?.name || '—';
+  if (row.contract?.name) return row.contract.name;
+  if (row.contract?.number) return row.contract.number;
+  if (row.costCenter?.trim()) return row.costCenter.trim();
+  return '—';
+}
+
+function fuelContractShortName(row: {
+  contract?: { number?: string; name?: string } | null;
+}): string {
+  return row.contract?.name?.trim() || row.contract?.number?.trim() || '';
 }
 
 function fuelRefuelTotalValue(
@@ -1136,7 +1144,11 @@ export default function SolicitacoesCombustivelPage() {
                                 : 'Selecionar posto do contrato...'
                           }
                           searchPlaceholder="Pesquisar posto..."
-                          emptyOptionsMessage="Nenhum posto vinculado a este contrato."
+                          emptyOptionsMessage={
+                            fuelContractShortName(selected)
+                              ? `Nenhum posto vinculado ao contrato ${fuelContractShortName(selected)}. Vincule em Cadastros > Postos de Combustível.`
+                              : 'Nenhum posto vinculado a este contrato.'
+                          }
                           noFocusRing
                         />
                       </div>
