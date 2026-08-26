@@ -74,6 +74,7 @@ type FuelRequestRow = {
   route: string;
   driverName: string;
   vehiclePlate: string;
+  vehicleDescription?: string | null;
   vehicleType: FuelVehicleType;
   status: FuelRefuelStatus;
   satelliteCityCode?: string | null;
@@ -699,7 +700,7 @@ export default function SolicitarCombustivelPage() {
     const q = searchTerm.trim().toLowerCase();
     if (q) {
       rows = rows.filter((r) => {
-        const hay = `${r.displayNumber} ${r.route} ${r.driverName} ${r.vehiclePlate} ${r.costCenter || ''} ${r.contract?.name || ''}`.toLowerCase();
+        const hay = `${r.displayNumber} ${r.route} ${r.driverName} ${r.vehiclePlate} ${r.vehicleDescription || ''} ${r.costCenter || ''} ${r.contract?.name || ''}`.toLowerCase();
         return hay.includes(q);
       });
     }
@@ -991,7 +992,7 @@ export default function SolicitarCombustivelPage() {
                           <th className={`${cadastroListClasses.th} min-w-[7rem]`}>Rota</th>
                           <th className={`${thCenterCompact} whitespace-nowrap`}>Data</th>
                           <th className={thCenterCompact}>Condutor</th>
-                          <th className={`${thCenterCompact} whitespace-nowrap`}>Placa</th>
+                          <th className={`${thCenterCompact} whitespace-nowrap`}>Veículo</th>
                           <th className={thCenterCompact}>Contrato</th>
                           {showStationDeadlineColumns ? (
                             <>
@@ -1046,9 +1047,14 @@ export default function SolicitarCombustivelPage() {
                                 <p className="font-medium text-gray-900 dark:text-gray-100">
                                   {row.vehiclePlate}
                                 </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {VEHICLE_TYPE_LABELS[row.vehicleType] || row.vehicleType}
-                                </p>
+                                {row.vehicleDescription?.trim() ? (
+                                  <p
+                                    className="truncate text-xs text-gray-500 dark:text-gray-400"
+                                    title={row.vehicleDescription}
+                                  >
+                                    {row.vehicleDescription.trim()}
+                                  </p>
+                                ) : null}
                               </div>
                             </td>
                             <td className={tdCenterWrap}>

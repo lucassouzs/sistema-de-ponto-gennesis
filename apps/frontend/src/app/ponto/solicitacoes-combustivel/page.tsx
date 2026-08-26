@@ -319,17 +319,24 @@ const STATUS_BADGE: Record<FuelRefuelStatus, string> = {
 
 const ITEMS_PER_PAGE = 20;
 
+function extractContractDisplayName(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return trimmed;
+  if (/^\d+\/\d+/.test(parts[0])) return parts.slice(1).join(' — ');
+  return parts[parts.length - 1];
+}
+
 function fuelContractLabel(row: {
   costCenter?: string | null;
   contract?: { number?: string; name?: string } | null;
 }): string {
-  if (row.contract?.name?.trim()) return row.contract.name.trim();
-  if (row.costCenter?.trim()) {
-    const label = row.costCenter.trim();
-    const parts = label.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
-    return parts.length > 1 ? parts[parts.length - 1] : label;
-  }
-  if (row.contract?.number?.trim()) return row.contract.number.trim();
+  const name = row.contract?.name?.trim();
+  const number = row.contract?.number?.trim();
+  if (name) return extractContractDisplayName(name);
+  if (row.costCenter?.trim()) return extractContractDisplayName(row.costCenter.trim());
+  if (number) return number;
   return '—';
 }
 
@@ -784,9 +791,10 @@ export default function SolicitacoesCombustivelPage() {
                           <th className={`${cadastroListClasses.th} w-[7%]`}>ID</th>
                           <th className={`${cadastroListClasses.th} w-[18%]`}>Solicitante</th>
                           <th className={`${cadastroListClasses.thCenter} w-[12%]`}>Data abast.</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[16%]`}>Contrato</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[16%]`}>Veículo</th>
-                          <th className={`${cadastroListClasses.thCenter} w-[15%]`}>Status</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Contrato</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[14%]`}>Veículo</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[10%]`}>Tipo</th>
+                          <th className={`${cadastroListClasses.thCenter} w-[13%]`}>Status</th>
                           <th className={listTableRowClasses.actionTh}>Ação</th>
                         </tr>
                       </thead>
@@ -830,11 +838,6 @@ export default function SolicitacoesCombustivelPage() {
                                 <p className="font-medium text-gray-900 dark:text-gray-100">
                                   {row.vehiclePlate}
                                 </p>
-                                {row.vehicleType ? (
-                                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                                    {VEHICLE_TYPE_LABELS[row.vehicleType]}
-                                  </p>
-                                ) : null}
                                 {row.vehicleDescription?.trim() ? (
                                   <p
                                     className="truncate text-xs text-gray-500 dark:text-gray-400"
@@ -844,6 +847,11 @@ export default function SolicitacoesCombustivelPage() {
                                   </p>
                                 ) : null}
                               </div>
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
+                              {row.vehicleType
+                                ? VEHICLE_TYPE_LABELS[row.vehicleType]
+                                : '—'}
                             </td>
                             <td className={cadastroListClasses.tdCenter}>
                               <span

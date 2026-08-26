@@ -172,21 +172,18 @@ function buildListWhere(
 
   if (ownership) {
     const userName = String(ownership.userName ?? '').trim();
-    where.AND = [
-      {
-        OR: [
-          { createdById: ownership.userId },
-          ...(userName
-            ? [
-                {
-                  createdById: null,
-                  solicitante: { equals: userName, mode: 'insensitive' as const },
-                },
-              ]
-            : []),
-        ],
-      },
-    ];
+    if (!userName) {
+      where.id = { in: [] };
+    } else {
+      where.AND = [
+        {
+          OR: [
+            { solicitante: { equals: userName, mode: 'insensitive' as const } },
+            { motorista: { equals: userName, mode: 'insensitive' as const } },
+          ],
+        },
+      ];
+    }
   }
 
   return where;

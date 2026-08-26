@@ -763,7 +763,7 @@ export default function ReservaVeiculosPage() {
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Buscar por solicitante, motorista, placa..."
+                      placeholder="Buscar por motorista, placa, contrato..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
@@ -819,19 +819,17 @@ export default function ReservaVeiculosPage() {
                   <div className="table-scroll">
                     <table className={cadastroListClasses.table}>
                       <colgroup>
-                        <col className="w-[4%]" />
+                        <col className="w-[5%]" />
+                        <col className="w-[22%]" />
+                        <col className="w-[12%]" />
                         <col className="w-[18%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[10%]" />
                         <col className="w-[16%]" />
                         <col className="w-[14%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[4%]" />
+                        <col className="w-[9%]" />
                       </colgroup>
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
                           <th className={cadastroListClasses.th}>ID</th>
-                          <th className={cadastroListClasses.th}>Solicitante</th>
                           <th className={cadastroListClasses.th}>Motorista</th>
                           <th className={cadastroListClasses.thCenter}>Veículo</th>
                           <th className={cadastroListClasses.thCenter}>Uso</th>
@@ -854,11 +852,6 @@ export default function ReservaVeiculosPage() {
                                   listRange.startItem + index
                                 )}
                               </ListRowNavigableLabel>
-                            </td>
-                            <td className={cadastroListClasses.tdTruncate}>
-                              <span className="block truncate text-sm text-gray-900 dark:text-gray-100">
-                                {reservation.solicitante}
-                              </span>
                             </td>
                             <td className={cadastroListClasses.tdTruncate}>
                               <span className="block truncate text-sm text-gray-900 dark:text-gray-100">
