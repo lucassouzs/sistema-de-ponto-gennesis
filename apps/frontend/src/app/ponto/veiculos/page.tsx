@@ -598,7 +598,7 @@ export default function VeiculosPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-              Frota
+              Veículos
             </h1>
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Gerencie os veículos da frota e particulares vinculados aos contratos
@@ -614,7 +614,7 @@ export default function VeiculosPage() {
                   </div>
                   <div className="min-w-0">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
-                      Frota
+                      Veículos
                     </h2>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {isLoading

@@ -60,7 +60,7 @@ export default function BottomTabNavigator() {
         <Tab.Screen
           name="Reservas"
           component={VehicleReservationsScreen}
-          options={{ title: 'Veículos' }}
+          options={{ title: 'Frota' }}
         />
       ) : null}
       {canSeeDpRequests ? (

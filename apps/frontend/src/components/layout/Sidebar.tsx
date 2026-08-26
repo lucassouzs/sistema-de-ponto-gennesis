@@ -688,7 +688,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             permission: isAdministrator || can(pk('/ponto/solicitacoes-dp'))
           },
           {
-            name: 'Reservar Veículo',
+            name: 'Frota',
             href: '/ponto/reserva-veiculos',
             icon: Car,
             description: 'Solicitar reserva de veículos da frota',
@@ -1168,7 +1168,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator || can(pk('/ponto/solicitacoes-combustivel'))
           },
           {
-            name: 'Reservas de Veículos',
+            name: 'Gestão da Frota',
             href: '/ponto/solicitacoes-reserva-veiculos',
             icon: CalendarRange,
             description: 'Aprovar ou rejeitar solicitações de uso da frota',
@@ -1245,7 +1245,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             section: 'Compras'
           },
           {
-            name: 'Frota',
+            name: 'Veículos',
             href: '/ponto/veiculos',
             icon: Car,
             description: 'Cadastro de veículos da frota',

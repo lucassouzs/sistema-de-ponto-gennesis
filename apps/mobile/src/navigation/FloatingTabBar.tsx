@@ -29,19 +29,19 @@ type TabIcon =
 const ICONS: Record<string, TabIcon> = {
   Home: { set: 'ion', name: 'home' },
   Combustivel: { set: 'mci', name: 'gas-station' },
-  Reservas: { set: 'ion', name: 'calendar' },
+  Reservas: { set: 'ion', name: 'car' },
   DpRequests: { set: 'mci', name: 'email-plus' },
   Fuel: { set: 'mci', name: 'gas-station' },
-  Vehicle: { set: 'ion', name: 'calendar' },
+  Vehicle: { set: 'ion', name: 'car' },
 };
 
 const SHORT_LABELS: Record<string, string> = {
   Home: 'Início',
   Combustivel: 'Abastecimento',
-  Reservas: 'Veículos',
+  Reservas: 'Frota',
   DpRequests: 'Solicitações',
   Fuel: 'Abastecimento',
-  Vehicle: 'Veículos',
+  Vehicle: 'Frota',
 };
 
 const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle', 'DpRequests']);
@@ -152,13 +152,7 @@ function TabItem({
               <TabIconView icon={icon} color={activeColor} />
             </Animated.View>
           </View>
-          <Animated.Text
-            style={[styles.label, { color: tint }]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.68}
-            allowFontScaling={false}
-          >
+          <Animated.Text style={[styles.label, { color: tint }]} numberOfLines={1}>
             {label}
           </Animated.Text>
         </Animated.View>
@@ -653,12 +647,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600',
-    letterSpacing: -0.35,
+    letterSpacing: -0.4,
     textAlign: 'center',
     width: '100%',
-    paddingHorizontal: 1,
+    paddingHorizontal: 0,
   },
   fab: {
     width: BAR_HEIGHT,

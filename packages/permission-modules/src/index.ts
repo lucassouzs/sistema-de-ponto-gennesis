@@ -71,7 +71,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/financeiro/gestao-solicitacoes'), name: 'Fluig - Processos', href: '/ponto/financeiro/gestao-solicitacoes', category: 'Principal' },
   { key: pathToModuleKey('/ponto/fluig/aprovacoes-workflow'), name: 'Fluig - Aprovações', href: '/ponto/fluig/aprovacoes-workflow', category: 'Principal' },
   { key: pathToModuleKey('/ponto/solicitacoes-dp'), name: 'Solicitações Internas', href: '/ponto/solicitacoes-dp', category: 'Principal' },
-  { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Reservar Veículo', href: '/ponto/reserva-veiculos', category: 'Principal' },
+  { key: pathToModuleKey('/ponto/reserva-veiculos'), name: 'Frota', href: '/ponto/reserva-veiculos', category: 'Principal' },
   { key: pathToModuleKey('/ponto/solicitar-combustivel'), name: 'Abastecimento', href: '/ponto/solicitar-combustivel', category: 'Principal' },
   { key: pathToModuleKey('/ponto/meus-chamados'), name: 'Meus Chamados', href: '/ponto/meus-chamados', category: 'Principal' },
   { key: pathToModuleKey('/ponto/entrega-logistica'), name: 'Entrega da Logística', href: '/ponto/entrega-logistica', category: 'Principal' },
@@ -222,7 +222,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   },
   {
     key: pathToModuleKey('/ponto/solicitacoes-reserva-veiculos'),
-    name: 'Reservas de Veículos',
+    name: 'Gestão da Frota',
     href: '/ponto/solicitacoes-reserva-veiculos',
     category: 'Suprimentos',
   },
@@ -236,7 +236,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/centros-custo'), name: 'Centros de Custo', href: '/ponto/centros-custo', category: 'Cadastros' },
   { key: pathToModuleKey('/ponto/materiais-construcao'), name: 'Materiais e Serviços', href: '/ponto/materiais-construcao', category: 'Cadastros' },
   { key: pathToModuleKey('/ponto/fornecedores'), name: 'Fornecedores', href: '/ponto/fornecedores', category: 'Cadastros' },
-  { key: pathToModuleKey('/ponto/veiculos'), name: 'Frota', href: '/ponto/veiculos', category: 'Cadastros' },
+  { key: pathToModuleKey('/ponto/veiculos'), name: 'Veículos', href: '/ponto/veiculos', category: 'Cadastros' },
   {
     key: pathToModuleKey('/ponto/regioes-postos-combustivel'),
     name: 'Postos de Combustível',

@@ -861,7 +861,7 @@ export default function VehicleReservationsScreen() {
           />
         }
       >
-        <Text style={styles.pageTitle}>Reservar Veículo</Text>
+        <Text style={styles.pageTitle}>Frota</Text>
         <Text style={styles.pageSubtitle}>
           Reserve veículos e acompanhe o status
         </Text>

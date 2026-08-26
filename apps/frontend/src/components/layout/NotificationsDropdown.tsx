@@ -273,7 +273,7 @@ export function NotificationsDropdown({ chatUnreadCount = 0 }: NotificationsDrop
     if (canSeeVehicleReservationSupplies && vehicleReservationSuppliesPendingCount > 0) {
       list.push({
         id: 'vehicle-supplies',
-        title: 'Reservas de Veículos',
+        title: 'Gestão da Frota',
         description: 'Solicitações pendentes',
         count: vehicleReservationSuppliesPendingCount,
         href: '/ponto/solicitacoes-reserva-veiculos',

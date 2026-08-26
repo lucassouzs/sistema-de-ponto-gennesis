@@ -447,7 +447,7 @@ const CARD_LIST_CONFIG: Record<
     iconColor: 'text-blue-600 dark:text-blue-400',
   },
   analysis: {
-    title: 'Em análise',
+    title: 'Em Análise',
     subtitle: 'Aguardando aprovação ou Suprimentos.',
     Icon: Clock,
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
@@ -468,7 +468,7 @@ const CARD_LIST_CONFIG: Record<
     iconColor: 'text-green-600 dark:text-green-400',
   },
   cancelled: {
-    title: 'Canceladas / rejeitadas',
+    title: 'Canceladas',
     subtitle: 'Solicitações encerradas sem abastecimento.',
     Icon: XCircle,
     iconBg: 'bg-red-100 dark:bg-red-900/30',
@@ -494,7 +494,7 @@ const STAT_CARDS: {
   },
   {
     filter: 'analysis',
-    label: 'Em análise',
+    label: 'Em Análise',
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
     Icon: Clock,

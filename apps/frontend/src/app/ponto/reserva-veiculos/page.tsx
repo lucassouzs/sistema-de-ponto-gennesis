@@ -298,28 +298,28 @@ const RESERVATION_CARD_LIST_CONFIG: Record<
     iconColor: 'text-blue-600 dark:text-blue-400',
   },
   pending: {
-    title: 'Reservas pendentes',
+    title: 'Pendentes',
     subtitle: 'Aguardando aprovação do Suprimentos ou vistoria.',
     Icon: Clock,
     iconBg: 'bg-yellow-100 dark:bg-yellow-900/30',
     iconColor: 'text-yellow-600 dark:text-yellow-400',
   },
   IN_USE: {
-    title: 'Reservas em uso',
+    title: 'Em Uso',
     subtitle: 'Veículos aprovados e em utilização.',
     Icon: Car,
     iconBg: 'bg-purple-100 dark:bg-purple-900/30',
     iconColor: 'text-purple-600 dark:text-purple-400',
   },
   CONCLUDED: {
-    title: 'Reservas vistoriadas',
+    title: 'Vistoriadas',
     subtitle: 'Reservas vistoriadas e finalizadas.',
     Icon: CheckCircle,
     iconBg: 'bg-green-100 dark:bg-green-900/30',
     iconColor: 'text-green-600 dark:text-green-400',
   },
   CANCELLED: {
-    title: 'Reservas canceladas',
+    title: 'Canceladas',
     subtitle: 'Solicitações canceladas ou rejeitadas.',
     Icon: XCircle,
     iconBg: 'bg-red-100 dark:bg-red-900/30',
@@ -719,7 +719,7 @@ export default function ReservaVeiculosPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Reservar Veículo
+              Frota
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
               Solicite o uso de veículos da frota

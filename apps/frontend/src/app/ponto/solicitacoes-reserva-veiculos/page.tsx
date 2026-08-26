@@ -560,7 +560,7 @@ export default function SolicitacoesReservaVeiculosPage() {
         <div className="space-y-6">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-              Reservas de Veículos
+              Gestão da Frota
             </h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm text-gray-600 dark:text-gray-400 sm:text-base">
               Fila do Suprimentos: analise e aprove ou rejeite solicitações de uso da frota.
@@ -1160,7 +1160,7 @@ export default function SolicitacoesReservaVeiculosPage() {
         <Modal
           isOpen={isFiltersOpen}
           onClose={() => setIsFiltersOpen(false)}
-          title="Filtros — Reservas de Veículos"
+          title="Filtros — Gestão da Frota"
           size="md"
         >
           <div className="space-y-4">
