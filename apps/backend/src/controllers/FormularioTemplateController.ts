@@ -14,9 +14,9 @@ export class FormularioTemplateController {
   async list(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const data = await service.list();
-      res.json({ success: true, data });
+      return res.json({ success: true, data });
     } catch (err) {
-      next(err);
+      return next(err);
     }
   }
 
@@ -27,9 +27,9 @@ export class FormularioTemplateController {
       if (!data) {
         return res.status(404).json({ success: false, message: 'Formulário não encontrado.' });
       }
-      res.json({ success: true, data });
+      return res.json({ success: true, data });
     } catch (err) {
-      next(err);
+      return next(err);
     }
   }
 
@@ -41,7 +41,7 @@ export class FormularioTemplateController {
         sections?: FormularioSection[];
       };
       const data = await service.create(body);
-      res.status(201).json({ success: true, data });
+      return res.status(201).json({ success: true, data });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'Seções inválidas.') {
@@ -60,7 +60,7 @@ export class FormularioTemplateController {
         sections?: FormularioSection[];
       };
       const data = await service.update(id, body);
-      res.json({ success: true, data });
+      return res.json({ success: true, data });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'Formulário não encontrado.') {
@@ -77,7 +77,7 @@ export class FormularioTemplateController {
     try {
       const { id } = req.params;
       await service.delete(id);
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
       if (msg === 'Formulário não encontrado.') {
