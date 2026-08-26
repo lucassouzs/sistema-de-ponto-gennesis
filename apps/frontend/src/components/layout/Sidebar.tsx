@@ -1316,6 +1316,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               isAdministrator ||
               can(pk('/ponto/espelho-nf/codigos-tributarios')),
             section: 'Nota Fiscal'
+          },
+          {
+            name: 'Formulários',
+            href: '/ponto/formularios',
+            icon: ClipboardList,
+            description: 'Criar e editar estrutura de formulários',
+            permission: isAdministrator || can(pk('/ponto/formularios')),
+            section: 'Geral'
           }
         ]
       },

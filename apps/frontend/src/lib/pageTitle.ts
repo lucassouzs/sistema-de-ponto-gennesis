@@ -19,6 +19,7 @@ const EXTRA_PAGE_TITLES: Record<string, { title: string; category?: string; href
     category: 'Cadastros',
   },
   '/ponto/veiculos': { title: 'Veículos', category: 'Cadastros' },
+  '/ponto/formularios': { title: 'Formulários', category: 'Cadastros' },
   '/ponto/seguranca-do-trabalho': {
     title: 'Segurança do Trabalho',
     category: 'Departamento Pessoal',

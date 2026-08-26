@@ -304,6 +304,7 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/regioes-postos-combustivel',
       '/ponto/condicoes-pagamento',
       '/ponto/natureza-orcamentaria',
+      '/ponto/formularios',
       '/ponto/prestadores-servico',
       '/ponto/tomadores-servico',
       '/ponto/contas-bancarias',
