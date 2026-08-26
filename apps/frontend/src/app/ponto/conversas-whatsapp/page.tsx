@@ -633,9 +633,9 @@ function ConversasWhatsAppPageContent() {
 
   if (loadingUser) {
     return (
-      <MainLayout userRole="EMPLOYEE" userName={userData?.data?.name ?? ''} onLogout={handleLogout}>
-          <Loading message="Carregando..." fullScreen size="lg" />
-        </MainLayout>
+      <MainLayout userRole="EMPLOYEE" userName="" onLogout={handleLogout}>
+        <Loading message="Carregando..." fullScreen size="lg" />
+      </MainLayout>
     );
   }
 
