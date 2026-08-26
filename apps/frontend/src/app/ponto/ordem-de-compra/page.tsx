@@ -62,11 +62,17 @@ export default function OrdemDeCompraPage() {
   const allOrders: PurchaseOrder[] = ordersData?.data || [];
   const tabCounts = useMemo(() => computeOcTabCounts(allOrders), [allOrders]);
 
-  if (loadingUser) {
-    return <Loading message="Carregando ordens de compra..." fullScreen size="lg" />;
-  }
-
   const displayUser = user || { name: 'Usuário', role: 'EMPLOYEE' as const };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/ordem-de-compra">
+        <MainLayout userRole={displayUser.role || 'EMPLOYEE'} userName={displayUser.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/ordem-de-compra">

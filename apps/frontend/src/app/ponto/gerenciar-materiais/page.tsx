@@ -785,11 +785,11 @@ export default function GerenciarMateriaisPage() {
 
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/gerenciar-materiais">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 

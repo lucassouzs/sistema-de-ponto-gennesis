@@ -1120,11 +1120,19 @@ export default function SegurancaDoTrabalhoPage() {
     router.push('/auth/login');
   };
 
+  const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
+
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/seguranca-do-trabalho">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
-  const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
+  
   const registros: AsoRegistro[] = listData?.items || [];
   const pagination = listData?.pagination || { page: 1, limit: 20, total: 0, totalPages: 1 };
 

@@ -2294,7 +2294,13 @@ export default function LicitacoesPncpPage() {
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' as const };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/licitacoes-pncp">
+        <MainLayout userRole="EMPLOYEE" userName={user.name || ''} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (

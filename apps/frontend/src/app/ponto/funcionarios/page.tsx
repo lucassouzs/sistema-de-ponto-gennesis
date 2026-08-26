@@ -105,20 +105,22 @@ export default function FuncionariosPage() {
   };
 
   // Mostrar loading no padrão das outras páginas
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando funcionários..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/funcionarios">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   return (
     <ProtectedRoute route="/ponto/funcionarios">

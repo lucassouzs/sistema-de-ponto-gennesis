@@ -710,7 +710,13 @@ export function GerenciarSolicitacoesGeraisPage({
   const hideTableColumns = !loadingList && filteredRequests.length === 0;
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route={scopeConfig.route}>
+        <MainLayout userRole={'EMPLOYEE'} userName={user?.name || ''} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (

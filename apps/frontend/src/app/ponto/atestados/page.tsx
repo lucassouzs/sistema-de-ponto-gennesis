@@ -34,20 +34,20 @@ function AtestadosPageContent() {
     setActiveTab('list');
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando atestados..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+    );
+  }
+
+  
 
   return (
     <MainLayout 

@@ -262,11 +262,11 @@ export default function CentrosCustoPage() {
 
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/centros-custo">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 

@@ -92,21 +92,23 @@ export default function AniversariantesPage() {
     enabled: !!userData?.data
   });
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando aniversariantes..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     cpf: '000.000.000-00',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/aniversariantes">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   const birthdayResponse: BirthdayResponse = birthdayData?.data || {
     employees: [],

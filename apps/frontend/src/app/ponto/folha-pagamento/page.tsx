@@ -778,21 +778,23 @@ export default function FolhaPagamentoPage() {
     XLSX.writeFile(wb, fileName);
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando folha de pagamento..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     cpf: '000.000.000-00',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/folha-pagamento">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   const payrollData: MonthlyPayrollData | null = payrollResponse?.data || null;
   const employees: PayrollEmployee[] = payrollData?.employees || [];

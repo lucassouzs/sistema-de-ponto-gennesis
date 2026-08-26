@@ -148,20 +148,22 @@ export default function AtestadosPage() {
     });
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando atestados..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/gerenciar-atestados">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   return (
     <ProtectedRoute route="/ponto/gerenciar-atestados">

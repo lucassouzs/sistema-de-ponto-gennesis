@@ -126,7 +126,15 @@ export default function PleitosGeradosPage() {
     }
   }, [rowActionMenu, rows]);
 
-  if (loadingUser) return <Loading message="Carregando..." fullScreen size="lg" />;
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/pleitos-gerados">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/pleitos-gerados">

@@ -40,11 +40,11 @@ export default function SolicitacoesPage() {
 
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/solicitacoes">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 

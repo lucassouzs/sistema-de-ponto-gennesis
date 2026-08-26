@@ -1122,11 +1122,11 @@ export default function MateriaisConstrucaoPage() {
 
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/materiais-construcao">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 

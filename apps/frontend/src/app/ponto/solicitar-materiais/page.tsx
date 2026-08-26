@@ -27,6 +27,9 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import {
+  CadastroListLoading,
+} from '@/components/ui/CadastroListSummary';
 import { AppModalTabButton } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { fixMojibakeFileName } from '@/lib/fixMojibakeFileName';
@@ -1706,11 +1709,11 @@ function SolicitarMateriaisPage() {
 
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/solicitar-materiais">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 
@@ -2119,9 +2122,7 @@ function SolicitarMateriaisPage() {
             </CardHeader>
             <CardContent>
               {loadingRequests ? (
-                <div className="text-center py-8">
-                  <Loading message="Carregando solicitações..." />
-                </div>
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : hasRequestsError ? (
                 <div className="text-center py-8">
                   <p className="text-red-600 dark:text-red-400">

@@ -170,20 +170,27 @@ function GerenciarFeriasPageContent() {
     }
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <MainLayout
+        userRole={user.role}
+        userName={user.name}
+        onLogout={() => {
+          localStorage.removeItem('token');
+          router.push('/auth/login');
+        }}
+      >
+        <Loading message="Carregando..." fullScreen size="lg" />
+      </MainLayout>
+    );
+  }
+
+  
 
   const pendingVacationsList: Vacation[] = pendingVacations?.data || [];
   const allVacationsList: Vacation[] = allVacations?.data || [];
