@@ -267,7 +267,7 @@ export class QuoteMapService {
 
         sections.push({
           isQuoteComparison: true,
-          wonItemCount: items.filter((it) => it.isWinner).length,
+          wonItemCount: items.filter((it: { isWinner: boolean }) => it.isWinner).length,
           paymentType: qs.paymentType,
           paymentCondition: qs.paymentCondition,
           paymentDetails: qs.paymentDetails,
