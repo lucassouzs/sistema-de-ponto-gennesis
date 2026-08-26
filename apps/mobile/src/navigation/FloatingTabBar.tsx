@@ -37,11 +37,11 @@ const ICONS: Record<string, TabIcon> = {
 
 const SHORT_LABELS: Record<string, string> = {
   Home: 'Início',
-  Combustivel: 'Combustível',
-  Reservas: 'Reservas',
+  Combustivel: 'Abastecimento',
+  Reservas: 'Veículos',
   DpRequests: 'Solicitações',
-  Fuel: 'Combustível',
-  Vehicle: 'Reservas',
+  Fuel: 'Abastecimento',
+  Vehicle: 'Veículos',
 };
 
 const FAB_TABS = new Set(['Combustivel', 'Reservas', 'Fuel', 'Vehicle', 'DpRequests']);
@@ -152,7 +152,13 @@ function TabItem({
               <TabIconView icon={icon} color={activeColor} />
             </Animated.View>
           </View>
-          <Animated.Text style={[styles.label, { color: tint }]} numberOfLines={1}>
+          <Animated.Text
+            style={[styles.label, { color: tint }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.68}
+            allowFontScaling={false}
+          >
             {label}
           </Animated.Text>
         </Animated.View>
@@ -632,6 +638,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
     zIndex: 2,
+    width: '100%',
+    paddingHorizontal: 2,
   },
   iconStack: {
     width: 22,
@@ -647,7 +655,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 10,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
+    textAlign: 'center',
+    width: '100%',
+    paddingHorizontal: 1,
   },
   fab: {
     width: BAR_HEIGHT,

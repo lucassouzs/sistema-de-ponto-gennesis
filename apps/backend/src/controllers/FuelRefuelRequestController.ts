@@ -108,7 +108,7 @@ const reportSchema = z.object({
 async function resolveDriverContext(
   requesterId: string,
   opts?: { driverCpf?: string | null; driverUserId?: string | null },
-): Promise<{ driverName: string; costCenterLabel: string }> {
+): Promise<{ driverName: string; costCenterLabel: string; contractId?: string | null }> {
   const driverUserId = opts?.driverUserId?.trim();
   if (driverUserId) {
     const user = await prisma.user.findUnique({
@@ -133,9 +133,13 @@ async function resolveDriverContext(
       department: null,
       position: null,
     };
-    const ctx = resolveFuelRequestContextFromEmployee(asLookup);
+    const ctx = await resolveFuelRequestContextFromEmployee(asLookup);
     if (!ctx.ok) throw createError(ctx.message, 400);
-    return { driverName: user.name, costCenterLabel: ctx.costCenterLabel };
+    return {
+      driverName: user.name,
+      costCenterLabel: ctx.costCenterLabel,
+      contractId: ctx.contractId,
+    };
   }
 
   const cpfRaw = opts?.driverCpf?.trim();
@@ -147,9 +151,13 @@ async function resolveDriverContext(
     if (!employee) {
       throw createError('Condutor não encontrado. Verifique o CPF cadastrado.', 404);
     }
-    const ctx = resolveFuelRequestContextFromEmployee(employee);
+    const ctx = await resolveFuelRequestContextFromEmployee(employee);
     if (!ctx.ok) throw createError(ctx.message, 400);
-    return { driverName: employee.name, costCenterLabel: ctx.costCenterLabel };
+    return {
+      driverName: employee.name,
+      costCenterLabel: ctx.costCenterLabel,
+      contractId: ctx.contractId,
+    };
   }
 
   const user = await prisma.user.findUnique({
@@ -178,9 +186,13 @@ async function resolveDriverContext(
     department: null,
     position: null,
   };
-  const ctx = resolveFuelRequestContextFromEmployee(asLookup);
+  const ctx = await resolveFuelRequestContextFromEmployee(asLookup);
   if (!ctx.ok) throw createError(ctx.message, 400);
-  return { driverName: user.name, costCenterLabel: ctx.costCenterLabel };
+  return {
+    driverName: user.name,
+    costCenterLabel: ctx.costCenterLabel,
+    contractId: ctx.contractId,
+  };
 }
 
 function mapManagerScopeToFuelWhere(
@@ -222,7 +234,7 @@ export class FuelRefuelRequestController {
       const employee = await findEmployeeByCpf(cpf);
       if (!employee) throw createError('Colaborador não encontrado', 404);
 
-      const ctx = resolveFuelRequestContextFromEmployee(employee);
+      const ctx = await resolveFuelRequestContextFromEmployee(employee);
       if (!ctx.ok) {
         return res.json({
           success: true,
@@ -230,6 +242,7 @@ export class FuelRefuelRequestController {
             name: employee.name,
             cpf: employee.cpfMasked,
             costCenter: null,
+            contractId: null,
             ok: false,
             message: ctx.message,
           },
@@ -242,6 +255,7 @@ export class FuelRefuelRequestController {
           name: employee.name,
           cpf: employee.cpfMasked,
           costCenter: ctx.costCenterLabel,
+          contractId: ctx.contractId || null,
           ok: true,
         },
       });
@@ -346,10 +360,11 @@ export class FuelRefuelRequestController {
         throw createError('Data inválida', 400);
       }
 
-      const { driverName, costCenterLabel } = await resolveDriverContext(user.id, {
-        driverCpf: body.driverCpf,
-        driverUserId: body.driverUserId,
-      });
+      const { driverName, costCenterLabel, contractId: driverContractId } =
+        await resolveDriverContext(user.id, {
+          driverCpf: body.driverCpf,
+          driverUserId: body.driverUserId,
+        });
 
       if (!body.dashboardPhotoBase64.includes('base64,')) {
         throw createError('Foto do painel inválida', 400);
@@ -366,7 +381,7 @@ export class FuelRefuelRequestController {
         refuelDate,
         route: body.route,
         satelliteCityCode: body.satelliteCityCode,
-        contractId: body.contractId,
+        contractId: body.contractId || driverContractId || undefined,
         costCenter: costCenterLabel,
         driverName,
         vehiclePlate: body.vehiclePlate,

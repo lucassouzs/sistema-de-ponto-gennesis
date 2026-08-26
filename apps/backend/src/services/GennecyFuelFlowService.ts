@@ -16,6 +16,10 @@ import {
   formatFuelOutsideHoursWarning,
 } from '../lib/fuelAttendanceHours';
 import { getPhotoAttachmentFromMessage, hasStoredPhoto } from '../lib/flowMedia';
+import {
+  getFuelSatelliteCityByCode,
+  listFuelSatelliteCities,
+} from '../constants/fuelSatelliteCities';
 import { fuelRefuelRequestService } from './FuelRefuelRequestService';
 
 const FLOW_TYPE = 'FUEL_REFUEL';
@@ -24,6 +28,8 @@ type FuelFlowStep =
   | 'MENU'
   | 'ASK_REFUEL_DATE'
   | 'ASK_ROUTE'
+  | 'ASK_FUEL_STATE'
+  | 'ASK_ADMIN_REGION'
   | 'ASK_DRIVER_CPF'
   | 'ASK_VEHICLE'
   | 'ASK_VEHICLE_TYPE'
@@ -34,6 +40,9 @@ type FuelFlowStep =
 type FuelFlowPayload = {
   refuelDate?: string;
   route?: string;
+  fuelStateCode?: string;
+  satelliteCityCode?: string;
+  administrativeRegionName?: string;
   contractId?: string;
   costCenter?: string | null;
   costCenterLabel?: string;
@@ -133,14 +142,20 @@ function buildSummary(payload: FuelFlowPayload): string {
     payload.vehicleType === FuelVehicleType.PRIVATE
       ? 'Após confirmar, seguirá para aprovação do gestor e depois Suprimentos.'
       : 'Após confirmar, seguirá direto para a fila do Suprimentos.';
+  const regionLabel = payload.fuelStateCode
+    ? `${payload.administrativeRegionName || '—'} (${payload.fuelStateCode})`
+    : payload.administrativeRegionName || '—';
+  const vehicleDescription = payload.vehicleDescription?.trim();
 
   return [
     '📋 Resumo da solicitação de abastecimento:',
     `• Data para abastecer: ${payload.refuelDate ? formatBrDate(payload.refuelDate) : '—'}`,
     `• Rota: ${payload.route || '—'}`,
+    `• Região administrativa: ${regionLabel}`,
     `• Contrato: ${payload.costCenterLabel || payload.costCenter || '—'}`,
     `• Condutor: ${payload.driverName || '—'}${payload.driverCpfMasked ? ` (CPF ${payload.driverCpfMasked})` : ''}`,
     `• Veículo: ${payload.vehiclePlate || '—'}`,
+    ...(vehicleDescription ? [`• Modelo: ${vehicleDescription}`] : []),
     `• Tipo: ${vehicleTypeLabel(payload.vehicleType)}`,
     `• Foto do painel: ${hasStoredPhoto(payload.dashboardPhotoUrl, payload.dashboardPhotoKey) ? '✅ enviada' : '—'}`,
     `• Observações: ${payload.observations?.trim() || '—'}`,
@@ -298,9 +313,81 @@ export class GennecyFuelFlowService {
         if (body.length < 2) {
           return { handled: true, reply: 'Informe a rota (mínimo 2 caracteres).' };
         }
-        await upsertSession(params.chatId, params.userId, 'ASK_DRIVER_CPF', {
+        await upsertSession(params.chatId, params.userId, 'ASK_FUEL_STATE', {
           ...payload,
           route: body,
+        });
+        return {
+          handled: true,
+          reply: 'Qual o estado da região administrativa?\nDigite **DF** ou **GO**.',
+        };
+      }
+
+      case 'ASK_FUEL_STATE': {
+        const text = body.trim().toUpperCase();
+        const stateCode =
+          text === 'DF' || text.includes('DISTRITO')
+            ? 'DF'
+            : text === 'GO' || text.includes('GOI')
+              ? 'GO'
+              : null;
+        if (!stateCode) {
+          return { handled: true, reply: 'Informe **DF** ou **GO**.' };
+        }
+        const cities = listFuelSatelliteCities(stateCode);
+        if (!cities.length) {
+          return {
+            handled: true,
+            reply: `Não há cidades cadastradas para ${stateCode}. Fale com o Suprimentos.`,
+          };
+        }
+        await upsertSession(params.chatId, params.userId, 'ASK_ADMIN_REGION', {
+          ...payload,
+          fuelStateCode: stateCode,
+        });
+        const list = cities
+          .slice(0, 20)
+          .map((c, i) => `${i + 1}. ${c.name}`)
+          .join('\n');
+        return {
+          handled: true,
+          reply: [
+            `Selecione a região administrativa em **${stateCode}**:`,
+            list,
+            cities.length > 20 ? `… e mais ${cities.length - 20} (digite o nome).` : '',
+            '',
+            'Digite o **número** ou o **nome** da cidade.',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        };
+      }
+
+      case 'ASK_ADMIN_REGION': {
+        const stateCode = payload.fuelStateCode || '';
+        const cities = listFuelSatelliteCities(stateCode);
+        const asNumber = Number.parseInt(body.replace(/\D/g, ''), 10);
+        let city =
+          Number.isFinite(asNumber) && asNumber >= 1 && asNumber <= cities.length
+            ? cities[asNumber - 1]
+            : cities.find(
+                (c) => c.name.toLowerCase() === body.trim().toLowerCase(),
+              );
+        if (!city) {
+          city = cities.find((c) =>
+            c.name.toLowerCase().includes(body.trim().toLowerCase()),
+          );
+        }
+        if (!city) {
+          return {
+            handled: true,
+            reply: 'Cidade não encontrada. Digite o número da lista ou o nome completo.',
+          };
+        }
+        await upsertSession(params.chatId, params.userId, 'ASK_DRIVER_CPF', {
+          ...payload,
+          satelliteCityCode: city.code,
+          administrativeRegionName: city.name,
         });
         return {
           handled: true,
@@ -333,7 +420,7 @@ export class GennecyFuelFlowService {
           };
         }
 
-        const ctx = resolveFuelRequestContextFromEmployee(employee);
+        const ctx = await resolveFuelRequestContextFromEmployee(employee);
         if (!ctx.ok) {
           return { handled: true, reply: ctx.message };
         }
@@ -343,8 +430,9 @@ export class GennecyFuelFlowService {
           driverName: employee.name,
           driverCpfMasked: employee.cpfMasked,
           driverEmployeeId: employee.employeeId,
-          costCenter: employee.costCenter,
+          costCenter: ctx.costCenterRaw || employee.costCenter,
           costCenterLabel: ctx.costCenterLabel,
+          contractId: ctx.contractId || undefined,
         });
         return {
           handled: true,
@@ -352,7 +440,7 @@ export class GennecyFuelFlowService {
             `✅ Identifiquei **${employee.name}** (CPF ${employee.cpfMasked}).`,
             `Contrato: **${ctx.costCenterLabel}**`,
             '',
-            'Qual o veículo? Informe a placa ou identificação (ex.: ABC1D23 — Strada).',
+            'Qual o veículo? Informe a placa (ex.: ABC1D23) ou placa — modelo (ex.: ABC1D23 — Strada).',
           ].join('\n'),
         };
       }
@@ -454,6 +542,7 @@ export class GennecyFuelFlowService {
         if (
           !payload.refuelDate ||
           !payload.route ||
+          !payload.satelliteCityCode ||
           !(payload.costCenterLabel || payload.costCenter) ||
           !payload.driverName ||
           !payload.vehiclePlate ||
@@ -467,10 +556,20 @@ export class GennecyFuelFlowService {
           };
         }
 
+        if (!getFuelSatelliteCityByCode(payload.satelliteCityCode)) {
+          await cancelSession(params.chatId, params.userId);
+          return {
+            handled: true,
+            reply: 'Cidade inválida na solicitação. Digite «1» para recomeçar.',
+          };
+        }
+
         const created = await fuelRefuelRequestService.create({
           requesterId: params.userId,
           refuelDate: new Date(`${payload.refuelDate}T12:00:00`),
           route: payload.route,
+          satelliteCityCode: payload.satelliteCityCode,
+          contractId: payload.contractId,
           costCenter: payload.costCenterLabel || payload.costCenter || null,
           driverName: payload.driverName,
           vehiclePlate: payload.vehiclePlate,

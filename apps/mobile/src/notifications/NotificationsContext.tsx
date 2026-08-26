@@ -144,20 +144,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     try {
       const [fuelRes, reservationRes] = await Promise.all([
         api.get('/api/fuel-refuel-requests/mine'),
-        api.get('/api/vehicle-reservations?limit=100&page=1'),
+        api.get('/api/vehicle-reservations/mine?limit=100&page=1'),
       ]);
 
       const fuelJson = await fuelRes.json().catch(() => ({}));
       const reservationJson = await reservationRes.json().catch(() => ({}));
 
       const fuelRows = (fuelRes.ok ? (fuelJson?.data || []) : []) as FuelRow[];
-      const allReservations = (reservationRes.ok ? (reservationJson?.data || []) : []) as ReservationRow[];
-      const myReservations = allReservations.filter(
-        (r) =>
-          r.createdBy?.id === user.id ||
-          r.createdById === user.id ||
-          r.solicitante === user.name,
-      );
+      const myReservations = (reservationRes.ok ? (reservationJson?.data || []) : []) as ReservationRow[];
 
       const normalized = [
         ...fuelRows.map((r) => ({

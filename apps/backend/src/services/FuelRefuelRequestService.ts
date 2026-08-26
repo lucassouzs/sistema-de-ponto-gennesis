@@ -248,7 +248,7 @@ export class FuelRefuelRequestService {
     });
     if (!contract) throw createError('Contrato não encontrado', 404);
 
-    const costCenterLabel = [contract.number, contract.name].filter(Boolean).join(' — ') || contract.name;
+    const costCenterLabel = contract.name.trim() || contract.number;
 
     const updated = await prisma.fuelRefuelRequest.update({
       where: { id },

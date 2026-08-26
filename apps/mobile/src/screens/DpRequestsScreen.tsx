@@ -878,7 +878,7 @@ export default function DpRequestsScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <AppHeader
         showBack={!isTabScreen}
-        title={!isTabScreen ? 'Solicitações' : undefined}
+        title={!isTabScreen ? 'Solicitações Internas' : undefined}
         onBack={() => navigation.goBack()}
         rightAction={
           !isTabScreen ? (
@@ -903,7 +903,7 @@ export default function DpRequestsScreen() {
         showsVerticalScrollIndicator={false}
       >
         {isTabScreen ? (
-          <Text style={styles.pageTitle}>Solicitações</Text>
+          <Text style={styles.pageTitle}>Solicitações Internas</Text>
         ) : null}
         <Text style={styles.pageSubtitle}>
           Crie e acompanhe pedidos ao DP e ADM/TST
@@ -965,8 +965,8 @@ export default function DpRequestsScreen() {
         <View style={styles.listHeader}>
           <Text style={styles.listHeading}>
             {destFilter === 'all'
-              ? 'Solicitações'
-              : filterChips.find((c) => c.key === destFilter)?.label || 'Solicitações'}
+              ? 'Minhas Solicitações'
+              : filterChips.find((c) => c.key === destFilter)?.label || 'Minhas Solicitações'}
           </Text>
           <Text style={styles.listHeadingMeta}>{filtered.length}</Text>
         </View>
@@ -2120,10 +2120,10 @@ export default function DpRequestsScreen() {
                 <X size={18} color={colors.text} strokeWidth={2.2} />
               </TouchableOpacity>
             </View>
-            <View style={[styles.searchBox, { marginBottom: 12 }]}>
-              <Search size={18} color={colors.textSecondary} />
+            <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
+              <Search size={16} color={colors.textSecondary} />
               <TextInput
-                style={styles.searchInput}
+                style={styles.pickerSearchInput}
                 placeholder="Buscar..."
                 placeholderTextColor={colors.textSecondary}
                 value={pickerSearch}
@@ -2706,6 +2706,23 @@ function getStyles(colors: any, isDark: boolean) {
       borderTopRightRadius: 22,
       paddingHorizontal: 16,
       paddingBottom: 12,
+    },
+    pickerSearchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 40,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    pickerSearchInput: {
+      flex: 1,
+      paddingVertical: 0,
+      color: colors.text,
+      fontSize: 14,
     },
     pickerHandle: {
       alignSelf: 'center',

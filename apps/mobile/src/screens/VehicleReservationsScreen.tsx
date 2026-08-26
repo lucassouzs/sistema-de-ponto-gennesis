@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Alert,
   Linking,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -52,7 +53,7 @@ type VehicleReservationStatus =
   | 'REJECTED'
   | 'CANCELLED';
 
-type CardFilter = 'all' | 'pending' | 'concluded' | 'cancelled';
+type CardFilter = 'all' | 'pending' | 'in_use' | 'concluded' | 'cancelled';
 
 type VehicleReservation = {
   id: string;
@@ -402,6 +403,7 @@ export default function VehicleReservationsScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const styles = getStyles(colors, isDark);
 
   const [rows, setRows] = useState<VehicleReservation[]>([]);
@@ -437,17 +439,10 @@ export default function VehicleReservationsScreen() {
 
   const loadList = useCallback(async () => {
     try {
-      const res = await api.get('/api/vehicle-reservations?limit=100&page=1');
+      const res = await api.get('/api/vehicle-reservations/mine?limit=100&page=1');
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || data?.error || 'Erro ao carregar');
-      const all = (data?.data || []) as VehicleReservation[];
-      const mine = all.filter(
-        (r) =>
-          r.createdBy?.id === user?.id ||
-          r.createdById === user?.id ||
-          r.solicitante === user?.name,
-      );
-      setRows(mine);
+      setRows((data?.data || []) as VehicleReservation[]);
     } catch (e: any) {
       Toast.show({
         type: 'error',
@@ -458,7 +453,7 @@ export default function VehicleReservationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, user?.name]);
+  }, []);
 
   useEffect(() => {
     void loadList();
@@ -525,14 +520,16 @@ export default function VehicleReservationsScreen() {
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => isPending(r.status)).length;
+    const inUse = rows.filter((r) => r.status === 'APPROVED').length;
     const concluded = rows.filter((r) => r.status === 'INSPECTED').length;
     const cancelled = rows.filter((r) => isCancelled(r.status)).length;
-    return { total: rows.length, pending, concluded, cancelled };
+    return { total: rows.length, pending, inUse, concluded, cancelled };
   }, [rows]);
 
   const filteredRows = useMemo(() => {
     let list = rows;
     if (cardFilter === 'pending') list = list.filter((r) => isPending(r.status));
+    if (cardFilter === 'in_use') list = list.filter((r) => r.status === 'APPROVED');
     if (cardFilter === 'concluded') list = list.filter((r) => r.status === 'INSPECTED');
     if (cardFilter === 'cancelled') list = list.filter((r) => isCancelled(r.status));
     if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
@@ -682,9 +679,115 @@ export default function VehicleReservationsScreen() {
   const chips: { key: CardFilter; label: string; count: number; Icon: any }[] = [
     { key: 'all', label: 'Todas', count: counts.total, Icon: Car },
     { key: 'pending', label: 'Pendentes', count: counts.pending, Icon: Clock },
+    { key: 'in_use', label: 'Em uso', count: counts.inUse, Icon: Car },
     { key: 'concluded', label: 'Vistoriadas', count: counts.concluded, Icon: CheckCircle },
     { key: 'cancelled', label: 'Canceladas', count: counts.cancelled, Icon: XCircle },
   ];
+
+  const closeForm = () => {
+    setShowForm(false);
+    setPicker(null);
+    setPickerSearch('');
+  };
+
+  const renderPickerOverlay = () => {
+    if (!picker) return null;
+    return (
+      <View style={[styles.pickerOverlay, styles.pickerOverlayAbsolute]}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setPicker(null)}
+        />
+        <View
+          style={[
+            styles.pickerSheet,
+            {
+              backgroundColor: colors.background,
+              height: Math.round(windowHeight * 0.72),
+            },
+          ]}
+        >
+          <View style={styles.pickerHandle} />
+          <View style={styles.pickerHeader}>
+            <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker.title}</Text>
+            <TouchableOpacity
+              onPress={() => setPicker(null)}
+              style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+            >
+              <X size={18} color={colors.text} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
+            <Search size={16} color={colors.textSecondary} />
+            <TextInput
+              style={styles.pickerSearchInput}
+              placeholder="Buscar..."
+              placeholderTextColor={colors.textSecondary}
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+            />
+          </View>
+          <FlatList
+            style={{ flex: 1 }}
+            data={pickerFiltered}
+            keyExtractor={(item) => item.value}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.pickerItem,
+                  { backgroundColor: isDark ? colors.card : colors.surface },
+                ]}
+                onPress={() => {
+                  picker.onSelect(item.value);
+                  setPicker(null);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 15,
+                    fontWeight: '600',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  {item.label}
+                </Text>
+                {item.subtitle ? (
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                      marginTop: 3,
+                      fontWeight: '500',
+                    }}
+                  >
+                    {item.subtitle}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text
+                style={{
+                  textAlign: 'center',
+                  color: colors.textSecondary,
+                  padding: 28,
+                  fontWeight: '500',
+                }}
+              >
+                Nenhum resultado
+              </Text>
+            }
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 24), gap: 8 }}
+          />
+        </View>
+      </View>
+    );
+  };
 
   const canReturn = (r: VehicleReservation) =>
     r.status === 'APPROVED' &&
@@ -758,7 +861,7 @@ export default function VehicleReservationsScreen() {
           />
         }
       >
-        <Text style={styles.pageTitle}>Reservas</Text>
+        <Text style={styles.pageTitle}>Reservar Veículo</Text>
         <Text style={styles.pageSubtitle}>
           Reserve veículos e acompanhe o status
         </Text>
@@ -817,8 +920,8 @@ export default function VehicleReservationsScreen() {
             {statusFilter !== 'all'
               ? STATUS_LABELS[statusFilter]
               : cardFilter === 'all'
-                ? 'Reservas'
-                : chips.find((c) => c.key === cardFilter)?.label || 'Reservas'}
+                ? 'Minhas Reservas'
+                : chips.find((c) => c.key === cardFilter)?.label || 'Minhas Reservas'}
           </Text>
           <Text style={styles.listHeadingMeta}>{filteredRows.length}</Text>
         </View>
@@ -1269,7 +1372,7 @@ export default function VehicleReservationsScreen() {
         visible={showForm}
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setShowForm(false)}
+        onRequestClose={closeForm}
       >
         <View
           style={[
@@ -1291,7 +1394,7 @@ export default function VehicleReservationsScreen() {
                 <Text style={styles.formSubtitle}>Agende o uso do veículo</Text>
               </View>
               <TouchableOpacity
-                onPress={() => setShowForm(false)}
+                onPress={closeForm}
                 style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
@@ -1459,6 +1562,7 @@ export default function VehicleReservationsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
+          {renderPickerOverlay()}
         </View>
       </Modal>
 
@@ -1558,63 +1662,13 @@ export default function VehicleReservationsScreen() {
       </Modal>
 
       {/* Picker */}
-      <Modal visible={!!picker} animationType="slide" transparent onRequestClose={() => setPicker(null)}>
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setPicker(null)} />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker?.title}</Text>
-              <TouchableOpacity
-                onPress={() => setPicker(null)}
-                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
-              >
-                <X size={18} color={colors.text} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.searchBox, { marginBottom: 12 }]}>
-              <Search size={18} color={colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar..."
-                placeholderTextColor={colors.textSecondary}
-                value={pickerSearch}
-                onChangeText={setPickerSearch}
-              />
-            </View>
-            <FlatList
-              data={pickerFiltered}
-              keyExtractor={(item) => item.value}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : colors.surface }]}
-                  onPress={() => {
-                    picker?.onSelect(item.value);
-                    setPicker(null);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
-                    {item.label}
-                  </Text>
-                  {item.subtitle ? (
-                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 3, fontWeight: '500' }}>
-                      {item.subtitle}
-                    </Text>
-                  ) : null}
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <Text style={{ textAlign: 'center', color: colors.textSecondary, padding: 28, fontWeight: '500' }}>
-                  Nenhum resultado
-                </Text>
-              }
-              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
-            />
-          </View>
-        </View>
+      <Modal
+        visible={Boolean(picker) && !showForm}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPicker(null)}
+      >
+        <View style={{ flex: 1 }}>{renderPickerOverlay()}</View>
       </Modal>
     </View>
   );
@@ -2022,13 +2076,34 @@ const getStyles = (colors: any, isDark: boolean) =>
       backgroundColor: 'rgba(0,0,0,0.45)',
       justifyContent: 'flex-end',
     },
+    pickerOverlayAbsolute: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 100,
+      elevation: 100,
+    },
     pickerSheet: {
-      maxHeight: '78%',
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 8,
+    },
+    pickerSearchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 40,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    pickerSearchInput: {
+      flex: 1,
+      paddingVertical: 0,
+      color: colors.text,
+      fontSize: 14,
     },
     pickerHandle: {
       alignSelf: 'center',

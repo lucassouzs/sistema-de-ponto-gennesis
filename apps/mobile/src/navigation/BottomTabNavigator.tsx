@@ -53,14 +53,14 @@ export default function BottomTabNavigator() {
         <Tab.Screen
           name="Combustivel"
           component={FuelRequestsScreen}
-          options={{ title: 'Combustível' }}
+          options={{ title: 'Abastecimento' }}
         />
       ) : null}
       {canSeeReservas ? (
         <Tab.Screen
           name="Reservas"
           component={VehicleReservationsScreen}
-          options={{ title: 'Reservas' }}
+          options={{ title: 'Veículos' }}
         />
       ) : null}
       {canSeeDpRequests ? (

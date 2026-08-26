@@ -14,6 +14,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -50,7 +51,7 @@ type FuelRefuelStatus =
   | 'REJECTED'
   | 'CANCELLED';
 
-type CardFilter = 'all' | 'pending' | 'concluded' | 'cancelled';
+type CardFilter = 'all' | 'pending' | 'liberado' | 'concluded' | 'cancelled';
 
 type FuelRefuelDeadlineUnit = 'HOURS' | 'DAYS';
 type FuelTankLevelAfter = 'RESERVE' | 'QUARTER' | 'HALF' | 'THREE_QUARTERS' | 'FULL';
@@ -62,9 +63,16 @@ type FuelRequestRow = {
   route: string;
   driverName: string;
   vehiclePlate: string;
+  vehicleDescription?: string | null;
   vehicleType: FuelVehicleType;
   status: FuelRefuelStatus;
   satelliteCityName?: string | null;
+  costCenter?: string | null;
+  contract?: {
+    id: string;
+    name: string;
+    number?: string | null;
+  } | null;
   observations?: string | null;
   gasStation?: {
     id: string;
@@ -117,7 +125,7 @@ type FormState = {
 const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
   PENDING_MANAGER: 'Aguardando gestor',
   PENDING_SUPPLIES: 'Aguardando Suprimentos',
-  AWAITING_REFUEL: 'Aguardando abastecimento',
+  AWAITING_REFUEL: 'Abastecimento Liberado',
   COMPLETED: 'Concluída',
   APPROVED: 'Aguardando Suprimentos',
   REJECTED: 'Rejeitada',
@@ -128,6 +136,27 @@ const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
   COMPANY: 'Frota',
 };
+
+function extractContractDisplayName(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return trimmed;
+  if (/^\d+\/\d+/.test(parts[0])) return parts.slice(1).join(' — ');
+  return parts[parts.length - 1];
+}
+
+function fuelContractLabel(row: {
+  costCenter?: string | null;
+  contract?: { number?: string | null; name?: string | null } | null;
+}): string {
+  const name = row.contract?.name?.trim();
+  const number = row.contract?.number?.trim();
+  if (name) return extractContractDisplayName(name);
+  if (row.costCenter?.trim()) return extractContractDisplayName(row.costCenter.trim());
+  if (number) return number;
+  return '—';
+}
 
 const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
   { value: 'RESERVE', label: 'Reserva' },
@@ -189,9 +218,12 @@ function isPendingStatus(status: FuelRefuelStatus) {
   return (
     status === 'PENDING_MANAGER' ||
     status === 'PENDING_SUPPLIES' ||
-    status === 'AWAITING_REFUEL' ||
     status === 'APPROVED'
   );
+}
+
+function isLiberadoStatus(status: FuelRefuelStatus) {
+  return status === 'AWAITING_REFUEL';
 }
 
 function isCancelledStatus(status: FuelRefuelStatus) {
@@ -324,6 +356,7 @@ export default function FuelRequestsScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const styles = getStyles(colors, isDark);
 
   const [rows, setRows] = useState<FuelRequestRow[]>([]);
@@ -438,14 +471,16 @@ export default function FuelRequestsScreen() {
 
   const counts = useMemo(() => {
     const pending = rows.filter((r) => isPendingStatus(r.status)).length;
+    const liberado = rows.filter((r) => isLiberadoStatus(r.status)).length;
     const concluded = rows.filter((r) => r.status === 'COMPLETED').length;
     const cancelled = rows.filter((r) => isCancelledStatus(r.status)).length;
-    return { total: rows.length, pending, concluded, cancelled };
+    return { total: rows.length, pending, liberado, concluded, cancelled };
   }, [rows]);
 
   const filteredRows = useMemo(() => {
     let list = rows;
     if (cardFilter === 'pending') list = list.filter((r) => isPendingStatus(r.status));
+    if (cardFilter === 'liberado') list = list.filter((r) => isLiberadoStatus(r.status));
     if (cardFilter === 'concluded') list = list.filter((r) => r.status === 'COMPLETED');
     if (cardFilter === 'cancelled') list = list.filter((r) => isCancelledStatus(r.status));
     if (statusFilter !== 'all') list = list.filter((r) => r.status === statusFilter);
@@ -457,8 +492,11 @@ export default function FuelRequestsScreen() {
           r.route,
           r.driverName,
           r.vehiclePlate,
+          r.vehicleDescription || '',
+          fuelContractLabel(r),
           STATUS_LABELS[r.status],
           r.satelliteCityName || '',
+          r.gasStation?.name || '',
         ]
           .join(' ')
           .toLowerCase()
@@ -688,11 +726,124 @@ export default function FuelRequestsScreen() {
   const filterChips: { key: CardFilter; label: string; count: number; Icon: any }[] = [
     { key: 'all', label: 'Todas', count: counts.total, Icon: Fuel },
     { key: 'pending', label: 'Pendentes', count: counts.pending, Icon: Clock },
+    { key: 'liberado', label: 'Liberado', count: counts.liberado, Icon: Fuel },
     { key: 'concluded', label: 'Concluídas', count: counts.concluded, Icon: CheckCircle },
     { key: 'cancelled', label: 'Canceladas', count: counts.cancelled, Icon: XCircle },
   ];
 
   const canCancel = (row: FuelRequestRow) => row.status === 'PENDING_MANAGER';
+
+  const closeForm = () => {
+    setShowForm(false);
+    setPicker(null);
+    setPickerSearch('');
+  };
+
+  const closeReport = () => {
+    if (reportSubmitting) return;
+    setReportTarget(null);
+    setPicker(null);
+    setPickerSearch('');
+  };
+
+  const renderPickerOverlay = () => {
+    if (!picker) return null;
+    return (
+      <View style={[styles.pickerOverlay, styles.pickerOverlayAbsolute]}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={() => setPicker(null)}
+        />
+        <View
+          style={[
+            styles.pickerSheet,
+            {
+              backgroundColor: colors.background,
+              height: Math.round(windowHeight * 0.72),
+            },
+          ]}
+        >
+          <View style={styles.pickerHandle} />
+          <View style={styles.pickerHeader}>
+            <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker.title}</Text>
+            <TouchableOpacity
+              onPress={() => setPicker(null)}
+              style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+            >
+              <X size={18} color={colors.text} strokeWidth={2.2} />
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
+            <Search size={16} color={colors.textSecondary} />
+            <TextInput
+              style={styles.pickerSearchInput}
+              placeholder="Buscar..."
+              placeholderTextColor={colors.textSecondary}
+              value={pickerSearch}
+              onChangeText={setPickerSearch}
+            />
+          </View>
+          <FlatList
+            style={{ flex: 1 }}
+            data={pickerFiltered}
+            keyExtractor={(item) => item.value}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[
+                  styles.pickerItem,
+                  { backgroundColor: isDark ? colors.card : colors.surface },
+                ]}
+                onPress={() => {
+                  picker.onSelect(item.value);
+                  setPicker(null);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 15,
+                    fontWeight: '600',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  {item.label}
+                </Text>
+                {item.subtitle ? (
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                      marginTop: 3,
+                      fontWeight: '500',
+                    }}
+                  >
+                    {item.subtitle}
+                  </Text>
+                ) : null}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text
+                style={{
+                  textAlign: 'center',
+                  color: colors.textSecondary,
+                  padding: 28,
+                  fontWeight: '500',
+                }}
+              >
+                Nenhum resultado
+              </Text>
+            }
+            contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 24), gap: 8 }}
+          />
+        </View>
+      </View>
+    );
+  };
 
   const cancelRequest = (row: FuelRequestRow) => {
     if (!canCancel(row)) {
@@ -744,7 +895,7 @@ export default function FuelRequestsScreen() {
       <AppHeader
         showBack={!isTabScreen}
         onBack={() => navigation.goBack()}
-        title={!isTabScreen ? 'Combustível' : undefined}
+        title={!isTabScreen ? 'Abastecimento' : undefined}
       />
 
       <ScrollView
@@ -763,7 +914,7 @@ export default function FuelRequestsScreen() {
       >
         {isTabScreen ? (
           <>
-            <Text style={styles.pageTitle}>Combustível</Text>
+            <Text style={styles.pageTitle}>Abastecimento</Text>
             <Text style={styles.pageSubtitle}>
               Solicite e acompanhe abastecimentos
             </Text>
@@ -836,8 +987,8 @@ export default function FuelRequestsScreen() {
             {statusFilter !== 'all'
               ? STATUS_LABELS[statusFilter]
               : cardFilter === 'all'
-                ? 'Solicitações'
-                : filterChips.find((c) => c.key === cardFilter)?.label || 'Solicitações'}
+                ? 'Meus Abastecimentos'
+                : filterChips.find((c) => c.key === cardFilter)?.label || 'Meus Abastecimentos'}
           </Text>
           <Text style={styles.listHeadingMeta}>{filteredRows.length}</Text>
         </View>
@@ -878,17 +1029,26 @@ export default function FuelRequestsScreen() {
                   <Text style={styles.cardRoute} numberOfLines={2}>
                     {row.route}
                   </Text>
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {formatDateLabel(row.refuelDate)}
-                    </Text>
-                    <View style={styles.dot} />
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {row.vehiclePlate}
-                    </Text>
-                  </View>
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {formatDateLabel(row.refuelDate)}
+                  </Text>
+                  <Text style={styles.cardVehicle} numberOfLines={1}>
+                    <Text style={styles.cardPlate}>{row.vehiclePlate}</Text>
+                    {row.vehicleDescription?.trim() ? (
+                      <Text style={styles.cardModel}>
+                        {'  '}
+                        {row.vehicleDescription.trim()}
+                      </Text>
+                    ) : null}
+                  </Text>
                   <Text style={styles.cardSub} numberOfLines={1}>
-                    {[row.driverName, row.satelliteCityName].filter(Boolean).join(' · ')}
+                    {[
+                      row.driverName,
+                      fuelContractLabel(row) !== '—' ? fuelContractLabel(row) : null,
+                      row.satelliteCityName,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                   <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
                     Toque para ver detalhes
@@ -969,7 +1129,7 @@ export default function FuelRequestsScreen() {
         visible={showForm}
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => setShowForm(false)}
+        onRequestClose={closeForm}
       >
         <View
           style={[
@@ -991,7 +1151,7 @@ export default function FuelRequestsScreen() {
                 <Text style={styles.formSubtitle}>Dados do abastecimento</Text>
               </View>
               <TouchableOpacity
-                onPress={() => setShowForm(false)}
+                onPress={closeForm}
                 style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
@@ -1145,9 +1305,7 @@ export default function FuelRequestsScreen() {
                         options: vehicles.map((v) => ({
                           value: v.id,
                           label: v.placaVeic,
-                          subtitle: [v.marcaVeic, v.modeloVeic, v.frotaPartic]
-                            .filter(Boolean)
-                            .join(' · '),
+                          subtitle: [v.marcaVeic, v.modeloVeic].filter(Boolean).join(' · '),
                         })),
                         onSelect: (vehicleId) => {
                           const v = vehicles.find((x) => x.id === vehicleId);
@@ -1168,9 +1326,13 @@ export default function FuelRequestsScreen() {
                   {form.vehicleType ? (
                     <View style={styles.hintChip}>
                       <Text style={styles.hintChipText}>
-                        {form.vehicleType === 'PRIVATE' ? 'Particular' : 'Frota'}
-                        {form.vehicleDescription ? ` · ${form.vehicleDescription}` : ''}
+                        Tipo: {form.vehicleType === 'PRIVATE' ? 'Particular' : 'Frota'}
                       </Text>
+                    </View>
+                  ) : null}
+                  {form.vehicleDescription ? (
+                    <View style={[styles.hintChip, { marginTop: 6 }]}>
+                      <Text style={styles.hintChipText}>Modelo: {form.vehicleDescription}</Text>
                     </View>
                   ) : null}
 
@@ -1235,6 +1397,7 @@ export default function FuelRequestsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
+          {renderPickerOverlay()}
         </View>
       </Modal>
 
@@ -1297,23 +1460,40 @@ export default function FuelRequestsScreen() {
                     </Text>
                   </View>
                   <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Contrato</Text>
+                    <Text style={[styles.releaseValue, { color: colors.text }]}>
+                      {fuelContractLabel(detailTarget)}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
                     <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Condutor</Text>
                     <Text style={[styles.releaseValue, { color: colors.text }]}>
                       {detailTarget.driverName}
                     </Text>
                   </View>
                   <View style={styles.detailField}>
-                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Veículo</Text>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Placa</Text>
                     <Text style={[styles.releaseValue, { color: colors.text }]}>
                       {detailTarget.vehiclePlate}
-                      {detailTarget.vehicleType
-                        ? ` — ${VEHICLE_TYPE_LABELS[detailTarget.vehicleType]}`
-                        : ''}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Modelo</Text>
+                    <Text style={[styles.releaseValue, { color: colors.text }]}>
+                      {detailTarget.vehicleDescription?.trim() || '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Tipo</Text>
+                    <Text style={[styles.releaseValue, { color: colors.text }]}>
+                      {VEHICLE_TYPE_LABELS[detailTarget.vehicleType] || detailTarget.vehicleType}
                     </Text>
                   </View>
                   {detailTarget.satelliteCityName ? (
                     <View style={styles.detailField}>
-                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Cidade</Text>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Região administrativa
+                      </Text>
                       <Text style={[styles.releaseValue, { color: colors.text }]}>
                         {detailTarget.satelliteCityName}
                       </Text>
@@ -1430,10 +1610,7 @@ export default function FuelRequestsScreen() {
         visible={Boolean(reportTarget)}
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={() => {
-          if (reportSubmitting) return;
-          setReportTarget(null);
-        }}
+        onRequestClose={closeReport}
       >
         <View
           style={[
@@ -1457,13 +1634,11 @@ export default function FuelRequestsScreen() {
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => {
-                  if (reportSubmitting) return;
-                  setReportTarget(null);
-                }}
+                onPress={closeReport}
                 style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
+                disabled={reportSubmitting}
               >
                 <X size={20} color={colors.text} strokeWidth={2.2} />
               </TouchableOpacity>
@@ -1671,72 +1846,18 @@ export default function FuelRequestsScreen() {
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+          {renderPickerOverlay()}
         </View>
       </Modal>
 
-      {/* Picker genérico */}
+      {/* Picker genérico (fora de outros modais) */}
       <Modal
-        visible={!!picker}
+        visible={Boolean(picker) && !showForm && !reportTarget}
         animationType="slide"
         transparent
         onRequestClose={() => setPicker(null)}
       >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setPicker(null)} />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <Text style={[styles.pickerTitle, { color: colors.text }]}>{picker?.title}</Text>
-              <TouchableOpacity
-                onPress={() => setPicker(null)}
-                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
-              >
-                <X size={18} color={colors.text} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.searchBox, { marginBottom: 12 }]}>
-              <Search size={18} color={colors.textSecondary} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar..."
-                placeholderTextColor={colors.textSecondary}
-                value={pickerSearch}
-                onChangeText={setPickerSearch}
-              />
-            </View>
-            <FlatList
-              data={pickerFiltered}
-              keyExtractor={(item) => item.value}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.pickerItem, { backgroundColor: isDark ? colors.card : colors.surface }]}
-                  onPress={() => {
-                    picker?.onSelect(item.value);
-                    setPicker(null);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', letterSpacing: -0.2 }}>
-                    {item.label}
-                  </Text>
-                  {item.subtitle ? (
-                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 3, fontWeight: '500' }}>
-                      {item.subtitle}
-                    </Text>
-                  ) : null}
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <Text style={{ textAlign: 'center', color: colors.textSecondary, padding: 28, fontWeight: '500' }}>
-                  Nenhum resultado
-                </Text>
-              }
-              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
-            />
-          </View>
-        </View>
+        <View style={{ flex: 1 }}>{renderPickerOverlay()}</View>
       </Modal>
     </View>
   );
@@ -1993,7 +2114,7 @@ const getStyles = (colors: any, isDark: boolean) =>
       fontSize: 16,
       fontWeight: '600',
       color: colors.text,
-      marginBottom: 10,
+      marginBottom: 8,
       letterSpacing: -0.2,
     },
     cardFooter: {
@@ -2010,7 +2131,27 @@ const getStyles = (colors: any, isDark: boolean) =>
       backgroundColor: colors.textSecondary,
       opacity: 0.5,
     },
-    cardMeta: { fontSize: 13, color: colors.textSecondary, fontWeight: '500' },
+    cardMeta: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      fontWeight: '500',
+      marginBottom: 4,
+    },
+    cardVehicle: {
+      fontSize: 15,
+      marginBottom: 4,
+    },
+    cardPlate: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+      letterSpacing: 0.3,
+    },
+    cardModel: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textSecondary,
+    },
     cardSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
     cardHint: {
       fontSize: 11,
@@ -2244,13 +2385,34 @@ const getStyles = (colors: any, isDark: boolean) =>
       backgroundColor: 'rgba(0,0,0,0.45)',
       justifyContent: 'flex-end',
     },
+    pickerOverlayAbsolute: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 100,
+      elevation: 100,
+    },
     pickerSheet: {
-      maxHeight: '78%',
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingHorizontal: 16,
       paddingTop: 8,
       paddingBottom: 8,
+    },
+    pickerSearchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? colors.card : colors.surface,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 40,
+      borderWidth: StyleSheet.hairlineWidth * 1.5,
+      borderColor: isDark ? 'transparent' : 'rgba(15, 23, 42, 0.08)',
+    },
+    pickerSearchInput: {
+      flex: 1,
+      paddingVertical: 0,
+      color: colors.text,
+      fontSize: 14,
     },
     pickerHandle: {
       alignSelf: 'center',

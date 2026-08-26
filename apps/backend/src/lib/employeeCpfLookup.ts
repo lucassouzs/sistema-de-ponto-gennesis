@@ -118,15 +118,27 @@ export async function resolveContractForEmployee(
 export type FuelRequestEmployeeContext =
   | {
       ok: true;
-      /** Valor exibido ao usuário como «Contrato» (é o centro de custo do colaborador). */
+      /** Nome do contrato (sem código) para exibir ao usuário. */
       costCenterLabel: string;
+      contractId?: string | null;
+      /** Centro de custo cru do colaborador (persistência / fallback). */
+      costCenterRaw?: string | null;
     }
   | { ok: false; message: string };
 
-/** Centro de custo do colaborador (como atestado) — sem buscar contrato no sistema. */
-export function resolveFuelRequestContextFromEmployee(
+function extractContractDisplayName(label: string): string {
+  const trimmed = label.trim();
+  if (!trimmed) return '';
+  const parts = trimmed.split(/\s*[—–-]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return trimmed;
+  if (/^\d+\/\d+/.test(parts[0])) return parts.slice(1).join(' — ');
+  return parts[parts.length - 1];
+}
+
+/** Resolve contrato pelo centro de custo do colaborador; exibe só o nome. */
+export async function resolveFuelRequestContextFromEmployee(
   employee: EmployeeCpfLookupResult,
-): FuelRequestEmployeeContext {
+): Promise<FuelRequestEmployeeContext> {
   const costCenterRaw = employee.costCenter?.trim();
   if (!costCenterRaw) {
     return {
@@ -136,5 +148,20 @@ export function resolveFuelRequestContextFromEmployee(
     };
   }
 
-  return { ok: true, costCenterLabel: costCenterRaw };
+  const contract = await resolveContractForEmployee(costCenterRaw);
+  if (contract) {
+    return {
+      ok: true,
+      costCenterLabel: contract.name.trim() || extractContractDisplayName(costCenterRaw),
+      contractId: contract.id,
+      costCenterRaw,
+    };
+  }
+
+  return {
+    ok: true,
+    costCenterLabel: extractContractDisplayName(costCenterRaw),
+    contractId: null,
+    costCenterRaw,
+  };
 }

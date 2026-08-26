@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 /** IP do PC na Wi-Fi — celular precisa alcançar esse host na porta 5000 */
-const LOCAL_LAN_API = 'http://192.168.1.84:5000';
+const LOCAL_LAN_API = 'http://192.168.15.93:5000';
 
 const getApiBaseUrl = () => {
   if (Platform.OS === 'web') {

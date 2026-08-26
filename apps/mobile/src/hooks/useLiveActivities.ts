@@ -21,6 +21,7 @@ type FuelRow = {
   displayNumber?: number;
   status: string;
   vehiclePlate?: string | null;
+  vehicleDescription?: string | null;
   route?: string | null;
   gasStation?: { name?: string | null } | null;
 };
@@ -57,20 +58,14 @@ export function useLiveActivities() {
     try {
       const [fuelRes, reservationRes] = await Promise.all([
         api.get('/api/fuel-refuel-requests/mine'),
-        api.get('/api/vehicle-reservations?limit=100&page=1'),
+        api.get('/api/vehicle-reservations/mine?limit=100&page=1'),
       ]);
 
       const fuelJson = await fuelRes.json().catch(() => ({}));
       const reservationJson = await reservationRes.json().catch(() => ({}));
 
       const fuelRows = (fuelRes.ok ? (fuelJson?.data || []) : []) as FuelRow[];
-      const allReservations = (reservationRes.ok ? (reservationJson?.data || []) : []) as ReservationRow[];
-      const myReservations = allReservations.filter(
-        (r) =>
-          r.createdBy?.id === user.id ||
-          r.createdById === user.id ||
-          r.solicitante === user.name,
-      );
+      const myReservations = (reservationRes.ok ? (reservationJson?.data || []) : []) as ReservationRow[];
 
       const live: LiveActivity[] = [];
 
@@ -81,7 +76,11 @@ export function useLiveActivities() {
           kind: 'fuel',
           title: 'Combustível liberado',
           subtitle: 'Pode abastecer agora',
-          meta: [row.vehiclePlate, row.gasStation?.name || row.route]
+          meta: [
+            row.vehiclePlate,
+            row.vehicleDescription?.trim() || null,
+            row.gasStation?.name || row.route,
+          ]
             .filter(Boolean)
             .join(' · ') || `Solicitação #${row.displayNumber ?? ''}`,
           cta: 'Informar abastecimento',

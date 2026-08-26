@@ -111,16 +111,18 @@ function buildSummary(payload: Record<string, unknown>): string {
   const stateCode = payload.fuelStateCode ? String(payload.fuelStateCode) : '';
   const cityName = payload.administrativeRegionName || '—';
   const regionLabel = stateCode ? `${cityName} (${stateCode})` : cityName;
+  const vehicleDescription = String(payload.vehicleDescription || '').trim();
 
   return [
     'Resumo da solicitação de abastecimento:',
     `• Data: ${payload.refuelDate ? formatBrDate(String(payload.refuelDate)) : '—'}`,
     `• Rota: ${payload.route || '—'}`,
-    `• Local de abastecimento: ${regionLabel}`,
+    `• Região administrativa: ${regionLabel}`,
     `• Contrato: ${payload.costCenterLabel || payload.costCenter || '—'}`,
     `• Condutor: ${payload.driverName || '—'}${payload.driverCpfMasked ? ` (CPF ${payload.driverCpfMasked})` : ''}`,
     `• Veículo: ${payload.vehiclePlate || '—'}`,
-    `• Tipo (cadastro): ${vehicleTypeLabel(payload.vehicleType as FuelVehicleType | undefined)}`,
+    ...(vehicleDescription ? [`• Modelo: ${vehicleDescription}`] : []),
+    `• Tipo: ${vehicleTypeLabel(payload.vehicleType as FuelVehicleType | undefined)}`,
     `• Foto do painel: ${hasStoredPhoto(payload.dashboardPhotoUrl, payload.dashboardPhotoKey) ? 'enviada' : '—'}`,
     `• Observações: ${String(payload.observations || '').trim() || '—'}`,
     '',
@@ -480,7 +482,7 @@ export async function processWhatsAppFuelFlow(params: {
       newPayload.requesterUserId = employee.userId;
       newPayload.costCenter = employee.costCenter;
 
-      const ctx = resolveFuelRequestContextFromEmployee(employee);
+      const ctx = await resolveFuelRequestContextFromEmployee(employee);
       if (!ctx.ok) {
         return {
           sendAction: waButtons(ctx.message),
@@ -490,6 +492,7 @@ export async function processWhatsAppFuelFlow(params: {
       }
 
       newPayload.costCenterLabel = ctx.costCenterLabel;
+      newPayload.contractId = ctx.contractId || null;
       return {
         sendAction: waButtons(
           [
@@ -666,6 +669,7 @@ export async function processWhatsAppFuelFlow(params: {
         refuelDate: new Date(`${newPayload.refuelDate}T12:00:00`),
         route: String(newPayload.route),
         satelliteCityCode: String(newPayload.satelliteCityCode),
+        contractId: (newPayload.contractId as string | undefined) || undefined,
         costCenter: String(newPayload.costCenterLabel || newPayload.costCenter),
         driverName: String(newPayload.driverName),
         vehiclePlate: String(newPayload.vehiclePlate),

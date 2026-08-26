@@ -53,7 +53,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "react-native-maps",
       [
         "@react-native-community/datetimepicker",
         {
@@ -74,7 +73,7 @@
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
       },
-      "EXPO_PUBLIC_API_URL": "http://192.168.1.84:5000"
+      "EXPO_PUBLIC_API_URL": "http://192.168.15.93:5000"
     },
     "owner": "lucassouzss"
   }
