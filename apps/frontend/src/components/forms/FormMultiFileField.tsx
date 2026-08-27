@@ -287,29 +287,29 @@ export function parseFormFileValue(raw: unknown): FormFileItem[] {
     try {
       const parsed = JSON.parse(text) as unknown;
       if (!Array.isArray(parsed)) return [];
-      return parsed
-        .map((item) => {
-          if (!item || typeof item !== 'object') return null;
-          const obj = item as Record<string, unknown>;
-          const name = String(obj.name || '').trim();
-          if (!name) return null;
-          const previewSheet = Array.isArray(obj.previewSheet)
-            ? (obj.previewSheet as unknown[])
-                .filter((row): row is unknown[] => Array.isArray(row))
-                .map((row) => row.map((cell) => String(cell ?? '')))
-            : undefined;
-          return {
-            id: String(obj.id || uid()),
-            name,
-            mimeType: obj.mimeType ? String(obj.mimeType) : undefined,
-            size: typeof obj.size === 'number' ? obj.size : undefined,
-            dataUrl: obj.dataUrl ? String(obj.dataUrl) : undefined,
-            sourceDataUrl: obj.sourceDataUrl ? String(obj.sourceDataUrl) : undefined,
-            previewSheet: previewSheet?.length ? previewSheet : undefined,
-            previewText: obj.previewText ? String(obj.previewText) : undefined,
-          } satisfies FormFileItem;
-        })
-        .filter((x): x is FormFileItem => !!x);
+      const files: FormFileItem[] = [];
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object') continue;
+        const obj = item as Record<string, unknown>;
+        const name = String(obj.name || '').trim();
+        if (!name) continue;
+        const previewSheet = Array.isArray(obj.previewSheet)
+          ? (obj.previewSheet as unknown[])
+              .filter((row): row is unknown[] => Array.isArray(row))
+              .map((row) => row.map((cell) => String(cell ?? '')))
+          : undefined;
+        files.push({
+          id: String(obj.id || uid()),
+          name,
+          mimeType: obj.mimeType ? String(obj.mimeType) : undefined,
+          size: typeof obj.size === 'number' ? obj.size : undefined,
+          dataUrl: obj.dataUrl ? String(obj.dataUrl) : undefined,
+          sourceDataUrl: obj.sourceDataUrl ? String(obj.sourceDataUrl) : undefined,
+          previewSheet: previewSheet?.length ? previewSheet : undefined,
+          previewText: obj.previewText ? String(obj.previewText) : undefined,
+        });
+      }
+      return files;
     } catch {
       /* legado */
     }
