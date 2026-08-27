@@ -155,14 +155,14 @@ export default function LoginPage() {
       }`}
     >
       {/* Header */}
-      <header className="login-page-enter login-page-enter--header w-full border-b border-gray-200/80 dark:border-gray-800/80 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm">
+      <header className="login-page-enter login-page-enter--header w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-24 relative">
             {/* Botão de trocar tema (esquerda) */}
             <div className="flex items-center w-1/3 justify-start">
               <button
                 onClick={toggleTheme}
-                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 title={isDark ? 'Modo Claro' : 'Modo Escuro'}
               >
                 {isDark ? (
@@ -373,7 +373,7 @@ export default function LoginPage() {
       )}
 
       {/* Footer */}
-      <footer className="w-full border-t border-gray-200/80 dark:border-gray-800/80 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm py-10">
+      <footer className="w-full py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-base text-gray-600 dark:text-gray-400">
             Ao acessar sua conta, você reconhece que leu, entendeu e concorda integralmente com os{' '}

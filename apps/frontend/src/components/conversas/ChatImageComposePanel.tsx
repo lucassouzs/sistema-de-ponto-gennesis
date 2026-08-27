@@ -100,7 +100,7 @@ export function ChatImageComposePanel({
   const canAddMore = files.length < maxFiles;
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-50 dark:bg-gray-950">
+    <div className="app-theme-bg relative flex min-h-0 flex-1 flex-col overflow-hidden">
       {/* Preview — ocupa só a área abaixo do header do chat */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gray-100/60 px-3 py-4 dark:bg-gray-900/40">
         <button

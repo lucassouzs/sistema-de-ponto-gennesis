@@ -2783,7 +2783,7 @@ function ConversasContent() {
         <div
           className={clsx(
             'relative flex min-w-0 flex-1 flex-col overflow-hidden',
-            'bg-gray-50 dark:bg-gray-950',
+            'app-theme-bg',
           )}
           onDragOver={hasImageCompose ? handleComposerDragOver : undefined}
           onDragLeave={hasImageCompose ? handleComposerDragLeave : undefined}
@@ -3204,7 +3204,7 @@ function ConversasContent() {
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               {selectedTopicTitle ? (
-                <div className="flex-shrink-0 border-b border-gray-200 bg-gray-50 px-4 py-2 dark:border-gray-800 dark:bg-gray-950">
+                <div className="flex-shrink-0 border-b border-gray-200/80 bg-transparent px-4 py-2 dark:border-gray-800/80">
                   <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     Tópico
                   </p>
@@ -3286,7 +3286,7 @@ function ConversasContent() {
                   }}
                 />
               ) : (
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1 bg-gray-50 dark:bg-gray-950">
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
                 {chatLoading && !activeChat ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 size={28} className="animate-spin text-gray-500 dark:text-gray-400" />
