@@ -150,12 +150,12 @@ export default function LoginPage() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col relative bg-white dark:bg-gray-900 login-page-shell${
+      className={`app-theme-bg min-h-screen flex flex-col relative login-page-shell${
         enterAnim ? ' login-page-shell--ready' : ''
       }`}
     >
       {/* Header */}
-      <header className="login-page-enter login-page-enter--header w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+      <header className="login-page-enter login-page-enter--header w-full border-b border-gray-200/80 dark:border-gray-800/80 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-24 relative">
             {/* Botão de trocar tema (esquerda) */}
@@ -373,7 +373,7 @@ export default function LoginPage() {
       )}
 
       {/* Footer */}
-      <footer className="w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-10">
+      <footer className="w-full border-t border-gray-200/80 dark:border-gray-800/80 bg-white/70 dark:bg-gray-900/70 backdrop-blur-sm py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-base text-gray-600 dark:text-gray-400">
             Ao acessar sua conta, você reconhece que leu, entendeu e concorda integralmente com os{' '}
