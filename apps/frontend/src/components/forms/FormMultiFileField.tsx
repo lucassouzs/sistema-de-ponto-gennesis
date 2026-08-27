@@ -259,7 +259,9 @@ async function buildPreviewFromFile(file: File): Promise<Partial<FormFileItem>> 
       throw new Error('Prévia só para .docx');
     }
     const mammothMod = await import('mammoth');
-    const mammoth = (mammothMod as { default?: typeof mammothMod }).default ?? mammothMod;
+    // CJS/ESM interop: em build o módulo pode vir com ou sem `.default`
+    const mammoth =
+      (mammothMod as unknown as { default?: typeof mammothMod }).default ?? mammothMod;
     const result = await mammoth.extractRawText({ arrayBuffer: buffer });
     const previewText = String(result.value || '').trim().slice(0, 500);
     if (!previewText) throw new Error('Documento sem texto');
