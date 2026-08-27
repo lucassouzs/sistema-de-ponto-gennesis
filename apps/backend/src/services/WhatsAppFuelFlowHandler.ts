@@ -3,8 +3,8 @@ import {
   findEmployeeByCpf,
   isValidCpf,
   onlyDigits,
-  resolveFuelRequestContextFromEmployee,
 } from '../lib/employeeCpfLookup';
+import { prisma } from '../lib/prisma';
 import {
   FUEL_ABASTECIMENTO_STATE_CODES,
   findActiveVehicleByPlate,
@@ -33,6 +33,7 @@ export type WhatsAppFuelFlowStatus =
   | 'FUEL_ASK_FUEL_STATE'
   | 'FUEL_ASK_ADMIN_REGION'
   | 'FUEL_ASK_DRIVER_CPF'
+  | 'FUEL_SELECT_CONTRACT'
   | 'FUEL_ASK_PLATE_SUFFIX'
   | 'FUEL_SELECT_VEHICLE'
   | 'FUEL_ASK_VEHICLE_MANUAL'
@@ -48,9 +49,17 @@ type VehicleOptionPayload = {
   frotaPartic: VehicleUsageType | null;
 };
 
+type ContractOptionPayload = {
+  id: string;
+  name: string;
+  number: string;
+};
+
 const YES_WORDS = /^(sim|s|confirmar|confirmo|ok|pode|yes)$/i;
 const NO_WORDS = /^(n[aã]o|nao|n|cancelar|cancela)$/i;
 const SKIP_WORDS = /^(n[aã]o|nao|nenhuma|nenhum|-|pular|skip)$/i;
+/** WhatsApp lista no máx. 10 linhas; 1 reservada para “Mais contratos”. */
+const CONTRACT_LIST_PAGE_SIZE = 9;
 
 function waButtons(body: string, extra?: Array<{ id: string; title: string }>): SendAction {
   return {
@@ -202,6 +211,84 @@ function parseRegionSelection(
 
 function getVehicleOptions(payload: Record<string, unknown>): VehicleOptionPayload[] {
   return (payload.vehicleOptions as VehicleOptionPayload[] | undefined) ?? [];
+}
+
+function truncateWaTitle(label: string): string {
+  const trimmed = label.trim();
+  if (trimmed.length <= 24) return trimmed;
+  return `${trimmed.slice(0, 21)}...`;
+}
+
+async function listRegisteredContracts(): Promise<ContractOptionPayload[]> {
+  const rows = await prisma.contract.findMany({
+    orderBy: [{ name: 'asc' }, { number: 'asc' }],
+    select: { id: true, name: true, number: true },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name.trim() || row.number,
+    number: row.number,
+  }));
+}
+
+function getContractOptions(payload: Record<string, unknown>): ContractOptionPayload[] {
+  return (payload.contractOptions as ContractOptionPayload[] | undefined) ?? [];
+}
+
+function buildContractListAction(
+  options: ContractOptionPayload[],
+  page: number,
+  driverName: string,
+): SendAction {
+  const start = Math.max(0, page) * CONTRACT_LIST_PAGE_SIZE;
+  const slice = options.slice(start, start + CONTRACT_LIST_PAGE_SIZE);
+  const hasMore = start + CONTRACT_LIST_PAGE_SIZE < options.length;
+  const rows = slice.map((contract) => ({
+    id: `fuel_contract_${contract.id}`,
+    title: truncateWaTitle(contract.name),
+  }));
+  if (hasMore) {
+    rows.push({
+      id: `fuel_contract_more_${page + 1}`,
+      title: 'Mais contratos…',
+    });
+  }
+  return waList(
+    [
+      `Identifiquei ${driverName}.`,
+      'Selecione o contrato desta solicitação:',
+    ].join('\n'),
+    rows,
+    'Ver contratos',
+  );
+}
+
+function parseContractSelection(
+  content: string,
+  textRaw: string,
+  payload: Record<string, unknown>,
+): ContractOptionPayload | null {
+  const options = getContractOptions(payload);
+  const fromId = content.match(/^fuel_contract_(?!more_)(.+)$/i);
+  if (fromId) {
+    const id = fromId[1].trim();
+    return options.find((item) => item.id === id) ?? null;
+  }
+
+  const nameCandidate = textRaw.trim().toLowerCase();
+  if (!nameCandidate) return null;
+  return (
+    options.find((item) => item.name.trim().toLowerCase() === nameCandidate) ||
+    options.find((item) => item.number.trim().toLowerCase() === nameCandidate) ||
+    null
+  );
+}
+
+function parseContractMorePage(content: string): number | null {
+  const m = content.match(/^fuel_contract_more_(\d+)$/i);
+  if (!m) return null;
+  const page = parseInt(m[1], 10);
+  return Number.isFinite(page) && page >= 0 ? page : null;
 }
 
 function parseVehicleSelection(
@@ -476,28 +563,85 @@ export async function processWhatsAppFuelFlow(params: {
         };
       }
 
-      newPayload.driverName = employee.name;
-      newPayload.driverCpfMasked = employee.cpfMasked;
-      newPayload.driverEmployeeId = employee.employeeId;
-      newPayload.requesterUserId = employee.userId;
-      newPayload.costCenter = employee.costCenter;
-
-      const ctx = await resolveFuelRequestContextFromEmployee(employee);
-      if (!ctx.ok) {
+      const contracts = await listRegisteredContracts();
+      if (!contracts.length) {
         return {
-          sendAction: waButtons(ctx.message),
+          sendAction: waButtons(
+            'Não há contratos cadastrados no sistema. Fale com o Suprimentos/Administração.',
+          ),
           newStatus,
           newPayload,
         };
       }
 
-      newPayload.costCenterLabel = ctx.costCenterLabel;
-      newPayload.contractId = ctx.contractId || null;
+      newPayload.driverName = employee.name;
+      newPayload.driverCpfMasked = employee.cpfMasked;
+      newPayload.driverEmployeeId = employee.employeeId;
+      newPayload.requesterUserId = employee.userId;
+      newPayload.costCenter = employee.costCenter;
+      newPayload.contractOptions = contracts;
+      newPayload.contractListPage = 0;
+      delete newPayload.contractId;
+      delete newPayload.costCenterLabel;
+
+      return {
+        sendAction: buildContractListAction(contracts, 0, employee.name),
+        newStatus: 'FUEL_SELECT_CONTRACT',
+        newPayload,
+      };
+    }
+
+    case 'FUEL_SELECT_CONTRACT': {
+      const morePage = parseContractMorePage(content);
+      if (morePage != null) {
+        const options = getContractOptions(newPayload);
+        if (!options.length) {
+          return {
+            sendAction: waButtons('Envie novamente o CPF do condutor.'),
+            newStatus: 'FUEL_ASK_DRIVER_CPF',
+            newPayload,
+          };
+        }
+        newPayload.contractListPage = morePage;
+        return {
+          sendAction: buildContractListAction(
+            options,
+            morePage,
+            String(newPayload.driverName || 'condutor'),
+          ),
+          newStatus,
+          newPayload,
+        };
+      }
+
+      const selected = parseContractSelection(content, textRaw, newPayload);
+      if (!selected) {
+        const options = getContractOptions(newPayload);
+        const page = Number(newPayload.contractListPage || 0);
+        if (!options.length) {
+          return {
+            sendAction: waButtons('Envie novamente o CPF do condutor.'),
+            newStatus: 'FUEL_ASK_DRIVER_CPF',
+            newPayload,
+          };
+        }
+        return {
+          sendAction: buildContractListAction(
+            options,
+            page,
+            String(newPayload.driverName || 'condutor'),
+          ),
+          newStatus,
+          newPayload,
+        };
+      }
+
+      newPayload.contractId = selected.id;
+      newPayload.costCenterLabel = selected.name;
       return {
         sendAction: waButtons(
           [
-            `Identifiquei ${employee.name} (CPF ${employee.cpfMasked}).`,
-            `Contrato: ${ctx.costCenterLabel}`,
+            `Contrato selecionado: ${selected.name}.`,
             '',
             'Informe os 2 últimos dígitos da placa do veículo.',
           ].join('\n'),
@@ -650,7 +794,7 @@ export async function processWhatsAppFuelFlow(params: {
         !newPayload.refuelDate ||
         !newPayload.route ||
         !newPayload.satelliteCityCode ||
-        !(newPayload.costCenterLabel || newPayload.costCenter) ||
+        !newPayload.contractId ||
         !newPayload.driverName ||
         !newPayload.vehiclePlate ||
         !newPayload.vehicleType ||
@@ -669,8 +813,8 @@ export async function processWhatsAppFuelFlow(params: {
         refuelDate: new Date(`${newPayload.refuelDate}T12:00:00`),
         route: String(newPayload.route),
         satelliteCityCode: String(newPayload.satelliteCityCode),
-        contractId: (newPayload.contractId as string | undefined) || undefined,
-        costCenter: String(newPayload.costCenterLabel || newPayload.costCenter),
+        contractId: String(newPayload.contractId),
+        costCenter: String(newPayload.costCenterLabel || newPayload.costCenter || ''),
         driverName: String(newPayload.driverName),
         vehiclePlate: String(newPayload.vehiclePlate),
         vehicleDescription: (newPayload.vehicleDescription as string | undefined) || null,

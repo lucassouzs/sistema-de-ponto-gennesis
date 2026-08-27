@@ -4,7 +4,6 @@ import {
   findEmployeeByCpf,
   isValidCpf,
   onlyDigits,
-  resolveFuelRequestContextFromEmployee,
 } from '../lib/employeeCpfLookup';
 import {
   notifyFuelRequesterWaitingManager,
@@ -31,6 +30,7 @@ type FuelFlowStep =
   | 'ASK_FUEL_STATE'
   | 'ASK_ADMIN_REGION'
   | 'ASK_DRIVER_CPF'
+  | 'ASK_CONTRACT'
   | 'ASK_VEHICLE'
   | 'ASK_VEHICLE_TYPE'
   | 'ASK_DASHBOARD_PHOTO'
@@ -46,6 +46,7 @@ type FuelFlowPayload = {
   contractId?: string;
   costCenter?: string | null;
   costCenterLabel?: string;
+  contractOptions?: Array<{ id: string; name: string; number: string }>;
   driverName?: string;
   driverCpfMasked?: string;
   driverEmployeeId?: string;
@@ -89,6 +90,26 @@ function formatBrDate(iso: string): string {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+async function listRegisteredContracts() {
+  const rows = await prisma.contract.findMany({
+    orderBy: [{ name: 'asc' }, { number: 'asc' }],
+    select: { id: true, name: true, number: true },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name.trim() || row.number,
+    number: row.number,
+  }));
+}
+
+function formatContractChoiceList(
+  options: Array<{ id: string; name: string; number: string }>,
+): string {
+  return options
+    .map((c, idx) => `${idx + 1}. ${c.name}${c.number ? ` (${c.number})` : ''}`)
+    .join('\n');
 }
 
 async function getActiveSession(chatId: string, userId: string) {
@@ -420,25 +441,79 @@ export class GennecyFuelFlowService {
           };
         }
 
-        const ctx = await resolveFuelRequestContextFromEmployee(employee);
-        if (!ctx.ok) {
-          return { handled: true, reply: ctx.message };
+        const contracts = await listRegisteredContracts();
+        if (!contracts.length) {
+          return {
+            handled: true,
+            reply:
+              'Não há contratos cadastrados no sistema. Fale com o Suprimentos/Administração.',
+          };
         }
 
-        await upsertSession(params.chatId, params.userId, 'ASK_VEHICLE', {
+        await upsertSession(params.chatId, params.userId, 'ASK_CONTRACT', {
           ...payload,
           driverName: employee.name,
           driverCpfMasked: employee.cpfMasked,
           driverEmployeeId: employee.employeeId,
-          costCenter: ctx.costCenterRaw || employee.costCenter,
-          costCenterLabel: ctx.costCenterLabel,
-          contractId: ctx.contractId || undefined,
+          costCenter: employee.costCenter,
+          contractOptions: contracts,
+          contractId: undefined,
+          costCenterLabel: undefined,
         });
         return {
           handled: true,
           reply: [
             `✅ Identifiquei **${employee.name}** (CPF ${employee.cpfMasked}).`,
-            `Contrato: **${ctx.costCenterLabel}**`,
+            '',
+            'Para qual contrato é esta solicitação? Digite o **número** da lista:',
+            '',
+            formatContractChoiceList(contracts),
+          ].join('\n'),
+        };
+      }
+
+      case 'ASK_CONTRACT': {
+        const options = payload.contractOptions || [];
+        if (!options.length) {
+          await upsertSession(params.chatId, params.userId, 'ASK_DRIVER_CPF', payload);
+          return {
+            handled: true,
+            reply: 'Envie novamente o CPF do condutor.',
+          };
+        }
+
+        const asIndex = Number.parseInt(body, 10);
+        let selected =
+          Number.isFinite(asIndex) && asIndex >= 1 && asIndex <= options.length
+            ? options[asIndex - 1]
+            : null;
+        if (!selected) {
+          const lower = body.toLowerCase();
+          selected =
+            options.find((c) => c.name.toLowerCase() === lower) ||
+            options.find((c) => c.number.toLowerCase() === lower) ||
+            null;
+        }
+        if (!selected) {
+          return {
+            handled: true,
+            reply: [
+              'Contrato não encontrado. Digite o **número** da lista:',
+              '',
+              formatContractChoiceList(options),
+            ].join('\n'),
+          };
+        }
+
+        await upsertSession(params.chatId, params.userId, 'ASK_VEHICLE', {
+          ...payload,
+          contractId: selected.id,
+          costCenterLabel: selected.name,
+        });
+        return {
+          handled: true,
+          reply: [
+            `Contrato selecionado: **${selected.name}**.`,
             '',
             'Qual o veículo? Informe a placa (ex.: ABC1D23) ou placa — modelo (ex.: ABC1D23 — Strada).',
           ].join('\n'),
@@ -543,7 +618,7 @@ export class GennecyFuelFlowService {
           !payload.refuelDate ||
           !payload.route ||
           !payload.satelliteCityCode ||
-          !(payload.costCenterLabel || payload.costCenter) ||
+          !payload.contractId ||
           !payload.driverName ||
           !payload.vehiclePlate ||
           !payload.vehicleType ||

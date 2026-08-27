@@ -119,17 +119,18 @@ export class FuelRefuelRequestService {
     const costCenter = input.costCenter?.trim() || null;
     const contractId = input.contractId?.trim() || null;
 
-    if (!costCenter && !contractId) {
-      throw createError('Centro de custo ou contrato é obrigatório', 400);
+    if (!contractId) {
+      throw createError('Contrato é obrigatório', 400);
     }
 
-    if (contractId) {
-      const contract = await prisma.contract.findUnique({
-        where: { id: contractId },
-        select: { id: true },
-      });
-      if (!contract) throw createError('Contrato não encontrado', 404);
-    }
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { id: true, name: true, number: true },
+    });
+    if (!contract) throw createError('Contrato não encontrado', 404);
+
+    const costCenterLabel =
+      costCenter || contract.name.trim() || contract.number;
 
     const satelliteCityCode = input.satelliteCityCode?.trim().toUpperCase() || null;
     if (!satelliteCityCode) {
@@ -153,8 +154,8 @@ export class FuelRefuelRequestService {
           route: input.route.trim(),
           satelliteCityCode,
           administrativeRegionId,
-          costCenter,
-          contractId,
+          costCenter: costCenterLabel,
+          contractId: contract.id,
           driverName: input.driverName.trim(),
           vehiclePlate: input.vehiclePlate.trim(),
           vehicleDescription: input.vehicleDescription?.trim() || null,
