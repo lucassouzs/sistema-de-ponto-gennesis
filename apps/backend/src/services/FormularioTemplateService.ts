@@ -4,7 +4,27 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { backendUploadsRoot } from '../lib/uploads';
 
-export type FormularioFieldType = 'text' | 'textarea' | 'sim_nao' | 'pills' | 'rating';
+export type FormularioFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'sim_nao'
+  | 'dropdown'
+  | 'checkbox'
+  | 'checklist'
+  | 'pills'
+  | 'profiles'
+  | 'rating'
+  | 'slider'
+  | 'attachment'
+  | 'image'
+  | 'table'
+  | 'qrcode'
+  | 'signature';
+
+export type FormularioFieldWidth = 'half' | 'full';
 
 export interface FormularioFollowUp {
   whenValue: string;
@@ -20,6 +40,7 @@ export interface FormularioQuestion {
   options?: string[];
   required?: boolean;
   placeholder?: string;
+  width?: FormularioFieldWidth;
   followUp?: FormularioFollowUp | null;
 }
 
@@ -55,10 +76,24 @@ const INDEX_KEY = 'formularios/_index.json';
 const VALID_FIELD_TYPES = new Set<FormularioFieldType>([
   'text',
   'textarea',
+  'number',
+  'date',
+  'datetime',
   'sim_nao',
+  'dropdown',
+  'checkbox',
+  'checklist',
   'pills',
+  'profiles',
   'rating',
+  'slider',
+  'attachment',
+  'image',
+  'table',
+  'qrcode',
+  'signature',
 ]);
+const VALID_FIELD_WIDTHS = new Set<FormularioFieldWidth>(['half', 'full']);
 const VALID_FOLLOW_UP_TYPES = new Set(['text', 'textarea', 'pills']);
 
 function emptySection(): FormularioSection {
@@ -186,6 +221,9 @@ export class FormularioTemplateService {
           options: qItem.options,
           required: !!qItem.required,
           placeholder: qItem.placeholder,
+          width: VALID_FIELD_WIDTHS.has(qItem.width as FormularioFieldWidth)
+            ? (qItem.width as FormularioFieldWidth)
+            : undefined,
           followUp,
         };
       }),
@@ -193,10 +231,36 @@ export class FormularioTemplateService {
   }
 
   async list(): Promise<FormularioTemplateIndexEntry[]> {
+    await this.ensureReuniaoDefault();
     const idx = await this.readIndex();
     return [...idx.items].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
+  }
+
+  /** Garante o template padrão de reunião em Cadastros > Formulários. */
+  async ensureReuniaoDefault(): Promise<FormularioTemplateIndexEntry> {
+    const idx = await this.readIndex();
+    const found = idx.items.find(
+      (i) => i.name.trim().toLowerCase() === 'formulário de reunião'
+    );
+    if (found) return found;
+
+    const { buildDefaultTemplate } = await import('./ReuniaoService');
+    const def = buildDefaultTemplate();
+    const created = await this.create({
+      name: 'Formulário de reunião',
+      description:
+        'Template padrão de reunião de acompanhamento de contrato (cronograma, gestão e comunicação).',
+      sections: def.sections as FormularioSection[],
+    });
+    return {
+      id: created.id,
+      name: created.name,
+      description: created.description,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+    };
   }
 
   async get(id: string): Promise<FormularioTemplate | null> {

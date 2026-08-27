@@ -4,11 +4,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, History, Trash2, Search, MoreVertical, Eye, Settings2 } from 'lucide-react';
+import { ArrowLeft, Plus, History, Trash2, Search, MoreVertical, Eye, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
@@ -20,8 +21,16 @@ interface ReuniaoEntry {
   data: string;
   responsavelPreenchimento: string;
   nome: string;
+  formularioName?: string;
+  formularioDescription?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface FormularioOption {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 interface Contract {
@@ -51,13 +60,6 @@ function formatDateTime(iso: string) {
   });
 }
 
-function formatDateOnly(ymd: string) {
-  if (!ymd) return '-';
-  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return '-';
-  return `${m[3]}/${m[2]}/${m[1]}`;
-}
-
 export default function ContratoReunioesPage() {
   const params = useParams();
   const router = useRouter();
@@ -71,6 +73,8 @@ export default function ContratoReunioesPage() {
   const [modalReuniaoId, setModalReuniaoId] = useState<string | null>(null);
   /** Overlay local da lista enquanto o modal está aberto (atualização em tempo real) */
   const [listOverrides, setListOverrides] = useState<Record<string, ReuniaoListPatch>>({});
+  const [formPickerOpen, setFormPickerOpen] = useState(false);
+  const [selectedFormularioId, setSelectedFormularioId] = useState<string>('');
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -89,6 +93,23 @@ export default function ContratoReunioesPage() {
     enabled: !!contractId,
   });
 
+  const {
+    data: formulariosData,
+    isLoading: loadingFormularios,
+    isFetching: fetchingFormularios,
+  } = useQuery({
+    queryKey: ['formularios-templates'],
+    queryFn: async () => {
+      const res = await api.get('/formularios');
+      return (Array.isArray(res.data?.data) ? res.data.data : []) as FormularioOption[];
+    },
+    enabled: formPickerOpen,
+  });
+
+  const formularios: FormularioOption[] = Array.isArray(formulariosData)
+    ? formulariosData
+    : [];
+
   // Abre modal via ?open=id (links antigos / redirect da página de detalhe)
   useEffect(() => {
     const openId = searchParams?.get('open');
@@ -98,8 +119,19 @@ export default function ContratoReunioesPage() {
     }
   }, [searchParams, contractId, router]);
 
+  useEffect(() => {
+    if (!formPickerOpen) {
+      setSelectedFormularioId('');
+      return;
+    }
+    if (Array.isArray(formulariosData) && formulariosData.length === 1) {
+      setSelectedFormularioId(formulariosData[0]!.id);
+    }
+  }, [formPickerOpen, formulariosData]);
+
   const criarMutation = useMutation({
-    mutationFn: async () => (await api.post(`/reunioes/${contractId}`)).data,
+    mutationFn: async (formularioId: string) =>
+      (await api.post(`/reunioes/${contractId}`, { formularioId })).data,
     onSuccess: (res) => {
       const entry = res.data as ReuniaoEntry;
       queryClient.setQueryData(['reunioes', contractId], (old: { data?: ReuniaoEntry[] } | undefined) => {
@@ -107,10 +139,16 @@ export default function ContratoReunioesPage() {
         return { success: true, data: [entry, ...list.filter((r) => r.id !== entry.id)] };
       });
       queryClient.invalidateQueries({ queryKey: ['reunioes', contractId] });
+      setFormPickerOpen(false);
       setModalReuniaoId(entry.id);
       toast.success('Reunião criada!');
     },
-    onError: () => toast.error('Erro ao criar reunião.'),
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Erro ao criar reunião.';
+      toast.error(msg);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -185,6 +223,8 @@ export default function ContratoReunioesPage() {
     (r) =>
       !q ||
       (r.nome || '').toLowerCase().includes(q) ||
+      (r.formularioName || '').toLowerCase().includes(q) ||
+      (r.formularioDescription || '').toLowerCase().includes(q) ||
       r.responsavelPreenchimento.toLowerCase().includes(q)
   );
 
@@ -239,27 +279,19 @@ export default function ContratoReunioesPage() {
                         type="text"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Buscar por título ou responsável..."
+                        placeholder="Buscar por formulário ou descrição..."
                         className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                     </div>
                   )}
-                  <Link
-                    href={`/ponto/contratos/${contractId}/reunioes/configurar`}
-                    title="Editar formulário"
-                    aria-label="Editar formulário"
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                  >
-                    <Settings2 className="h-4 w-4" />
-                  </Link>
                   <button
                     type="button"
-                    onClick={() => criarMutation.mutate()}
+                    onClick={() => setFormPickerOpen(true)}
                     disabled={criarMutation.isPending}
                     className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-70"
                   >
                     <Plus className="h-4 w-4 shrink-0" />
-                    {criarMutation.isPending ? 'Criando...' : 'Nova Reunião'}
+                    Nova Reunião
                   </button>
                 </div>
               </div>
@@ -292,16 +324,13 @@ export default function ContratoReunioesPage() {
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
                         <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          Título
+                          Formulário
                         </th>
                         <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          Responsável
+                          Descrição
                         </th>
                         <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          Data da reunião
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                          Atualizado
+                          Criado em
                         </th>
                         <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                           Ação
@@ -319,17 +348,16 @@ export default function ContratoReunioesPage() {
                         >
                           <td className="px-4 py-3">
                             <ListRowNavigableLabel className="truncate font-medium">
-                              {r.nome || 'Reunião sem título'}
+                              {r.formularioName || r.nome || 'Formulário sem nome'}
                             </ListRowNavigableLabel>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-300">
-                            {r.responsavelPreenchimento || '-'}
+                          <td className="max-w-[280px] px-4 py-3 text-gray-600 dark:text-gray-300">
+                            <span className="line-clamp-2">
+                              {r.formularioDescription?.trim() || '—'}
+                            </span>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-300">
-                            {formatDateOnly(r.data)}
-                          </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-gray-600 dark:text-gray-300">
-                            {formatDateTime(r.updatedAt)}
+                            {formatDateTime(r.createdAt)}
                           </td>
                           <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end">
@@ -403,6 +431,98 @@ export default function ContratoReunioesPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Modal
+          isOpen={formPickerOpen}
+          onClose={() => {
+            if (criarMutation.isPending) return;
+            setFormPickerOpen(false);
+          }}
+          title="Escolher formulário"
+          size="md"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Selecione qual formulário usar nesta reunião. Os templates vêm de{' '}
+              <Link
+                href="/ponto/formularios"
+                className="font-medium text-red-600 hover:underline dark:text-red-400"
+              >
+                Cadastros → Formulários
+              </Link>
+              .
+            </p>
+
+            {loadingFormularios || fetchingFormularios ? (
+              <Loading message="Carregando formulários..." size="md" />
+            ) : formularios.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-gray-600">
+                <ClipboardList className="mx-auto mb-2 h-8 w-8 text-gray-400" />
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Nenhum formulário cadastrado.
+                </p>
+                <Link
+                  href="/ponto/formularios"
+                  className="mt-3 inline-flex text-sm font-semibold text-red-600 hover:underline"
+                >
+                  Criar formulário
+                </Link>
+              </div>
+            ) : (
+              <ul className="max-h-72 space-y-2 overflow-y-auto">
+                {formularios.map((f) => {
+                  const active = selectedFormularioId === f.id;
+                  return (
+                    <li key={f.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFormularioId(f.id)}
+                        className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
+                          active
+                            ? 'border-red-500 bg-red-50 dark:border-red-500 dark:bg-red-950/40'
+                            : 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-gray-500'
+                        }`}
+                      >
+                        <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">
+                          {f.name}
+                        </span>
+                        {f.description ? (
+                          <span className="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">
+                            {f.description}
+                          </span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setFormPickerOpen(false)}
+                disabled={criarMutation.isPending}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  !selectedFormularioId ||
+                  criarMutation.isPending ||
+                  formularios.length === 0
+                }
+                onClick={() => criarMutation.mutate(selectedFormularioId)}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                {criarMutation.isPending ? 'Criando...' : 'Criar reunião'}
+              </button>
+            </div>
+          </div>
+        </Modal>
 
         <ReuniaoFormModal
           isOpen={!!modalReuniaoId}

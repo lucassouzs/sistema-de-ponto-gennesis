@@ -45,8 +45,8 @@ export class ReuniaoController {
   async getList(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { contractId } = req.params;
-      const idx = await service.getIndex(contractId);
-      res.json({ success: true, data: idx.reunioes });
+      const idx = await service.listReunioes(contractId);
+      res.json({ success: true, data: idx });
     } catch (err) {
       next(err);
     }
@@ -55,9 +55,16 @@ export class ReuniaoController {
   async create(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { contractId } = req.params;
-      const entry = await service.createReuniao(contractId);
+      const formularioId = String(
+        (req.body as { formularioId?: string })?.formularioId || ''
+      ).trim();
+      const entry = await service.createReuniao(contractId, { formularioId });
       return res.status(201).json({ success: true, data: entry });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === 'Selecione um formulário.' || msg === 'Formulário não encontrado.') {
+        return res.status(400).json({ success: false, message: msg });
+      }
       return next(err);
     }
   }

@@ -4,7 +4,27 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { backendUploadsRoot } from '../lib/uploads';
 
-export type ReuniaoFieldType = 'text' | 'textarea' | 'sim_nao' | 'pills' | 'rating';
+export type ReuniaoFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'sim_nao'
+  | 'dropdown'
+  | 'checkbox'
+  | 'checklist'
+  | 'pills'
+  | 'profiles'
+  | 'rating'
+  | 'slider'
+  | 'attachment'
+  | 'image'
+  | 'table'
+  | 'qrcode'
+  | 'signature';
+
+export type ReuniaoFieldWidth = 'half' | 'full';
 
 export interface ReuniaoFollowUp {
   whenValue: string;
@@ -20,6 +40,7 @@ export interface ReuniaoQuestion {
   options?: string[];
   required?: boolean;
   placeholder?: string;
+  width?: ReuniaoFieldWidth;
   followUp?: ReuniaoFollowUp | null;
 }
 
@@ -60,6 +81,13 @@ export interface ReuniaoData {
   answers: Record<string, ReuniaoAnswer>;
   ata: ReuniaoAnexoInfo | null;
   video: ReuniaoAnexoInfo | null;
+  /** Snapshot do formulário escolhido na criação (Cadastros > Formulários). */
+  formTemplate?: {
+    id: string;
+    name: string;
+    description?: string;
+    sections: ReuniaoSection[];
+  } | null;
 }
 
 export interface ReuniaoIndexEntry {
@@ -67,6 +95,10 @@ export interface ReuniaoIndexEntry {
   data: string;
   responsavelPreenchimento: string;
   nome: string;
+  /** Nome do formulário (template) usado na criação. */
+  formularioName?: string;
+  /** Descrição do formulário (template). */
+  formularioDescription?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -239,6 +271,7 @@ const EMPTY_DATA: ReuniaoData = {
   answers: {},
   ata: null,
   video: null,
+  formTemplate: null,
 };
 
 function pickIdentificacaoNome(id: Record<string, unknown> | ReuniaoData['identificacao']): string {
@@ -256,6 +289,24 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
 
   if (obj.answers && typeof obj.answers === 'object') {
     const id = (obj.identificacao as ReuniaoData['identificacao']) || EMPTY_DATA.identificacao;
+    const formTemplateRaw = obj.formTemplate;
+    let formTemplate: ReuniaoData['formTemplate'] = null;
+    if (formTemplateRaw && typeof formTemplateRaw === 'object') {
+      const ft = formTemplateRaw as {
+        id?: string;
+        name?: string;
+        description?: string;
+        sections?: ReuniaoSection[];
+      };
+      if (ft.id && Array.isArray(ft.sections)) {
+        formTemplate = {
+          id: String(ft.id),
+          name: String(ft.name || 'Formulário'),
+          description: ft.description ? String(ft.description) : undefined,
+          sections: ft.sections,
+        };
+      }
+    }
     return {
       identificacao: {
         data: id.data || '',
@@ -265,6 +316,7 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
       answers: obj.answers as Record<string, ReuniaoAnswer>,
       ata: (obj.ata as ReuniaoAnexoInfo | null) ?? null,
       video: (obj.video as ReuniaoAnexoInfo | null) ?? null,
+      formTemplate,
     };
   }
 
@@ -312,6 +364,7 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
     answers,
     ata: (obj.ata as ReuniaoAnexoInfo | null) ?? null,
     video: (obj.video as ReuniaoAnexoInfo | null) ?? null,
+    formTemplate: null,
   };
 }
 
@@ -438,12 +491,52 @@ export class ReuniaoService {
         return {
           ...raw,
           nome: raw.nome || raw.contrato || '',
+          formularioName: raw.formularioName || '',
+          formularioDescription: raw.formularioDescription || '',
         };
       }),
     };
   }
 
-  async createReuniao(contractId: string): Promise<ReuniaoIndexEntry> {
+  /** Lista com enriquecimento do nome/descrição do formulário quando faltar no índice. */
+  async listReunioes(contractId: string): Promise<ReuniaoIndexEntry[]> {
+    const idx = await this.getIndex(contractId);
+    let dirty = false;
+    for (const entry of idx.reunioes) {
+      if (entry.formularioName) continue;
+      try {
+        const data = await this.getReuniao(contractId, entry.id);
+        if (data?.formTemplate?.name) {
+          entry.formularioName = data.formTemplate.name;
+          entry.formularioDescription = data.formTemplate.description || '';
+          dirty = true;
+        }
+      } catch {
+        /* ignora */
+      }
+    }
+    if (dirty) {
+      await this.writeJson(this.getIndexKey(contractId), idx);
+    }
+    return idx.reunioes;
+  }
+
+  async createReuniao(
+    contractId: string,
+    opts: { formularioId: string }
+  ): Promise<ReuniaoIndexEntry> {
+    const formularioId = String(opts.formularioId || '').trim();
+    if (!formularioId) {
+      throw new Error('Selecione um formulário.');
+    }
+
+    const { FormularioTemplateService } = await import('./FormularioTemplateService');
+    const formService = new FormularioTemplateService();
+    const tpl = await formService.get(formularioId);
+    if (!tpl) {
+      throw new Error('Formulário não encontrado.');
+    }
+
     const id = randomUUID();
     const now = new Date().toISOString();
     const entry: ReuniaoIndexEntry = {
@@ -451,14 +544,26 @@ export class ReuniaoService {
       data: '',
       responsavelPreenchimento: '',
       nome: '',
+      formularioName: tpl.name || '',
+      formularioDescription: tpl.description || '',
       createdAt: now,
       updatedAt: now,
+    };
+
+    const initial: ReuniaoData = {
+      ...EMPTY_DATA,
+      formTemplate: {
+        id: tpl.id,
+        name: tpl.name,
+        description: tpl.description,
+        sections: tpl.sections as ReuniaoSection[],
+      },
     };
 
     const idx = await this.getIndex(contractId);
     idx.reunioes.unshift(entry);
     await this.writeJson(this.getIndexKey(contractId), idx);
-    await this.writeJson(this.getReuniaoKey(contractId, id), EMPTY_DATA);
+    await this.writeJson(this.getReuniaoKey(contractId, id), initial);
 
     return entry;
   }
@@ -483,6 +588,10 @@ export class ReuniaoService {
       entry.data = normalized.identificacao?.data || '';
       entry.responsavelPreenchimento = normalized.identificacao?.responsavelPreenchimento || '';
       entry.nome = normalized.identificacao?.nome || '';
+      if (normalized.formTemplate?.name) {
+        entry.formularioName = normalized.formTemplate.name;
+        entry.formularioDescription = normalized.formTemplate.description || '';
+      }
       await this.writeJson(this.getIndexKey(contractId), idx);
     }
   }

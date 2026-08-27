@@ -216,8 +216,8 @@ export const cadastroListClasses = {
     'mb-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:gap-2',
   pagination:
     'mt-4 flex flex-wrap items-center justify-center gap-2 sm:mt-6',
-  /** min-w garante scroll horizontal legível no mobile; table-fixed no desktop. */
-  table: 'w-full min-w-[36rem] table-fixed text-sm',
+  /** min-w força scroll horizontal; sem table-fixed as colunas não esmagam a ação. */
+  table: 'w-full min-w-[36rem] text-sm',
   th: 'px-2 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6 sm:py-4',
   thCenter:
     'px-2 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-6 sm:py-4',

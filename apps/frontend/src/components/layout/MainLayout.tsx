@@ -191,11 +191,16 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
     setIsChangePasswordOpen(true);
   }, []);
 
+  const isFormularioEditorRoute =
+    pathname != null &&
+    /^\/ponto\/formularios\/[^/]+$/.test(pathname);
+
   const isFullBleedRoute = pathname != null && (
     pathname === '/ponto/conversas' ||
     pathname.startsWith('/ponto/conversas/') ||
     pathname === '/ponto/flow' ||
-    pathname.startsWith('/ponto/flow')
+    pathname.startsWith('/ponto/flow') ||
+    isFormularioEditorRoute
   );
 
   return (

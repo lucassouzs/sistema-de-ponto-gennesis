@@ -14,8 +14,9 @@ export const listTableRowClasses = {
   chevron:
     'pointer-events-none absolute left-full top-1/2 ml-1.5 h-4 w-4 -translate-y-1/2 -translate-x-1 text-red-500 opacity-0 transition-all duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 dark:text-red-400',
   actionTh:
-    'w-[4%] min-w-[2.75rem] px-1.5 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:min-w-[3rem] sm:px-3 sm:py-4',
-  actionTd: 'relative w-[4%] min-w-[2.75rem] px-1.5 py-2.5 align-middle sm:min-w-[3rem] sm:px-3 sm:py-3',
+    'w-14 min-w-[3.5rem] px-2 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400 sm:px-3 sm:py-4',
+  actionTd:
+    'relative w-14 min-w-[3.5rem] whitespace-nowrap px-2 py-2.5 align-middle sm:px-3 sm:py-3',
 } as const;
 
 /** `navigable=true` só quando a linha inteira abre outra tela (ex.: contratos). */

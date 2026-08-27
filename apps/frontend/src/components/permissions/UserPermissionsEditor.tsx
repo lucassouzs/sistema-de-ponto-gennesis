@@ -277,6 +277,7 @@ function inferCategoryFromHref(href: string): string {
     return 'Contratos e Licitações';
   }
   if (h === '/ponto/juridico') return 'Jurídico';
+  if (h === '/ponto/juridico/processos-ativos') return 'Jurídico';
   if (
     [
       '/ponto/gerenciar-materiais',

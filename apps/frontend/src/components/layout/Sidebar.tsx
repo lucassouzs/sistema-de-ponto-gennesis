@@ -60,6 +60,7 @@ import {
   Percent,
   Contact,
   Scale,
+  Briefcase,
   ScrollText,
   Fuel,
   Car,
@@ -1087,6 +1088,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Scale,
             description: 'Acompanhe status, acordos e valores dos processos',
             permission: isAdministrator || can(pk('/ponto/juridico'))
+          },
+          {
+            name: 'Processos Ativos',
+            href: '/ponto/juridico/processos-ativos',
+            icon: Briefcase,
+            description: 'Lista de processos jurídicos em andamento',
+            permission: isAdministrator || can(pk('/ponto/juridico/processos-ativos'))
           }
         ]
       },

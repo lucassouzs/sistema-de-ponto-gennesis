@@ -61,7 +61,7 @@ export default function FormulariosPage() {
     queryKey: ['formularios-templates'],
     queryFn: async () => {
       const res = await api.get('/formularios');
-      return (res.data?.data || []) as FormTemplateSummary[];
+      return (Array.isArray(res.data?.data) ? res.data.data : []) as FormTemplateSummary[];
     },
   });
 
@@ -90,16 +90,18 @@ export default function FormulariosPage() {
     onError: () => toast.error('Não foi possível excluir o formulário.'),
   });
 
+  const rows = Array.isArray(listData) ? listData : [];
+
   const filtered = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
-    return (listData || []).filter((row) => {
+    return rows.filter((row) => {
       if (!q) return true;
       return (
         row.name.toLowerCase().includes(q) ||
         (row.description || '').toLowerCase().includes(q)
       );
     });
-  }, [listData, searchTerm]);
+  }, [rows, searchTerm]);
 
   const totalFiltered = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / ITEMS_PER_PAGE));
@@ -171,10 +173,12 @@ export default function FormulariosPage() {
                     type="button"
                     onClick={() => createMutation.mutate()}
                     disabled={createMutation.isPending}
-                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                    className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <Plus className="h-4 w-4" />
-                    {createMutation.isPending ? 'Criando…' : 'Novo formulário'}
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>
+                      {createMutation.isPending ? 'Criando…' : 'Novo formulário'}
+                    </span>
                   </button>
                 </div>
               </div>
