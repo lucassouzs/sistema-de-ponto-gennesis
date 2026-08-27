@@ -183,26 +183,6 @@ export function downloadControleAnuidadeImportTemplate() {
   XLSX.writeFile(wb, 'modelo-controle-anuidade.xlsx');
 }
 
-function formatExportDate(value: string | null | undefined): string {
-  if (!value) return '';
-  const raw = String(value).trim();
-  if (!raw) return '';
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}/${d.getUTCFullYear()}`;
-}
-
-function formatExportValor(value: string | number | null | undefined): string | number {
-  if (value === null || value === undefined || value === '') return '';
-  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
-  const n = parseFloat(String(value).replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : String(value);
-}
-
 export type ControleAnuidadeExportRow = {
   pagosPelo?: string | null;
   empresa?: string | null;
@@ -217,33 +197,6 @@ export type ControleAnuidadeExportRow = {
   status?: string | null;
   fluig?: string | null;
 };
-
-export function exportControleAnuidadeEntries(
-  entries: ControleAnuidadeExportRow[],
-  filenameSuffix?: string
-): void {
-  const data = entries.map((r) => ({
-    'PAGOS PELO': r.pagosPelo || '',
-    EMPRESA: r.empresa || '',
-    PROFISSIONAL: r.profissional || '',
-    'PORQUE DO DESCONTO': r.porqueDesconto || '',
-    CREA: r.crea || '',
-    'CPF/CNPJ': r.cpfCnpj || '',
-    VALOR: formatExportValor(r.valor),
-    'DATA DE VENCIMENTO': formatExportDate(r.dataVencimento),
-    'DATA PARA PAGAMENTO': formatExportDate(r.dataParaPagamento),
-    'DATA DE PAGAMENTO': formatExportDate(r.dataPagamento),
-    STATUS: r.status || '',
-    FLUIG: r.fluig || '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(data, {
-    header: CONTROLE_ANUIDADE_IMPORT_TEMPLATE_HEADERS,
-  });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Anuidades');
-  const suffix = filenameSuffix || new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `controle-anuidade_${suffix}.xlsx`);
-}
 
 export async function parseControleAnuidadeFromFile(file: File): Promise<{
   registros: ControleAnuidadeImportRow[];

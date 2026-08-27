@@ -283,19 +283,6 @@ export function downloadResponsavelTecnicoImportTemplate() {
   XLSX.writeFile(wb, 'modelo-responsaveis-tecnicos.xlsx');
 }
 
-function formatExportDate(value: string | null | undefined): string {
-  if (!value) return '';
-  const raw = String(value).trim();
-  if (!raw) return '';
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}/${d.getUTCFullYear()}`;
-}
-
 export type ResponsavelTecnicoExportRow = {
   crea?: string | null;
   empresa?: string | null;
@@ -310,33 +297,6 @@ export type ResponsavelTecnicoExportRow = {
   anuidade2026?: string | null;
   status?: string | null;
 };
-
-export function exportResponsaveisTecnicosEntries(
-  entries: ResponsavelTecnicoExportRow[],
-  filenameSuffix?: string
-): void {
-  const data = entries.map((r) => ({
-    CREA: r.crea || '',
-    EMPRESA: r.empresa || '',
-    PROFISSIONAL: r.profissional || '',
-    CPF: r.cpf || '',
-    REGISTRO: r.registro || '',
-    'DATA DE INÍCIO': formatExportDate(r.dataInicio),
-    TÍTULO: r.titulo || '',
-    'ART/CARGO OU FUNÇÃO': r.artCargoFuncao || '',
-    PROTOCOLO: r.protocolo || '',
-    'BAIXA EM': formatExportDate(r.baixaEm),
-    ANUIDADE: r.anuidade2026 || '',
-    STATUS: r.status || '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(data, {
-    header: RESPONSAVEL_TECNICO_IMPORT_TEMPLATE_HEADERS,
-  });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Responsaveis');
-  const suffix = filenameSuffix || new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `responsaveis-tecnicos_${suffix}.xlsx`);
-}
 
 export async function parseResponsaveisFromFile(file: File): Promise<{
   responsaveis: ResponsavelTecnicoImportRow[];

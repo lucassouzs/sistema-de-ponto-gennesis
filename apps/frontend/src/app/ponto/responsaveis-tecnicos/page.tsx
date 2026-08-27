@@ -4,7 +4,9 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertCircle,
+  ChevronDown,
   Download,
+  FileDown,
   FileSpreadsheet,
   Filter,
   HardHat,
@@ -41,11 +43,12 @@ import api from '@/lib/api';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   downloadResponsavelTecnicoImportTemplate,
-  exportResponsaveisTecnicosEntries,
   parseResponsaveisFromFile,
   RESPONSAVEL_TECNICO_IMPORT_COLUMNS,
   type ResponsavelTecnicoImportRow,
 } from '@/lib/responsavelTecnicoImport';
+import { exportResponsaveisTecnicosEntries } from '@/lib/exportResponsaveisTecnicosExcel';
+import { exportResponsaveisTecnicosPdf } from '@/lib/exportResponsaveisTecnicosPdf';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ResponsavelTecnico {
@@ -207,6 +210,9 @@ function ResponsaveisTecnicosContent() {
   const [importFileName, setImportFileName] = useState('');
   const [isImportDragging, setIsImportDragging] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const hasActiveFilters =
     statusFilter !== 'all' ||
@@ -416,16 +422,37 @@ function ResponsaveisTecnicosContent() {
     }
   }
 
-  function handleExport() {
+  async function handleExportExcel() {
     if (rows.length === 0) {
       toast.error('Nenhum registro para exportar com os filtros atuais.');
       return;
     }
+    setExportingExcel(true);
     try {
-      exportResponsaveisTecnicosEntries(rows, new Date().toISOString().slice(0, 10));
-      toast.success(`${rows.length} registro(s) exportado(s).`);
+      await exportResponsaveisTecnicosEntries(rows, new Date().toISOString().slice(0, 10));
+      toast.success(`${rows.length} registro(s) exportado(s) em Excel.`);
+      setShowExportMenu(false);
     } catch {
       toast.error('Erro ao exportar planilha.');
+    } finally {
+      setExportingExcel(false);
+    }
+  }
+
+  async function handleExportPdf() {
+    if (rows.length === 0) {
+      toast.error('Nenhum registro para exportar com os filtros atuais.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      await exportResponsaveisTecnicosPdf(rows, new Date().toISOString().slice(0, 10));
+      toast.success(`${rows.length} registro(s) exportado(s) em PDF.`);
+      setShowExportMenu(false);
+    } catch {
+      toast.error('Erro ao gerar PDF.');
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -543,15 +570,54 @@ function ResponsaveisTecnicosContent() {
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={isLoading || rows.length === 0}
-                className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-              >
-                <Download className="h-4 w-4 shrink-0" />
-                <span>Exportar</span>
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={isLoading || rows.length === 0 || exportingPdf || exportingExcel}
+                  className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span>
+                    {exportingExcel
+                      ? 'Gerando Excel…'
+                      : exportingPdf
+                        ? 'Gerando PDF…'
+                        : 'Exportar'}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </button>
+                {showExportMenu ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Fechar menu de exportação"
+                      className="fixed inset-0 z-40 cursor-default"
+                      onClick={() => setShowExportMenu(false)}
+                    />
+                    <div className="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => void handleExportExcel()}
+                        disabled={exportingExcel}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        Excel (.xlsx)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleExportPdf()}
+                        disabled={exportingPdf}
+                        className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        <FileDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        PDF
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={() => {

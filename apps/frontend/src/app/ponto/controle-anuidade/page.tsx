@@ -7,8 +7,10 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCircle,
+  ChevronDown,
   Clock,
   Download,
+  FileDown,
   FileSpreadsheet,
   Filter,
   Plus,
@@ -48,10 +50,13 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import {
   CONTROLE_ANUIDADE_IMPORT_COLUMNS,
   downloadControleAnuidadeImportTemplate,
-  exportControleAnuidadeEntries,
   parseControleAnuidadeFromFile,
   type ControleAnuidadeImportRow,
 } from '@/lib/controleAnuidadeImport';
+import {
+  exportControleAnuidadeEntries,
+  exportControleAnuidadePdf,
+} from '@/lib/exportControleAnuidade';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ControleAnuidade {
@@ -120,6 +125,7 @@ const EMPRESA_FILTER_OPTIONS = labeledToSelectOptions([
 const PAGOS_PELO_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'all', label: 'Todos' },
   { value: 'CFT', label: 'CFT' },
+  { value: 'CREA-BA', label: 'CREA-BA' },
   { value: 'CREA-DF', label: 'CREA-DF' },
   { value: 'CREA-GO', label: 'CREA-GO' },
   { value: 'CREA-RN', label: 'CREA-RN' },
@@ -183,18 +189,38 @@ const ANUIDADE_STAT_CARDS: {
   },
 ];
 
-const EMPRESA_FORM_OPTIONS = labeledToSelectOptions([
-  { value: 'GENNESIS', label: 'GENNESIS' },
-  { value: 'ENGPAC', label: 'ENGPAC' },
-  { value: 'ECONTECX', label: 'ECONTECX' },
-  { value: 'ECONTECK', label: 'ECONTECK' },
-  { value: 'MÉTRICA', label: 'MÉTRICA' },
-  { value: 'CONSÓRCIO UNB', label: 'CONSÓRCIO UNB' },
-  { value: 'CONSÓRCIO HUB', label: 'CONSÓRCIO HUB' },
-]);
+const EMPRESA_FORM_VALUES = [
+  'GENNESIS',
+  'ENGPAC',
+  'ECONTECX',
+  'ECONTECK',
+  'MÉTRICA',
+  'CONSÓRCIO UNB',
+  'CONSÓRCIO HUB',
+] as const;
+
+const EMPRESA_OPTION_PREFIX = 'empresa:';
+
+const EMPRESA_FORM_OPTIONS = labeledToSelectOptions(
+  EMPRESA_FORM_VALUES.map((value) => ({ value, label: value })),
+);
+
+function isEmpresaProfissionalOption(value: string): boolean {
+  return value.startsWith(EMPRESA_OPTION_PREFIX);
+}
+
+function empresaProfissionalOptionValue(empresa: string): string {
+  return `${EMPRESA_OPTION_PREFIX}${empresa}`;
+}
+
+function parseEmpresaProfissionalOption(value: string): string | null {
+  if (!isEmpresaProfissionalOption(value)) return null;
+  return value.slice(EMPRESA_OPTION_PREFIX.length).trim() || null;
+}
 
 const PAGOS_PELO_FORM_OPTIONS = labeledToSelectOptions([
   { value: 'CFT', label: 'CFT' },
+  { value: 'CREA-BA', label: 'CREA-BA' },
   { value: 'CREA-DF', label: 'CREA-DF' },
   { value: 'CREA-GO', label: 'CREA-GO' },
   { value: 'CREA-RN', label: 'CREA-RN' },
@@ -276,6 +302,9 @@ function ControleAnuidadeContent() {
   const [detail, setDetail] = useState<ControleAnuidade | null>(null);
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [importRows, setImportRows] = useState<ControleAnuidadeImportRow[]>([]);
   const [importSkipped, setImportSkipped] = useState<
     { line: number; reasons: string[]; preview: string }[]
@@ -353,10 +382,15 @@ function ControleAnuidadeContent() {
     enabled: showForm,
   });
 
-  const [selectedRtId, setSelectedRtId] = useState('');
+  const [selectedProfissionalOption, setSelectedProfissionalOption] = useState('');
 
   const profissionalOptions = useMemo(() => {
-    const options = responsaveisTecnicos
+    const empresaOptions = EMPRESA_FORM_VALUES.map((empresa) => ({
+      value: empresaProfissionalOptionValue(empresa),
+      label: `Empresa · ${empresa}`,
+    }));
+
+    const rtOptions = responsaveisTecnicos
       .filter((rt) => rt.profissional?.trim())
       .slice()
       .sort((a, b) => a.profissional.localeCompare(b.profissional, 'pt-BR'))
@@ -365,12 +399,13 @@ function ControleAnuidadeContent() {
         const label = cpf ? `${rt.profissional.trim()} · ${cpf}` : rt.profissional.trim();
         return { value: rt.id, label };
       });
-    return labeledToSelectOptions(options);
+
+    return labeledToSelectOptions([...empresaOptions, ...rtOptions]);
   }, [responsaveisTecnicos]);
 
-  function applyProfissional(rtId: string) {
-    setSelectedRtId(rtId);
-    if (!rtId) {
+  function applyProfissional(optionValue: string) {
+    setSelectedProfissionalOption(optionValue);
+    if (!optionValue) {
       setFormData((prev) => ({
         ...prev,
         profissional: '',
@@ -379,7 +414,20 @@ function ControleAnuidadeContent() {
       }));
       return;
     }
-    const match = responsaveisTecnicos.find((rt) => rt.id === rtId);
+
+    const empresaNome = parseEmpresaProfissionalOption(optionValue);
+    if (empresaNome) {
+      setFormData((prev) => ({
+        ...prev,
+        profissional: empresaNome,
+        empresa: prev.empresa?.trim() ? prev.empresa : empresaNome,
+        crea: '',
+        cpfCnpj: '',
+      }));
+      return;
+    }
+
+    const match = responsaveisTecnicos.find((rt) => rt.id === optionValue);
     if (!match) return;
     setFormData((prev) => ({
       ...prev,
@@ -391,25 +439,45 @@ function ControleAnuidadeContent() {
   }
 
   useEffect(() => {
-    if (!showForm || selectedRtId || !formData.profissional.trim() || responsaveisTecnicos.length === 0) {
+    if (!showForm || selectedProfissionalOption || !formData.profissional.trim()) {
       return;
     }
-    const name = formData.profissional.trim().toUpperCase();
+    const name = formData.profissional.trim();
+    const nameUpper = name.toUpperCase();
+
+    const naoInformadoEmpresa = name.match(/^n[aã]o informado\s*\((.+)\)$/i)?.[1]?.trim();
+    const empresaCandidate = naoInformadoEmpresa || name;
+    const empresaMatch = EMPRESA_FORM_VALUES.find(
+      (empresa) => empresa.toUpperCase() === empresaCandidate.toUpperCase(),
+    );
+    if (empresaMatch) {
+      setSelectedProfissionalOption(empresaProfissionalOptionValue(empresaMatch));
+      return;
+    }
+
+    if (responsaveisTecnicos.length === 0) return;
+
     const cpf = formData.cpfCnpj.trim();
     const match =
       responsaveisTecnicos.find(
         (rt) =>
-          rt.profissional?.trim().toUpperCase() === name &&
+          rt.profissional?.trim().toUpperCase() === nameUpper &&
           (!cpf || (rt.cpf || '').trim() === cpf),
       ) ||
-      responsaveisTecnicos.find((rt) => rt.profissional?.trim().toUpperCase() === name);
+      responsaveisTecnicos.find((rt) => rt.profissional?.trim().toUpperCase() === nameUpper);
     if (match) {
-      setSelectedRtId(match.id);
+      setSelectedProfissionalOption(match.id);
       if (!formData.cpfCnpj.trim() && match.cpf?.trim()) {
         setFormData((prev) => ({ ...prev, cpfCnpj: match.cpf!.trim() }));
       }
     }
-  }, [showForm, selectedRtId, formData.profissional, formData.cpfCnpj, responsaveisTecnicos]);
+  }, [
+    showForm,
+    selectedProfissionalOption,
+    formData.profissional,
+    formData.cpfCnpj,
+    responsaveisTecnicos,
+  ]);
 
   const rows = data?.rows || [];
   const stats = data?.meta || { pagos: 0, emAberta: 0, vencidas: 0, venceHoje: 0 };
@@ -503,7 +571,7 @@ function ControleAnuidadeContent() {
   function openCreate() {
     setEditing(null);
     setFormData(EMPTY_FORM);
-    setSelectedRtId('');
+    setSelectedProfissionalOption('');
     setShowForm(true);
   }
 
@@ -523,7 +591,7 @@ function ControleAnuidadeContent() {
       status: row.status || 'EM_ABERTA',
       fluig: row.fluig || '',
     });
-    setSelectedRtId('');
+    setSelectedProfissionalOption('');
     setShowForm(true);
   }
 
@@ -546,16 +614,37 @@ function ControleAnuidadeContent() {
     }
   }
 
-  function handleExport() {
+  async function handleExportExcel() {
     if (rows.length === 0) {
       toast.error('Nenhum registro para exportar com os filtros atuais.');
       return;
     }
+    setExportingExcel(true);
     try {
-      exportControleAnuidadeEntries(rows, new Date().toISOString().slice(0, 10));
-      toast.success(`${rows.length} registro(s) exportado(s).`);
+      await exportControleAnuidadeEntries(rows, new Date().toISOString().slice(0, 10));
+      toast.success(`${rows.length} registro(s) exportado(s) em Excel.`);
+      setShowExportMenu(false);
     } catch {
       toast.error('Erro ao exportar planilha.');
+    } finally {
+      setExportingExcel(false);
+    }
+  }
+
+  async function handleExportPdf() {
+    if (rows.length === 0) {
+      toast.error('Nenhum registro para exportar com os filtros atuais.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      await exportControleAnuidadePdf(rows, new Date().toISOString().slice(0, 10));
+      toast.success(`${rows.length} registro(s) exportado(s) em PDF.`);
+      setShowExportMenu(false);
+    } catch {
+      toast.error('Erro ao gerar PDF.');
+    } finally {
+      setExportingPdf(false);
     }
   }
 
@@ -693,15 +782,54 @@ function ControleAnuidadeContent() {
                   <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
                 ) : null}
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                disabled={isLoading || rows.length === 0}
-                className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-              >
-                <Download className="h-4 w-4 shrink-0" />
-                <span>Exportar</span>
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowExportMenu((v) => !v)}
+                  disabled={isLoading || rows.length === 0 || exportingExcel || exportingPdf}
+                  className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  <Download className="h-4 w-4 shrink-0" />
+                  <span>
+                    {exportingExcel
+                      ? 'Gerando Excel…'
+                      : exportingPdf
+                        ? 'Gerando PDF…'
+                        : 'Exportar'}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                </button>
+                {showExportMenu ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Fechar menu de exportação"
+                      className="fixed inset-0 z-40 cursor-default"
+                      onClick={() => setShowExportMenu(false)}
+                    />
+                    <div className="absolute right-0 z-50 mt-1 w-48 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => void handleExportExcel()}
+                        disabled={exportingExcel}
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        Excel (.xlsx)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleExportPdf()}
+                        disabled={exportingPdf}
+                        className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-700"
+                      >
+                        <FileDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        PDF
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -1031,8 +1159,8 @@ function ControleAnuidadeContent() {
               className="space-y-4 p-6"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (!formData.profissional.trim()) {
-                  toast.error('Preencha o Profissional');
+                if (!formData.profissional.trim() || !selectedProfissionalOption) {
+                  toast.error('Selecione o profissional ou a empresa');
                   return;
                 }
                 saveMutation.mutate();
@@ -1064,10 +1192,10 @@ function ControleAnuidadeContent() {
                 <div className="sm:col-span-2">
                   <label className={labelClass}>Profissional *</label>
                   <StringSingleSelectDropdown
-                    value={selectedRtId}
+                    value={selectedProfissionalOption}
                     onChange={applyProfissional}
                     options={profissionalOptions}
-                    placeholder="Selecionar profissional..."
+                    placeholder="Selecionar profissional ou empresa..."
                     allowEmpty
                     emptyOptionLabel="—"
                   />

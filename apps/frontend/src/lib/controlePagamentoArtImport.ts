@@ -255,26 +255,6 @@ export function downloadControlePagamentoArtImportTemplate() {
   XLSX.writeFile(wb, 'modelo-controle-pagamentos-art.xlsx');
 }
 
-function formatExportDate(value: string | null | undefined): string {
-  if (!value) return '';
-  const raw = String(value).trim();
-  if (!raw) return '';
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${dd}/${mm}/${d.getUTCFullYear()}`;
-}
-
-function formatExportValor(value: string | number | null | undefined): string | number {
-  if (value === null || value === undefined || value === '') return '';
-  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
-  const n = parseFloat(String(value).replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : String(value);
-}
-
 export type ControlePagamentoArtExportRow = {
   uf?: string | null;
   empresa?: string | null;
@@ -295,39 +275,6 @@ export type ControlePagamentoArtExportRow = {
   pagoEm?: string | null;
   fluig?: string | null;
 };
-
-export function exportControlePagamentoArtEntries(
-  entries: ControlePagamentoArtExportRow[],
-  filenameSuffix?: string
-): void {
-  const data = entries.map((r) => ({
-    UF: r.uf || '',
-    EMPRESA: r.empresa || '',
-    CONTRATANTE: r.contratante || '',
-    'CNPJ/CPF': r.cnpjCpf || '',
-    CONTRATO: r.contrato || '',
-    OBSERVAÇÕES: r.observacoes || '',
-    'VIGÊNCIA - INICIO': formatExportDate(r.vigenciaInicio),
-    'VIGÊNCIA - TERMINO': formatExportDate(r.vigenciaTermino),
-    RENOVAÇÃO: formatExportDate(r.renovacao),
-    ART: r.art || '',
-    VALOR: formatExportValor(r.valor),
-    PROFISSIONAL: r.profissional || '',
-    'VENC DO BOLETO': formatExportDate(r.vencDoBoleto),
-    STATUS: r.status || '',
-    PAGO: r.pago || '',
-    'SOLICITA EM': formatExportDate(r.solicitaEm),
-    'PAGO EM': formatExportDate(r.pagoEm),
-    FLUIG: r.fluig || '',
-  }));
-  const ws = XLSX.utils.json_to_sheet(data, {
-    header: CONTROLE_PAGAMENTO_ART_IMPORT_TEMPLATE_HEADERS,
-  });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'ART Protocolos');
-  const suffix = filenameSuffix || new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `controle-pagamentos-art_${suffix}.xlsx`);
-}
 
 export async function parseControlePagamentoArtFromFile(file: File): Promise<{
   registros: ControlePagamentoArtImportRow[];

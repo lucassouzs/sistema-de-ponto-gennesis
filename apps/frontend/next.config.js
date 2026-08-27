@@ -69,6 +69,16 @@ const nextConfig = {
       'victory-vendor/d3-scale': require.resolve('d3-scale'),
       'victory-vendor/d3-shape': require.resolve('d3-shape'),
     };
+    // exceljs (export Excel no browser) puxa módulos Node — desliga no client bundle
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      fs: false,
+      path: false,
+      stream: false,
+      crypto: false,
+      zlib: false,
+      util: false,
+    };
     return config;
   },
 };
