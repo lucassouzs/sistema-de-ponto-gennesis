@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import {
   FormularioTemplateService,
   FormularioSection,
+  FormularioStep,
 } from '../services/FormularioTemplateService';
 
 interface AuthRequest extends Request {
@@ -38,13 +39,15 @@ export class FormularioTemplateController {
       const body = req.body as {
         name?: string;
         description?: string;
+        multiStepEnabled?: boolean;
+        steps?: FormularioStep[];
         sections?: FormularioSection[];
       };
       const data = await service.create(body);
       return res.status(201).json({ success: true, data });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '';
-      if (msg === 'Seções inválidas.') {
+      if (msg === 'Seções inválidas.' || msg === 'Etapas inválidas.') {
         return res.status(400).json({ success: false, message: msg });
       }
       return next(err);
@@ -57,6 +60,8 @@ export class FormularioTemplateController {
       const body = req.body as {
         name?: string;
         description?: string | null;
+        multiStepEnabled?: boolean;
+        steps?: FormularioStep[];
         sections?: FormularioSection[];
       };
       const data = await service.update(id, body);
@@ -66,7 +71,7 @@ export class FormularioTemplateController {
       if (msg === 'Formulário não encontrado.') {
         return res.status(404).json({ success: false, message: msg });
       }
-      if (msg === 'Seções inválidas.') {
+      if (msg === 'Seções inválidas.' || msg === 'Etapas inválidas.') {
         return res.status(400).json({ success: false, message: msg });
       }
       return next(err);

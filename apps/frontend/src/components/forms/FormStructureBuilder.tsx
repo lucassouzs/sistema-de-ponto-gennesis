@@ -8,12 +8,15 @@ import {
   CalendarClock,
   CheckSquare,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Columns,
   Hash,
   Image as ImageIcon,
   LayoutGrid,
   LayoutList,
+  Layers,
   ListChecks,
   ListFilter,
   Maximize2,
@@ -40,6 +43,7 @@ import { SignatureField } from '@/components/ui/SignatureField';
 import {
   FormMultiFileFieldPreview,
 } from '@/components/forms/FormMultiFileField';
+import { FormStepsStepper } from '@/components/forms/FormStepsStepper';
 import {
   FORM_FIELD_TYPE_LABELS,
   FORM_FIELD_TYPES_WITH_OPTIONS,
@@ -50,13 +54,16 @@ import {
   type FormFieldWidth,
   type FormQuestion,
   type FormSection,
+  type FormStep,
   formUid,
   newFormQuestion,
   newFormSection,
+  newFormStep,
 } from '@/components/forms/formStructureTypes';
 
 type PaletteAction =
   | { kind: 'section'; label: string; Icon: typeof Type }
+  | { kind: 'step'; label: string; Icon: typeof Type }
   | { kind: 'field'; type: FormFieldType; label: string; Icon: typeof Type };
 
 type PaletteGroup = {
@@ -68,6 +75,7 @@ const PALETTE_GROUPS: PaletteGroup[] = [
   {
     title: 'Layout',
     items: [
+      { kind: 'step', label: 'Etapas', Icon: Layers },
       { kind: 'section', label: 'Seções', Icon: LayoutList },
       { kind: 'field', type: 'table', label: 'Tabelas', Icon: Table2 },
     ],
@@ -116,10 +124,16 @@ const FORM_DND_MIME = 'application/x-form-palette';
 type Props = {
   name: string;
   description: string;
+  multiStepEnabled: boolean;
+  steps: FormStep[];
   sections: FormSection[];
   onNameChange: (name: string) => void;
   onDescriptionChange: (description: string) => void;
-  onChange: (sections: FormSection[]) => void;
+  onStructureChange: (patch: {
+    multiStepEnabled?: boolean;
+    steps?: FormStep[];
+    sections?: FormSection[];
+  }) => void;
   footer?: React.ReactNode;
 };
 
@@ -177,18 +191,21 @@ function questionDefaults(type: FormFieldType): Partial<FormQuestion> {
 export function FormStructureBuilder({
   name,
   description,
-  sections,
+  multiStepEnabled,
+  steps,
+  sections: flatSections,
   onNameChange,
   onDescriptionChange,
-  onChange,
+  onStructureChange,
   footer,
 }: Props) {
   const [search, setSearch] = useState('');
+  const [activeStepId, setActiveStepId] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ sectionId: string; questionId: string } | null>(
     null
   );
   const [dragging, setDragging] = useState(false);
-  const [dragKind, setDragKind] = useState<'section' | 'field' | null>(null);
+  const [dragKind, setDragKind] = useState<'section' | 'step' | 'field' | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const [optionsModal, setOptionsModal] = useState<{
@@ -197,6 +214,9 @@ export function FormStructureBuilder({
   } | null>(null);
   const [optionsDraft, setOptionsDraft] = useState<string[]>([]);
   const dragGhostRef = useRef<HTMLElement | null>(null);
+
+  const stepActionBtn =
+    'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200';
 
   useEffect(() => {
     if (!justAddedId) return;
@@ -218,8 +238,44 @@ export function FormStructureBuilder({
     return () => window.removeEventListener('dragend', clear);
   }, []);
 
+  useEffect(() => {
+    if (!multiStepEnabled || !steps.length) {
+      setActiveStepId(null);
+      return;
+    }
+    if (!activeStepId || !steps.some((step) => step.id === activeStepId)) {
+      setActiveStepId(steps[0]!.id);
+    }
+  }, [multiStepEnabled, steps, activeStepId]);
+
+  const activeStep = multiStepEnabled
+    ? (steps.find((step) => step.id === activeStepId) ?? steps[0])
+    : undefined;
+  const sections = multiStepEnabled ? (activeStep?.sections ?? []) : flatSections;
+  const allSections = multiStepEnabled
+    ? steps.flatMap((step) => step.sections)
+    : flatSections;
+
+  const setSteps = (updater: (prev: FormStep[]) => FormStep[]) => {
+    onStructureChange({ steps: updater(steps) });
+  };
+
+  const setFlatSections = (updater: (prev: FormSection[]) => FormSection[]) => {
+    onStructureChange({ sections: updater(flatSections) });
+  };
+
   const setSections = (updater: (prev: FormSection[]) => FormSection[]) => {
-    onChange(updater(sections));
+    if (multiStepEnabled) {
+      if (!activeStep) return;
+      const stepId = activeStep.id;
+      setSteps((prev) =>
+        prev.map((step) =>
+          step.id === stepId ? { ...step, sections: updater(step.sections) } : step
+        )
+      );
+      return;
+    }
+    setFlatSections(updater);
   };
 
   const filteredGroups = useMemo(() => {
@@ -267,9 +323,79 @@ export function FormStructureBuilder({
     );
   };
 
+  const enableMultiStep = () => {
+    if (multiStepEnabled) return;
+    const step = newFormStep('Etapa 1');
+    step.sections = flatSections.length ? [...flatSections] : [];
+    onStructureChange({
+      multiStepEnabled: true,
+      steps: [step],
+      sections: [],
+    });
+    setActiveStepId(step.id);
+  };
+
+  const addStep = () => {
+    if (!multiStepEnabled) {
+      enableMultiStep();
+      return;
+    }
+    const step = newFormStep(`Etapa ${steps.length + 1}`);
+    setSteps((prev) => [...prev, step]);
+    setActiveStepId(step.id);
+  };
+
+  const updateStep = (stepId: string, patch: Partial<FormStep>) => {
+    setSteps((prev) => prev.map((step) => (step.id === stepId ? { ...step, ...patch } : step)));
+  };
+
+  const removeStep = (stepId: string) => {
+    if (steps.length <= 1) return;
+    if (!confirm('Remover esta etapa e todo o conteúdo dela?')) return;
+    setSteps((prev) => prev.filter((step) => step.id !== stepId));
+  };
+
+  const moveStep = (stepId: string, direction: -1 | 1) => {
+    setSteps((prev) => {
+      const idx = prev.findIndex((step) => step.id === stepId);
+      if (idx < 0) return prev;
+      const nextIdx = idx + direction;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const next = [...prev];
+      const [item] = next.splice(idx, 1);
+      next.splice(nextIdx, 0, item!);
+      return next;
+    });
+  };
+
+  const disableMultiStep = () => {
+    const mergedSections = steps.flatMap((step) => step.sections);
+    onStructureChange({
+      multiStepEnabled: false,
+      steps: [],
+      sections: mergedSections.length ? mergedSections : [newFormSection()],
+    });
+    setActiveStepId(null);
+  };
+
+  const handleStepMenuRemove = () => {
+    if (!activeStep) return;
+    if (steps.length > 1) {
+      removeStep(activeStep.id);
+      return;
+    }
+    if (!confirm('Remover etapas e voltar ao formulário em uma página?')) return;
+    disableMultiStep();
+  };
+
   const addSection = () => {
     const section = newFormSection();
     section.questions = [];
+    if (!multiStepEnabled) {
+      setFlatSections((prev) => [...prev, section]);
+      return;
+    }
+    if (!activeStep) return;
     setSections((prev) => [...prev, section]);
   };
 
@@ -288,10 +414,44 @@ export function FormStructureBuilder({
       ...(opts?.width ? { width: opts.width } : {}),
     } as FormQuestion;
 
+    if (!multiStepEnabled) {
+      if (flatSections.length === 0) {
+        const section = newFormSection();
+        section.questions = [question];
+        onStructureChange({ sections: [section] });
+        setSelected({ sectionId: section.id, questionId: question.id });
+        setJustAddedId(question.id);
+        return;
+      }
+
+      const sectionId =
+        targetSectionId || selected?.sectionId || flatSections[flatSections.length - 1]!.id;
+
+      setFlatSections((prev) => {
+        const nextSections = prev.map((s) => {
+          if (s.id !== sectionId) return s;
+          if (!opts?.afterQuestionId) {
+            return { ...s, questions: [...s.questions, question] };
+          }
+          const idx = s.questions.findIndex((q) => q.id === opts.afterQuestionId);
+          if (idx < 0) return { ...s, questions: [...s.questions, question] };
+          const nextQuestions = [...s.questions];
+          nextQuestions.splice(idx + 1, 0, question);
+          return { ...s, questions: nextQuestions };
+        });
+        return nextSections;
+      });
+      setSelected({ sectionId, questionId: question.id });
+      setJustAddedId(question.id);
+      return;
+    }
+
+    if (!activeStep) return;
+
     if (sections.length === 0) {
       const section = newFormSection();
       section.questions = [question];
-      onChange([section]);
+      setSections(() => [section]);
       setSelected({ sectionId: section.id, questionId: question.id });
       setJustAddedId(question.id);
       return;
@@ -300,19 +460,20 @@ export function FormStructureBuilder({
     const sectionId =
       targetSectionId || selected?.sectionId || sections[sections.length - 1]!.id;
 
-    onChange(
-      sections.map((s) => {
+    setSections((prev) => {
+      const nextSections = prev.map((s) => {
         if (s.id !== sectionId) return s;
         if (!opts?.afterQuestionId) {
           return { ...s, questions: [...s.questions, question] };
         }
         const idx = s.questions.findIndex((q) => q.id === opts.afterQuestionId);
         if (idx < 0) return { ...s, questions: [...s.questions, question] };
-        const next = [...s.questions];
-        next.splice(idx + 1, 0, question);
-        return { ...s, questions: next };
-      })
-    );
+        const nextQuestions = [...s.questions];
+        nextQuestions.splice(idx + 1, 0, question);
+        return { ...s, questions: nextQuestions };
+      });
+      return nextSections;
+    });
     setSelected({ sectionId, questionId: question.id });
     setJustAddedId(question.id);
   };
@@ -329,7 +490,8 @@ export function FormStructureBuilder({
   };
 
   const handlePaletteClick = (item: PaletteAction) => {
-    if (item.kind === 'section') addSection();
+    if (item.kind === 'step') enableMultiStep();
+    else if (item.kind === 'section') addSection();
     else addField(item.type);
   };
 
@@ -345,12 +507,18 @@ export function FormStructureBuilder({
 
   const onPaletteDragStart = (e: React.DragEvent, item: PaletteAction) => {
     const payload = JSON.stringify(
-      item.kind === 'section' ? { kind: 'section' } : { kind: 'field', type: item.type }
+      item.kind === 'section'
+        ? { kind: 'section' }
+        : item.kind === 'step'
+          ? { kind: 'step' }
+          : { kind: 'field', type: item.type }
     );
     e.dataTransfer.setData(FORM_DND_MIME, payload);
     e.dataTransfer.setData('text/plain', payload);
     e.dataTransfer.effectAllowed = 'copy';
-    setDragKind(item.kind === 'section' ? 'section' : 'field');
+    setDragKind(
+      item.kind === 'section' ? 'section' : item.kind === 'step' ? 'step' : 'field'
+    );
 
     const source = e.currentTarget as HTMLElement;
     const ghost = source.cloneNode(true) as HTMLElement;
@@ -410,6 +578,10 @@ export function FormStructureBuilder({
     if (!raw) return;
     try {
       const data = JSON.parse(raw) as { kind: string; type?: FormFieldType };
+      if (data.kind === 'step') {
+        enableMultiStep();
+        return;
+      }
       if (data.kind === 'section' || target?.newSection) {
         if (data.kind === 'section') {
           addSection();
@@ -456,7 +628,7 @@ export function FormStructureBuilder({
   };
 
   const optionsModalQuestion = optionsModal
-    ? sections
+    ? allSections
         .find((s) => s.id === optionsModal.sectionId)
         ?.questions.find((q) => q.id === optionsModal.questionId) ?? null
     : null;
@@ -534,18 +706,23 @@ export function FormStructureBuilder({
               <div className="grid grid-cols-2 gap-2.5">
                 {group.items.map((item) => {
                   const Icon = item.Icon;
-                  const key = item.kind === 'section' ? 'section' : item.type;
+                  const key = item.kind === 'section' ? 'section' : item.kind === 'step' ? 'step' : item.type;
+                  const stepLocked = item.kind === 'step' && multiStepEnabled;
                   return (
                     <button
                       key={key}
                       type="button"
-                      draggable
+                      draggable={!stepLocked}
+                      disabled={stepLocked}
                       onClick={() => handlePaletteClick(item)}
                       onDragStart={(e) => onPaletteDragStart(e, item)}
                       onDragEnd={clearDrag}
-                      className={`flex min-h-[52px] cursor-grab items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-left text-sm font-medium text-gray-700 transition-all duration-200 hover:border-gray-300 hover:bg-gray-50 active:cursor-grabbing active:scale-95 dark:border-gray-700 dark:bg-transparent dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-white/[0.04] ${
-                        dragging ? 'opacity-60' : ''
-                      }`}
+                      className={`flex min-h-[52px] items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3.5 py-3 text-left text-sm font-medium text-gray-700 transition-all duration-200 dark:border-gray-700 dark:bg-transparent dark:text-gray-200 ${
+                        stepLocked
+                          ? 'cursor-not-allowed opacity-40'
+                          : 'cursor-grab hover:border-gray-300 hover:bg-gray-50 active:cursor-grabbing active:scale-95 dark:hover:border-gray-600 dark:hover:bg-white/[0.04]'
+                      } ${dragging && !stepLocked ? 'opacity-60' : ''}`}
+                      title={stepLocked ? 'Etapas já ativadas neste formulário' : undefined}
                     >
                       <Icon className="h-[18px] w-[18px] shrink-0 text-gray-500 dark:text-gray-400" />
                       <span className="leading-snug">{item.label}</span>
@@ -587,7 +764,77 @@ export function FormStructureBuilder({
               placeholder="Descrição do formulário"
             />
 
-            <div className="mt-8 space-y-8">
+            <div className="mt-8 space-y-6">
+              {multiStepEnabled ? (
+                <div className="group/stepper relative">
+                  <div className="pointer-events-none absolute right-0 top-0 z-10 flex h-8 -translate-y-full items-center justify-end gap-0.5 pb-1 opacity-0 transition-opacity group-hover/stepper:pointer-events-auto group-hover/stepper:opacity-100">
+                    {activeStep ? (
+                      <>
+                        <button
+                          type="button"
+                          title="Nova etapa"
+                          onClick={addStep}
+                          className={stepActionBtn}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Mover etapa para a esquerda"
+                          disabled={
+                            steps.findIndex((step) => step.id === activeStep.id) === 0
+                          }
+                          onClick={() => moveStep(activeStep.id, -1)}
+                          className={stepActionBtn}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Mover etapa para a direita"
+                          disabled={
+                            steps.findIndex((step) => step.id === activeStep.id) >=
+                            steps.length - 1
+                          }
+                          onClick={() => moveStep(activeStep.id, 1)}
+                          className={stepActionBtn}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          title={steps.length > 1 ? 'Remover etapa' : 'Remover etapas'}
+                          onClick={handleStepMenuRemove}
+                          className={`${stepActionBtn} hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  <FormStepsStepper
+                    className="w-full"
+                    steps={steps.map((step) => ({
+                      id: step.id,
+                      label: step.title,
+                    }))}
+                    currentIndex={Math.max(
+                      0,
+                      steps.findIndex((step) => step.id === activeStep?.id)
+                    )}
+                    mode="navigation"
+                    editable
+                    onStepLabelChange={(stepId, label) =>
+                      updateStep(stepId, { title: label })
+                    }
+                    onSelect={(index) => {
+                      const step = steps[index];
+                      if (step) setActiveStepId(step.id);
+                    }}
+                  />
+                </div>
+              ) : null}
+
               {sections.length === 0 ? (
                 dragging ? (
                   <div

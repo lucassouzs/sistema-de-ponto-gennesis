@@ -176,7 +176,6 @@ export function JuridicoImportModal({ isOpen, onClose, onImported }: Props) {
     setImportProgress({ ...progress, uploadPercent: 0 });
     const res = await api.post('/juridico-processos/import', fd, {
       timeout: IMPORT_TIMEOUT_MS,
-      headers: { 'Content-Type': 'multipart/form-data' },
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       onUploadProgress: (evt) => {
@@ -398,6 +397,11 @@ export function JuridicoImportModal({ isOpen, onClose, onImported }: Props) {
       const msg =
         ax.code === 'ECONNABORTED'
           ? 'Tempo esgotado no envio. Tente de novo — os ZIPs agora vão um por vez.'
+          : ax.message === 'Network Error' ||
+              String(ax.message || '')
+                .toLowerCase()
+                .includes('network error')
+            ? 'Conexão com o servidor foi interrompida (timeout no deploy ou processamento longo). Aguarde e tente de novo; se persistir, confira os logs do backend no Railway.'
           : ax.response?.data?.message ||
             (String(ax.message || '').toLowerCase().includes('file too large')
               ? 'Arquivo grande demais. O envio agora é por ZIP; se ainda falhar, divida o ZIP.'

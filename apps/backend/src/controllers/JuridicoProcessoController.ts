@@ -527,6 +527,9 @@ export class JuridicoProcessoController {
           ...collectUploadedFiles(files.comprovantesZip, 'comprovante', cleanups),
         ]);
 
+        const hasUploadedFiles =
+          anexoFiles.all.length > 0 || comprovanteFiles.all.length > 0;
+
       let created = 0;
       let updated = 0;
       let anexosLinked = 0;
@@ -553,6 +556,8 @@ export class JuridicoProcessoController {
               });
           if (existing) updated += 1;
           else created += 1;
+
+          if (!hasUploadedFiles) continue;
 
           const anexos = Array.isArray(row.anexos) ? row.anexos : [];
           for (const anexo of anexos) {

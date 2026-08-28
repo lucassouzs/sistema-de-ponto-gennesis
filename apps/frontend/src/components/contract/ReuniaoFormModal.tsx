@@ -21,10 +21,13 @@ import {
   FormMultiFileField,
   isBlankFormFileValue,
 } from '@/components/forms/FormMultiFileField';
+import { FormStepsStepper } from '@/components/forms/FormStepsStepper';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 import {
+  normalizeFormSteps,
   resolveFieldWidth,
   type FormQuestion,
+  type FormStep,
 } from '@/components/forms/formStructureTypes';
 import { fetchEmployeeSelectOptions } from '@/lib/employeeSelectOptions';
 import { toPersonSelectOptions } from '@/lib/personSelectOptions';
@@ -108,6 +111,8 @@ export interface ReuniaoData {
     id: string;
     name: string;
     description?: string;
+    multiStepEnabled?: boolean;
+    steps?: FormStep[];
     sections: Section[];
   } | null;
 }
@@ -602,6 +607,7 @@ export function ReuniaoFormModal({
   const [form, setForm] = useState<ReuniaoData>(EMPTY_DATA);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [activeFillStep, setActiveFillStep] = useState(0);
   const seededRef = useRef(false);
   const hydratedReuniaoIdRef = useRef<string | null>(null);
 
@@ -656,6 +662,7 @@ export function ReuniaoFormModal({
       hydratedReuniaoIdRef.current = null;
       setForm(EMPTY_DATA);
       setSaving(false);
+      setActiveFillStep(0);
       return;
     }
   }, [isOpen]);
@@ -709,10 +716,12 @@ export function ReuniaoFormModal({
       | {
           name?: string;
           description?: string;
+          multiStepEnabled?: boolean;
           sections?: Section[];
+          steps?: FormStep[];
         }
       | undefined;
-    if (!tpl?.sections?.length) return;
+    if (!tpl?.sections?.length && !tpl?.steps?.length) return;
 
     setForm((prev) => {
       if (!prev.formTemplate) return prev;
@@ -725,7 +734,12 @@ export function ReuniaoFormModal({
             tpl.description !== undefined
               ? tpl.description
               : prev.formTemplate.description,
-          sections: tpl.sections!,
+          multiStepEnabled:
+            tpl.multiStepEnabled !== undefined
+              ? tpl.multiStepEnabled
+              : prev.formTemplate.multiStepEnabled,
+          sections: tpl.sections || prev.formTemplate.sections,
+          steps: tpl.steps || prev.formTemplate.steps,
         },
       };
     });
@@ -766,14 +780,27 @@ export function ReuniaoFormModal({
     !hydrated;
 
   const allSections = templateSections;
+  const formSteps = useMemo(() => {
+    if (form.formTemplate?.multiStepEnabled !== true) return [];
+    return normalizeFormSteps({
+      steps: form.formTemplate?.steps,
+      sections: templateSections,
+    });
+  }, [form.formTemplate?.multiStepEnabled, form.formTemplate?.steps, templateSections]);
+  const multiStep = formSteps.length > 1;
+  const currentStep = formSteps[activeFillStep];
+  const visibleSections = multiStep ? currentStep?.sections ?? [] : allSections;
   const formTitle = form.formTemplate?.name?.trim() || 'Formulário de reunião';
   const formDescription = form.formTemplate?.description?.trim() || '';
 
-  const validateForm = (): string | null => {
-    for (const section of allSections) {
+  const validateSections = (
+    sections: Section[],
+    answers: Record<string, ReuniaoAnswer>
+  ): string | null => {
+    for (const section of sections) {
       for (const q of section.questions) {
         if (!q.required) continue;
-        const ans = form.answers[q.id];
+        const ans = answers[q.id];
         const empty =
           q.type === 'signature'
             ? isBlankSignature(typeof ans?.value === 'string' ? ans.value : '')
@@ -787,6 +814,26 @@ export function ReuniaoFormModal({
       }
     }
     return null;
+  };
+
+  const validateForm = (): string | null => {
+    for (const step of formSteps) {
+      const err = validateSections(step.sections as Section[], form.answers);
+      if (err) return err;
+    }
+    return null;
+  };
+
+  const handleNextStep = () => {
+    const err = validateSections(
+      (currentStep?.sections as Section[]) ?? [],
+      form.answers
+    );
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    setActiveFillStep((prev) => Math.min(prev + 1, formSteps.length - 1));
   };
 
   const handleFinish = async () => {
@@ -871,8 +918,20 @@ export function ReuniaoFormModal({
           </div>
 
           <div className="space-y-8">
-            {allSections.length > 0 ? (
-              allSections.map(renderSection)
+            {multiStep ? (
+              <FormStepsStepper
+                steps={formSteps.map((step, index) => ({
+                  id: step.id,
+                  label: step.title.trim() || `Etapa ${index + 1}`,
+                }))}
+                currentIndex={activeFillStep}
+                mode="progress"
+                onSelect={setActiveFillStep}
+              />
+            ) : null}
+
+            {visibleSections.length > 0 ? (
+              visibleSections.map(renderSection)
             ) : (
               <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                 Nenhuma pergunta neste formulário.
@@ -880,16 +939,37 @@ export function ReuniaoFormModal({
             )}
           </div>
 
-          <div className="flex justify-end border-t border-gray-200 pt-6 dark:border-gray-700">
-            <button
-              type="button"
-              onClick={() => void handleFinish()}
-              disabled={saving}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-red-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
-            >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salvar
-            </button>
+          <div className="flex justify-end gap-2 border-t border-gray-200 pt-6 dark:border-gray-700">
+            {multiStep && activeFillStep > 0 ? (
+              <button
+                type="button"
+                onClick={() => setActiveFillStep((prev) => Math.max(prev - 1, 0))}
+                disabled={saving}
+                className="inline-flex h-10 items-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+              >
+                Anterior
+              </button>
+            ) : null}
+            {multiStep && activeFillStep < formSteps.length - 1 ? (
+              <button
+                type="button"
+                onClick={handleNextStep}
+                disabled={saving}
+                className="inline-flex h-10 items-center rounded-lg bg-red-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                Próxima etapa
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleFinish()}
+                disabled={saving}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-red-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Salvar
+              </button>
+            )}
           </div>
         </div>
       )}

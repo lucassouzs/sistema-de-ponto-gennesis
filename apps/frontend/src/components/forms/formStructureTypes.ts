@@ -47,6 +47,13 @@ export interface FormSection {
   questions: FormQuestion[];
 }
 
+export interface FormStep {
+  id: string;
+  title: string;
+  description?: string;
+  sections: FormSection[];
+}
+
 export interface FormTemplateSummary {
   id: string;
   name: string;
@@ -56,6 +63,9 @@ export interface FormTemplateSummary {
 }
 
 export interface FormTemplate extends FormTemplateSummary {
+  /** Quando true, o formulário é dividido em etapas no preenchimento. */
+  multiStepEnabled?: boolean;
+  steps?: FormStep[];
   sections: FormSection[];
 }
 
@@ -162,5 +172,90 @@ export function newFormSection(): FormSection {
     title: 'Nova seção',
     description: '',
     questions: [newFormQuestion()],
+  };
+}
+
+export function newFormStep(title = 'Nova etapa'): FormStep {
+  return {
+    id: formUid(),
+    title,
+    description: '',
+    sections: [],
+  };
+}
+
+export function normalizeFormSteps(data: {
+  steps?: FormStep[];
+  sections?: FormSection[];
+}): FormStep[] {
+  if (data.steps?.length) {
+    return data.steps.map((step) => ({
+      id: step.id || formUid(),
+      title: step.title?.trim() || 'Nova etapa',
+      description: step.description?.trim() || '',
+      sections: Array.isArray(step.sections) ? step.sections : [],
+    }));
+  }
+
+  const sections = data.sections?.length ? data.sections : [newFormSection()];
+  return [
+    {
+      id: formUid(),
+      title: 'Etapa 1',
+      description: '',
+      sections,
+    },
+  ];
+}
+
+export function flattenFormSections(steps: FormStep[]): FormSection[] {
+  return steps.flatMap((step) => step.sections);
+}
+
+export type FormEditorStructure = {
+  multiStepEnabled: boolean;
+  steps: FormStep[];
+  sections: FormSection[];
+};
+
+export function loadFormEditorStructure(tpl: {
+  multiStepEnabled?: boolean;
+  steps?: FormStep[];
+  sections?: FormSection[];
+}): FormEditorStructure {
+  const multiStepEnabled = tpl.multiStepEnabled === true;
+
+  if (multiStepEnabled) {
+    return {
+      multiStepEnabled: true,
+      steps: normalizeFormSteps({ steps: tpl.steps, sections: tpl.sections }),
+      sections: [],
+    };
+  }
+
+  if (tpl.sections?.length) {
+    return { multiStepEnabled: false, steps: [], sections: tpl.sections };
+  }
+
+  if (tpl.steps?.length === 1) {
+    return { multiStepEnabled: false, steps: [], sections: tpl.steps[0]!.sections };
+  }
+
+  return { multiStepEnabled: false, steps: [], sections: [newFormSection()] };
+}
+
+export function buildFormSavePayload(structure: FormEditorStructure) {
+  if (structure.multiStepEnabled) {
+    return {
+      multiStepEnabled: true,
+      steps: structure.steps,
+      sections: flattenFormSections(structure.steps),
+    };
+  }
+
+  return {
+    multiStepEnabled: false,
+    steps: undefined,
+    sections: structure.sections,
   };
 }

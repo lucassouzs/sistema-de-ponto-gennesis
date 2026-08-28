@@ -11,9 +11,11 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Button } from '@/components/ui/Button';
 import { FormStructureBuilder } from '@/components/forms/FormStructureBuilder';
-import type {
-  FormSection,
-  FormTemplate,
+import type { FormTemplate } from '@/components/forms/formStructureTypes';
+import {
+  buildFormSavePayload,
+  loadFormEditorStructure,
+  type FormEditorStructure,
 } from '@/components/forms/formStructureTypes';
 import api from '@/lib/api';
 
@@ -27,7 +29,11 @@ export default function FormularioEditorPage() {
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [sections, setSections] = useState<FormSection[]>([]);
+  const [structure, setStructure] = useState<FormEditorStructure>({
+    multiStepEnabled: false,
+    steps: [],
+    sections: [],
+  });
   const [dirty, setDirty] = useState(false);
 
   const handleLogout = () => {
@@ -52,7 +58,7 @@ export default function FormularioEditorPage() {
     if (!tpl) return;
     setName(tpl.name || '');
     setDescription(tpl.description || '');
-    setSections(JSON.parse(JSON.stringify(tpl.sections || [])));
+    setStructure(loadFormEditorStructure(tpl));
     setDirty(false);
   }, [templateRes]);
 
@@ -61,7 +67,7 @@ export default function FormularioEditorPage() {
       const res = await api.put(`/formularios/${formId}`, {
         name,
         description,
-        sections,
+        ...buildFormSavePayload(structure),
       });
       return res.data;
     },
@@ -124,7 +130,9 @@ export default function FormularioEditorPage() {
             <FormStructureBuilder
               name={name}
               description={description}
-              sections={sections}
+              multiStepEnabled={structure.multiStepEnabled}
+              steps={structure.steps}
+              sections={structure.sections}
               onNameChange={(next) => {
                 setName(next);
                 setDirty(true);
@@ -133,8 +141,8 @@ export default function FormularioEditorPage() {
                 setDescription(next);
                 setDirty(true);
               }}
-              onChange={(next) => {
-                setSections(next);
+              onStructureChange={(patch) => {
+                setStructure((prev) => ({ ...prev, ...patch }));
                 setDirty(true);
               }}
               footer={

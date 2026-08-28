@@ -51,6 +51,13 @@ export interface FormularioSection {
   questions: FormularioQuestion[];
 }
 
+export interface FormularioStep {
+  id: string;
+  title: string;
+  description?: string;
+  sections: FormularioSection[];
+}
+
 export interface FormularioTemplateIndexEntry {
   id: string;
   name: string;
@@ -63,6 +70,8 @@ export interface FormularioTemplate {
   id: string;
   name: string;
   description?: string;
+  multiStepEnabled?: boolean;
+  steps?: FormularioStep[];
   sections: FormularioSection[];
   createdAt: string;
   updatedAt: string;
@@ -110,6 +119,15 @@ function emptySection(): FormularioSection {
         followUp: null,
       },
     ],
+  };
+}
+
+function emptyStep(): FormularioStep {
+  return {
+    id: randomUUID(),
+    title: 'Etapa 1',
+    description: '',
+    sections: [emptySection()],
   };
 }
 
@@ -230,6 +248,70 @@ export class FormularioTemplateService {
     }));
   }
 
+  private cleanSteps(steps: FormularioStep[]): FormularioStep[] {
+    if (!Array.isArray(steps) || steps.length === 0) {
+      throw new Error('Etapas inválidas.');
+    }
+    return steps.map((step) => ({
+      id: step.id || randomUUID(),
+      title: (step.title || '').trim() || 'Nova etapa',
+      description: step.description?.trim() || undefined,
+      sections: this.cleanSections(step.sections || []),
+    }));
+  }
+
+  private applyStructureSave(input: {
+    multiStepEnabled?: boolean;
+    steps?: FormularioStep[];
+    sections?: FormularioSection[];
+  }): {
+    multiStepEnabled: boolean;
+    steps?: FormularioStep[];
+    sections: FormularioSection[];
+  } {
+    if (input.multiStepEnabled === true) {
+      const steps = this.cleanSteps(input.steps || []);
+      return {
+        multiStepEnabled: true,
+        steps,
+        sections: steps.flatMap((step) => step.sections),
+      };
+    }
+
+    const sections =
+      input.sections && input.sections.length > 0
+        ? this.cleanSections(input.sections)
+        : [emptySection()];
+
+    return { multiStepEnabled: false, sections, steps: undefined };
+  }
+
+  private normalizeStoredTemplate(template: FormularioTemplate): FormularioTemplate {
+    if (template.multiStepEnabled === true && template.steps?.length) {
+      const steps = this.cleanSteps(template.steps);
+      return {
+        ...template,
+        multiStepEnabled: true,
+        steps,
+        sections: steps.flatMap((step) => step.sections),
+      };
+    }
+
+    const sections =
+      template.sections && template.sections.length > 0
+        ? this.cleanSections(template.sections)
+        : template.steps?.length === 1
+          ? this.cleanSections(template.steps[0]!.sections || [])
+          : [emptySection()];
+
+    return {
+      ...template,
+      multiStepEnabled: false,
+      sections,
+      steps: undefined,
+    };
+  }
+
   async list(): Promise<FormularioTemplateIndexEntry[]> {
     await this.ensureReuniaoDefault();
     const idx = await this.readIndex();
@@ -265,28 +347,31 @@ export class FormularioTemplateService {
 
   async get(id: string): Promise<FormularioTemplate | null> {
     if (!id?.trim()) return null;
-    return this.readJson<FormularioTemplate>(this.templateKey(id.trim()));
+    const raw = await this.readJson<FormularioTemplate>(this.templateKey(id.trim()));
+    if (!raw) return null;
+    return this.normalizeStoredTemplate(raw);
   }
 
   async create(input: {
     name?: string;
     description?: string;
+    multiStepEnabled?: boolean;
+    steps?: FormularioStep[];
     sections?: FormularioSection[];
   }): Promise<FormularioTemplate> {
     const now = new Date().toISOString();
     const id = randomUUID();
     const name = (input.name || '').trim() || 'Novo formulário';
     const description = (input.description || '').trim() || undefined;
-    const sections =
-      input.sections && input.sections.length > 0
-        ? this.cleanSections(input.sections)
-        : [emptySection()];
+    const structure = this.applyStructureSave(input);
 
     const template: FormularioTemplate = {
       id,
       name,
       description,
-      sections,
+      multiStepEnabled: structure.multiStepEnabled,
+      steps: structure.steps,
+      sections: structure.sections,
       createdAt: now,
       updatedAt: now,
     };
@@ -309,6 +394,8 @@ export class FormularioTemplateService {
     input: {
       name?: string;
       description?: string | null;
+      multiStepEnabled?: boolean;
+      steps?: FormularioStep[];
       sections?: FormularioSection[];
     }
   ): Promise<FormularioTemplate> {
@@ -322,15 +409,31 @@ export class FormularioTemplateService {
       input.description !== undefined
         ? (input.description || '').trim() || undefined
         : existing.description;
-    const sections =
-      input.sections !== undefined
-        ? this.cleanSections(input.sections)
-        : existing.sections;
+
+    let multiStepEnabled = existing.multiStepEnabled === true;
+    let steps = existing.steps;
+    let sections = existing.sections;
+
+    if (input.multiStepEnabled !== undefined || input.steps !== undefined || input.sections !== undefined) {
+      const structure = this.applyStructureSave({
+        multiStepEnabled:
+          input.multiStepEnabled !== undefined
+            ? input.multiStepEnabled
+            : existing.multiStepEnabled,
+        steps: input.steps !== undefined ? input.steps : existing.steps,
+        sections: input.sections !== undefined ? input.sections : existing.sections,
+      });
+      multiStepEnabled = structure.multiStepEnabled;
+      steps = structure.steps;
+      sections = structure.sections;
+    }
 
     const updated: FormularioTemplate = {
       ...existing,
       name,
       description,
+      multiStepEnabled,
+      steps,
       sections,
       updatedAt: now,
     };
