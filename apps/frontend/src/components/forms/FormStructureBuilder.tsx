@@ -1056,14 +1056,14 @@ function SimNaoPreview({
               role="radio"
               aria-checked={checked}
               onClick={() => setSelected(idx)}
-              className={`group flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
+              className={`group flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200 ${
                 checked
                   ? 'border-red-600 dark:border-red-500'
                   : 'border-gray-300 bg-white hover:border-red-400 dark:border-gray-600 dark:bg-gray-800 dark:hover:border-red-400'
               }`}
             >
               {checked ? (
-                <span className="h-2.5 w-2.5 rounded-full bg-red-600 dark:bg-red-500" />
+                <span className="h-3 w-3 rounded-full bg-red-600 dark:bg-red-500" />
               ) : null}
             </button>
             <span className="inline-grid max-w-full">
