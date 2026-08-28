@@ -26,6 +26,7 @@ import { resolveContratoNome } from '@/data/juridico-contratos';
 import {
   cellText,
   formatCurrencyBRL,
+  formatProcessoStatus,
   statusBadgeClass,
   type JuridicoProcesso,
 } from '@/data/juridico-processos-ativos';
@@ -167,7 +168,7 @@ export default function ProcessoAtivoDetailPage() {
                     <span
                       className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(status)}`}
                     >
-                      {cellText(status)}
+                      {formatProcessoStatus(processo.status, processo.statusProcesso)}
                     </span>
                     {processo.acordo ? (
                       <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
@@ -225,7 +226,10 @@ export default function ProcessoAtivoDetailPage() {
                       <Field label="Função" value={cellText(processo.funcao)} />
                       <Field label="Regime" value={cellText(processo.regimeContratacao)} />
                       <Field label="Presencial" value={cellText(processo.presencial)} />
-                      <Field label="Status processo" value={cellText(processo.statusProcesso)} />
+                      <Field
+                        label="Status processo"
+                        value={formatProcessoStatus(processo.statusProcesso)}
+                      />
                       <Field label="Decisão do STF" value={cellText(processo.decisaoStf)} />
                       <Field
                         label="Representante do autor"

@@ -213,9 +213,11 @@ export const cadastroListClasses = {
     'flex h-10 w-full min-w-0 flex-1 basis-full items-stretch gap-2 sm:basis-auto sm:w-auto sm:flex-none',
   /** Campo de busca dentro do grupo busca+filtro. */
   searchFieldInGroup: 'relative min-w-0 flex-1 sm:min-w-[240px] sm:w-[280px]',
-  /** Botão ícone de filtro — altura igual ao campo ao lado, largura = altura. */
+  /** Wrapper quadrado 40×40 — mesma altura do campo de busca. */
+  filterIconButtonWrap: 'relative h-10 w-10 shrink-0',
+  /** Botão ícone dentro do wrapper quadrado. */
   filterIconButton:
-    'relative box-border inline-flex aspect-square shrink-0 self-stretch items-center justify-center rounded-lg border p-0',
+    'relative box-border flex h-full w-full items-center justify-center rounded-lg border p-0',
   /** Campo de busca das toolbars — ocupa a largura no mobile sem forçar overflow. */
   searchField: 'relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none',
   /** Wrapper de tabela — scroll horizontal no mobile sem estourar a viewport. */

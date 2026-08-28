@@ -12,10 +12,9 @@ import {
   LayoutGrid,
   Paperclip,
   PauseCircle,
-  Receipt,
+  Plus,
   Scale,
   Search,
-  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -43,7 +42,14 @@ import {
 } from '@/components/ui/listTableUi';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { JuridicoImportModal } from '@/components/juridico/JuridicoImportModal';
-import { JuridicoLinkComprovantesModal } from '@/components/juridico/JuridicoLinkComprovantesModal';
+import {
+  JuridicoImportMenu,
+  type JuridicoImportAction,
+} from '@/components/juridico/JuridicoImportMenu';
+import {
+  JuridicoLinkPendingFilesModal,
+  type JuridicoLinkPendingKind,
+} from '@/components/juridico/JuridicoLinkPendingFilesModal';
 import { JuridicoProcessoAnexosModal } from '@/components/juridico/JuridicoProcessoAnexosModal';
 import { JuridicoProcessoEditModal } from '@/components/juridico/JuridicoProcessoEditModal';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
@@ -51,9 +57,11 @@ import api from '@/lib/api';
 import { resolveContratoNome } from '@/data/juridico-contratos';
 import {
   cellText,
+  formatProcessoStatus,
   statusBadgeClass,
+  statusCardLabel,
+  statusListTitle,
   statusStatIconClasses,
-  toStatusTitleCase,
   type JuridicoProcesso,
 } from '@/data/juridico-processos-ativos';
 
@@ -92,6 +100,7 @@ const COLUMNS: ListColumn[] = [
 
 function cellValue(row: JuridicoProcesso, col: ListColumn): string {
   if (col.key === 'contrato') return resolveContratoNome(row.contrato) || '—';
+  if (col.key === 'status') return formatProcessoStatus(row.status, row.statusProcesso);
   const value = row[col.key];
   if (typeof value === 'object' && value !== null) return '—';
   return cellText(value);
@@ -171,14 +180,14 @@ export default function ProcessosAtivosPage() {
   const [listFilters, setListFilters] = useState<ListFilters>(EMPTY_LIST_FILTERS);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showImport, setShowImport] = useState(false);
-  const [showLinkComprovantes, setShowLinkComprovantes] = useState(false);
+  const [importAction, setImportAction] = useState<JuridicoImportAction | null>(null);
   const [anexosModal, setAnexosModal] = useState<{
     id: string;
     label: string;
     numeroProcesso?: string;
   } | null>(null);
   const [editProcessoId, setEditProcessoId] = useState<string | null>(null);
+  const [showCreateProcesso, setShowCreateProcesso] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -288,13 +297,34 @@ export default function ProcessosAtivosPage() {
       },
       ...entries.map(([key, count]) => ({
         key,
-        label: toStatusTitleCase(key),
+        label: statusCardLabel(key),
         count,
         icon: statusStatIcon(key),
         ...statusStatIconClasses(key),
       })),
     ];
   }, [statusCount]);
+
+  const activeStatusVisual = useMemo(() => {
+    const card = statusCards.find((item) => item.key === statusFilter);
+    if (card) {
+      return { icon: card.icon, iconBg: card.iconBg, iconColor: card.iconColor };
+    }
+    return {
+      icon: statusStatIcon(statusFilter),
+      ...statusStatIconClasses(statusFilter),
+    };
+  }, [statusCards, statusFilter]);
+
+  const listTitle = statusListTitle(statusFilter);
+  const ListHeaderIcon = activeStatusVisual.icon;
+
+  const linkPendingKind: JuridicoLinkPendingKind | null =
+    importAction === 'link-anexos'
+      ? 'anexos'
+      : importAction === 'link-comprovantes'
+        ? 'comprovantes'
+        : null;
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
@@ -345,12 +375,17 @@ export default function ProcessosAtivosPage() {
             <CardHeader className={cadastroListClasses.cardHeader}>
               <div className={cadastroListClasses.cardHeaderRow}>
                 <div className={cadastroListClasses.cardHeaderIconRow}>
-                  <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
-                    <Briefcase className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                  <div
+                    className={`shrink-0 rounded-lg p-2 sm:p-3 ${activeStatusVisual.iconBg}`}
+                  >
+                    <ListHeaderIcon
+                      className={`h-5 w-5 sm:h-6 sm:w-6 ${activeStatusVisual.iconColor}`}
+                      aria-hidden
+                    />
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
-                      Processos Ativos
+                      {listTitle}
                     </h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       Consulte e gerencie os processos cadastrados
@@ -372,38 +407,33 @@ export default function ProcessosAtivosPage() {
                         className="box-border h-full w-full rounded-lg border border-gray-300 bg-white py-0 pl-9 pr-3 text-sm font-medium leading-10 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsFiltersModalOpen(true)}
-                      className={`${cadastroListClasses.filterIconButton} transition-colors ${
-                        filtersActive
-                          ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
-                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
-                      }`}
-                      aria-label="Abrir filtros"
-                      title={filtersActive ? 'Filtros ativos' : 'Filtros'}
-                    >
-                      <Filter className="h-4 w-4" />
-                      {filtersActive ? (
-                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
-                      ) : null}
-                    </button>
+                    <div className={cadastroListClasses.filterIconButtonWrap}>
+                      <button
+                        type="button"
+                        onClick={() => setIsFiltersModalOpen(true)}
+                        className={`${cadastroListClasses.filterIconButton} transition-colors ${
+                          filtersActive
+                            ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                        aria-label="Abrir filtros"
+                        title={filtersActive ? 'Filtros ativos' : 'Filtros'}
+                      >
+                        <Filter className="h-4 w-4" />
+                        {filtersActive ? (
+                          <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+                        ) : null}
+                      </button>
+                    </div>
                   </div>
+                  <JuridicoImportMenu onAction={setImportAction} />
                   <button
                     type="button"
-                    onClick={() => setShowLinkComprovantes(true)}
-                    className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                    onClick={() => setShowCreateProcesso(true)}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <Receipt className="h-4 w-4 shrink-0" />
-                    <span>Vincular comprovantes</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowImport(true)}
-                    className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-                  >
-                    <Upload className="h-4 w-4 shrink-0" />
-                    <span>Importar</span>
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Novo processo</span>
                   </button>
                 </div>
               </div>
@@ -422,7 +452,7 @@ export default function ProcessosAtivosPage() {
                   hint={
                     searchTerm.trim() || statusFilter !== 'all' || filtersActive
                       ? 'Tente ajustar a busca ou os filtros'
-                      : 'Importe a planilha para começar'
+                      : 'Importe a planilha ou cadastre um novo processo'
                   }
                 />
               ) : (
@@ -639,20 +669,21 @@ export default function ProcessosAtivosPage() {
           </div>
         </Modal>
 
-        {showImport ? (
+        {importAction === 'full' ? (
           <JuridicoImportModal
-            isOpen={showImport}
-            onClose={() => setShowImport(false)}
+            isOpen
+            onClose={() => setImportAction(null)}
             onImported={() => {
               void refetch();
             }}
           />
         ) : null}
 
-        {showLinkComprovantes ? (
-          <JuridicoLinkComprovantesModal
-            isOpen={showLinkComprovantes}
-            onClose={() => setShowLinkComprovantes(false)}
+        {linkPendingKind ? (
+          <JuridicoLinkPendingFilesModal
+            isOpen
+            kind={linkPendingKind}
+            onClose={() => setImportAction(null)}
             onLinked={() => {
               void refetch();
             }}
@@ -671,9 +702,13 @@ export default function ProcessosAtivosPage() {
         />
 
         <JuridicoProcessoEditModal
-          isOpen={!!editProcessoId}
+          isOpen={showCreateProcesso || !!editProcessoId}
+          mode={showCreateProcesso ? 'create' : 'edit'}
           processoId={editProcessoId}
-          onClose={() => setEditProcessoId(null)}
+          onClose={() => {
+            setShowCreateProcesso(false);
+            setEditProcessoId(null);
+          }}
           onSaved={() => {
             void refetch();
           }}

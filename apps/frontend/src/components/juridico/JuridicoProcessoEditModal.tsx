@@ -12,7 +12,8 @@ import type { JuridicoProcesso } from '@/data/juridico-processos-ativos';
 
 type Props = {
   isOpen: boolean;
-  processoId: string | null;
+  processoId?: string | null;
+  mode?: 'create' | 'edit';
   onClose: () => void;
   onSaved?: (processo: JuridicoProcesso) => void;
 };
@@ -201,14 +202,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved }: Props) {
+export function JuridicoProcessoEditModal({
+  isOpen,
+  processoId,
+  mode = 'edit',
+  onClose,
+  onSaved,
+}: Props) {
+  const isCreate = mode === 'create';
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['juridico-processos', processoId, 'edit'],
-    enabled: isOpen && !!processoId,
+    enabled: isOpen && !isCreate && !!processoId,
     queryFn: async () => {
       const res = await api.get(`/juridico-processos/${processoId}`);
       return res.data?.data as JuridicoProcesso;
@@ -222,11 +230,16 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
       setSaving(false);
       return;
     }
+    if (isCreate) {
+      setForm(EMPTY_FORM);
+      setDirty(false);
+      return;
+    }
     if (data) {
       setForm(processoToForm(data));
       setDirty(false);
     }
-  }, [isOpen, data]);
+  }, [isOpen, isCreate, data]);
 
   const contratoOptions = useMemo(() => {
     const options = Object.entries(JURIDICO_CONTRATOS).map(([value, label]) => ({
@@ -253,7 +266,7 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
     };
 
   const handleSave = async () => {
-    if (!processoId) return;
+    if (!isCreate && !processoId) return;
     if (!form.reclamante.trim()) {
       toast.error('Informe o reclamante.');
       return;
@@ -265,11 +278,16 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
 
     setSaving(true);
     try {
-      const res = await api.put(`/juridico-processos/${processoId}`, form);
-      const updated = res.data?.data as JuridicoProcesso;
-      toast.success(res.data?.message || 'Processo atualizado com sucesso.');
+      const res = isCreate
+        ? await api.post('/juridico-processos', form)
+        : await api.put(`/juridico-processos/${processoId}`, form);
+      const saved = res.data?.data as JuridicoProcesso;
+      toast.success(
+        res.data?.message ||
+          (isCreate ? 'Processo cadastrado com sucesso.' : 'Processo atualizado com sucesso.'),
+      );
       setDirty(false);
-      onSaved?.(updated);
+      onSaved?.(saved);
       onClose();
     } catch (err) {
       const message =
@@ -282,9 +300,11 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
     }
   };
 
-  const title = data?.numeroProcesso
-    ? `Editar processo ${data.numeroProcesso}`
-    : 'Editar processo';
+  const title = isCreate
+    ? 'Novo processo'
+    : data?.numeroProcesso
+      ? `Editar processo ${data.numeroProcesso}`
+      : 'Editar processo';
 
   return (
     <Modal
@@ -295,12 +315,12 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
       confirmBeforeClose={dirty && !saving}
       confirmCloseMessage="Há alterações não salvas. Deseja sair sem salvar?"
     >
-      {isLoading ? (
+      {isLoading && !isCreate ? (
         <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-500">
           <Loader2 className="h-5 w-5 animate-spin" />
           Carregando processo…
         </div>
-      ) : isError ? (
+      ) : isError && !isCreate ? (
         <p className="py-8 text-center text-sm text-gray-600 dark:text-gray-300">
           {(error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
             'Não foi possível carregar o processo.'}
@@ -624,7 +644,7 @@ export function JuridicoProcessoEditModal({ isOpen, processoId, onClose, onSaved
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-red-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Salvar alterações
+              {isCreate ? 'Cadastrar processo' : 'Salvar alterações'}
             </button>
           </div>
         </div>

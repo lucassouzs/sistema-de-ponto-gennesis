@@ -462,8 +462,7 @@ export function JuridicoProcessosDashboard() {
     {
       key: 'causa',
       label: 'Total causa',
-      value: formatCompactBRL(totals.valorCausa),
-      subtitle: formatFullBRL(totals.valorCausa),
+      value: formatFullBRL(totals.valorCausa),
       icon: Scale,
       iconBg: 'bg-red-100 dark:bg-red-900/30',
       iconColor: 'text-red-600 dark:text-red-400',
@@ -471,8 +470,7 @@ export function JuridicoProcessosDashboard() {
     {
       key: 'sentenca',
       label: 'Total sentença',
-      value: formatCompactBRL(totals.valorSentenca),
-      subtitle: formatFullBRL(totals.valorSentenca),
+      value: formatFullBRL(totals.valorSentenca),
       icon: Gavel,
       iconBg: 'bg-cyan-100 dark:bg-cyan-900/30',
       iconColor: 'text-cyan-600 dark:text-cyan-400',
@@ -480,8 +478,7 @@ export function JuridicoProcessosDashboard() {
     {
       key: 'custas',
       label: 'Total custas',
-      value: formatCompactBRL(totals.valorCustas),
-      subtitle: formatFullBRL(totals.valorCustas),
+      value: formatFullBRL(totals.valorCustas),
       icon: Receipt,
       iconBg: 'bg-amber-100 dark:bg-amber-900/30',
       iconColor: 'text-amber-600 dark:text-amber-400',
@@ -489,8 +486,7 @@ export function JuridicoProcessosDashboard() {
     {
       key: 'ro',
       label: 'Total RO',
-      value: formatCompactBRL(totals.valorRO),
-      subtitle: formatFullBRL(totals.valorRO),
+      value: formatFullBRL(totals.valorRO),
       icon: TrendingUp,
       iconBg: 'bg-blue-100 dark:bg-blue-900/30',
       iconColor: 'text-blue-600 dark:text-blue-400',
@@ -498,8 +494,7 @@ export function JuridicoProcessosDashboard() {
     {
       key: 'acordo',
       label: 'Total acordado',
-      value: formatCompactBRL(totals.valorAcordo),
-      subtitle: formatFullBRL(totals.valorAcordo),
+      value: formatFullBRL(totals.valorAcordo),
       icon: Coins,
       iconBg: 'bg-teal-100 dark:bg-teal-900/30',
       iconColor: 'text-teal-600 dark:text-teal-400',
@@ -508,7 +503,6 @@ export function JuridicoProcessosDashboard() {
       key: 'processos',
       label: 'Total processos',
       value: formatCount(totals.processos),
-      subtitle: `${allRows.length} cadastrados`,
       icon: Briefcase,
       iconBg: 'bg-slate-100 dark:bg-slate-800/60',
       iconColor: 'text-slate-600 dark:text-slate-300',
@@ -517,10 +511,6 @@ export function JuridicoProcessosDashboard() {
       key: 'acordos',
       label: 'Total acordos',
       value: formatCount(totals.acordos),
-      subtitle:
-        totals.processos > 0
-          ? `${Math.round((totals.acordos / totals.processos) * 100)}% dos processos`
-          : '—',
       icon: FileCheck2,
       iconBg: 'bg-purple-100 dark:bg-purple-900/30',
       iconColor: 'text-purple-600 dark:text-purple-400',
@@ -536,7 +526,6 @@ export function JuridicoProcessosDashboard() {
               key={kpi.key}
               label={kpi.label}
               count={kpi.value}
-              subtitle={kpi.subtitle}
               icon={kpi.icon}
               iconBg={kpi.iconBg}
               iconColor={kpi.iconColor}
@@ -549,7 +538,6 @@ export function JuridicoProcessosDashboard() {
               key={kpi.key}
               label={kpi.label}
               count={kpi.value}
-              subtitle={kpi.subtitle}
               icon={kpi.icon}
               iconBg={kpi.iconBg}
               iconColor={kpi.iconColor}
@@ -558,7 +546,7 @@ export function JuridicoProcessosDashboard() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-stretch gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-1.5 dark:border-gray-700 dark:bg-gray-800">
           {TABS.map((item) => {
             const active = tab === item.key;
@@ -580,23 +568,25 @@ export function JuridicoProcessosDashboard() {
             );
           })}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowFilters((prev) => !prev)}
-          className={`${cadastroListClasses.filterIconButton} transition-colors ${
-            showFilters || filtersActive
-              ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
-              : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
-          }`}
-          aria-expanded={showFilters}
-          aria-label="Abrir filtros"
-          title={filtersActive ? 'Filtros ativos' : 'Filtros'}
-        >
-          <Filter className="h-4 w-4" />
-          {filtersActive ? (
-            <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
-          ) : null}
-        </button>
+        <div className={cadastroListClasses.filterIconButtonWrap}>
+          <button
+            type="button"
+            onClick={() => setShowFilters((prev) => !prev)}
+            className={`${cadastroListClasses.filterIconButton} transition-colors ${
+              showFilters || filtersActive
+                ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
+                : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700'
+            }`}
+            aria-expanded={showFilters}
+            aria-label="Abrir filtros"
+            title={filtersActive ? 'Filtros ativos' : 'Filtros'}
+          >
+            <Filter className="h-4 w-4" />
+            {filtersActive ? (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+            ) : null}
+          </button>
+        </div>
       </div>
 
       {showFilters ? (

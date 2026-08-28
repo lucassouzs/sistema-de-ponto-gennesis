@@ -143,6 +143,16 @@ export function toStatusTitleCase(value: string): string {
     .join(' ');
 }
 
+/** Rótulo legível do status do processo (sem ALL CAPS). */
+export function formatProcessoStatus(
+  status?: string | null,
+  statusProcesso?: string | null,
+): string {
+  const raw = String(status || statusProcesso || '').trim();
+  if (!raw) return '—';
+  return toStatusTitleCase(raw);
+}
+
 export function statusStatIconClasses(status?: string | null): {
   iconBg: string;
   iconColor: string;
@@ -188,4 +198,34 @@ export function statusStatIconClasses(status?: string | null): {
     iconBg: 'bg-gray-100 dark:bg-gray-700',
     iconColor: 'text-gray-600 dark:text-gray-300',
   };
+}
+
+/** Rótulo curto dos cards de filtro por status (plural). */
+export function statusCardLabel(status?: string | null): string {
+  if (!status || status === 'all') return 'Todos';
+  const s = status.toUpperCase();
+  if (s.includes('ARQUIV')) return 'Arquivados';
+  if (s.includes('SUSPENS')) return 'Suspensos';
+  if (s.includes('ANDAMENTO')) return 'Andamento Processual';
+  if (s.includes('INSTRU')) return 'Audiências de Instrução';
+  if (s.includes('INICIAL') && s.includes('AUDIEN')) return 'Audiências Iniciais';
+  if (s.includes('AGUARDANDO') && s.includes('ARQUIV')) return 'Aguardando Arquivamento';
+  if (s.includes('ACORDO')) return 'Acordos';
+  if (s.includes('AUDIEN')) return 'Audiências';
+  return toStatusTitleCase(status);
+}
+
+/** Título da lista conforme o card de status selecionado (plural). */
+export function statusListTitle(status?: string | null): string {
+  if (!status || status === 'all') return 'Todos os Processos';
+  const s = status.toUpperCase();
+  if (s.includes('ARQUIV')) return 'Processos Arquivados';
+  if (s.includes('SUSPENS')) return 'Processos Suspensos';
+  if (s.includes('ANDAMENTO')) return 'Processos em Andamento Processual';
+  if (s.includes('INSTRU')) return 'Processos em Audiência de Instrução';
+  if (s.includes('INICIAL') && s.includes('AUDIEN')) return 'Processos em Audiência Inicial';
+  if (s.includes('AGUARDANDO') && s.includes('ARQUIV')) return 'Processos Aguardando Arquivamento';
+  if (s.includes('ACORDO')) return 'Processos com Acordo';
+  if (s.includes('AUDIEN')) return 'Processos em Audiência';
+  return `Processos ${toStatusTitleCase(status)}`;
 }

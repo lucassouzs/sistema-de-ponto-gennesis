@@ -438,6 +438,32 @@ export class JuridicoProcessoController {
     }
   }
 
+  async create(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const body = (req.body || {}) as ProcessoInput;
+      const reclamante = opt(body.reclamante);
+      const numeroProcesso = opt(body.numeroProcesso);
+      if (!reclamante) throw createError('Informe o reclamante.', 400);
+      if (!numeroProcesso) throw createError('Informe o número do processo.', 400);
+
+      const externalId = opt(body.externalId) || `manual-${uuidv4()}`;
+      const data = buildProcessoData(body);
+
+      const created = await prisma.juridicoProcesso.create({
+        data: { ...data, externalId },
+        include: PROCESSO_INCLUDE,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: created,
+        message: 'Processo cadastrado com sucesso.',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async update(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const id = str(req.params.id);

@@ -1,14 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
-import { CheckCircle2, FileArchive, Loader2, Receipt, Upload } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  CheckCircle2,
+  FileArchive,
+  Loader2,
+  Paperclip,
+  Receipt,
+  Upload,
+  type LucideIcon,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
 import api from '@/lib/api';
 import { isZipFile, listZipEntryNames } from '@/lib/zipEntryNames';
 
+export type JuridicoLinkPendingKind = 'anexos' | 'comprovantes';
+
 type Props = {
   isOpen: boolean;
+  kind: JuridicoLinkPendingKind;
   onClose: () => void;
   onLinked: () => void;
 };
@@ -23,7 +34,62 @@ type ProgressState = {
 
 const TIMEOUT_MS = 20 * 60 * 1000;
 
-export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Props) {
+function kindConfig(kind: JuridicoLinkPendingKind) {
+  if (kind === 'anexos') {
+    return {
+      title: 'Importar só anexos',
+      progressTitle: 'Vinculando anexos',
+      description: (
+        <>
+          Envie o ZIP da pasta <strong>DB_ANEXO_ATA_Images</strong> (ou outros ZIPs restantes). O
+          sistema vincula automaticamente aos anexos já importados que ainda estão sem arquivo.
+        </>
+      ),
+      emptyError: 'Selecione o ZIP da pasta DB_ANEXO_ATA_Images.',
+      dropLabel: 'ZIP de anexos / atas (Images)',
+      inputId: 'juridico-link-anexos',
+      Icon: Paperclip as LucideIcon,
+      looseField: 'anexos' as const,
+      zipField: 'anexosZip' as const,
+      kindValue: 'anexos' as const,
+      linkedKey: 'anexosLinked' as const,
+      pendingKey: 'anexosPending' as const,
+      itemLabel: 'anexo(s)',
+      progressHint: 'O sistema cruza só os anexos sem arquivo.',
+      sendingLoose: 'Enviando anexos avulsos…',
+      sendingZip: (idx: number, total: number) =>
+        `Enviando ZIP de anexos (${idx}/${total})…`,
+    };
+  }
+  return {
+    title: 'Vincular comprovantes pendentes',
+    progressTitle: 'Vinculando comprovantes',
+    description: (
+      <>
+        Envie o ZIP da pasta <strong>DB_COMPROVANTES_PAGAMENTO_Images</strong> (ou outros ZIPs
+        restantes). O sistema vincula automaticamente aos comprovantes já importados que ainda
+        estão sem arquivo.
+      </>
+    ),
+    emptyError: 'Selecione o ZIP da pasta DB_COMPROVANTES_PAGAMENTO_Images.',
+    dropLabel: 'ZIP de comprovantes (Images)',
+    inputId: 'juridico-link-comprovantes',
+    Icon: Receipt as LucideIcon,
+    looseField: 'comprovantes' as const,
+    zipField: 'comprovantesZip' as const,
+    kindValue: 'comprovantes' as const,
+    linkedKey: 'comprovantesLinked' as const,
+    pendingKey: 'comprovantesPending' as const,
+    itemLabel: 'comprovante(s)',
+    progressHint: 'O sistema cruza só os comprovantes sem arquivo.',
+    sendingLoose: 'Enviando comprovantes avulsos…',
+    sendingZip: (idx: number, total: number) =>
+      `Enviando ZIP de comprovantes (${idx}/${total})…`,
+  };
+}
+
+export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked }: Props) {
+  const cfg = useMemo(() => kindConfig(kind), [kind]);
   const [files, setFiles] = useState<File[]>([]);
   const [entryCount, setEntryCount] = useState(0);
   const [reading, setReading] = useState(false);
@@ -35,6 +101,10 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
     setEntryCount(0);
     setProgress(null);
   };
+
+  useEffect(() => {
+    if (!isOpen) reset();
+  }, [isOpen, kind]);
 
   const handleClose = () => {
     if (linking) return;
@@ -67,7 +137,7 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
 
   const runLink = async () => {
     if (!files.length) {
-      toast.error('Selecione o ZIP da pasta DB_COMPROVANTES_PAGAMENTO_Images.');
+      toast.error(cfg.emptyError);
       return;
     }
 
@@ -77,12 +147,12 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
 
     if (loose.length) {
       steps.push({
-        label: 'Enviando comprovantes avulsos…',
+        label: cfg.sendingLoose,
         detail: `${loose.length} arquivo(s)`,
         build: () => {
           const fd = new FormData();
-          fd.append('kind', 'comprovantes');
-          for (const file of loose) fd.append('comprovantes', file);
+          fd.append('kind', cfg.kindValue);
+          for (const file of loose) fd.append(cfg.looseField, file);
           return fd;
         },
       });
@@ -90,12 +160,12 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
 
     zips.forEach((file, idx) => {
       steps.push({
-        label: `Enviando ZIP de comprovantes (${idx + 1}/${zips.length})…`,
+        label: cfg.sendingZip(idx + 1, zips.length),
         detail: file.name,
         build: () => {
           const fd = new FormData();
-          fd.append('kind', 'comprovantes');
-          fd.append('comprovantesZip', file);
+          fd.append('kind', cfg.kindValue);
+          fd.append(cfg.zipField, file);
           return fd;
         },
       });
@@ -137,16 +207,16 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
           },
         });
 
-        const data = res.data?.data as
-          | { comprovantesLinked?: number; comprovantesPending?: number }
-          | undefined;
-        totalLinked += data?.comprovantesLinked || 0;
-        lastPending = data?.comprovantesPending || lastPending;
+        const data = res.data?.data as Record<string, number> | undefined;
+        totalLinked += data?.[cfg.linkedKey] || 0;
+        lastPending = data?.[cfg.pendingKey] || lastPending;
       }
 
       toast.success(
-        `Vinculados ${totalLinked} comprovante(s)` +
-          (lastPending ? ` · ${Math.max(0, lastPending - totalLinked)} ainda pendente(s) nesta etapa` : ''),
+        `Vinculados ${totalLinked} ${cfg.itemLabel}` +
+          (lastPending
+            ? ` · ${Math.max(0, lastPending - totalLinked)} ainda pendente(s) nesta etapa`
+            : ''),
       );
       onLinked();
       reset();
@@ -160,7 +230,7 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
       toast.error(
         ax.code === 'ECONNABORTED'
           ? 'Tempo esgotado. Tente enviar o ZIP sozinho de novo.'
-          : ax.response?.data?.message || ax.message || 'Erro ao vincular comprovantes.',
+          : ax.response?.data?.message || ax.message || 'Erro ao vincular arquivos.',
       );
     } finally {
       setLinking(false);
@@ -175,11 +245,13 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
       )
     : 0;
 
+  const DropIcon = cfg.Icon;
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Vincular comprovantes pendentes"
+      title={cfg.title}
       size="lg"
       confirmBeforeClose={!!files.length && !linking}
       confirmCloseMessage="Descartar os arquivos selecionados?"
@@ -193,7 +265,7 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
               </div>
               <div>
                 <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                  Vinculando comprovantes
+                  {cfg.progressTitle}
                 </p>
                 <p className="text-xs text-gray-500">
                   Etapa {progress.step} de {progress.totalSteps}
@@ -216,22 +288,16 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
                 />
               </div>
             </div>
-            <p className="mt-5 text-center text-xs text-gray-500">
-              Não feche esta janela. O sistema cruza só os comprovantes sem arquivo.
-            </p>
+            <p className="mt-5 text-center text-xs text-gray-500">{cfg.progressHint}</p>
           </div>
         </div>
       ) : null}
 
       <div className="space-y-5">
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Envie o ZIP da pasta <strong>DB_COMPROVANTES_PAGAMENTO_Images</strong> (ou outros ZIPs
-          restantes). O sistema vincula automaticamente aos comprovantes já importados que ainda
-          estão sem arquivo.
-        </p>
+        <p className="text-sm text-gray-600 dark:text-gray-400">{cfg.description}</p>
 
         <label
-          htmlFor="juridico-link-comprovantes"
+          htmlFor={cfg.inputId}
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -250,11 +316,9 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
           {files.length ? (
             <CheckCircle2 className="h-8 w-8 text-green-600 dark:text-green-400" />
           ) : (
-            <Receipt className="h-8 w-8 text-gray-400" />
+            <DropIcon className="h-8 w-8 text-gray-400" />
           )}
-          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-            ZIP de comprovantes (Images)
-          </p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cfg.dropLabel}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             {reading
               ? 'Lendo arquivos…'
@@ -276,7 +340,7 @@ export function JuridicoLinkComprovantesModal({ isOpen, onClose, onLinked }: Pro
             </button>
           ) : null}
           <input
-            id="juridico-link-comprovantes"
+            id={cfg.inputId}
             type="file"
             accept=".zip,image/*,.pdf,.png,.jpg,.jpeg,.webp"
             multiple
