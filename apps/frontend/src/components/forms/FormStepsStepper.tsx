@@ -47,7 +47,9 @@ export function FormStepsStepper({
         {steps.map((step, index) => {
           const state = stepState(index, currentIndex);
           const isLast = index === steps.length - 1;
-          const clickable = typeof onSelect === 'function';
+          const clickable =
+            typeof onSelect === 'function' &&
+            (mode === 'navigation' || index <= currentIndex);
           const fallbackLabel = index === steps.length - 1 ? 'Final' : `Etapa ${index + 1}`;
 
           const circleNode = clickable ? (

@@ -154,6 +154,34 @@ function pickNome(identificacao?: { nome?: string; contrato?: string } | null): 
   return identificacao.nome || identificacao.contrato || '';
 }
 
+function isAnswerEmpty(question: Question, answer: ReuniaoAnswer | undefined): boolean {
+  if (question.type === 'signature') {
+    return isBlankSignature(typeof answer?.value === 'string' ? answer.value : '');
+  }
+  if (question.type === 'attachment' || question.type === 'image') {
+    return isBlankFormFileValue(answer?.value);
+  }
+  if (question.type === 'rating') {
+    return typeof answer?.value !== 'number' || answer.value < 1 || answer.value > 5;
+  }
+  if (question.type === 'checkbox') {
+    return (
+      answer?.value !== 'true' && answer?.value !== 'SIM' && answer?.value !== 1
+    );
+  }
+  if (question.type === 'checklist') {
+    const selected = String(answer?.value ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    return selected.length === 0;
+  }
+  if (answer == null || answer.value === null || answer.value === undefined) {
+    return true;
+  }
+  return String(answer.value).trim() === '';
+}
+
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="mb-2 flex items-baseline gap-0.5 text-sm font-medium text-gray-800 dark:text-gray-200">
@@ -800,28 +828,45 @@ export function ReuniaoFormModal({
     for (const section of sections) {
       for (const q of section.questions) {
         if (!q.required) continue;
-        const ans = answers[q.id];
-        const empty =
-          q.type === 'signature'
-            ? isBlankSignature(typeof ans?.value === 'string' ? ans.value : '')
-            : q.type === 'attachment' || q.type === 'image'
-              ? isBlankFormFileValue(ans?.value)
-              : ans == null ||
-                ans.value === null ||
-                ans.value === undefined ||
-                String(ans.value).trim() === '';
-        if (empty) return `Preencha: ${q.title}`;
+        if (isAnswerEmpty(q, answers[q.id])) {
+          return `Preencha: ${q.title}`;
+        }
       }
     }
     return null;
   };
 
-  const validateForm = (): string | null => {
-    for (const step of formSteps) {
-      const err = validateSections(step.sections as Section[], form.answers);
-      if (err) return err;
+  const findFirstValidationError = (): { message: string; stepIndex: number } | null => {
+    if (multiStep) {
+      for (let i = 0; i < formSteps.length; i += 1) {
+        const err = validateSections((formSteps[i]?.sections as Section[]) ?? [], form.answers);
+        if (err) return { message: err, stepIndex: i };
+      }
+      return null;
     }
-    return null;
+
+    const err = validateSections(allSections, form.answers);
+    return err ? { message: err, stepIndex: 0 } : null;
+  };
+
+  const handleStepSelect = (targetIndex: number) => {
+    if (targetIndex === activeFillStep) return;
+
+    if (targetIndex < activeFillStep) {
+      setActiveFillStep(targetIndex);
+      return;
+    }
+
+    for (let i = activeFillStep; i < targetIndex; i += 1) {
+      const err = validateSections((formSteps[i]?.sections as Section[]) ?? [], form.answers);
+      if (err) {
+        toast.error(err);
+        setActiveFillStep(i);
+        return;
+      }
+    }
+
+    setActiveFillStep(targetIndex);
   };
 
   const handleNextStep = () => {
@@ -837,9 +882,10 @@ export function ReuniaoFormModal({
   };
 
   const handleFinish = async () => {
-    const error = validateForm();
-    if (error) {
-      toast.error(error);
+    const validation = findFirstValidationError();
+    if (validation) {
+      if (multiStep) setActiveFillStep(validation.stepIndex);
+      toast.error(validation.message);
       return;
     }
     const ok = await persist(form);
@@ -926,7 +972,7 @@ export function ReuniaoFormModal({
                 }))}
                 currentIndex={activeFillStep}
                 mode="progress"
-                onSelect={setActiveFillStep}
+                onSelect={handleStepSelect}
               />
             ) : null}
 
