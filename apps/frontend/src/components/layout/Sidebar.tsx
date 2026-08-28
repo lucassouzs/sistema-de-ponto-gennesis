@@ -1083,13 +1083,6 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
         icon: Scale,
         items: [
           {
-            name: 'Processos Trabalhistas',
-            href: '/ponto/juridico',
-            icon: Scale,
-            description: 'Acompanhe status, acordos e valores dos processos',
-            permission: isAdministrator || can(pk('/ponto/juridico'))
-          },
-          {
             name: 'Processos Ativos',
             href: '/ponto/juridico/processos-ativos',
             icon: Briefcase,

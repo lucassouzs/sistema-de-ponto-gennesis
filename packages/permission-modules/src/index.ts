@@ -203,7 +203,6 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     category: 'Engenharia',
   },
   // Jurídico
-  { key: pathToModuleKey('/ponto/juridico'), name: 'Processos Trabalhistas', href: '/ponto/juridico', category: 'Jurídico' },
   { key: pathToModuleKey('/ponto/juridico/processos-ativos'), name: 'Processos Ativos', href: '/ponto/juridico/processos-ativos', category: 'Jurídico' },
   { key: pathToModuleKey('/ponto/juridico/processos-ativos/dashboard'), name: 'Dashboards dos Processos', href: '/ponto/juridico/processos-ativos/dashboard', category: 'Jurídico' },
   // Suprimentos
