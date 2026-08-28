@@ -188,7 +188,6 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
 
         const res = await api.post('/juridico-processos/link-files', step.build(), {
           timeout: TIMEOUT_MS,
-          headers: { 'Content-Type': 'multipart/form-data' },
           maxBodyLength: Infinity,
           maxContentLength: Infinity,
           onUploadProgress: (evt) => {
@@ -229,7 +228,12 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
       };
       toast.error(
         ax.code === 'ECONNABORTED'
-          ? 'Tempo esgotado. Tente enviar o ZIP sozinho de novo.'
+          ? 'Tempo esgotado. Tente enviar um ZIP por vez.'
+          : ax.message === 'Network Error' ||
+              String(ax.message || '')
+                .toLowerCase()
+                .includes('network error')
+            ? 'Conexão interrompida (ZIP grande ou timeout no servidor). Envie um ZIP por vez e aguarde cada etapa terminar.'
           : ax.response?.data?.message || ax.message || 'Erro ao vincular arquivos.',
       );
     } finally {

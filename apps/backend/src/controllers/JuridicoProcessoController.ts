@@ -131,6 +131,71 @@ function matchFile(
   return null;
 }
 
+async function linkPendingIndexedFiles(
+  pending: Array<{
+    id: string;
+    processoId: string;
+    externalId: string | null;
+    originalName: string | null;
+    sourcePath: string | null;
+  }>,
+  fileIndex: ReturnType<typeof indexFiles>,
+  usedKeys: Set<string>,
+  folder: 'anexos' | 'comprovantes',
+  updateRow: (
+    id: string,
+    data: {
+      fileUrl: string;
+      fileKey: string;
+      mimeType: string;
+      size: number;
+      originalName: string;
+    },
+  ) => Promise<void>,
+): Promise<number> {
+  const jobs: Array<{
+    row: (typeof pending)[number];
+    matched: IndexedFile;
+  }> = [];
+
+  for (const row of pending) {
+    const matched = matchFile(fileIndex, row.sourcePath || row.originalName, row.externalId);
+    if (!matched) continue;
+    const key = normalizeKey(matched.name);
+    if (usedKeys.has(key)) continue;
+    usedKeys.add(key);
+    jobs.push({ row, matched });
+  }
+
+  const concurrency = 4;
+  let linked = 0;
+  for (let i = 0; i < jobs.length; i += concurrency) {
+    const batch = jobs.slice(i, i + concurrency);
+    await Promise.all(
+      batch.map(async ({ row, matched }) => {
+        const buffer = matched.read();
+        const saved = await savePersistentUpload({
+          folder: `juridico-processos/${row.processoId}/${folder}`,
+          buffer,
+          originalName: basename(matched.name),
+          mimeType: matched.mimeType,
+          includeSafeOriginalName: true,
+        });
+        await updateRow(row.id, {
+          fileUrl: saved.url,
+          fileKey: saved.key,
+          mimeType: matched.mimeType,
+          size: buffer.length,
+          originalName: row.originalName || basename(matched.name),
+        });
+        linked += 1;
+      }),
+    );
+  }
+
+  return linked;
+}
+
 type ProcessoInput = {
   externalId?: string;
   numeroProcesso?: string;
@@ -775,33 +840,18 @@ export class JuridicoProcessoController {
           });
           anexosPending = pending.length;
 
-          for (const row of pending) {
-            const matched = matchFile(anexoFiles, row.sourcePath || row.originalName, row.externalId);
-            if (!matched) continue;
-            const key = normalizeKey(matched.name);
-            if (usedAnexoKeys.has(key)) continue;
-            usedAnexoKeys.add(key);
-
-            const buffer = matched.read();
-            const saved = await savePersistentUpload({
-              folder: `juridico-processos/${row.processoId}/anexos`,
-              buffer,
-              originalName: basename(matched.name),
-              mimeType: matched.mimeType,
-              includeSafeOriginalName: true,
-            });
-            await prisma.juridicoProcessoAnexo.update({
-              where: { id: row.id },
-              data: {
-                fileUrl: saved.url,
-                fileKey: saved.key,
-                mimeType: matched.mimeType,
-                size: buffer.length,
-                originalName: row.originalName || basename(matched.name),
-              },
-            });
-            anexosLinked += 1;
-          }
+          anexosLinked = await linkPendingIndexedFiles(
+            pending,
+            anexoFiles,
+            usedAnexoKeys,
+            'anexos',
+            async (id, data) => {
+              await prisma.juridicoProcessoAnexo.update({
+                where: { id },
+                data,
+              });
+            },
+          );
         }
 
         if (linkComprovantes && comprovanteFiles.all.length) {
@@ -819,37 +869,18 @@ export class JuridicoProcessoController {
           });
           comprovantesPending = pending.length;
 
-          for (const row of pending) {
-            const matched = matchFile(
-              comprovanteFiles,
-              row.sourcePath || row.originalName,
-              row.externalId,
-            );
-            if (!matched) continue;
-            const key = normalizeKey(matched.name);
-            if (usedComprovanteKeys.has(key)) continue;
-            usedComprovanteKeys.add(key);
-
-            const buffer = matched.read();
-            const saved = await savePersistentUpload({
-              folder: `juridico-processos/${row.processoId}/comprovantes`,
-              buffer,
-              originalName: basename(matched.name),
-              mimeType: matched.mimeType,
-              includeSafeOriginalName: true,
-            });
-            await prisma.juridicoProcessoComprovante.update({
-              where: { id: row.id },
-              data: {
-                fileUrl: saved.url,
-                fileKey: saved.key,
-                mimeType: matched.mimeType,
-                size: buffer.length,
-                originalName: row.originalName || basename(matched.name),
-              },
-            });
-            comprovantesLinked += 1;
-          }
+          comprovantesLinked = await linkPendingIndexedFiles(
+            pending,
+            comprovanteFiles,
+            usedComprovanteKeys,
+            'comprovantes',
+            async (id, data) => {
+              await prisma.juridicoProcessoComprovante.update({
+                where: { id },
+                data,
+              });
+            },
+          );
         }
 
         res.json({
