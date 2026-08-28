@@ -208,6 +208,14 @@ export const cadastroListClasses = {
   cardHeaderIconRow: 'flex min-w-0 items-center space-x-3',
   cardToolbar:
     'flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end',
+  /** Busca + botão de filtro na mesma altura (quadrado). */
+  searchFilterGroup:
+    'flex h-10 w-full min-w-0 flex-1 basis-full items-stretch gap-2 sm:basis-auto sm:w-auto sm:flex-none',
+  /** Campo de busca dentro do grupo busca+filtro. */
+  searchFieldInGroup: 'relative min-w-0 flex-1 sm:min-w-[240px] sm:w-[280px]',
+  /** Botão ícone de filtro — altura igual ao campo ao lado, largura = altura. */
+  filterIconButton:
+    'relative box-border inline-flex aspect-square shrink-0 self-stretch items-center justify-center rounded-lg border p-0',
   /** Campo de busca das toolbars — ocupa a largura no mobile sem forçar overflow. */
   searchField: 'relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none',
   /** Wrapper de tabela — scroll horizontal no mobile sem estourar a viewport. */

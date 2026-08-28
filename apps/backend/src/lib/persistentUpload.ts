@@ -117,6 +117,30 @@ export async function savePersistentUpload(input: UploadFileInput): Promise<Uplo
   return { url, key, fileName, originalName };
 }
 
+/** Remove arquivo persistente (disco local e/ou S3). Ignora falhas de storage. */
+export async function deletePersistentUpload(keyOrUrl: string | null | undefined): Promise<void> {
+  const key = String(keyOrUrl || '')
+    .replace(/^\/uploads\//, '')
+    .replace(/^\/+/, '')
+    .replace(/\\/g, '/');
+  if (!assertSafeUploadKey(key)) return;
+
+  const localPath = path.join(backendUploadsRoot, ...key.split('/'));
+  try {
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath);
+  } catch {
+    // ignore
+  }
+
+  const s3 = getS3();
+  if (!s3) return;
+  try {
+    await s3.client.deleteObject({ Bucket: s3.bucket, Key: key }).promise();
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Grava buffer já com nome/caminho definidos (ex.: snapshot de mapa de cotação).
  * `keepLocalCopy`: também grava no disco (útil quando o servidor usa sendFile).

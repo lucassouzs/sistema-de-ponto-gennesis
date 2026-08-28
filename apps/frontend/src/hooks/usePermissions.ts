@@ -708,6 +708,8 @@ export function useRoutePermission(route: string) {
     '/ponto/formularios': isAdministrator || can(pk('/ponto/formularios')),
     '/ponto/juridico': isAdministrator || can(pk('/ponto/juridico')),
     '/ponto/juridico/processos-ativos': isAdministrator || can(pk('/ponto/juridico/processos-ativos')),
+    '/ponto/juridico/processos-ativos/dashboard':
+      isAdministrator || can(pk('/ponto/juridico/processos-ativos/dashboard')),
     '/ponto/financeiro/controle-financeiro':
       isAdministrator || can(pk('/ponto/financeiro/controle-financeiro')),
     '/ponto/financeiro/receitas': isAdministrator || can(pk('/ponto/financeiro/receitas')),

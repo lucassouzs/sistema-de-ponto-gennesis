@@ -76,6 +76,7 @@ import controleGeralRoutes from './routes/controleGeral';
 import supplierRoutes from './routes/suppliers';
 import responsaveisTecnicosRoutes from './routes/responsaveisTecnicos';
 import controleAnuidadeRoutes from './routes/controleAnuidade';
+import juridicoProcessosRoutes from './routes/juridicoProcessos';
 import controlePagamentoArtRoutes from './routes/controlePagamentoArt';
 import financeiroReceitasRoutes from './routes/financeiroReceitas';
 import vehicleRoutes from './routes/vehicles';
@@ -326,6 +327,18 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Sempre servir ficheiros gravados em disco (RM, OC/boleto, mensagens, etc.).
 // O uso de S3 para fotos de ponto não impede estes anexos locais.
 // Depois do static: se o arquivo sumiu do disco do Railway, busca no S3 (mesmo path).
+// Front (:3000) embute PDF/imagem via iframe — helmet SAMEORIGIN bloqueava e o Chrome
+// mostrava "conexão recusada". Liberamos só /uploads para as origens do app.
+app.use('/uploads', (req, res, next) => {
+  const frontend = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const ancestors = [`'self'`, frontend, 'http://localhost:3000', 'https://localhost:3000'];
+  res.removeHeader('X-Frame-Options');
+  res.setHeader(
+    'Content-Security-Policy',
+    `frame-ancestors ${ancestors.join(' ')}`,
+  );
+  next();
+});
 app.use('/uploads', express.static(backendUploadsRoot));
 app.use('/uploads', persistentUploadsS3Fallback());
 
@@ -376,6 +389,7 @@ app.use('/api/controle-geral', controleGeralRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/responsaveis-tecnicos', responsaveisTecnicosRoutes);
 app.use('/api/controle-anuidade', controleAnuidadeRoutes);
+app.use('/api/juridico-processos', juridicoProcessosRoutes);
 app.use('/api/controle-pagamentos-art', controlePagamentoArtRoutes);
 app.use('/api/financeiro-receitas', financeiroReceitasRoutes);
 app.use('/api/vehicles', vehicleRoutes);

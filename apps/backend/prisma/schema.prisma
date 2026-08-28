@@ -4514,3 +4514,99 @@ model NfeDistribuicaoState {
 
   @@map("nfe_distribuicao_state")
 }
+
+/// Processo trabalhista importado da planilha de Controle Jurídico.
+model JuridicoProcesso {
+  id                   String   @id @default(cuid())
+  externalId           String   @unique
+  numeroProcesso       String
+  tribunal             String?
+  vara                 String?
+  reclamante           String
+  dataAudiencia        String?
+  horario              String?
+  presencial           String?
+  statusProcesso       String?
+  decisaoStf           String?
+  polo                 String?
+  empresa              String?
+  objeto               String?  @db.Text
+  objeto2              String?  @db.Text
+  contrato             String?
+  funcao               String?
+  regimeContratacao    String?
+  periodo              String?
+  periodoInicio        String?
+  periodoFim           String?
+  representanteAutor   String?
+  acordo               String?
+  valorCausa           Decimal? @db.Decimal(14, 2)
+  statusSentenca       String?
+  valorSentenca        Decimal? @db.Decimal(14, 2)
+  valorRO              Decimal? @db.Decimal(14, 2)
+  valorRR              Decimal? @db.Decimal(14, 2)
+  valorCustas          Decimal? @db.Decimal(14, 2)
+  valorAcordo          Decimal? @db.Decimal(14, 2)
+  valorPagoSentenciado Decimal? @db.Decimal(14, 2)
+  valorParcela         Decimal? @db.Decimal(14, 2)
+  valorPago            Decimal? @db.Decimal(14, 2)
+  numParcelas          Int?
+  custas               Decimal? @db.Decimal(14, 2)
+  previdencia          Decimal? @db.Decimal(14, 2)
+  outrosGastos         Decimal? @db.Decimal(14, 2)
+  status               String?
+  dataAcordo           String?
+  dataAbertura         String?
+  agravoInstrumento    String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  anexos       JuridicoProcessoAnexo[]
+  comprovantes JuridicoProcessoComprovante[]
+
+  @@index([numeroProcesso])
+  @@index([reclamante])
+  @@index([status])
+  @@index([statusProcesso])
+  @@index([empresa])
+  @@map("juridico_processos")
+}
+
+model JuridicoProcessoAnexo {
+  id           String           @id @default(cuid())
+  processoId   String
+  processo     JuridicoProcesso @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  externalId   String?
+  originalName String
+  sourcePath   String?
+  fileUrl      String?
+  fileKey      String?
+  mimeType     String?
+  size         Int?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([processoId])
+  @@index([externalId])
+  @@map("juridico_processo_anexos")
+}
+
+model JuridicoProcessoComprovante {
+  id            String           @id @default(cuid())
+  processoId    String
+  processo      JuridicoProcesso @relation(fields: [processoId], references: [id], onDelete: Cascade)
+  externalId    String?
+  originalName  String
+  sourcePath    String?
+  dataPagamento String?
+  fileUrl       String?
+  fileKey       String?
+  mimeType      String?
+  size          Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([processoId])
+  @@index([externalId])
+  @@map("juridico_processo_comprovantes")
+}

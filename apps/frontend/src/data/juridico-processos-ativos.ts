@@ -1,36 +1,67 @@
-import type { ProcessoJuridico } from '@/data/juridico-processos';
-
-/** Colunas alinhadas à planilha de Processos Ativos. */
-export interface ProcessoAtivo {
+export type JuridicoProcessoAnexo = {
   id: string;
-  reclamante: string;
+  externalId?: string | null;
+  originalName: string;
+  sourcePath?: string | null;
+  fileUrl?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+  createdAt?: string;
+};
+
+export type JuridicoProcessoComprovante = JuridicoProcessoAnexo & {
+  dataPagamento?: string | null;
+};
+
+export type JuridicoProcesso = {
+  id: string;
+  externalId: string;
   numeroProcesso: string;
-  tribunal: string;
-  vara: string;
-  mes: string;
-  dataAudiencia: string;
-  horario: string;
-  presencial: string;
-  statusProcesso: string;
-  decisaoStf: string;
-  objeto: string;
-  valorCausa: number;
-  polo: string;
-  funcao: string;
-  representanteAutor: string;
-  empresa: string;
-  contrato: string;
-  periodo: string;
-  valorAcordo: number;
-  valorSentenca: number;
-  valorCustas: number;
-  valorRO: number;
-  valorRR: number;
-  valorAgravo: number;
-  execucaoProvisoria: string;
-  embargosExecucao: string;
-  regimeContratacao: string;
-}
+  tribunal?: string | null;
+  vara?: string | null;
+  reclamante: string;
+  dataAudiencia?: string | null;
+  horario?: string | null;
+  presencial?: string | null;
+  statusProcesso?: string | null;
+  decisaoStf?: string | null;
+  polo?: string | null;
+  empresa?: string | null;
+  objeto?: string | null;
+  objeto2?: string | null;
+  contrato?: string | null;
+  funcao?: string | null;
+  regimeContratacao?: string | null;
+  periodo?: string | null;
+  periodoInicio?: string | null;
+  periodoFim?: string | null;
+  representanteAutor?: string | null;
+  acordo?: string | null;
+  valorCausa?: string | number | null;
+  statusSentenca?: string | null;
+  valorSentenca?: string | number | null;
+  valorRO?: string | number | null;
+  valorRR?: string | number | null;
+  valorCustas?: string | number | null;
+  valorAcordo?: string | number | null;
+  valorPagoSentenciado?: string | number | null;
+  valorParcela?: string | number | null;
+  valorPago?: string | number | null;
+  numParcelas?: number | null;
+  custas?: string | number | null;
+  previdencia?: string | number | null;
+  outrosGastos?: string | number | null;
+  status?: string | null;
+  dataAcordo?: string | null;
+  dataAbertura?: string | null;
+  agravoInstrumento?: string | null;
+  anexos?: JuridicoProcessoAnexo[];
+  comprovantes?: JuridicoProcessoComprovante[];
+  _count?: { anexos: number; comprovantes: number };
+  /** Registros da planilha cujo arquivo ainda não foi enviado. */
+  anexosPendentes?: number;
+  comprovantesPendentes?: number;
+};
 
 const MESES = [
   'Janeiro',
@@ -47,7 +78,7 @@ const MESES = [
   'Dezembro',
 ];
 
-function mesFromDate(value?: string): string {
+export function mesFromDate(value?: string | null): string {
   if (!value) return '—';
   const parts = value.split('/');
   if (parts.length >= 2) {
@@ -59,46 +90,102 @@ function mesFromDate(value?: string): string {
   return '—';
 }
 
-export function mapProcessoToAtivo(p: ProcessoJuridico): ProcessoAtivo {
-  return {
-    id: p.id,
-    reclamante: p.reclamante || '—',
-    numeroProcesso: p.numeroProcesso || '—',
-    tribunal: p.tribunal || '—',
-    vara: p.vara || '—',
-    mes: mesFromDate(p.dataAudiencia || p.dataAbertura),
-    dataAudiencia: p.dataAudiencia || '—',
-    horario: p.horario || '—',
-    presencial: p.presencial || '—',
-    statusProcesso: p.statusProcesso || p.status || '—',
-    decisaoStf: '—',
-    objeto: p.objeto || '—',
-    valorCausa: p.valorCausa || 0,
-    polo: p.polo || '—',
-    funcao: p.funcao || '—',
-    representanteAutor: p.representanteAutor || '—',
-    empresa: p.empresa || '—',
-    contrato: p.contrato || '—',
-    periodo: p.periodo || '—',
-    valorAcordo: p.valorAcordo || 0,
-    valorSentenca: p.valorSentenca || 0,
-    valorCustas: p.valorCustas || p.custas || 0,
-    valorRO: p.valorRO || 0,
-    valorRR: p.valorRR || 0,
-    valorAgravo: 0,
-    execucaoProvisoria: '—',
-    embargosExecucao: '—',
-    regimeContratacao: p.regimeContratacao || '—',
-  };
+export function toMoneyNumber(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const raw = String(value)
+    .replace(/R\$\s?/gi, '')
+    .replace(/\s/g, '');
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  let normalized = raw;
+  if (lastComma >= 0 && lastDot >= 0) {
+    normalized = lastDot > lastComma ? raw.replace(/,/g, '') : raw.replace(/\./g, '').replace(',', '.');
+  } else if (lastComma >= 0) {
+    normalized = raw.replace(',', '.');
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
-/** Processos ativos — inicia vazio até importar a planilha. */
-export const processosAtivos: ProcessoAtivo[] = [];
+export function formatCurrencyBRL(value: string | number | null | undefined): string {
+  const n = toMoneyNumber(value);
+  if (!n) return '—';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
 
-export function formatCurrencyBRL(value: number): string {
-  if (!value) return '—';
-  return value.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  });
+export function cellText(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const s = String(value).trim();
+  return s || '—';
+}
+
+export function statusBadgeClass(status?: string | null): string {
+  const s = (status || '').toUpperCase();
+  if (s.includes('ARQUIV')) return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+  if (s.includes('ANDAMENTO')) return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+  if (s.includes('SUSPENS')) return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+  if (s.includes('ACORDO')) return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400';
+  if (s.includes('INSTRU') || s.includes('AUDIEN')) {
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+  }
+  return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+}
+
+/** Primeira letra de cada palavra maiúscula (ex.: "ANDAMENTO PROCESSUAL" → "Andamento Processual"). */
+export function toStatusTitleCase(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+export function statusStatIconClasses(status?: string | null): {
+  iconBg: string;
+  iconColor: string;
+} {
+  const s = (status || '').toUpperCase();
+  if (!status || status === 'all') {
+    return {
+      iconBg: 'bg-slate-100 dark:bg-slate-800/60',
+      iconColor: 'text-slate-600 dark:text-slate-300',
+    };
+  }
+  if (s.includes('ARQUIV')) {
+    return {
+      iconBg: 'bg-green-100 dark:bg-green-900/30',
+      iconColor: 'text-green-600 dark:text-green-400',
+    };
+  }
+  if (s.includes('ANDAMENTO')) {
+    return {
+      iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+    };
+  }
+  if (s.includes('SUSPENS')) {
+    return {
+      iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+  if (s.includes('ACORDO')) {
+    return {
+      iconBg: 'bg-purple-100 dark:bg-purple-900/30',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+    };
+  }
+  if (s.includes('INSTRU') || s.includes('AUDIEN')) {
+    return {
+      iconBg: 'bg-red-100 dark:bg-red-900/30',
+      iconColor: 'text-red-600 dark:text-red-400',
+    };
+  }
+  return {
+    iconBg: 'bg-gray-100 dark:bg-gray-700',
+    iconColor: 'text-gray-600 dark:text-gray-300',
+  };
 }

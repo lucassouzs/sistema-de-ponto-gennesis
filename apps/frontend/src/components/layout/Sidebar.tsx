@@ -1095,6 +1095,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: Briefcase,
             description: 'Lista de processos jurídicos em andamento',
             permission: isAdministrator || can(pk('/ponto/juridico/processos-ativos'))
+          },
+          {
+            name: 'Dashboards dos Processos',
+            href: '/ponto/juridico/processos-ativos/dashboard',
+            icon: BarChart3,
+            description: 'Indicadores de causas, sentenças, recursos e acordos',
+            permission: isAdministrator || can(pk('/ponto/juridico/processos-ativos/dashboard'))
           }
         ]
       },

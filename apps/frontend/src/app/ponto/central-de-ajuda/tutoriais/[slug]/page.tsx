@@ -15,7 +15,7 @@ import { fetchHelpTutorialBySlug } from '@/lib/helpTutorialsApi';
 
 export default function HelpTutorialPage() {
   const params = useParams();
-  const slug = typeof params.slug === 'string' ? params.slug : '';
+  const slug = typeof params?.slug === 'string' ? params.slug : '';
 
   const { data: tutorial, isLoading, isError, error } = useQuery({
     queryKey: ['help-tutorial', slug],
