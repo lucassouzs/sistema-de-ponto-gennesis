@@ -6,6 +6,7 @@ import {
   processWhatsAppFuelFlow,
 } from './WhatsAppFuelFlowHandler';
 import { processWhatsAppFuelRefuelReportFlow } from './WhatsAppFuelRefuelReportFlowHandler';
+import { processWhatsAppSupportFlow } from './WhatsAppSupportFlowHandler';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -43,7 +44,13 @@ type FlowStatus =
   | 'FUEL_REPORT_ASK_RECEIPT'
   | 'FUEL_REPORT_ASK_OBSERVATIONS'
   | 'FUEL_REPORT_CONFIRM'
-  | 'FUEL_REPORT_COMPLETE';
+  | 'FUEL_REPORT_COMPLETE'
+  | 'SUPPORT_ASK_CATEGORY'
+  | 'SUPPORT_ASK_DESCRIPTION'
+  | 'SUPPORT_ASK_NAME'
+  | 'SUPPORT_ASK_CPF'
+  | 'SUPPORT_CONFIRM'
+  | 'SUPPORT_COMPLETE';
 
 type FaqItem = { id: string; question: string; answer: string; label?: string };
 type FaqTopic = { id: string; title: string; items: FaqItem[]; label?: string };
@@ -253,6 +260,34 @@ const FAQ_TOPICS: FaqTopic[] = [
     ]
   },
   {
+    id: 'SISTEMA',
+    title: 'Dúvidas sobre o sistema',
+    label: 'Sistema / login',
+    items: [
+      {
+        id: 'ESQUECI_SENHA',
+        question: 'Esqueci minha senha, o que fazer?',
+        label: 'Esqueci a senha',
+        answer:
+          'A recuperação automática está desativada. Solicite reset pelo WhatsApp (opção Suporte do sistema) ou fale com o DP/TI. Informe seu CPF completo.',
+      },
+      {
+        id: 'SEM_PERMISSAO',
+        question: 'Não vejo um menu ou módulo',
+        label: 'Sem permissão',
+        answer:
+          'O acesso é liberado pelo gestor em Controle → Permissões. Peça ao responsável do seu setor ou abra um chamado em Suporte do sistema.',
+      },
+      {
+        id: 'ERRO_SISTEMA',
+        question: 'Deu erro na tela',
+        label: 'Erro no sistema',
+        answer:
+          'Anote o que estava fazendo, tire um print se possível e abra Suporte do sistema no WhatsApp ou fale com a Gennecy no chat interno (opção 5).',
+      },
+    ],
+  },
+  {
     id: 'RESCISAO',
     title: 'Dúvidas sobre rescisão',
     label: 'Rescisão',
@@ -295,6 +330,7 @@ const GENNECY_MAIN_MENU_ROWS: Array<{ id: string; title: string }> = [
   { id: 'ATESTADO', title: 'Enviar atestado' },
   { id: 'COMBUSTIVEL', title: 'Solicitar combustível' },
   { id: 'INFORMAR_ABASTECIMENTO', title: 'Informar abastecimento' },
+  { id: 'SUPORTE_SISTEMA', title: 'Suporte do sistema' },
   { id: 'ATENDENTE', title: 'Falar com atendente' },
   { id: 'DUVIDAS', title: 'Dúvidas' },
   { id: 'END', title: 'Encerrar' },
@@ -1035,31 +1071,57 @@ export class WhatsAppBotService {
       }
       skipDefaultSwitch = true;
     } else {
-      const fuelResult = await processWhatsAppFuelFlow({
+      const supportResult = await processWhatsAppSupportFlow({
         phone,
         textRaw,
         content,
         flowStatus: normalizedFlowStatus,
         payload: newPayload,
-        hasMedia,
-        savedMedia,
+        conversationId: conversation.id,
         isMenuRequest,
         isEndRequest,
         resetToMenu,
         endConversation,
       });
 
-      if (fuelResult) {
-        sendAction = fuelResult.sendAction;
-        newStatus = fuelResult.newStatus as FlowStatus;
-        newPayload = fuelResult.newPayload;
-        if (fuelResult.newConversationStatus) {
-          newConversationStatus = fuelResult.newConversationStatus;
+      if (supportResult) {
+        sendAction = supportResult.sendAction;
+        newStatus = supportResult.newStatus as FlowStatus;
+        newPayload = supportResult.newPayload;
+        if (supportResult.newConversationStatus) {
+          newConversationStatus = supportResult.newConversationStatus;
         }
-        if (fuelResult.clearPayload) {
+        if (supportResult.clearPayload) {
           Object.keys(newPayload).forEach((k) => delete newPayload[k]);
         }
         skipDefaultSwitch = true;
+      } else {
+        const fuelResult = await processWhatsAppFuelFlow({
+          phone,
+          textRaw,
+          content,
+          flowStatus: normalizedFlowStatus,
+          payload: newPayload,
+          hasMedia,
+          savedMedia,
+          isMenuRequest,
+          isEndRequest,
+          resetToMenu,
+          endConversation,
+        });
+
+        if (fuelResult) {
+          sendAction = fuelResult.sendAction;
+          newStatus = fuelResult.newStatus as FlowStatus;
+          newPayload = fuelResult.newPayload;
+          if (fuelResult.newConversationStatus) {
+            newConversationStatus = fuelResult.newConversationStatus;
+          }
+          if (fuelResult.clearPayload) {
+            Object.keys(newPayload).forEach((k) => delete newPayload[k]);
+          }
+          skipDefaultSwitch = true;
+        }
       }
     }
 

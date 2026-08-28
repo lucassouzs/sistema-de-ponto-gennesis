@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { ensureGestaoOsSchema } from './ensureGestaoOsSchema';
+import { ensureSupportTicketsSchema } from './ensureSupportTicketsSchema';
 import { ensureToolRentalRequestsSchema } from './ensureToolRentalRequestsSchema';
 
 async function columnExists(
@@ -1472,6 +1473,7 @@ export async function ensureProductionSchema(prisma: PrismaClient): Promise<void
     await ensureQuoteMapUnitPricePrecision(prisma);
     await ensureToolRentalRequestsSchema(prisma);
     await ensureGestaoOsSchema(prisma);
+    await ensureSupportTicketsSchema(prisma);
     await ensureJuridicoProcessosTables(prisma);
     console.log('[Schema] Verificação de tabelas/colunas críticas concluída.');
   } catch (e) {

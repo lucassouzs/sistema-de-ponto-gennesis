@@ -646,6 +646,7 @@ export function useRoutePermission(route: string) {
       isAdministrator || can(pk('/ponto/sistema-gestao-os/tipos-servico')),
     '/ponto/permissoes': true,
     '/ponto/conversas-whatsapp': isAdministrator || can(pk('/ponto/conversas-whatsapp')),
+    '/ponto/suporte-ti': isAdministrator || can(pk('/ponto/suporte-ti')),
     '/ponto/financeiro': isAdministrator || can(pk('/ponto/financeiro')),
     '/ponto/financeiro/analise-extrato':
       isAdministrator || can(pk('/ponto/financeiro/analise-extrato')),

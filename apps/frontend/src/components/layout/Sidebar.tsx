@@ -71,6 +71,7 @@ import {
   Workflow,
   ChevronDown,
   HelpCircle,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
@@ -788,6 +789,13 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: MessageSquare,
             description: 'Conversas do chatbot WhatsApp para o pessoal ver',
             permission: isAdministrator || can(pk('/ponto/conversas-whatsapp'))
+          },
+          {
+            name: 'Suporte ao Sistema',
+            href: '/ponto/suporte-ti',
+            icon: LifeBuoy,
+            description: 'Chamados de senha, erro e permissão abertos pela Gennecy',
+            permission: isAdministrator || can(pk('/ponto/suporte-ti'))
           },
           {
             name: 'Férias',

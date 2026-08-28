@@ -12,6 +12,11 @@ import {
   shouldShowGennecyFuelMenu,
 } from './GennecyFuelFlowService';
 import {
+  gennecySupportFlowService,
+  messageHasSupportIntent,
+  messageStartsSupportMenu,
+} from './GennecySupportFlowService';
+import {
   gennecyFuelRefuelReportFlowService,
   messageHasFuelRefuelReportIntent,
 } from './GennecyFuelRefuelReportFlowService';
@@ -181,6 +186,7 @@ export async function shouldProcessGennecyMessage(
   if (content.trim().length > 0 || options?.hasAttachments) return true;
   if (await gennecyFuelFlowService.hasActiveFlow(chatId, senderId)) return true;
   if (await gennecyFuelRefuelReportFlowService.hasActiveFlow(chatId, senderId)) return true;
+  if (await gennecySupportFlowService.hasActiveFlow(chatId, senderId)) return true;
   return false;
 }
 
@@ -623,6 +629,28 @@ export class GennecyChatAssistantService {
     const inGennecyDm = await isDirectChatWithGennecyBot(params.chatId, params.senderId);
 
     try {
+      const supportActive = await gennecySupportFlowService.hasActiveFlow(
+        params.chatId,
+        params.senderId,
+      );
+      const supportTrigger =
+        supportActive ||
+        messageStartsSupportMenu(body) ||
+        (inGennecyDm && messageHasSupportIntent(body));
+
+      if (supportTrigger) {
+        const supportResult = await gennecySupportFlowService.processMessage({
+          chatId: params.chatId,
+          userId: params.senderId,
+          content: body || '(anexo)',
+          requesterName: requesterName,
+        });
+        if (supportResult.handled) {
+          await this.postGennecyReply(params.chatId, params.senderId, supportResult.reply);
+          return;
+        }
+      }
+
       const reportActive = await gennecyFuelRefuelReportFlowService.hasActiveFlow(
         params.chatId,
         params.senderId,

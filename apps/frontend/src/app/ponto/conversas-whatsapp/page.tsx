@@ -107,6 +107,41 @@ interface ConversationDetail {
   submissions: Submission[];
 }
 
+interface SupportTicketSummary {
+  id: string;
+  displayNumber: number;
+  category: string;
+  status: string;
+  channel: string;
+  subject: string;
+  description: string;
+  moduleHint: string | null;
+  requesterName: string | null;
+  requesterPhone: string | null;
+  requesterCpf: string | null;
+  whatsAppConversationId: string | null;
+  resolutionNote: string | null;
+  createdAt: string;
+  requester?: { name: string; email: string } | null;
+}
+
+type QueueItem =
+  | { kind: 'whatsapp'; data: ConversationSummary }
+  | { kind: 'support'; data: SupportTicketSummary };
+
+const SUPPORT_CATEGORY_LABELS: Record<string, string> = {
+  PASSWORD_RESET: 'Senha / acesso',
+  SYSTEM_ERROR: 'Erro no sistema',
+  PERMISSION: 'Permissão / menu',
+  OTHER: 'Outro',
+};
+
+const SUPPORT_CHANNEL_LABELS: Record<string, string> = {
+  GENNECY_CHAT: 'Gennecy (chat)',
+  WHATSAPP: 'WhatsApp',
+  WEB: 'Web',
+};
+
 function formatPhone(phone: string) {
   const n = phone.replace(/\D/g, '');
   if (n.length === 11) return n.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
@@ -291,6 +326,8 @@ const ABAS: { id: TabFiltro; label: string; icon: React.ElementType }[] = [
 function ConversasWhatsAppPageContent() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSupportId, setSelectedSupportId] = useState<string | null>(null);
+  const [supportResolutionNote, setSupportResolutionNote] = useState('');
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -330,6 +367,20 @@ function ConversasWhatsAppPageContent() {
     }
   });
 
+  const { data: supportListData, isLoading: loadingSupport } = useQuery({
+    queryKey: ['support-tickets-central'],
+    queryFn: async () => {
+      const res = await api.get('/support-tickets');
+      return (res.data?.data ?? []) as SupportTicketSummary[];
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: () => {
+      if (typeof document === 'undefined') return false;
+      return document.hidden ? false : 5000;
+    },
+  });
+
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ['whatsapp-conversation', selectedId],
     queryFn: async () => {
@@ -337,7 +388,7 @@ function ConversasWhatsAppPageContent() {
       const res = await api.get(`/whatsapp/conversations/${selectedId}`);
       return res.data;
     },
-    enabled: !!selectedId,
+    enabled: !!selectedId && !selectedSupportId,
     staleTime: 0,
     refetchOnWindowFocus: true,
     // Mensagens do cliente chegam pelo webhook; polling mantém o chat em tempo quase real.
@@ -357,6 +408,16 @@ function ConversasWhatsAppPageContent() {
   };
 
   const conversations: ConversationSummary[] = listData?.data ?? [];
+  const supportTickets: SupportTicketSummary[] = supportListData ?? [];
+
+  /** Chamados Gennecy/chat sem conversa WhatsApp duplicada na fila. */
+  const supportOnlyTickets = useMemo(() => {
+    const waIds = new Set(conversations.map((c) => c.id));
+    return supportTickets.filter(
+      (t) => !t.whatsAppConversationId || !waIds.has(t.whatsAppConversationId),
+    );
+  }, [conversations, supportTickets]);
+
   const isAtestadoConversation = (c: ConversationSummary) =>
     getCategoriaConversa(c.flowStatus) === 'atestados' ||
     c.submissionCount > 0 ||
@@ -368,17 +429,40 @@ function ConversasWhatsAppPageContent() {
   const isOnlyAtestadoQueue = (c: ConversationSummary) =>
     isAtestadoConversation(c) && !c.attendantRequested && !c.attendantInProgress;
 
-  const aguardandoAtendimento = conversations.filter(
-    (c) => !isOnlyAtestadoQueue(c) && c.status === 'PENDING' && !!c.attendantRequested && !c.attendantInProgress
-  );
-  const atendimentoEmAndamento = conversations.filter(
-    (c) => !isOnlyAtestadoQueue(c) && c.status === 'PENDING' && !!c.attendantInProgress
-  );
-  const conversasEncerradas = conversations.filter(
-    (c) =>
-      (c.status === 'COMPLETED' || c.status === 'CANCELLED') &&
-      (!isOnlyAtestadoQueue(c) || !!c.attendantHandoffEver)
-  );
+  const aguardandoAtendimento: QueueItem[] = [
+    ...conversations
+      .filter(
+        (c) =>
+          !isOnlyAtestadoQueue(c) &&
+          c.status === 'PENDING' &&
+          !!c.attendantRequested &&
+          !c.attendantInProgress,
+      )
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'OPEN')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
+  const atendimentoEmAndamento: QueueItem[] = [
+    ...conversations
+      .filter((c) => !isOnlyAtestadoQueue(c) && c.status === 'PENDING' && !!c.attendantInProgress)
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'IN_PROGRESS')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
+  const conversasEncerradas: QueueItem[] = [
+    ...conversations
+      .filter(
+        (c) =>
+          (c.status === 'COMPLETED' || c.status === 'CANCELLED') &&
+          (!isOnlyAtestadoQueue(c) || !!c.attendantHandoffEver),
+      )
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
 
   const conversasFiltradas =
     atendimentoTab === 'aguardando'
@@ -388,7 +472,11 @@ function ConversasWhatsAppPageContent() {
         : conversasEncerradas;
   const conversasVisiveis = conversasFiltradas;
   const detail: ConversationDetail | null = detailData?.data ?? null;
-  const isLoading = loadingUser || loadingList;
+  const selectedSupport = useMemo(
+    () => supportTickets.find((t) => t.id === selectedSupportId) ?? null,
+    [supportTickets, selectedSupportId],
+  );
+  const isLoading = loadingUser || loadingList || loadingSupport;
   const showLegacyData = false;
 
   /** Categoria da conversa selecionada (para acompanhar aba só quando o status mudar na mesma conversa, ex. após refetch). */
@@ -402,18 +490,38 @@ function ConversasWhatsAppPageContent() {
         ? 'aguardando'
         : 'encerradas';
 
+  const tabForSupport = (t: SupportTicketSummary) =>
+    t.status === 'IN_PROGRESS' ? 'andamento' : t.status === 'OPEN' ? 'aguardando' : 'encerradas';
+
   const conversationBelongsToTab = (
     c: ConversationSummary,
     tab: 'aguardando' | 'andamento' | 'encerradas'
   ) => tabForConversation(c) === tab;
 
+  const supportBelongsToTab = (
+    t: SupportTicketSummary,
+    tab: 'aguardando' | 'andamento' | 'encerradas',
+  ) => tabForSupport(t) === tab;
+
   const handleAtendimentoTabChange = (tab: 'aguardando' | 'andamento' | 'encerradas') => {
     setAtendimentoTab(tab);
-    if (!selectedId) return;
-    const selected = conversations.find((x) => x.id === selectedId);
-    if (!selected || !conversationBelongsToTab(selected, tab)) {
-      setSelectedId(null);
+    if (selectedId) {
+      const selected = conversations.find((x) => x.id === selectedId);
+      if (!selected || !conversationBelongsToTab(selected, tab)) {
+        setSelectedId(null);
+      }
     }
+    if (selectedSupportId) {
+      const selected = supportTickets.find((x) => x.id === selectedSupportId);
+      if (!selected || !supportBelongsToTab(selected, tab)) {
+        setSelectedSupportId(null);
+      }
+    }
+  };
+
+  const updateSupportTicket = async (id: string, status: string, resolutionNote?: string) => {
+    await api.patch(`/support-tickets/${id}`, { status, resolutionNote });
+    await queryClient.invalidateQueries({ queryKey: ['support-tickets-central'] });
   };
 
   const isMedicalCertificatePending = (status: string | null | undefined) =>
@@ -652,7 +760,7 @@ function ConversasWhatsAppPageContent() {
             Central de Atendimentos
           </h1>
           <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
-            Encaminhe, acompanhe e encerre conversas com atendente humano.
+            Fila única: conversas WhatsApp e chamados da Gennecy que precisam de atendimento humano.
           </p>
         </div>
 
@@ -743,19 +851,62 @@ function ConversasWhatsAppPageContent() {
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[calc(100vh-20rem)] overflow-y-auto">
-                  {conversasVisiveis.map((c) => {
+                  {conversasVisiveis.map((item) => {
+                    if (item.kind === 'support') {
+                      const t = item.data;
+                      return (
+                        <li key={`support-${t.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSupportId(t.id);
+                              setSelectedId(null);
+                              setSupportResolutionNote(t.resolutionNote || '');
+                              setSelectedAtestadoSubmissionId(null);
+                              setAtestadoConversationModalOpen(false);
+                              setAtestadoFilePreview(null);
+                            }}
+                            className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-4 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                              selectedSupportId === t.id
+                                ? 'bg-red-50 dark:bg-red-900/20 border-l-red-600 dark:border-l-red-500'
+                                : ''
+                            }`}
+                          >
+                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 shrink-0">
+                              <HelpCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                #{t.displayNumber} · {SUPPORT_CATEGORY_LABELS[t.category] || t.subject}
+                              </div>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                {t.requester?.name || t.requesterName || 'Solicitante'} ·{' '}
+                                {SUPPORT_CHANNEL_LABELS[t.channel] || t.channel}
+                              </p>
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2">
+                                {t.description}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 shrink-0" />
+                          </button>
+                        </li>
+                      );
+                    }
+
+                    const c = item.data;
                     return (
                       <li key={c.id}>
                         <button
                           type="button"
                           onClick={() => {
                             setSelectedId(c.id);
+                            setSelectedSupportId(null);
                             setSelectedAtestadoSubmissionId(null);
                             setAtestadoConversationModalOpen(false);
                             setAtestadoFilePreview(null);
                           }}
                           className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-4 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                            selectedId === c.id
+                            selectedId === c.id && !selectedSupportId
                               ? 'bg-red-50 dark:bg-red-900/20 border-l-red-600 dark:border-l-red-500'
                               : ''
                           }`}
@@ -826,9 +977,99 @@ function ConversasWhatsAppPageContent() {
             </CardContent>
           </Card>
 
-          {/* Detalhe da conversa */}
+          {/* Detalhe da conversa ou chamado Gennecy */}
           <div className="lg:col-span-2 min-h-[320px]">
-            {!selectedId ? (
+            {selectedSupport ? (
+              <Card className="shadow-sm">
+                <CardHeader className="border-b border-gray-200 dark:border-gray-700 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSupportId(null)}
+                    className="lg:hidden flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-2 px-1 py-1 -ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Voltar
+                  </button>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                        Chamado #{selectedSupport.displayNumber}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {SUPPORT_CATEGORY_LABELS[selectedSupport.category]} ·{' '}
+                        {SUPPORT_CHANNEL_LABELS[selectedSupport.channel]}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-400">Solicitante</p>
+                    <p className="text-sm">
+                      {selectedSupport.requester?.name || selectedSupport.requesterName || '—'}
+                    </p>
+                    {selectedSupport.requesterCpf ? (
+                      <p className="text-xs text-gray-500">CPF: {selectedSupport.requesterCpf}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-400">Problema</p>
+                    <p className="text-sm whitespace-pre-wrap">{selectedSupport.description}</p>
+                  </div>
+                  {selectedSupport.moduleHint ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-400">Tela / módulo</p>
+                      <p className="text-sm">{selectedSupport.moduleHint}</p>
+                    </div>
+                  ) : null}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Observação da equipe</label>
+                    <textarea
+                      value={supportResolutionNote}
+                      onChange={(e) => setSupportResolutionNote(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+                      placeholder="Como foi resolvido…"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSupport.status === 'OPEN' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await updateSupportTicket(selectedSupport.id, 'IN_PROGRESS', supportResolutionNote);
+                        }}
+                        className="rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-700"
+                      >
+                        Iniciar atendimento
+                      </button>
+                    )}
+                    {(selectedSupport.status === 'OPEN' || selectedSupport.status === 'IN_PROGRESS') && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await updateSupportTicket(selectedSupport.id, 'RESOLVED', supportResolutionNote);
+                        }}
+                        className="rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                      >
+                        Marcar resolvido
+                      </button>
+                    )}
+                    {selectedSupport.whatsAppConversationId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(selectedSupport.whatsAppConversationId);
+                          setSelectedSupportId(null);
+                        }}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600"
+                      >
+                        Abrir conversa WhatsApp
+                      </button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : !selectedId ? (
               <Card className="h-full min-h-[320px] flex items-center justify-center shadow-sm">
                 <div className="text-center py-12 px-6">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gray-100 dark:bg-gray-700/60 mb-4">
@@ -948,6 +1189,18 @@ function ConversasWhatsAppPageContent() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 space-y-6">
+                  {detail.payload && (detail.payload as any).supportTicketNumber ? (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        Chamado Gennecy #{(detail.payload as any).supportTicketNumber}
+                      </p>
+                      {(detail.payload as any).supportDescription ? (
+                        <p className="text-sm text-amber-800 dark:text-amber-200 mt-1 whitespace-pre-wrap">
+                          {String((detail.payload as any).supportDescription)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {detail.status === 'PENDING' && detail.payload && (detail.payload as any).attendantRequested ? (
                     <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 flex items-start gap-3">
                       <AlertCircle className="w-4 h-4 text-blue-700 dark:text-blue-300 mt-0.5" />

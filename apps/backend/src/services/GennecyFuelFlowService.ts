@@ -20,6 +20,7 @@ import {
   listFuelSatelliteCities,
 } from '../constants/fuelSatelliteCities';
 import { fuelRefuelRequestService } from './FuelRefuelRequestService';
+import { messageHasSupportIntent } from './GennecySupportFlowService';
 
 const FLOW_TYPE = 'FUEL_REFUEL';
 
@@ -236,6 +237,10 @@ export function shouldShowGennecyFuelMenu(body: string): boolean {
   if (/\b(criar|crie|cria|gerar|nova|adicionar|abrir|registrar)\b[\s\S]{0,80}?\b(task|tarefa|card|cart[aã]o)\b/i.test(text)) {
     return false;
   }
+  if (/^5$/.test(text)) return false;
+  if (/\b(suporte|senha|esqueci|permiss[aã]o)\b/i.test(text) && !messageHasFuelIntent(text)) {
+    return false;
+  }
   if (text.length <= 24 && !text.includes('?')) return true;
   return false;
 }
@@ -248,6 +253,7 @@ export const GENNECY_FUEL_MENU_MESSAGE = [
   '2 — Criar task no Tasks (ex.: «criar task sobre …»)',
   '3 — Outra pergunta',
   '4 — Informar abastecimento (após aprovação do Suprimentos)',
+  '5 — Suporte do sistema (senha, erro, permissão)',
   '',
   '⏰ Atendimento das solicitações: 7h–8h30 e 13h–14h30.',
   'Após 14h30 → dia seguinte. Urgências: contate o setor responsável.',
