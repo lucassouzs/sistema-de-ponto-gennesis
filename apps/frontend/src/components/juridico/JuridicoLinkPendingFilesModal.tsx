@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
-import api from '@/lib/api';
+import { postJuridicoMultipart } from '@/lib/juridicoMultipartUpload';
 import { isZipFile, listZipEntryNames } from '@/lib/zipEntryNames';
 
 export type JuridicoLinkPendingKind = 'anexos' | 'comprovantes';
@@ -31,8 +31,6 @@ type ProgressState = {
   detail?: string;
   uploadPercent: number | null;
 };
-
-const TIMEOUT_MS = 20 * 60 * 1000;
 
 function kindConfig(kind: JuridicoLinkPendingKind) {
   if (kind === 'anexos') {
@@ -186,27 +184,26 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
           uploadPercent: 0,
         });
 
-        const res = await api.post('/juridico-processos/link-files', step.build(), {
-          timeout: TIMEOUT_MS,
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          onUploadProgress: (evt) => {
-            if (!evt.total) {
+        const body = await postJuridicoMultipart<{ data?: Record<string, number> }>(
+          '/juridico-processos/link-files',
+          step.build(),
+          (loaded, total) => {
+            if (!total) {
               setProgress((prev) =>
                 prev ? { ...prev, label: step.label, detail: step.detail, uploadPercent: null } : prev,
               );
               return;
             }
-            const pct = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+            const pct = Math.min(100, Math.round((loaded / total) * 100));
             setProgress((prev) =>
               prev
                 ? { ...prev, label: step.label, detail: step.detail, uploadPercent: pct }
                 : prev,
             );
           },
-        });
+        );
 
-        const data = res.data?.data as Record<string, number> | undefined;
+        const data = body?.data;
         totalLinked += data?.[cfg.linkedKey] || 0;
         lastPending = data?.[cfg.pendingKey] || lastPending;
       }
@@ -221,21 +218,11 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
       reset();
       onClose();
     } catch (err: unknown) {
-      const ax = err as {
-        code?: string;
-        response?: { data?: { message?: string } };
-        message?: string;
-      };
-      toast.error(
-        ax.code === 'ECONNABORTED'
-          ? 'Tempo esgotado. Tente enviar um ZIP por vez.'
-          : ax.message === 'Network Error' ||
-              String(ax.message || '')
-                .toLowerCase()
-                .includes('network error')
-            ? 'Conexão interrompida (ZIP grande ou timeout no servidor). Envie um ZIP por vez e aguarde cada etapa terminar.'
-          : ax.response?.data?.message || ax.message || 'Erro ao vincular arquivos.',
-      );
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Erro ao vincular arquivos.';
+      toast.error(message);
     } finally {
       setLinking(false);
       setProgress(null);

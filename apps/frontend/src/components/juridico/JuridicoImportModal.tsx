@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
-import api from '@/lib/api';
+import { postJuridicoMultipart } from '@/lib/juridicoMultipartUpload';
 import {
   JURIDICO_PROCESSOS_IMPORT_COLUMNS,
   collectAnexos,
@@ -46,8 +46,6 @@ type ImportResultTotals = {
   anexosLinked: number;
   comprovantesLinked: number;
 };
-
-const IMPORT_TIMEOUT_MS = 20 * 60 * 1000;
 
 function isZipName(name: string) {
   return name.toLowerCase().endsWith('.zip');
@@ -174,27 +172,26 @@ export function JuridicoImportModal({ isOpen, onClose, onImported }: Props) {
     progress: Omit<ImportProgressState, 'uploadPercent'>,
   ) => {
     setImportProgress({ ...progress, uploadPercent: 0 });
-    const res = await api.post('/juridico-processos/import', fd, {
-      timeout: IMPORT_TIMEOUT_MS,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      onUploadProgress: (evt) => {
-        if (!evt.total) {
+    const body = await postJuridicoMultipart<{ data?: Partial<ImportResultTotals> }>(
+      '/juridico-processos/import',
+      fd,
+      (loaded, total) => {
+        if (!total) {
           setImportProgress((prev) =>
             prev ? { ...prev, ...progress, uploadPercent: null } : prev,
           );
           return;
         }
-        const pct = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+        const pct = Math.min(100, Math.round((loaded / total) * 100));
         setImportProgress((prev) =>
           prev ? { ...prev, ...progress, uploadPercent: pct } : prev,
         );
       },
-    });
+    );
     setImportProgress((prev) =>
       prev ? { ...prev, ...progress, uploadPercent: 100 } : prev,
     );
-    return res.data?.data as Partial<ImportResultTotals> | undefined;
+    return body?.data;
   };
 
   const handleSpreadsheet = async (files: File[]) => {

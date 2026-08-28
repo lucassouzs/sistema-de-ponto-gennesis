@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { unzipAll } from './unzipBuffer';
+import { extractZipFromDisk } from './unzipFromDisk';
 
 const MAX_ZIP_MEMORY_BYTES = 120 * 1024 * 1024;
 
@@ -20,7 +21,7 @@ function tryExtractWithCommand(command: string, args: string[], dir: string): bo
   }
 }
 
-/** Extrai ZIP para uma pasta temporária (preferência: CLI no disco; fallback: buffer). */
+/** Extrai ZIP para uma pasta temporária (CLI → streaming no disco → buffer pequeno). */
 export function extractZipArchive(zipPath: string): { dir: string; cleanup: () => void } {
   const dir = path.join(os.tmpdir(), `juridico-zip-${uuidv4()}`);
   fs.mkdirSync(dir, { recursive: true });
@@ -33,19 +34,25 @@ export function extractZipArchive(zipPath: string): { dir: string; cleanup: () =
     }
   };
 
-  if (
-    tryExtractWithCommand('unzip', ['-q', '-o', zipPath, '-d', dir], dir) ||
-    tryExtractWithCommand('tar', ['-xf', zipPath, '-C', dir], dir)
-  ) {
+  if (tryExtractWithCommand('unzip', ['-q', '-o', zipPath, '-d', dir], dir)) {
     return { dir, cleanup };
   }
 
-  // Fallback para ZIPs pequenos / ambientes sem unzip/tar funcional
+  try {
+    extractZipFromDisk(zipPath, dir);
+    if (walkFilesRecursive(dir).length > 0) {
+      return { dir, cleanup };
+    }
+  } catch (diskErr) {
+    console.warn('[extractZipArchive] extração em disco falhou, tentando buffer:', diskErr);
+  }
+
+  // Fallback para ZIPs pequenos
   try {
     const stat = fs.statSync(zipPath);
     if (stat.size > MAX_ZIP_MEMORY_BYTES) {
       throw new Error(
-        `ZIP muito grande (${Math.round(stat.size / (1024 * 1024))} MB). No servidor, instale unzip ou envie ZIPs menores.`,
+        `ZIP muito grande (${Math.round(stat.size / (1024 * 1024))} MB) e não pôde ser extraído no servidor. Divida em ZIPs menores.`,
       );
     }
     const buf = fs.readFileSync(zipPath);
@@ -56,6 +63,9 @@ export function extractZipArchive(zipPath: string): { dir: string; cleanup: () =
       const outPath = path.join(dir, ...safe.split('/'));
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
       fs.writeFileSync(outPath, entry.data);
+    }
+    if (!walkFilesRecursive(dir).length) {
+      throw new Error('Nenhum arquivo válido encontrado dentro do ZIP.');
     }
     return { dir, cleanup };
   } catch (err) {

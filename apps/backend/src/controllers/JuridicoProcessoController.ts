@@ -313,20 +313,22 @@ function collectUploadedFiles(
       (!!diskPath && /\.zip$/i.test(diskPath));
 
     if (looksZip && diskPath) {
-      try {
-        const extracted = extractZipArchive(diskPath);
-        cleanups.push(extracted.cleanup);
-        const filePaths = walkFilesRecursive(extracted.dir);
-        for (const abs of filePaths) {
-          const rel = path.relative(extracted.dir, abs).replace(/\\/g, '/');
-          out.push({
-            name: rel || path.basename(abs),
-            mimeType: mimeFromName(abs),
-            read: () => fs.readFileSync(abs),
-          });
-        }
-      } catch (err) {
-        console.warn(`[juridico-import] ZIP ${kind} inválido (${originalName}):`, err);
+      const extracted = extractZipArchive(diskPath);
+      cleanups.push(extracted.cleanup);
+      const filePaths = walkFilesRecursive(extracted.dir);
+      if (!filePaths.length) {
+        throw createError(
+          `Não foi possível extrair arquivos do ZIP "${originalName}". Verifique se o arquivo não está corrompido.`,
+          400,
+        );
+      }
+      for (const abs of filePaths) {
+        const rel = path.relative(extracted.dir, abs).replace(/\\/g, '/');
+        out.push({
+          name: rel || path.basename(abs),
+          mimeType: mimeFromName(abs),
+          read: () => fs.readFileSync(abs),
+        });
       }
       continue;
     }
@@ -343,19 +345,22 @@ function collectUploadedFiles(
         head = null;
       }
       if (head && isZipBuffer(head)) {
-        try {
-          const extracted = extractZipArchive(diskPath);
-          cleanups.push(extracted.cleanup);
-          for (const abs of walkFilesRecursive(extracted.dir)) {
-            const rel = path.relative(extracted.dir, abs).replace(/\\/g, '/');
-            out.push({
-              name: rel || path.basename(abs),
-              mimeType: mimeFromName(abs),
-              read: () => fs.readFileSync(abs),
-            });
-          }
-        } catch (err) {
-          console.warn(`[juridico-import] ZIP ${kind} inválido (${originalName}):`, err);
+        const extracted = extractZipArchive(diskPath);
+        cleanups.push(extracted.cleanup);
+        const filePaths = walkFilesRecursive(extracted.dir);
+        if (!filePaths.length) {
+          throw createError(
+            `Não foi possível extrair arquivos do ZIP "${originalName}". Verifique se o arquivo não está corrompido.`,
+            400,
+          );
+        }
+        for (const abs of filePaths) {
+          const rel = path.relative(extracted.dir, abs).replace(/\\/g, '/');
+          out.push({
+            name: rel || path.basename(abs),
+            mimeType: mimeFromName(abs),
+            read: () => fs.readFileSync(abs),
+          });
         }
         continue;
       }
@@ -370,17 +375,19 @@ function collectUploadedFiles(
     const buf = file.buffer;
     if (!buf?.length) continue;
     if (isZipBuffer(buf) || /\.zip$/i.test(originalName) || /zip/.test(file.mimetype || '')) {
-      try {
-        const entries = unzipAll(buf);
-        for (const entry of entries) {
-          out.push({
-            name: entry.name,
-            mimeType: mimeFromName(entry.name),
-            read: () => entry.data,
-          });
-        }
-      } catch (err) {
-        console.warn(`[juridico-import] ZIP ${kind} inválido (${originalName}):`, err);
+      const entries = unzipAll(buf);
+      if (!entries.length) {
+        throw createError(
+          `Não foi possível extrair arquivos do ZIP "${originalName}". Verifique se o arquivo não está corrompido.`,
+          400,
+        );
+      }
+      for (const entry of entries) {
+        out.push({
+          name: entry.name,
+          mimeType: mimeFromName(entry.name),
+          read: () => entry.data,
+        });
       }
     } else {
       out.push({
