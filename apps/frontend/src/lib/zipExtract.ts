@@ -1,4 +1,7 @@
-/** Extrai arquivos de um ZIP no navegador (STORE / DEFLATE). */
+/**
+ * Extrai arquivos de um ZIP no navegador (STORE / DEFLATE) lendo apenas os
+ * trechos necessários via File.slice — ZIPs grandes não são carregados na RAM.
+ */
 
 const EOCD = 0x06054b50;
 const CDH = 0x02014b50;
@@ -11,10 +14,23 @@ type ZipEntryMeta = {
   localOffset: number;
 };
 
-function findEocd(view: DataView): number {
-  const len = view.byteLength;
-  const maxScan = Math.min(len, 65535 + 22);
-  for (let i = len - 22; i >= len - maxScan && i >= 0; i -= 1) {
+export type ZipExtractProgress = (done: number, total: number) => void;
+
+async function readSlice(file: File, start: number, end: number): Promise<Uint8Array> {
+  const from = Math.max(0, start);
+  const to = Math.min(file.size, end);
+  if (to <= from) return new Uint8Array(0);
+  const buf = await file.slice(from, to).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+function viewOf(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+
+function findEocd(bytes: Uint8Array): number {
+  const view = viewOf(bytes);
+  for (let i = bytes.length - 22; i >= 0; i -= 1) {
     if (view.getUint32(i, true) === EOCD) return i;
   }
   return -1;
@@ -27,30 +43,38 @@ function decodeZipName(raw: Uint8Array, utf8Flag: boolean): string {
   return out;
 }
 
-function parseCentralDirectory(bytes: Uint8Array, view: DataView): ZipEntryMeta[] {
-  const eocd = findEocd(view);
-  if (eocd < 0) throw new Error('ZIP inválido. Envie um arquivo .zip padrão.');
+async function parseCentralDirectory(file: File): Promise<ZipEntryMeta[]> {
+  const tailSize = Math.min(file.size, 65535 + 22);
+  const tail = await readSlice(file, file.size - tailSize, file.size);
+  const eocdPos = findEocd(tail);
+  if (eocdPos < 0) {
+    throw new Error(
+      'ZIP inválido ou incompleto. Se for um backup dividido em partes, junte tudo em um ZIP único.',
+    );
+  }
 
-  const cdOffset = view.getUint32(eocd + 16, true);
-  const cdSize = view.getUint32(eocd + 12, true);
+  const eocdView = viewOf(tail);
+  const cdSize = eocdView.getUint32(eocdPos + 12, true);
+  const cdOffset = eocdView.getUint32(eocdPos + 16, true);
   if (cdOffset === 0xffffffff || cdSize === 0xffffffff) {
     throw new Error('ZIP64 não é suportado. Compacte os arquivos em um ZIP padrão.');
   }
 
+  const cd = await readSlice(file, cdOffset, cdOffset + cdSize);
+  const cdView = viewOf(cd);
   const entries: ZipEntryMeta[] = [];
-  let pos = cdOffset;
-  const end = Math.min(bytes.length, cdOffset + cdSize);
+  let pos = 0;
 
-  while (pos + 46 <= end) {
-    if (view.getUint32(pos, true) !== CDH) break;
-    const flags = view.getUint16(pos + 8, true);
-    const method = view.getUint16(pos + 10, true);
-    const compSize = view.getUint32(pos + 20, true);
-    const nameLen = view.getUint16(pos + 28, true);
-    const extraLen = view.getUint16(pos + 30, true);
-    const commentLen = view.getUint16(pos + 32, true);
-    const localOffset = view.getUint32(pos + 42, true);
-    const nameRaw = bytes.subarray(pos + 46, pos + 46 + nameLen);
+  while (pos + 46 <= cd.length) {
+    if (cdView.getUint32(pos, true) !== CDH) break;
+    const flags = cdView.getUint16(pos + 8, true);
+    const method = cdView.getUint16(pos + 10, true);
+    const compSize = cdView.getUint32(pos + 20, true);
+    const nameLen = cdView.getUint16(pos + 28, true);
+    const extraLen = cdView.getUint16(pos + 30, true);
+    const commentLen = cdView.getUint16(pos + 32, true);
+    const localOffset = cdView.getUint32(pos + 42, true);
+    const nameRaw = cd.subarray(pos + 46, pos + 46 + nameLen);
     const name = decodeZipName(nameRaw, (flags & 0x800) !== 0).replace(/\\/g, '/');
     pos += 46 + nameLen + extraLen + commentLen;
 
@@ -69,30 +93,25 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy;
 }
 
-async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
+async function inflateRawBlob(compressed: Uint8Array): Promise<Blob> {
   if (typeof DecompressionStream === 'undefined') {
-    throw new Error('Seu navegador não suporta extração de ZIP. Use Chrome ou Edge atualizado.');
+    throw new Error(
+      'Seu navegador não suporta a leitura do ZIP. Use o Google Chrome ou o Edge atualizado.',
+    );
   }
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
   void writer.write(toArrayBuffer(compressed));
   void writer.close();
+
   const reader = ds.readable.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
+  const chunks: BlobPart[] = [];
+  for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    chunks.push(value);
-    total += value.length;
+    if (value) chunks.push(toArrayBuffer(value));
   }
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
+  return new Blob(chunks);
 }
 
 function mimeFromName(name: string): string {
@@ -115,40 +134,48 @@ function basenamePath(pathLike: string): string {
   return pathLike.replace(/\\/g, '/').split('/').filter(Boolean).pop() || pathLike;
 }
 
-/** Extrai entradas de um ZIP para objetos File (para envio em lotes ao servidor). */
-export async function extractZipToFiles(zipFile: File): Promise<File[]> {
-  const buf = await zipFile.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  const view = new DataView(buf);
-  const metas = parseCentralDirectory(bytes, view);
+/** Extrai as entradas de um ZIP como File, para envio em lotes pequenos ao servidor. */
+export async function extractZipToFiles(
+  zipFile: File,
+  onProgress?: ZipExtractProgress,
+): Promise<File[]> {
+  const metas = await parseCentralDirectory(zipFile);
   if (!metas.length) {
-    throw new Error('O ZIP não contém arquivos válidos.');
+    throw new Error('O ZIP não contém arquivos válidos para vincular.');
   }
 
   const out: File[] = [];
-  for (const meta of metas) {
-    if (meta.localOffset + 30 > bytes.length) continue;
-    if (view.getUint32(meta.localOffset, true) !== LFH) continue;
-    const lNameLen = view.getUint16(meta.localOffset + 26, true);
-    const lExtraLen = view.getUint16(meta.localOffset + 28, true);
-    const dataStart = meta.localOffset + 30 + lNameLen + lExtraLen;
-    const dataEnd = dataStart + meta.compSize;
-    if (dataEnd > bytes.length) continue;
+  for (let i = 0; i < metas.length; i += 1) {
+    const meta = metas[i]!;
+    onProgress?.(i, metas.length);
 
-    const compressed = bytes.subarray(dataStart, dataEnd);
-    let data: Uint8Array;
-    if (meta.method === 0) data = compressed;
-    else if (meta.method === 8) data = await inflateRaw(compressed);
-    else continue;
+    const localHeader = await readSlice(zipFile, meta.localOffset, meta.localOffset + 30);
+    if (localHeader.length < 30) continue;
+    const lhView = viewOf(localHeader);
+    if (lhView.getUint32(0, true) !== LFH) continue;
+
+    const nameLen = lhView.getUint16(26, true);
+    const extraLen = lhView.getUint16(28, true);
+    const dataStart = meta.localOffset + 30 + nameLen + extraLen;
+    const dataEnd = dataStart + meta.compSize;
+    if (dataEnd > zipFile.size) continue;
 
     const fileName = basenamePath(meta.name);
-    out.push(
-      new File([toArrayBuffer(data)], fileName, {
-        type: mimeFromName(fileName),
-        lastModified: zipFile.lastModified,
-      }),
-    );
+    const mimeType = mimeFromName(fileName);
+
+    if (meta.method === 0) {
+      const blob = zipFile.slice(dataStart, dataEnd);
+      out.push(new File([blob], fileName, { type: mimeType }));
+      continue;
+    }
+    if (meta.method !== 8) continue;
+
+    const compressed = await readSlice(zipFile, dataStart, dataEnd);
+    const inflated = await inflateRawBlob(compressed);
+    out.push(new File([inflated], fileName, { type: mimeType }));
   }
+
+  onProgress?.(metas.length, metas.length);
 
   if (!out.length) {
     throw new Error(

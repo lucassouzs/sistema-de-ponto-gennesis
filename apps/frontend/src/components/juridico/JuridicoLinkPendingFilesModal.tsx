@@ -34,6 +34,7 @@ type ProgressState = {
 };
 
 const LINK_FILE_BATCH_SIZE = 5;
+const BATCH_MAX_ATTEMPTS = 3;
 
 function chunkArray<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -41,6 +42,12 @@ function chunkArray<T>(items: T[], size: number): T[][] {
     out.push(items.slice(i, i + size));
   }
   return out;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function kindConfig(kind: JuridicoLinkPendingKind) {
@@ -173,7 +180,13 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
           detail: zip.name,
           uploadPercent: null,
         });
-        const fromZip = await extractZipToFiles(zip);
+        const fromZip = await extractZipToFiles(zip, (done, total) => {
+          setProgress((prev) =>
+            prev
+              ? { ...prev, detail: `${zip.name} — ${done}/${total} arquivo(s)` }
+              : prev,
+          );
+        });
         extracted.push(...fromZip);
       }
 
@@ -201,36 +214,41 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
         );
         for (const file of batch) fd.append(cfg.looseField, file);
 
-        const body = await postJuridicoMultipart<{ data?: Record<string, number> }>(
-          '/juridico-processos/link-files',
-          fd,
-          (loaded, total) => {
-            if (!total) {
-              setProgress((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      label: cfg.sendingBatch(i + 1, batches.length),
-                      detail: `${batch.length} arquivo(s)`,
-                      uploadPercent: null,
-                    }
-                  : prev,
-              );
-              return;
-            }
-            const pct = Math.min(100, Math.round((loaded / total) * 100));
-            setProgress((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    label: cfg.sendingBatch(i + 1, batches.length),
-                    detail: `${batch.length} arquivo(s)`,
-                    uploadPercent: pct,
-                  }
-                : prev,
+        let body: { data?: Record<string, number> } | undefined;
+        let lastError: unknown = null;
+
+        for (let attempt = 1; attempt <= BATCH_MAX_ATTEMPTS; attempt += 1) {
+          try {
+            body = await postJuridicoMultipart<{ data?: Record<string, number> }>(
+              '/juridico-processos/link-files',
+              fd,
+              (loaded, total) => {
+                const detail =
+                  attempt > 1
+                    ? `${batch.length} arquivo(s) · tentativa ${attempt}`
+                    : `${batch.length} arquivo(s)`;
+                const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : null;
+                setProgress((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        label: cfg.sendingBatch(i + 1, batches.length),
+                        detail,
+                        uploadPercent: pct,
+                      }
+                    : prev,
+                );
+              },
             );
-          },
-        );
+            lastError = null;
+            break;
+          } catch (err) {
+            lastError = err;
+            if (attempt < BATCH_MAX_ATTEMPTS) await wait(1500 * attempt);
+          }
+        }
+
+        if (lastError) throw lastError;
 
         const data = body?.data;
         totalLinked += data?.[cfg.linkedKey] || 0;

@@ -879,17 +879,25 @@ export class JuridicoProcessoController {
         const usedComprovanteKeys = new Set<string>();
 
         if (linkAnexos && anexoFiles.all.length) {
-          const pendingWhere = buildPendingMatchWhere(matchHints);
-          const pending = await prisma.juridicoProcessoAnexo.findMany({
-            where: pendingWhere as Prisma.JuridicoProcessoAnexoWhereInput,
-            select: {
-              id: true,
-              processoId: true,
-              externalId: true,
-              originalName: true,
-              sourcePath: true,
-            },
+          const select = {
+            id: true,
+            processoId: true,
+            externalId: true,
+            originalName: true,
+            sourcePath: true,
+          } as const;
+
+          let pending = await prisma.juridicoProcessoAnexo.findMany({
+            where: buildPendingMatchWhere(matchHints) as Prisma.JuridicoProcessoAnexoWhereInput,
+            select,
           });
+          // Sem acerto pelas dicas de nome, cai para a varredura completa dos pendentes.
+          if (!pending.length && matchHints.length) {
+            pending = await prisma.juridicoProcessoAnexo.findMany({
+              where: buildPendingMatchWhere([]) as Prisma.JuridicoProcessoAnexoWhereInput,
+              select,
+            });
+          }
           anexosPending = pending.length;
 
           anexosLinked = await linkPendingIndexedFiles(
@@ -907,17 +915,26 @@ export class JuridicoProcessoController {
         }
 
         if (linkComprovantes && comprovanteFiles.all.length) {
-          const pendingWhere = buildPendingMatchWhere(matchHints);
-          const pending = await prisma.juridicoProcessoComprovante.findMany({
-            where: pendingWhere as Prisma.JuridicoProcessoComprovanteWhereInput,
-            select: {
-              id: true,
-              processoId: true,
-              externalId: true,
-              originalName: true,
-              sourcePath: true,
-            },
+          const select = {
+            id: true,
+            processoId: true,
+            externalId: true,
+            originalName: true,
+            sourcePath: true,
+          } as const;
+
+          let pending = await prisma.juridicoProcessoComprovante.findMany({
+            where: buildPendingMatchWhere(
+              matchHints,
+            ) as Prisma.JuridicoProcessoComprovanteWhereInput,
+            select,
           });
+          if (!pending.length && matchHints.length) {
+            pending = await prisma.juridicoProcessoComprovante.findMany({
+              where: buildPendingMatchWhere([]) as Prisma.JuridicoProcessoComprovanteWhereInput,
+              select,
+            });
+          }
           comprovantesPending = pending.length;
 
           comprovantesLinked = await linkPendingIndexedFiles(

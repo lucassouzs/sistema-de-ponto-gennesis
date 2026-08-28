@@ -54,13 +54,13 @@ export async function postJuridicoMultipart<T = unknown>(
         }
         return;
       }
-      reject(new Error(parseErrorPayload(xhr.responseText)));
+      reject(new Error(`${parseErrorPayload(xhr.responseText)} (HTTP ${xhr.status})`));
     };
 
     xhr.onerror = () =>
       reject(
         new Error(
-          'Conexão interrompida durante o envio. Verifique a internet ou envie um ZIP menor.',
+          'Conexão interrompida durante o envio (falha de rede ou servidor indisponível).',
         ),
       );
     xhr.onabort = () => reject(new Error('Envio cancelado.'));
