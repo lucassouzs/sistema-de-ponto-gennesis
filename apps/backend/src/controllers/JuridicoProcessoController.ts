@@ -131,6 +131,51 @@ function matchFile(
   return null;
 }
 
+function parseMatchHints(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((item) => str(item)).filter(Boolean);
+  }
+  const text = str(raw);
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => str(item)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function buildPendingMatchWhere(
+  hints: string[],
+): Prisma.JuridicoProcessoAnexoWhereInput | Prisma.JuridicoProcessoComprovanteWhereInput {
+  const base = {
+    OR: [{ fileUrl: null }, { fileUrl: '' }],
+  } satisfies Prisma.JuridicoProcessoAnexoWhereInput;
+
+  if (!hints.length) return base;
+
+  const ors: Prisma.JuridicoProcessoAnexoWhereInput[] = [];
+  for (const hint of hints) {
+    const normalized = normalizeKey(basename(hint));
+    if (!normalized) continue;
+    const stem = normalized.replace(/\.[a-z0-9]+$/, '');
+    ors.push({ sourcePath: { contains: normalized, mode: 'insensitive' } });
+    ors.push({ originalName: { contains: normalized, mode: 'insensitive' } });
+    if (stem && stem !== normalized) {
+      ors.push({ sourcePath: { contains: stem, mode: 'insensitive' } });
+      ors.push({ originalName: { contains: stem, mode: 'insensitive' } });
+    }
+    if (/^\d+$/.test(normalized)) {
+      ors.push({ externalId: normalized });
+    }
+  }
+
+  if (!ors.length) return base;
+  return { AND: [base, { OR: ors }] };
+}
+
 async function linkPendingIndexedFiles(
   pending: Array<{
     id: string;
@@ -800,6 +845,7 @@ export class JuridicoProcessoController {
       const linkAnexos = !kindRaw || kindRaw === 'all' || kindRaw === 'anexos';
       const linkComprovantes =
         !kindRaw || kindRaw === 'all' || kindRaw === 'comprovantes';
+      const matchHints = parseMatchHints((req.body as { matchHints?: unknown })?.matchHints);
 
       const files = (req.files || {}) as Record<string, Express.Multer.File[]>;
       const cleanups: Array<() => void> = [];
@@ -833,10 +879,9 @@ export class JuridicoProcessoController {
         const usedComprovanteKeys = new Set<string>();
 
         if (linkAnexos && anexoFiles.all.length) {
+          const pendingWhere = buildPendingMatchWhere(matchHints);
           const pending = await prisma.juridicoProcessoAnexo.findMany({
-            where: {
-              OR: [{ fileUrl: null }, { fileUrl: '' }],
-            },
+            where: pendingWhere as Prisma.JuridicoProcessoAnexoWhereInput,
             select: {
               id: true,
               processoId: true,
@@ -862,10 +907,9 @@ export class JuridicoProcessoController {
         }
 
         if (linkComprovantes && comprovanteFiles.all.length) {
+          const pendingWhere = buildPendingMatchWhere(matchHints);
           const pending = await prisma.juridicoProcessoComprovante.findMany({
-            where: {
-              OR: [{ fileUrl: null }, { fileUrl: '' }],
-            },
+            where: pendingWhere as Prisma.JuridicoProcessoComprovanteWhereInput,
             select: {
               id: true,
               processoId: true,

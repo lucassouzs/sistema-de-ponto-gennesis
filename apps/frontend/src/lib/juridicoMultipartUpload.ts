@@ -1,5 +1,10 @@
 import { API_BASE_URL } from './apiBaseUrl';
 
+async function refreshAuthToken(): Promise<void> {
+  const { ensureValidAuthToken } = await import('./api');
+  await ensureValidAuthToken();
+}
+
 function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('token') || sessionStorage.getItem('token');
@@ -17,11 +22,13 @@ function parseErrorPayload(text: string): string {
 export type JuridicoUploadProgressCb = (loaded: number, total: number | null) => void;
 
 /** Upload multipart sem timeout do axios — adequado para ZIPs grandes. */
-export function postJuridicoMultipart<T = unknown>(
+export async function postJuridicoMultipart<T = unknown>(
   endpoint: string,
   formData: FormData,
   onProgress?: JuridicoUploadProgressCb,
 ): Promise<T> {
+  await refreshAuthToken();
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const url = `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;

@@ -13,6 +13,7 @@ import {
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
 import { postJuridicoMultipart } from '@/lib/juridicoMultipartUpload';
+import { extractZipToFiles } from '@/lib/zipExtract';
 import { isZipFile, listZipEntryNames } from '@/lib/zipEntryNames';
 
 export type JuridicoLinkPendingKind = 'anexos' | 'comprovantes';
@@ -31,6 +32,16 @@ type ProgressState = {
   detail?: string;
   uploadPercent: number | null;
 };
+
+const LINK_FILE_BATCH_SIZE = 5;
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
 
 function kindConfig(kind: JuridicoLinkPendingKind) {
   if (kind === 'anexos') {
@@ -55,8 +66,10 @@ function kindConfig(kind: JuridicoLinkPendingKind) {
       itemLabel: 'anexo(s)',
       progressHint: 'O sistema cruza só os anexos sem arquivo.',
       sendingLoose: 'Enviando anexos avulsos…',
-      sendingZip: (idx: number, total: number) =>
-        `Enviando ZIP de anexos (${idx}/${total})…`,
+      sendingBatch: (idx: number, total: number) =>
+        `Vinculando lote de anexos (${idx}/${total})…`,
+      extractingZip: (idx: number, total: number) =>
+        `Lendo ZIP de anexos (${idx}/${total})…`,
     };
   }
   return {
@@ -81,8 +94,10 @@ function kindConfig(kind: JuridicoLinkPendingKind) {
     itemLabel: 'comprovante(s)',
     progressHint: 'O sistema cruza só os comprovantes sem arquivo.',
     sendingLoose: 'Enviando comprovantes avulsos…',
-    sendingZip: (idx: number, total: number) =>
-      `Enviando ZIP de comprovantes (${idx}/${total})…`,
+    sendingBatch: (idx: number, total: number) =>
+      `Vinculando lote de comprovantes (${idx}/${total})…`,
+    extractingZip: (idx: number, total: number) =>
+      `Lendo ZIP de comprovantes (${idx}/${total})…`,
   };
 }
 
@@ -141,63 +156,77 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
 
     const zips = files.filter((f) => isZipFile(f));
     const loose = files.filter((f) => !isZipFile(f));
-    const steps: Array<{ label: string; detail?: string; build: () => FormData }> = [];
-
-    if (loose.length) {
-      steps.push({
-        label: cfg.sendingLoose,
-        detail: `${loose.length} arquivo(s)`,
-        build: () => {
-          const fd = new FormData();
-          fd.append('kind', cfg.kindValue);
-          for (const file of loose) fd.append(cfg.looseField, file);
-          return fd;
-        },
-      });
-    }
-
-    zips.forEach((file, idx) => {
-      steps.push({
-        label: cfg.sendingZip(idx + 1, zips.length),
-        detail: file.name,
-        build: () => {
-          const fd = new FormData();
-          fd.append('kind', cfg.kindValue);
-          fd.append(cfg.zipField, file);
-          return fd;
-        },
-      });
-    });
 
     setLinking(true);
     let totalLinked = 0;
     let lastPending = 0;
 
     try {
-      for (let i = 0; i < steps.length; i += 1) {
-        const step = steps[i]!;
+      const extracted: File[] = [...loose];
+
+      for (let zi = 0; zi < zips.length; zi += 1) {
+        const zip = zips[zi]!;
+        setProgress({
+          step: zi + 1,
+          totalSteps: zips.length,
+          label: cfg.extractingZip(zi + 1, zips.length),
+          detail: zip.name,
+          uploadPercent: null,
+        });
+        const fromZip = await extractZipToFiles(zip);
+        extracted.push(...fromZip);
+      }
+
+      const batches = chunkArray(extracted, LINK_FILE_BATCH_SIZE);
+      if (!batches.length) {
+        toast.error('Nenhum arquivo válido para vincular.');
+        return;
+      }
+
+      for (let i = 0; i < batches.length; i += 1) {
+        const batch = batches[i]!;
         setProgress({
           step: i + 1,
-          totalSteps: steps.length,
-          label: step.label,
-          detail: step.detail,
+          totalSteps: batches.length,
+          label: cfg.sendingBatch(i + 1, batches.length),
+          detail: `${batch.length} arquivo(s)`,
           uploadPercent: 0,
         });
 
+        const fd = new FormData();
+        fd.append('kind', cfg.kindValue);
+        fd.append(
+          'matchHints',
+          JSON.stringify(batch.map((file) => file.name)),
+        );
+        for (const file of batch) fd.append(cfg.looseField, file);
+
         const body = await postJuridicoMultipart<{ data?: Record<string, number> }>(
           '/juridico-processos/link-files',
-          step.build(),
+          fd,
           (loaded, total) => {
             if (!total) {
               setProgress((prev) =>
-                prev ? { ...prev, label: step.label, detail: step.detail, uploadPercent: null } : prev,
+                prev
+                  ? {
+                      ...prev,
+                      label: cfg.sendingBatch(i + 1, batches.length),
+                      detail: `${batch.length} arquivo(s)`,
+                      uploadPercent: null,
+                    }
+                  : prev,
               );
               return;
             }
             const pct = Math.min(100, Math.round((loaded / total) * 100));
             setProgress((prev) =>
               prev
-                ? { ...prev, label: step.label, detail: step.detail, uploadPercent: pct }
+                ? {
+                    ...prev,
+                    label: cfg.sendingBatch(i + 1, batches.length),
+                    detail: `${batch.length} arquivo(s)`,
+                    uploadPercent: pct,
+                  }
                 : prev,
             );
           },
@@ -219,9 +248,7 @@ export function JuridicoLinkPendingFilesModal({ isOpen, kind, onClose, onLinked 
       onClose();
     } catch (err: unknown) {
       const message =
-        err instanceof Error
-          ? err.message
-          : 'Erro ao vincular arquivos.';
+        err instanceof Error ? err.message : 'Erro ao vincular arquivos.';
       toast.error(message);
     } finally {
       setLinking(false);
