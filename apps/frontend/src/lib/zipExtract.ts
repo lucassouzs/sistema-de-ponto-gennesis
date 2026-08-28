@@ -63,13 +63,19 @@ function parseCentralDirectory(bytes: Uint8Array, view: DataView): ZipEntryMeta[
   return entries;
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(copy).set(bytes);
+  return copy;
+}
+
 async function inflateRaw(compressed: Uint8Array): Promise<Uint8Array> {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('Seu navegador não suporta extração de ZIP. Use Chrome ou Edge atualizado.');
   }
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
-  void writer.write(compressed);
+  void writer.write(toArrayBuffer(compressed));
   void writer.close();
   const reader = ds.readable.getReader();
   const chunks: Uint8Array[] = [];
@@ -137,7 +143,7 @@ export async function extractZipToFiles(zipFile: File): Promise<File[]> {
 
     const fileName = basenamePath(meta.name);
     out.push(
-      new File([data], fileName, {
+      new File([toArrayBuffer(data)], fileName, {
         type: mimeFromName(fileName),
         lastModified: zipFile.lastModified,
       }),
