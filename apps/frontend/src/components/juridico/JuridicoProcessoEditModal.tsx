@@ -5,9 +5,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '@/components/ui/Modal';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { TimePickerField } from '@/components/ui/TimePickerField';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import {
+  formatCurrencyInputBrFromNumber,
+  maskCurrencyInputBrOrEmpty,
+} from '@/lib/maskCurrencyBr';
 import api from '@/lib/api';
 import { JURIDICO_CONTRATOS, resolveContratoNome } from '@/data/juridico-contratos';
+import { parseBrDate } from '@/data/juridico-processos-dashboard';
 import type { JuridicoProcesso } from '@/data/juridico-processos-ativos';
 
 type Props = {
@@ -118,11 +125,36 @@ const inputClass =
 const textareaClass =
   'min-h-[72px] w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
 
+const DATE_FIELDS: Array<keyof FormState> = [
+  'dataAbertura',
+  'dataAudiencia',
+  'dataAcordo',
+  'periodoInicio',
+  'periodoFim',
+];
+
+function dateToPickerValue(value?: string | null): string {
+  const raw = (value ?? '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = parseBrDate(raw);
+  if (!parsed) return '';
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function dateFromPickerValue(value: string): string {
+  const raw = value.trim();
+  if (!raw) return '';
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return raw;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
 function moneyToInput(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '';
-  const n = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
-  if (!Number.isFinite(n)) return String(value);
-  return String(n);
+  return formatCurrencyInputBrFromNumber(value);
 }
 
 function textToInput(value: string | number | null | undefined): string {
@@ -146,13 +178,13 @@ function processoToForm(processo: JuridicoProcesso): FormState {
     statusProcesso: textToInput(processo.statusProcesso),
     acordo: textToInput(processo.acordo),
     statusSentenca: textToInput(processo.statusSentenca),
-    dataAbertura: textToInput(processo.dataAbertura),
-    dataAudiencia: textToInput(processo.dataAudiencia),
+    dataAbertura: dateToPickerValue(processo.dataAbertura),
+    dataAudiencia: dateToPickerValue(processo.dataAudiencia),
     horario: textToInput(processo.horario),
-    dataAcordo: textToInput(processo.dataAcordo),
+    dataAcordo: dateToPickerValue(processo.dataAcordo),
     periodo: textToInput(processo.periodo),
-    periodoInicio: textToInput(processo.periodoInicio),
-    periodoFim: textToInput(processo.periodoFim),
+    periodoInicio: dateToPickerValue(processo.periodoInicio),
+    periodoFim: dateToPickerValue(processo.periodoFim),
     representanteAutor: textToInput(processo.representanteAutor),
     decisaoStf: textToInput(processo.decisaoStf),
     agravoInstrumento: textToInput(processo.agravoInstrumento),
@@ -190,6 +222,46 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+function TextInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      className={inputClass}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function MoneyInput({
+  value,
+  onChange,
+  placeholder = 'R$ 0,00',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className={inputClass}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(maskCurrencyInputBrOrEmpty(e.target.value))}
+    />
   );
 }
 
@@ -278,9 +350,14 @@ export function JuridicoProcessoEditModal({
 
     setSaving(true);
     try {
+      const payload: FormState = { ...form };
+      for (const key of DATE_FIELDS) {
+        payload[key] = dateFromPickerValue(form[key]);
+      }
+
       const res = isCreate
-        ? await api.post('/juridico-processos', form)
-        : await api.put(`/juridico-processos/${processoId}`, form);
+        ? await api.post('/juridico-processos', payload)
+        : await api.put(`/juridico-processos/${processoId}`, payload);
       const saved = res.data?.data as JuridicoProcesso;
       toast.success(
         res.data?.message ||
@@ -312,6 +389,7 @@ export function JuridicoProcessoEditModal({
       onClose={onClose}
       title={title}
       size="2xl"
+      contentOverflowVisible
       confirmBeforeClose={dirty && !saving}
       confirmCloseMessage="Há alterações não salvas. Deseja sair sem salvar?"
     >
@@ -329,45 +407,45 @@ export function JuridicoProcessoEditModal({
         <div className="space-y-6">
           <Section title="Identificação">
             <Field label="Reclamante" className="sm:col-span-2">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.reclamante}
-                onChange={(e) => setField('reclamante')(e.target.value)}
+                onChange={setField('reclamante')}
+                placeholder="Nome do reclamante"
               />
             </Field>
             <Field label="Nº Processo">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.numeroProcesso}
-                onChange={(e) => setField('numeroProcesso')(e.target.value)}
+                onChange={setField('numeroProcesso')}
+                placeholder="Ex: 0001234-12.2024.5.03.0001"
               />
             </Field>
             <Field label="Tribunal">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.tribunal}
-                onChange={(e) => setField('tribunal')(e.target.value)}
+                onChange={setField('tribunal')}
+                placeholder="Ex: TRT-3"
               />
             </Field>
             <Field label="Vara">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.vara}
-                onChange={(e) => setField('vara')(e.target.value)}
+                onChange={setField('vara')}
+                placeholder="Ex: 1ª Vara do Trabalho"
               />
             </Field>
             <Field label="Polo">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.polo}
-                onChange={(e) => setField('polo')(e.target.value)}
+                onChange={setField('polo')}
+                placeholder="Ex: Passivo"
               />
             </Field>
             <Field label="Empresa">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.empresa}
-                onChange={(e) => setField('empresa')(e.target.value)}
+                onChange={setField('empresa')}
+                placeholder="Ex: GENNESIS"
               />
             </Field>
             <Field label="Contrato">
@@ -381,31 +459,31 @@ export function JuridicoProcessoEditModal({
               />
             </Field>
             <Field label="Função">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.funcao}
-                onChange={(e) => setField('funcao')(e.target.value)}
+                onChange={setField('funcao')}
+                placeholder="Ex: Pedreiro"
               />
             </Field>
             <Field label="Regime">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.regimeContratacao}
-                onChange={(e) => setField('regimeContratacao')(e.target.value)}
+                onChange={setField('regimeContratacao')}
+                placeholder="Ex: CLT"
               />
             </Field>
             <Field label="Presencial">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.presencial}
-                onChange={(e) => setField('presencial')(e.target.value)}
+                onChange={setField('presencial')}
+                placeholder="Ex: Sim, Não ou Remoto"
               />
             </Field>
             <Field label="Representante do autor" className="sm:col-span-2">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.representanteAutor}
-                onChange={(e) => setField('representanteAutor')(e.target.value)}
+                onChange={setField('representanteAutor')}
+                placeholder="Nome do advogado ou representante"
               />
             </Field>
           </Section>
@@ -434,165 +512,128 @@ export function JuridicoProcessoEditModal({
               />
             </Field>
             <Field label="Status da sentença">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.statusSentenca}
-                onChange={(e) => setField('statusSentenca')(e.target.value)}
+                onChange={setField('statusSentenca')}
+                placeholder="Ex: Procedente parcial"
               />
             </Field>
             <Field label="Status processo" className="sm:col-span-2 lg:col-span-3">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.statusProcesso}
-                onChange={(e) => setField('statusProcesso')(e.target.value)}
+                onChange={setField('statusProcesso')}
+                placeholder="Descrição do andamento processual"
               />
             </Field>
             <Field label="Data da abertura">
-              <input
-                className={inputClass}
-                placeholder="dd/mm/aaaa"
+              <DatePickerField
                 value={form.dataAbertura}
-                onChange={(e) => setField('dataAbertura')(e.target.value)}
+                onChange={setField('dataAbertura')}
+                placeholder="dd/mm/aaaa"
+                className="w-full"
+                aria-label="Data da abertura"
               />
             </Field>
             <Field label="Data audiência">
-              <input
-                className={inputClass}
-                placeholder="dd/mm/aaaa"
+              <DatePickerField
                 value={form.dataAudiencia}
-                onChange={(e) => setField('dataAudiencia')(e.target.value)}
+                onChange={setField('dataAudiencia')}
+                placeholder="dd/mm/aaaa"
+                className="w-full"
+                aria-label="Data audiência"
               />
             </Field>
             <Field label="Horário">
-              <input
-                className={inputClass}
+              <TimePickerField
                 value={form.horario}
-                onChange={(e) => setField('horario')(e.target.value)}
+                onChange={setField('horario')}
+                placeholder="Selecionar horário"
+                className="w-full"
+                allowEmpty
+                aria-label="Horário da audiência"
               />
             </Field>
             <Field label="Data do acordo">
-              <input
-                className={inputClass}
-                placeholder="dd/mm/aaaa"
+              <DatePickerField
                 value={form.dataAcordo}
-                onChange={(e) => setField('dataAcordo')(e.target.value)}
+                onChange={setField('dataAcordo')}
+                placeholder="dd/mm/aaaa"
+                className="w-full"
+                aria-label="Data do acordo"
               />
             </Field>
             <Field label="Período">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.periodo}
-                onChange={(e) => setField('periodo')(e.target.value)}
+                onChange={setField('periodo')}
+                placeholder="Ex: 12 meses"
               />
             </Field>
             <Field label="Início trabalhado">
-              <input
-                className={inputClass}
-                placeholder="dd/mm/aaaa"
+              <DatePickerField
                 value={form.periodoInicio}
-                onChange={(e) => setField('periodoInicio')(e.target.value)}
+                onChange={setField('periodoInicio')}
+                placeholder="dd/mm/aaaa"
+                className="w-full"
+                aria-label="Início trabalhado"
               />
             </Field>
             <Field label="Fim trabalhado">
-              <input
-                className={inputClass}
-                placeholder="dd/mm/aaaa"
+              <DatePickerField
                 value={form.periodoFim}
-                onChange={(e) => setField('periodoFim')(e.target.value)}
+                onChange={setField('periodoFim')}
+                placeholder="dd/mm/aaaa"
+                className="w-full"
+                aria-label="Fim trabalhado"
               />
             </Field>
           </Section>
 
           <Section title="Valores">
             <Field label="Valor da causa">
-              <input
-                className={inputClass}
-                value={form.valorCausa}
-                onChange={(e) => setField('valorCausa')(e.target.value)}
-              />
+              <MoneyInput value={form.valorCausa} onChange={setField('valorCausa')} />
             </Field>
             <Field label="Valor sentença">
-              <input
-                className={inputClass}
-                value={form.valorSentenca}
-                onChange={(e) => setField('valorSentenca')(e.target.value)}
-              />
+              <MoneyInput value={form.valorSentenca} onChange={setField('valorSentenca')} />
             </Field>
             <Field label="Valor do acordo">
-              <input
-                className={inputClass}
-                value={form.valorAcordo}
-                onChange={(e) => setField('valorAcordo')(e.target.value)}
-              />
+              <MoneyInput value={form.valorAcordo} onChange={setField('valorAcordo')} />
             </Field>
             <Field label="Valor pago">
-              <input
-                className={inputClass}
-                value={form.valorPago}
-                onChange={(e) => setField('valorPago')(e.target.value)}
-              />
+              <MoneyInput value={form.valorPago} onChange={setField('valorPago')} />
             </Field>
             <Field label="Valor da parcela">
-              <input
-                className={inputClass}
-                value={form.valorParcela}
-                onChange={(e) => setField('valorParcela')(e.target.value)}
-              />
+              <MoneyInput value={form.valorParcela} onChange={setField('valorParcela')} />
             </Field>
             <Field label="Nº parcelas">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.numParcelas}
-                onChange={(e) => setField('numParcelas')(e.target.value)}
+                onChange={setField('numParcelas')}
+                placeholder="Ex: 6"
               />
             </Field>
             <Field label="Valor de RO">
-              <input
-                className={inputClass}
-                value={form.valorRO}
-                onChange={(e) => setField('valorRO')(e.target.value)}
-              />
+              <MoneyInput value={form.valorRO} onChange={setField('valorRO')} />
             </Field>
             <Field label="Valor de RR">
-              <input
-                className={inputClass}
-                value={form.valorRR}
-                onChange={(e) => setField('valorRR')(e.target.value)}
-              />
+              <MoneyInput value={form.valorRR} onChange={setField('valorRR')} />
             </Field>
             <Field label="Valor custas">
-              <input
-                className={inputClass}
-                value={form.valorCustas}
-                onChange={(e) => setField('valorCustas')(e.target.value)}
-              />
+              <MoneyInput value={form.valorCustas} onChange={setField('valorCustas')} />
             </Field>
             <Field label="Custas">
-              <input
-                className={inputClass}
-                value={form.custas}
-                onChange={(e) => setField('custas')(e.target.value)}
-              />
+              <MoneyInput value={form.custas} onChange={setField('custas')} />
             </Field>
             <Field label="Previdência">
-              <input
-                className={inputClass}
-                value={form.previdencia}
-                onChange={(e) => setField('previdencia')(e.target.value)}
-              />
+              <MoneyInput value={form.previdencia} onChange={setField('previdencia')} />
             </Field>
             <Field label="Outros gastos / honorários">
-              <input
-                className={inputClass}
-                value={form.outrosGastos}
-                onChange={(e) => setField('outrosGastos')(e.target.value)}
-              />
+              <MoneyInput value={form.outrosGastos} onChange={setField('outrosGastos')} />
             </Field>
             <Field label="Valor pago sentenciado">
-              <input
-                className={inputClass}
+              <MoneyInput
                 value={form.valorPagoSentenciado}
-                onChange={(e) => setField('valorPagoSentenciado')(e.target.value)}
+                onChange={setField('valorPagoSentenciado')}
               />
             </Field>
           </Section>
@@ -602,6 +643,7 @@ export function JuridicoProcessoEditModal({
               <textarea
                 className={textareaClass}
                 value={form.objeto}
+                placeholder="Descreva o objeto principal do processo"
                 onChange={(e) => setField('objeto')(e.target.value)}
               />
             </Field>
@@ -609,21 +651,22 @@ export function JuridicoProcessoEditModal({
               <textarea
                 className={textareaClass}
                 value={form.objeto2}
+                placeholder="Outros objetos ou pedidos vinculados"
                 onChange={(e) => setField('objeto2')(e.target.value)}
               />
             </Field>
             <Field label="Decisão do STF" className="sm:col-span-2">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.decisaoStf}
-                onChange={(e) => setField('decisaoStf')(e.target.value)}
+                onChange={setField('decisaoStf')}
+                placeholder="Ex: Não aplicável"
               />
             </Field>
             <Field label="Agravo de instrumento">
-              <input
-                className={inputClass}
+              <TextInput
                 value={form.agravoInstrumento}
-                onChange={(e) => setField('agravoInstrumento')(e.target.value)}
+                onChange={setField('agravoInstrumento')}
+                placeholder="Ex: Sim ou Não"
               />
             </Field>
           </Section>
