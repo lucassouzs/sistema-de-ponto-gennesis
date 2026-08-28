@@ -193,7 +193,7 @@ function SimNaoGroup({
   const opts =
     options.length >= 2 ? [options[0]!, options[1]!] : ['SIM', 'NÃO'];
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
+    <div className="flex h-10 flex-wrap items-center gap-2">
       {opts.map((opt) => {
         const checked = value === opt;
         return (

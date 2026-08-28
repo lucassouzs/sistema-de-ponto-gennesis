@@ -1042,7 +1042,7 @@ function SimNaoPreview({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-2 pt-1"
+      className="flex h-10 flex-wrap items-center gap-2"
       onClick={(e) => e.stopPropagation()}
     >
       {opts.map((opt, idx) => {
