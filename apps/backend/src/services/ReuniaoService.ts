@@ -10,6 +10,8 @@ export type ReuniaoFieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'valor'
+  | 'percent'
   | 'date'
   | 'datetime'
   | 'sim_nao'
