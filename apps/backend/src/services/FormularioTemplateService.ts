@@ -8,6 +8,8 @@ export type FormularioFieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'valor'
+  | 'percent'
   | 'date'
   | 'datetime'
   | 'sim_nao'
@@ -41,6 +43,19 @@ export interface FormularioQuestion {
   required?: boolean;
   placeholder?: string;
   width?: FormularioFieldWidth;
+  readOnly?: boolean;
+  formula?: {
+    op: 'sum' | 'subtract' | 'multiply' | 'divide';
+    sourceIds: string[];
+    resultFormat?: 'number' | 'valor' | 'percent';
+  };
+  tableColumns?: Array<{
+    id: string;
+    title: string;
+    align?: 'left' | 'center' | 'right';
+    bold?: boolean;
+    type?: 'text' | 'number' | 'valor' | 'percent';
+  }>;
   followUp?: FormularioFollowUp | null;
 }
 
@@ -79,13 +94,19 @@ export interface FormularioTemplate {
 
 interface FormularioIndexFile {
   items: FormularioTemplateIndexEntry[];
+  defaultReuniaoTemplateId?: string;
 }
+
+const REUNIAO_DEFAULT_DESCRIPTION_MARKER =
+  'Template padrão de reunião de acompanhamento de contrato';
 
 const INDEX_KEY = 'formularios/_index.json';
 const VALID_FIELD_TYPES = new Set<FormularioFieldType>([
   'text',
   'textarea',
   'number',
+  'valor',
+  'percent',
   'date',
   'datetime',
   'sim_nao',
@@ -205,11 +226,37 @@ export class FormularioTemplateService {
   private async readIndex(): Promise<FormularioIndexFile> {
     const idx = await this.readJson<FormularioIndexFile>(INDEX_KEY);
     if (!idx || !Array.isArray(idx.items)) return { items: [] };
-    return { items: idx.items };
+    return {
+      items: idx.items,
+      defaultReuniaoTemplateId: idx.defaultReuniaoTemplateId,
+    };
   }
 
-  private async writeIndex(items: FormularioTemplateIndexEntry[]): Promise<void> {
-    await this.writeJson(INDEX_KEY, { items });
+  private async writeIndex(file: FormularioIndexFile): Promise<void> {
+    await this.writeJson(INDEX_KEY, {
+      items: file.items,
+      ...(file.defaultReuniaoTemplateId
+        ? { defaultReuniaoTemplateId: file.defaultReuniaoTemplateId }
+        : {}),
+    });
+  }
+
+  private entryFromTemplate(template: FormularioTemplate): FormularioTemplateIndexEntry {
+    return {
+      id: template.id,
+      name: template.name,
+      description: template.description,
+      createdAt: template.createdAt,
+      updatedAt: template.updatedAt,
+    };
+  }
+
+  private async persistDefaultReuniaoTemplateId(
+    idx: FormularioIndexFile,
+    templateId: string,
+  ): Promise<void> {
+    if (idx.defaultReuniaoTemplateId === templateId) return;
+    await this.writeIndex({ ...idx, defaultReuniaoTemplateId: templateId });
   }
 
   private cleanSections(sections: FormularioSection[] | undefined): FormularioSection[] {
@@ -242,6 +289,9 @@ export class FormularioTemplateService {
           width: VALID_FIELD_WIDTHS.has(qItem.width as FormularioFieldWidth)
             ? (qItem.width as FormularioFieldWidth)
             : undefined,
+          readOnly: qItem.readOnly === true ? true : undefined,
+          formula: qItem.formula,
+          tableColumns: qItem.tableColumns,
           followUp,
         };
       }),
@@ -313,20 +363,60 @@ export class FormularioTemplateService {
   }
 
   async list(): Promise<FormularioTemplateIndexEntry[]> {
-    await this.ensureReuniaoDefault();
     const idx = await this.readIndex();
     return [...idx.items].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
     );
   }
 
-  /** Garante o template padrão de reunião em Cadastros > Formulários. */
-  async ensureReuniaoDefault(): Promise<FormularioTemplateIndexEntry> {
+  /** Garante o template padrão de reunião (somente em catálogo vazio). */
+  async ensureReuniaoDefault(): Promise<FormularioTemplateIndexEntry | null> {
     const idx = await this.readIndex();
-    const found = idx.items.find(
-      (i) => i.name.trim().toLowerCase() === 'formulário de reunião'
+
+    const linkedById = idx.defaultReuniaoTemplateId
+      ? idx.items.find((item) => item.id === idx.defaultReuniaoTemplateId)
+      : undefined;
+    if (linkedById) return linkedById;
+
+    if (idx.defaultReuniaoTemplateId) {
+      const stored = await this.get(idx.defaultReuniaoTemplateId);
+      if (stored) {
+        const entry = this.entryFromTemplate(stored);
+        const nextItems = [entry, ...idx.items.filter((item) => item.id !== entry.id)];
+        await this.writeIndex({
+          items: nextItems,
+          defaultReuniaoTemplateId: entry.id,
+        });
+        return entry;
+      }
+    }
+
+    const reuniaoCandidates = idx.items.filter((item) =>
+      (item.description || '').includes(REUNIAO_DEFAULT_DESCRIPTION_MARKER),
     );
-    if (found) return found;
+    if (reuniaoCandidates.length > 0) {
+      const preferred =
+        reuniaoCandidates.find(
+          (item) => item.name.trim().toLowerCase() !== 'formulário de reunião',
+        ) ||
+        [...reuniaoCandidates].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        )[0]!;
+      await this.persistDefaultReuniaoTemplateId(idx, preferred.id);
+      return preferred;
+    }
+
+    const byName = idx.items.find(
+      (item) => item.name.trim().toLowerCase() === 'formulário de reunião',
+    );
+    if (byName) {
+      await this.persistDefaultReuniaoTemplateId(idx, byName.id);
+      return byName;
+    }
+
+    if (idx.items.length > 0) {
+      return null;
+    }
 
     const { buildDefaultTemplate } = await import('./ReuniaoService');
     const def = buildDefaultTemplate();
@@ -336,13 +426,12 @@ export class FormularioTemplateService {
         'Template padrão de reunião de acompanhamento de contrato (cronograma, gestão e comunicação).',
       sections: def.sections as FormularioSection[],
     });
-    return {
-      id: created.id,
-      name: created.name,
-      description: created.description,
-      createdAt: created.createdAt,
-      updatedAt: created.updatedAt,
-    };
+    const currentIdx = await this.readIndex();
+    await this.writeIndex({
+      ...currentIdx,
+      defaultReuniaoTemplateId: created.id,
+    });
+    return this.entryFromTemplate(created);
   }
 
   async get(id: string): Promise<FormularioTemplate | null> {
@@ -385,7 +474,7 @@ export class FormularioTemplateService {
       updatedAt: now,
     });
     await this.writeJson(this.templateKey(id), template);
-    await this.writeIndex(idx.items);
+    await this.writeIndex(idx);
     return template;
   }
 
@@ -451,7 +540,7 @@ export class FormularioTemplateService {
     else idx.items.unshift(entry);
 
     await this.writeJson(this.templateKey(id), updated);
-    await this.writeIndex(idx.items);
+    await this.writeIndex(idx);
     return updated;
   }
 
@@ -460,7 +549,11 @@ export class FormularioTemplateService {
     if (!existing) throw new Error('Formulário não encontrado.');
 
     const idx = await this.readIndex();
-    await this.writeIndex(idx.items.filter((i) => i.id !== id));
+    await this.writeIndex({
+      items: idx.items.filter((item) => item.id !== id),
+      defaultReuniaoTemplateId:
+        idx.defaultReuniaoTemplateId === id ? undefined : idx.defaultReuniaoTemplateId,
+    });
     await this.deleteKey(this.templateKey(id));
   }
 }

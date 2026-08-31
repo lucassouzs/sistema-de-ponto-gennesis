@@ -167,6 +167,8 @@ function QuestionFieldTitleRow({
   setFormulaModal,
   setOptionsModal,
   setTableColumnsModal,
+  typeMenuOpen,
+  onTypeMenuOpenChange,
 }: {
   question: FormQuestion;
   sectionId: string;
@@ -182,6 +184,8 @@ function QuestionFieldTitleRow({
   setFormulaModal: (value: { sectionId: string; questionId: string }) => void;
   setOptionsModal: (value: { sectionId: string; questionId: string }) => void;
   setTableColumnsModal: (value: { sectionId: string; questionId: string }) => void;
+  typeMenuOpen: boolean;
+  onTypeMenuOpenChange: (open: boolean) => void;
 }) {
   return (
     <div data-field-title className="mb-3 flex min-w-0 items-start gap-1">
@@ -195,10 +199,21 @@ function QuestionFieldTitleRow({
       </div>
       <div
         data-field-toolbar
-        className="shrink-0 opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
+        className={`shrink-0 transition-opacity ${
+          typeMenuOpen
+            ? 'pointer-events-auto opacity-100'
+            : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="inline-flex w-max items-center gap-1">
+        <QuestionFieldTypeMenu
+          question={question}
+          sectionId={sectionId}
+          updateQuestion={updateQuestion}
+          open={typeMenuOpen}
+          onOpenChange={onTypeMenuOpenChange}
+        />
         {hasOptionsModal || question.type === 'table' ? (
           <button
             type="button"
@@ -494,6 +509,159 @@ function questionDefaults(type: FormFieldType): Partial<FormQuestion> {
   return { type, title: 'Nova pergunta', width };
 }
 
+function patchQuestionType(
+  question: FormQuestion,
+  nextType: FormFieldType,
+): Partial<FormQuestion> {
+  if (question.type === nextType) return {};
+
+  const defaults = questionDefaults(nextType);
+  const patch: Partial<FormQuestion> = {
+    type: nextType,
+    width: question.width ?? defaults.width,
+    placeholder: defaults.placeholder,
+    formula: undefined,
+    followUp: null,
+    tableColumns: undefined,
+    options: undefined,
+  };
+
+  if (nextType === 'sim_nao') {
+    patch.options = ['SIM', 'NÃO'];
+  } else if (nextType === 'dropdown' || nextType === 'checklist' || nextType === 'pills') {
+    const keepOptions =
+      !!question.options?.length &&
+      question.type !== 'table' &&
+      !['sim_nao', 'checkbox', 'slider'].includes(question.type);
+    patch.options = keepOptions ? question.options : defaults.options;
+    if (nextType === 'dropdown') {
+      patch.placeholder = 'Selecionar…';
+    }
+  } else if (nextType === 'checkbox') {
+    patch.options = ['Aceito'];
+  } else if (nextType === 'slider') {
+    patch.options = ['1', '10'];
+  } else if (nextType === 'table') {
+    patch.tableColumns = defaults.tableColumns;
+    patch.options = defaults.options;
+  }
+
+  if (questionHasFormula(question)) {
+    patch.readOnly = false;
+  }
+
+  return patch;
+}
+
+const FIELD_TYPE_SWITCH_ITEMS = PALETTE_GROUPS.flatMap((group) =>
+  group.items.filter(
+    (item): item is Extract<PaletteAction, { kind: 'field' }> => item.kind === 'field',
+  ),
+);
+
+function QuestionFieldTypeMenu({
+  question,
+  sectionId,
+  updateQuestion,
+  open,
+  onOpenChange,
+}: {
+  question: FormQuestion;
+  sectionId: string;
+  updateQuestion: (
+    sectionId: string,
+    questionId: string,
+    patch: Partial<FormQuestion>,
+  ) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const currentItem =
+    FIELD_TYPE_SWITCH_ITEMS.find((item) => item.type === question.type) ??
+    FIELD_TYPE_SWITCH_ITEMS[0]!;
+  const CurrentIcon = currentItem.Icon;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        onOpenChange(false);
+      }
+    };
+    const onScroll = () => onOpenChange(false);
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open, onOpenChange]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        title={`Tipo: ${FORM_FIELD_TYPE_LABELS[question.type]} — clique para alterar`}
+        onClick={() => onOpenChange(!open)}
+        className={`${fieldToolbarBtn} ${open ? '!bg-gray-100 !text-gray-800 dark:!bg-gray-700 dark:!text-gray-100' : ''}`}
+      >
+        <CurrentIcon className={fieldToolbarIcon} />
+      </button>
+      {open ? (
+        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-gray-800">
+          <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Tipo do campo
+          </p>
+          {PALETTE_GROUPS.map((group) => {
+            const fields = group.items.filter(
+              (item): item is Extract<PaletteAction, { kind: 'field' }> =>
+                item.kind === 'field',
+            );
+            if (!fields.length) return null;
+            return (
+              <div
+                key={group.title}
+                className="border-t border-gray-100 first:border-t-0 dark:border-gray-700"
+              >
+                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  {group.title}
+                </p>
+                {fields.map((item) => {
+                  const Icon = item.Icon;
+                  const selected = question.type === item.type;
+                  return (
+                    <button
+                      key={item.type}
+                      type="button"
+                      onClick={() => {
+                        updateQuestion(
+                          sectionId,
+                          question.id,
+                          patchQuestionType(question, item.type),
+                        );
+                        onOpenChange(false);
+                      }}
+                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
+                        selected
+                          ? 'bg-red-50 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FormStructureBuilder({
   name,
   description,
@@ -526,6 +694,7 @@ export function FormStructureBuilder({
     sectionId: string;
     questionId: string;
   } | null>(null);
+  const [typeMenuQuestionId, setTypeMenuQuestionId] = useState<string | null>(null);
   const [optionsDraft, setOptionsDraft] = useState<string[]>([]);
   const dragGhostRef = useRef<HTMLElement | null>(null);
 
@@ -1275,12 +1444,18 @@ export function FormStructureBuilder({
                               ? 'animate-[formFieldDropIn_0.4s_ease-out]'
                               : ''
                           }`}
-                          onClick={() =>
+                          onMouseLeave={() => {
+                            if (typeMenuQuestionId === question.id) {
+                              setTypeMenuQuestionId(null);
+                            }
+                          }}
+                          onClick={() => {
+                            setTypeMenuQuestionId(null);
                             setSelected({
                               sectionId: section.id,
                               questionId: question.id,
-                            })
-                          }
+                            });
+                          }}
                         >
                           <QuestionFieldTitleRow
                             question={question}
@@ -1293,6 +1468,10 @@ export function FormStructureBuilder({
                             setFormulaModal={setFormulaModal}
                             setOptionsModal={setOptionsModal}
                             setTableColumnsModal={setTableColumnsModal}
+                            typeMenuOpen={typeMenuQuestionId === question.id}
+                            onTypeMenuOpenChange={(nextOpen) =>
+                              setTypeMenuQuestionId(nextOpen ? question.id : null)
+                            }
                           />
 
                           <FieldPreview
