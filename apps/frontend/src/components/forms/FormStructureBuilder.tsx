@@ -1110,7 +1110,7 @@ export function FormStructureBuilder({
   };
 
   const dropZoneCls = (active: boolean) =>
-    `flex items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs font-medium transition-all duration-150 sm:text-sm ${
+    `flex items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs font-medium transition-colors duration-150 sm:text-sm ${
       active
         ? 'border-red-400 bg-red-50 text-red-600 dark:border-red-500/70 dark:bg-red-950/30 dark:text-red-400'
         : 'border-gray-300 bg-gray-50 text-gray-400 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-500'
@@ -1503,11 +1503,7 @@ export function FormStructureBuilder({
                                   side: true,
                                 })
                               }
-                              className={`absolute top-0 z-20 hidden h-full sm:block ${
-                                sideDropActive
-                                  ? 'left-[calc(100%+0.625rem)] w-[calc(100%-0.625rem)]'
-                                  : 'left-[calc(100%+0.25rem)] w-[calc(100%-0.25rem)]'
-                              }`}
+                              className="absolute top-0 left-[calc(100%+1.25rem)] z-20 hidden h-full w-full sm:block"
                             >
                               <div
                                 className={`${dropZoneCls(sideDropActive)} h-full min-h-[3rem] px-2 text-center`}
