@@ -1,6 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AlignLeft,
   Asterisk,
@@ -36,6 +43,7 @@ import {
   ToggleLeft,
   Trash2,
   Type,
+  GripVertical,
   UserRound,
   X,
 } from 'lucide-react';
@@ -156,6 +164,76 @@ const fieldToolbarBtn =
   'inline-flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200';
 const fieldToolbarIcon = 'h-3.5 w-3.5';
 
+function insertQuestionIntoList(
+  questions: FormQuestion[],
+  question: FormQuestion,
+  opts?: { beforeQuestionId?: string; afterQuestionId?: string },
+): FormQuestion[] {
+  const next = [...questions];
+  let insertAt = next.length;
+  if (opts?.beforeQuestionId) {
+    const index = next.findIndex((q) => q.id === opts.beforeQuestionId);
+    if (index >= 0) insertAt = index;
+  } else if (opts?.afterQuestionId) {
+    const index = next.findIndex((q) => q.id === opts.afterQuestionId);
+    if (index >= 0) insertAt = index + 1;
+  }
+  next.splice(insertAt, 0, question);
+  return next;
+}
+
+function moveQuestionInSections(
+  sections: FormSection[],
+  from: { sectionId: string; questionId: string },
+  to: {
+    sectionId: string;
+    beforeQuestionId?: string;
+    afterQuestionId?: string;
+    side?: boolean;
+  },
+): FormSection[] {
+  let moved: FormQuestion | null = null;
+  let fromIndex = -1;
+
+  const stripped = sections.map((section) => {
+    if (section.id !== from.sectionId) return section;
+    fromIndex = section.questions.findIndex((q) => q.id === from.questionId);
+    if (fromIndex < 0) return section;
+    const questions = [...section.questions];
+    moved = questions[fromIndex]!;
+    questions.splice(fromIndex, 1);
+    return { ...section, questions };
+  });
+
+  if (moved === null) return sections;
+
+  const movedQuestion: FormQuestion = moved;
+  const nextQuestion: FormQuestion = to.side
+    ? { ...movedQuestion, width: 'half' }
+    : movedQuestion;
+
+  return stripped.map((section) => {
+    if (section.id !== to.sectionId) return section;
+    const questions = [...section.questions];
+    let insertAt = questions.length;
+
+    if (to.beforeQuestionId) {
+      const index = questions.findIndex((q) => q.id === to.beforeQuestionId);
+      if (index >= 0) insertAt = index;
+    } else if (to.afterQuestionId) {
+      const index = questions.findIndex((q) => q.id === to.afterQuestionId);
+      if (index >= 0) insertAt = index + 1;
+    }
+
+    if (from.sectionId === to.sectionId && fromIndex >= 0 && fromIndex < insertAt) {
+      insertAt -= 1;
+    }
+
+    questions.splice(insertAt, 0, nextQuestion);
+    return { ...section, questions };
+  });
+}
+
 function QuestionFieldTitleRow({
   question,
   sectionId,
@@ -169,6 +247,8 @@ function QuestionFieldTitleRow({
   setTableColumnsModal,
   typeMenuOpen,
   onTypeMenuOpenChange,
+  onFieldDragStart,
+  isDraggingThisField,
 }: {
   question: FormQuestion;
   sectionId: string;
@@ -186,9 +266,23 @@ function QuestionFieldTitleRow({
   setTableColumnsModal: (value: { sectionId: string; questionId: string }) => void;
   typeMenuOpen: boolean;
   onTypeMenuOpenChange: (open: boolean) => void;
+  onFieldDragStart: (e: React.DragEvent, sectionId: string, questionId: string) => void;
+  isDraggingThisField?: boolean;
 }) {
   return (
-    <div data-field-title className="mb-3 flex min-w-0 items-start gap-1">
+    <div data-field-title className="mb-3 flex min-w-0 items-center gap-1">
+      <button
+        type="button"
+        draggable
+        title="Arrastar para mover o campo"
+        onDragStart={(e) => onFieldDragStart(e, sectionId, question.id)}
+        onClick={(e) => e.stopPropagation()}
+        className={`inline-flex h-5 w-5 shrink-0 cursor-grab items-center justify-center rounded-md text-gray-300 hover:bg-gray-100 hover:text-gray-500 active:cursor-grabbing dark:hover:bg-gray-700 dark:hover:text-gray-300 ${
+          isDraggingThisField ? 'opacity-40' : ''
+        }`}
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
       <div className="min-w-0 flex-1">
         <QuestionTitleInput
           value={question.title}
@@ -679,7 +773,15 @@ export function FormStructureBuilder({
     null
   );
   const [dragging, setDragging] = useState(false);
-  const [dragKind, setDragKind] = useState<'section' | 'step' | 'field' | null>(null);
+  const [dragKind, setDragKind] = useState<'section' | 'step' | 'field' | 'field-move' | null>(
+    null,
+  );
+  const [draggedField, setDraggedField] = useState<{
+    sectionId: string;
+    questionId: string;
+  } | null>(null);
+  const [draggedPaletteFieldType, setDraggedPaletteFieldType] =
+    useState<FormFieldType | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const [optionsModal, setOptionsModal] = useState<{
@@ -697,6 +799,8 @@ export function FormStructureBuilder({
   const [typeMenuQuestionId, setTypeMenuQuestionId] = useState<string | null>(null);
   const [optionsDraft, setOptionsDraft] = useState<string[]>([]);
   const dragGhostRef = useRef<HTMLElement | null>(null);
+  const fieldElsRef = useRef(new Map<string, HTMLElement>());
+  const flipFromRef = useRef(new Map<string, DOMRect>());
 
   const stepActionBtn =
     'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200';
@@ -712,6 +816,13 @@ export function FormStructureBuilder({
       setDragging(false);
       setDragKind(null);
       setDropTarget(null);
+      setDraggedField(null);
+      setDraggedPaletteFieldType(null);
+      fieldElsRef.current.forEach((el) => {
+        el.style.transition = '';
+        el.style.transform = '';
+      });
+      flipFromRef.current = new Map();
       if (dragGhostRef.current) {
         dragGhostRef.current.remove();
         dragGhostRef.current = null;
@@ -912,7 +1023,11 @@ export function FormStructureBuilder({
   const addField = (
     type: FormFieldType,
     targetSectionId?: string,
-    opts?: { afterQuestionId?: string; width?: FormFieldWidth }
+    opts?: {
+      afterQuestionId?: string;
+      beforeQuestionId?: string;
+      width?: FormFieldWidth;
+    },
   ) => {
     const question: FormQuestion = {
       id: formUid(),
@@ -940,14 +1055,13 @@ export function FormStructureBuilder({
       setFlatSections((prev) => {
         const nextSections = prev.map((s) => {
           if (s.id !== sectionId) return s;
-          if (!opts?.afterQuestionId) {
-            return { ...s, questions: [...s.questions, question] };
-          }
-          const idx = s.questions.findIndex((q) => q.id === opts.afterQuestionId);
-          if (idx < 0) return { ...s, questions: [...s.questions, question] };
-          const nextQuestions = [...s.questions];
-          nextQuestions.splice(idx + 1, 0, question);
-          return { ...s, questions: nextQuestions };
+          return {
+            ...s,
+            questions: insertQuestionIntoList(s.questions, question, {
+              beforeQuestionId: opts?.beforeQuestionId,
+              afterQuestionId: opts?.afterQuestionId,
+            }),
+          };
         });
         return nextSections;
       });
@@ -973,14 +1087,13 @@ export function FormStructureBuilder({
     setSections((prev) => {
       const nextSections = prev.map((s) => {
         if (s.id !== sectionId) return s;
-        if (!opts?.afterQuestionId) {
-          return { ...s, questions: [...s.questions, question] };
-        }
-        const idx = s.questions.findIndex((q) => q.id === opts.afterQuestionId);
-        if (idx < 0) return { ...s, questions: [...s.questions, question] };
-        const nextQuestions = [...s.questions];
-        nextQuestions.splice(idx + 1, 0, question);
-        return { ...s, questions: nextQuestions };
+        return {
+          ...s,
+          questions: insertQuestionIntoList(s.questions, question, {
+            beforeQuestionId: opts?.beforeQuestionId,
+            afterQuestionId: opts?.afterQuestionId,
+          }),
+        };
       });
       return nextSections;
     });
@@ -999,16 +1112,43 @@ export function FormStructureBuilder({
     if (selected?.questionId === questionId) setSelected(null);
   };
 
+  const moveQuestion = (
+    fromSectionId: string,
+    questionId: string,
+    to: {
+      sectionId: string;
+      beforeQuestionId?: string;
+      afterQuestionId?: string;
+      side?: boolean;
+    },
+  ) => {
+    setSections((prev) =>
+      moveQuestionInSections(prev, { sectionId: fromSectionId, questionId }, to),
+    );
+    setSelected({ sectionId: to.sectionId, questionId });
+  };
+
   const handlePaletteClick = (item: PaletteAction) => {
     if (item.kind === 'step') enableMultiStep();
     else if (item.kind === 'section') addSection();
     else addField(item.type);
   };
 
+  const resetFieldMotion = () => {
+    fieldElsRef.current.forEach((el) => {
+      el.style.transition = '';
+      el.style.transform = '';
+    });
+    flipFromRef.current = new Map();
+  };
+
   const clearDrag = () => {
     setDragging(false);
     setDragKind(null);
     setDropTarget(null);
+    setDraggedField(null);
+    setDraggedPaletteFieldType(null);
+    resetFieldMotion();
     if (dragGhostRef.current) {
       dragGhostRef.current.remove();
       dragGhostRef.current = null;
@@ -1029,6 +1169,7 @@ export function FormStructureBuilder({
     setDragKind(
       item.kind === 'section' ? 'section' : item.kind === 'step' ? 'step' : 'field'
     );
+    setDraggedPaletteFieldType(item.kind === 'field' ? item.type : null);
 
     const source = e.currentTarget as HTMLElement;
     const ghost = source.cloneNode(true) as HTMLElement;
@@ -1063,19 +1204,67 @@ export function FormStructureBuilder({
     setDragging(true);
   };
 
+  const onFieldDragStart = (
+    e: React.DragEvent,
+    sectionId: string,
+    questionId: string,
+  ) => {
+    const payload = JSON.stringify({ kind: 'field-move', sectionId, questionId });
+    e.dataTransfer.setData(FORM_DND_MIME, payload);
+    e.dataTransfer.setData('text/plain', payload);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragKind('field-move');
+    setDraggedField({ sectionId, questionId });
+    setDragging(true);
+  };
+
+  const snapshotFieldRects = () => {
+    const map = new Map<string, DOMRect>();
+    fieldElsRef.current.forEach((el, id) => {
+      map.set(id, el.getBoundingClientRect());
+    });
+    flipFromRef.current = map;
+  };
+
   const onCanvasDragOver = (e: React.DragEvent, targetId: string) => {
     const types = Array.from(e.dataTransfer.types);
     if (!types.includes(FORM_DND_MIME) && !types.includes('text/plain')) return;
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    if (dropTarget !== targetId) setDropTarget(targetId);
+    e.dataTransfer.dropEffect = dragKind === 'field-move' ? 'move' : 'copy';
+    if (dropTarget !== targetId) {
+      snapshotFieldRects();
+      setDropTarget(targetId);
+    }
   };
+
+  useLayoutEffect(() => {
+    const from = flipFromRef.current;
+    if (from.size === 0) return;
+
+    fieldElsRef.current.forEach((el, id) => {
+      const prev = from.get(id);
+      if (!prev) return;
+      const next = el.getBoundingClientRect();
+      const dx = prev.left - next.left;
+      const dy = prev.top - next.top;
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      void el.offsetWidth;
+      el.style.transition = 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1)';
+      el.style.transform = '';
+    });
+
+    flipFromRef.current = new Map();
+  }, [dropTarget]);
 
   const onCanvasDrop = (
     e: React.DragEvent,
     target?: {
       sectionId?: string;
+      beforeQuestionId?: string;
       afterQuestionId?: string;
       side?: boolean;
       newSection?: boolean;
@@ -1087,7 +1276,12 @@ export function FormStructureBuilder({
     clearDrag();
     if (!raw) return;
     try {
-      const data = JSON.parse(raw) as { kind: string; type?: FormFieldType };
+      const data = JSON.parse(raw) as {
+        kind: string;
+        type?: FormFieldType;
+        sectionId?: string;
+        questionId?: string;
+      };
       if (data.kind === 'step') {
         enableMultiStep();
         return;
@@ -1098,8 +1292,25 @@ export function FormStructureBuilder({
           return;
         }
       }
+      if (data.kind === 'field-move' && data.sectionId && data.questionId && target?.sectionId) {
+        if (
+          data.sectionId === target.sectionId &&
+          (data.questionId === target.beforeQuestionId ||
+            data.questionId === target.afterQuestionId)
+        ) {
+          return;
+        }
+        moveQuestion(data.sectionId, data.questionId, {
+          sectionId: target.sectionId,
+          beforeQuestionId: target.beforeQuestionId,
+          afterQuestionId: target.afterQuestionId,
+          side: target.side,
+        });
+        return;
+      }
       if (data.kind === 'field' && data.type) {
         addField(data.type, target?.sectionId, {
+          beforeQuestionId: target?.beforeQuestionId,
           afterQuestionId: target?.afterQuestionId,
           width: target?.side ? 'half' : undefined,
         });
@@ -1116,25 +1327,20 @@ export function FormStructureBuilder({
         : 'border-gray-300 bg-gray-50 text-gray-400 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-500'
     }`;
 
-  /** Em grid de 2 colunas: half sem par à direita pode receber drop ao lado. */
-  const hasOpenSideSlot = (questions: FormQuestion[], index: number) => {
-    const q = questions[index]!;
-    if (resolveFieldWidth(q) !== 'half') return false;
-    const next = questions[index + 1];
-    if (next && resolveFieldWidth(next) === 'half') return false;
-
+  /** Coluna (1 ou 2) que o campo ocupa no grid; `null` para largura total. */
+  const fieldColumn = (questions: FormQuestion[], index: number): 1 | 2 | null => {
     let col = 0;
-    for (let i = 0; i <= index; i++) {
-      const w = resolveFieldWidth(questions[i]!);
-      if (w === 'full') {
+    for (let i = 0; i < questions.length; i++) {
+      if (resolveFieldWidth(questions[i]!) === 'full') {
+        if (i === index) return null;
         col = 0;
         continue;
       }
       col += 1;
-      if (i === index) return col === 1;
+      if (i === index) return col as 1 | 2;
       if (col === 2) col = 0;
     }
-    return false;
+    return null;
   };
 
   const optionsModalQuestion = optionsModal
@@ -1172,6 +1378,54 @@ export function FormStructureBuilder({
     closeOptionsModal();
   };
 
+  const isFieldDragging =
+    dragging && (dragKind === 'field' || dragKind === 'field-move');
+
+  const resolveDraggedFieldWidth = (): FormFieldWidth => {
+    if (dragKind === 'field-move' && draggedField) {
+      const section = allSections.find((s) => s.id === draggedField.sectionId);
+      const question = section?.questions.find((q) => q.id === draggedField.questionId);
+      if (question) return resolveFieldWidth(question);
+    }
+    if (dragKind === 'field' && draggedPaletteFieldType) {
+      return defaultFieldWidth(draggedPaletteFieldType);
+    }
+    return 'half';
+  };
+
+  const renderFieldDropSlot = (
+    targetId: string,
+    width: FormFieldWidth,
+    onDrop: (e: React.DragEvent) => void,
+    label = 'Solte aqui',
+  ) => (
+    <div
+      className={`${width === 'full' ? 'sm:col-span-2' : ''} min-h-[5.5rem]`}
+      onDragOver={(e) => onCanvasDragOver(e, targetId)}
+      onDrop={onDrop}
+    >
+      <div
+        className={`${dropZoneCls(true)} h-full min-h-[5.5rem] w-full animate-[formDropSlotIn_0.28s_cubic-bezier(0.22,1,0.36,1)_both]`}
+      >
+        {label}
+      </div>
+    </div>
+  );
+
+  /**
+   * Metade esquerda (ou superior, em largura total) insere antes do campo;
+   * metade direita (ou inferior) insere depois.
+   */
+  const resolveInsertEdge = (
+    e: React.DragEvent<HTMLElement>,
+    spanFull: boolean,
+  ): 'before' | 'after' => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (spanFull) {
+      return e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+    }
+    return e.clientX < rect.left + rect.width / 2 ? 'before' : 'after';
+  };
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-gray-50 dark:bg-gray-900">
@@ -1180,6 +1434,10 @@ export function FormStructureBuilder({
           0% { opacity: 0; transform: translateY(10px) scale(0.96); }
           60% { opacity: 1; transform: translateY(-2px) scale(1.01); }
           100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes formDropSlotIn {
+          0% { opacity: 0; transform: scale(0.92); }
+          100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
       {/* Sidebar de componentes — mesmo tom da sidebar do app */}
@@ -1364,7 +1622,11 @@ export function FormStructureBuilder({
                 )
               ) : null}
 
-              {sections.map((section, sectionIdx) => (
+              {sections.map((section, sectionIdx) => {
+                const belowTargetId = `below:${section.id}`;
+                const draggedWidth = resolveDraggedFieldWidth();
+
+                return (
                 <section key={section.id} className="relative space-y-4">
                   <div className="group relative">
                     <div className="min-w-0 space-y-1">
@@ -1429,21 +1691,62 @@ export function FormStructureBuilder({
                       const hasOptionsModal = FORM_FIELD_TYPES_WITH_OPTIONS.includes(
                         question.type
                       );
-                      const sideTargetId = `side:${section.id}:${question.id}`;
-                      const canSideDrop =
-                        dragging &&
-                        dragKind === 'field' &&
-                        hasOpenSideSlot(section.questions, qIdx);
-                      const sideDropActive = dropTarget === sideTargetId;
+                      const beforeTargetId = `insert:${section.id}:${question.id}:before`;
+                      const afterTargetId = `insert:${section.id}:${question.id}:after`;
+                      const isDraggingThisField =
+                        draggedField?.sectionId === section.id &&
+                        draggedField?.questionId === question.id;
+                      const canReceiveDrop = isFieldDragging && !isDraggingThisField;
+                      const dropsBesideField =
+                        !spanFull && fieldColumn(section.questions, qIdx) === 1;
+                      const isBeforeActive = dropTarget === beforeTargetId;
+                      const isAfterActive = dropTarget === afterTargetId;
+                      const afterSlotWidth = dropsBesideField ? 'half' : draggedWidth;
+
+                      const dropPayload = (edge: 'before' | 'after') => ({
+                        sectionId: section.id,
+                        ...(edge === 'before'
+                          ? { beforeQuestionId: question.id }
+                          : { afterQuestionId: question.id }),
+                        ...(edge === 'after' && dropsBesideField ? { side: true } : {}),
+                      });
 
                       return (
+                        <React.Fragment key={question.id}>
+                          {isBeforeActive
+                            ? renderFieldDropSlot(
+                                beforeTargetId,
+                                draggedWidth,
+                                (e) => onCanvasDrop(e, dropPayload('before')),
+                              )
+                            : null}
                         <div
-                          key={question.id}
-                          className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 transition-all duration-300 ${
+                          ref={(el) => {
+                            if (el) fieldElsRef.current.set(question.id, el);
+                            else fieldElsRef.current.delete(question.id);
+                          }}
+                          className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 ${
                             justAddedId === question.id
                               ? 'animate-[formFieldDropIn_0.4s_ease-out]'
                               : ''
-                          }`}
+                          } ${isDraggingThisField ? 'opacity-40' : ''}`}
+                          onDragOver={
+                            canReceiveDrop
+                              ? (e) =>
+                                  onCanvasDragOver(
+                                    e,
+                                    resolveInsertEdge(e, spanFull) === 'before'
+                                      ? beforeTargetId
+                                      : afterTargetId,
+                                  )
+                              : undefined
+                          }
+                          onDrop={
+                            canReceiveDrop
+                              ? (e) =>
+                                  onCanvasDrop(e, dropPayload(resolveInsertEdge(e, spanFull)))
+                              : undefined
+                          }
                           onMouseLeave={() => {
                             if (typeMenuQuestionId === question.id) {
                               setTypeMenuQuestionId(null);
@@ -1472,6 +1775,8 @@ export function FormStructureBuilder({
                             onTypeMenuOpenChange={(nextOpen) =>
                               setTypeMenuQuestionId(nextOpen ? question.id : null)
                             }
+                            onFieldDragStart={onFieldDragStart}
+                            isDraggingThisField={isDraggingThisField}
                           />
 
                           <FieldPreview
@@ -1490,51 +1795,40 @@ export function FormStructureBuilder({
                             }
                           />
 
-                          {canSideDrop ? (
-                            <div
-                              onDragOver={(e) => onCanvasDragOver(e, sideTargetId)}
-                              onDragLeave={() => {
-                                if (dropTarget === sideTargetId) setDropTarget(null);
-                              }}
-                              onDrop={(e) =>
-                                onCanvasDrop(e, {
-                                  sectionId: section.id,
-                                  afterQuestionId: question.id,
-                                  side: true,
-                                })
-                              }
-                              className="absolute top-0 left-[calc(100%+1.25rem)] z-20 hidden h-full w-full sm:block"
-                            >
-                              <div
-                                className={`${dropZoneCls(sideDropActive)} h-full min-h-[3rem] px-2 text-center`}
-                              >
-                                Solte aqui do lado
-                              </div>
-                            </div>
-                          ) : null}
                         </div>
+                          {isAfterActive
+                            ? renderFieldDropSlot(
+                                afterTargetId,
+                                afterSlotWidth,
+                                (e) => onCanvasDrop(e, dropPayload('after')),
+                                dropsBesideField ? 'Solte aqui do lado' : 'Solte aqui',
+                              )
+                            : null}
+                        </React.Fragment>
                       );
                     })}
+
+                    {dropTarget === belowTargetId
+                      ? renderFieldDropSlot(
+                          belowTargetId,
+                          draggedWidth,
+                          (e) => onCanvasDrop(e, { sectionId: section.id }),
+                          'Solte aqui embaixo',
+                        )
+                      : null}
                   </div>
 
-                  {dragging && dragKind === 'field' ? (
+                  {isFieldDragging ? (
                     <div
-                      onDragOver={(e) => onCanvasDragOver(e, `below:${section.id}`)}
-                      onDragLeave={() => {
-                        if (dropTarget === `below:${section.id}`) setDropTarget(null);
-                      }}
+                      onDragOver={(e) => onCanvasDragOver(e, belowTargetId)}
                       onDrop={(e) => onCanvasDrop(e, { sectionId: section.id })}
-                      className="mt-2 h-10 w-full transition-all duration-150"
-                    >
-                      <div
-                        className={`${dropZoneCls(dropTarget === `below:${section.id}`)} h-full w-full`}
-                      >
-                        Solte aqui embaixo
-                      </div>
-                    </div>
+                      className="h-8 w-full"
+                      aria-hidden
+                    />
                   ) : null}
                 </section>
-              ))}
+                );
+              })}
 
               {dragging && dragKind === 'section' && sections.length > 0 ? (
                 <div

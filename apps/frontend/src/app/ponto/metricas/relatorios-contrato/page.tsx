@@ -387,7 +387,7 @@ export default function RelatoriosContratoPage() {
                   </div>
                 </div>
                 <div className={cadastroListClasses.cardToolbar}>
-                  <div className="box-border flex h-10 min-w-0 w-full items-center gap-0.5 rounded-lg border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800 sm:min-w-[240px] sm:w-[280px]">
+                  <div className="box-border flex h-10 w-full shrink-0 items-center gap-0.5 rounded-lg border border-gray-300 bg-white px-1 dark:border-gray-600 dark:bg-gray-800 sm:w-auto sm:min-w-[300px]">
                     <button
                       type="button"
                       onClick={() => setWeekKey((current) => shiftFortnightKey(current, -1))}
@@ -396,7 +396,7 @@ export default function RelatoriosContratoPage() {
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </button>
-                    <p className="min-w-0 flex-1 truncate px-1 text-center text-sm font-medium leading-none text-gray-900 dark:text-gray-100">
+                    <p className="flex-1 whitespace-nowrap px-1 text-center text-sm font-medium leading-none text-gray-900 dark:text-gray-100">
                       {formatWeekLabel(weekKey)}
                     </p>
                     <button
