@@ -940,6 +940,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             description: 'Gastos operacionais por contrato (QUERY BASE DE GASTOS)',
             permission: isAdministrator || can(pk('/ponto/contratos/gastos-operacionais'))
           },
+          {
+            name: 'Relatórios de Contrato',
+            href: '/ponto/metricas/relatorios-contrato',
+            icon: FileText,
+            description: 'Reuniões quinzenais por contrato — acompanhamento interno',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/metricas/relatorios-contrato')) ||
+              can(pk('/ponto/contratos/controle-geral')) ||
+              can(pk('/ponto/contratos'))
+          },
         ]
       },
       {

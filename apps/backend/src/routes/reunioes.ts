@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticate } from '../middleware/auth';
-import { ReuniaoController } from '../controllers/ReuniaoController';
+import { ReuniaoController, parseReuniaoKindParam } from '../controllers/ReuniaoController';
 
 const router = Router();
 const controller = new ReuniaoController();
@@ -49,23 +49,31 @@ function handleReuniaoUploadError(error: unknown, req: Request, res: Response, n
 
 router.use(authenticate);
 
-// Template do formulário (rotas estáticas antes de :contractId)
 router.get('/template', (req, res, next) => controller.getTemplate(req as any, res, next));
 router.put('/template', (req, res, next) => controller.saveTemplate(req as any, res, next));
 router.post('/template/reset', (req, res, next) => controller.resetTemplate(req as any, res, next));
+router.get('/mensal/overview', (req, res, next) => controller.getMensalOverview(req as any, res, next));
+router.get('/semanal/overview', (req, res, next) => controller.getSemanalOverview(req as any, res, next));
 
-router.get('/:contractId', (req, res, next) => controller.getList(req as any, res, next));
-router.post('/:contractId', (req, res, next) => controller.create(req as any, res, next));
-router.get('/:contractId/:reuniaoId', (req, res, next) => controller.get(req as any, res, next));
-router.put('/:contractId/:reuniaoId', (req, res, next) => controller.save(req as any, res, next));
-router.delete('/:contractId/:reuniaoId', (req, res, next) => controller.delete(req as any, res, next));
+router.use('/:contractId/:kind', parseReuniaoKindParam);
+
+router.get('/:contractId/:kind', (req, res, next) => controller.getList(req as any, res, next));
+router.get('/:contractId/:kind/config', (req, res, next) => controller.getConfig(req as any, res, next));
+router.put('/:contractId/:kind/config', (req, res, next) => controller.saveConfig(req as any, res, next));
+router.post('/:contractId/:kind/periodo-atual', (req, res, next) =>
+  controller.ensurePeriodoAtual(req as any, res, next)
+);
+router.post('/:contractId/:kind', (req, res, next) => controller.create(req as any, res, next));
+router.get('/:contractId/:kind/:reuniaoId', (req, res, next) => controller.get(req as any, res, next));
+router.put('/:contractId/:kind/:reuniaoId', (req, res, next) => controller.save(req as any, res, next));
+router.delete('/:contractId/:kind/:reuniaoId', (req, res, next) => controller.delete(req as any, res, next));
 router.post(
-  '/:contractId/:reuniaoId/anexo/:tipo',
+  '/:contractId/:kind/:reuniaoId/anexo/:tipo',
   upload.single('file'),
   handleReuniaoUploadError,
   (req: Request, res: Response, next: NextFunction) => controller.uploadAnexo(req as any, res, next)
 );
-router.delete('/:contractId/:reuniaoId/anexo/:tipo', (req, res, next) =>
+router.delete('/:contractId/:kind/:reuniaoId/anexo/:tipo', (req, res, next) =>
   controller.deleteAnexo(req as any, res, next)
 );
 

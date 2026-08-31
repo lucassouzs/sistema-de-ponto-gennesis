@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   AlignLeft,
   Asterisk,
+  Calculator,
   Calendar,
   CalendarClock,
   CheckSquare,
@@ -12,6 +13,7 @@ import {
   ChevronRight,
   ChevronUp,
   Columns,
+  DollarSign,
   Hash,
   Image as ImageIcon,
   LayoutGrid,
@@ -19,10 +21,12 @@ import {
   Layers,
   ListChecks,
   ListFilter,
+  Lock,
   Maximize2,
   Minimize2,
   Paperclip,
   PenLine,
+  Percent,
   Plus,
   QrCode,
   Search,
@@ -44,6 +48,14 @@ import {
   FormMultiFileFieldPreview,
 } from '@/components/forms/FormMultiFileField';
 import { FormStepsStepper } from '@/components/forms/FormStepsStepper';
+import { FormFormulaModal } from '@/components/forms/FormFormulaModal';
+import {
+  FormTableColumnsModal,
+  tableColumnsToSavePayload,
+} from '@/components/forms/FormTableColumnsModal';
+import { FormTableFieldPreview } from '@/components/forms/FormTableField';
+import { describeFormula, isFormulaCapableFieldType, questionHasFormula } from '@/lib/formFormula';
+import { defaultTableColumn, resolveTableColumns, syncTableColumnTitles } from '@/lib/formTable';
 import {
   FORM_FIELD_TYPE_LABELS,
   FORM_FIELD_TYPES_WITH_OPTIONS,
@@ -52,6 +64,7 @@ import {
   resolveFieldWidth,
   type FormFieldType,
   type FormFieldWidth,
+  type FormTableColumn,
   type FormQuestion,
   type FormSection,
   type FormStep,
@@ -86,6 +99,8 @@ const PALETTE_GROUPS: PaletteGroup[] = [
       { kind: 'field', type: 'text', label: 'Texto curto', Icon: Type },
       { kind: 'field', type: 'textarea', label: 'Texto longo', Icon: AlignLeft },
       { kind: 'field', type: 'number', label: 'Número', Icon: Hash },
+      { kind: 'field', type: 'valor', label: 'Valor', Icon: DollarSign },
+      { kind: 'field', type: 'percent', label: 'Porcentagem', Icon: Percent },
     ],
   },
   {
@@ -137,6 +152,297 @@ type Props = {
   footer?: React.ReactNode;
 };
 
+const fieldToolbarBtn =
+  'inline-flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200';
+const fieldToolbarIcon = 'h-3.5 w-3.5';
+
+function QuestionFieldTitleRow({
+  question,
+  sectionId,
+  fieldWidth,
+  hasOptionsModal,
+  autoFocusTitle,
+  updateQuestion,
+  removeQuestion,
+  setFormulaModal,
+  setOptionsModal,
+  setTableColumnsModal,
+}: {
+  question: FormQuestion;
+  sectionId: string;
+  fieldWidth: 'half' | 'full';
+  hasOptionsModal: boolean;
+  autoFocusTitle?: boolean;
+  updateQuestion: (
+    sectionId: string,
+    questionId: string,
+    patch: Partial<FormQuestion>
+  ) => void;
+  removeQuestion: (sectionId: string, questionId: string) => void;
+  setFormulaModal: (value: { sectionId: string; questionId: string }) => void;
+  setOptionsModal: (value: { sectionId: string; questionId: string }) => void;
+  setTableColumnsModal: (value: { sectionId: string; questionId: string }) => void;
+}) {
+  return (
+    <div data-field-title className="mb-3 flex min-w-0 items-start gap-1">
+      <div className="min-w-0 flex-1">
+        <QuestionTitleInput
+          value={question.title}
+          onChange={(title) => updateQuestion(sectionId, question.id, { title })}
+          required={question.required}
+          autoEdit={autoFocusTitle}
+        />
+      </div>
+      <div
+        data-field-toolbar
+        className="shrink-0 opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="inline-flex w-max items-center gap-1">
+        {hasOptionsModal || question.type === 'table' ? (
+          <button
+            type="button"
+            title={
+              question.type === 'table' ? 'Editar colunas' : 'Gerenciar opções'
+            }
+            onClick={() => {
+              if (question.type === 'table') {
+                setTableColumnsModal({
+                  sectionId,
+                  questionId: question.id,
+                });
+                return;
+              }
+              setOptionsModal({
+                sectionId,
+                questionId: question.id,
+              });
+            }}
+            className={fieldToolbarBtn}
+          >
+            {question.type === 'table' ? (
+              <Columns className={fieldToolbarIcon} />
+            ) : (
+              <ListFilter className={fieldToolbarIcon} />
+            )}
+          </button>
+        ) : null}
+        {isFormulaCapableFieldType(question.type) ? (
+          <button
+            type="button"
+            title={
+              questionHasFormula(question)
+                ? 'Editar fórmula'
+                : 'Configurar fórmula'
+            }
+            onClick={() =>
+              setFormulaModal({
+                sectionId,
+                questionId: question.id,
+              })
+            }
+            className={`${fieldToolbarBtn} ${
+              questionHasFormula(question)
+                ? '!bg-indigo-600 !text-white hover:!bg-indigo-600 hover:!text-white'
+                : ''
+            }`}
+          >
+            <Calculator className={fieldToolbarIcon} />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title={
+            question.required ? 'Remover obrigatória' : 'Marcar como obrigatória'
+          }
+          onClick={() =>
+            updateQuestion(sectionId, question.id, {
+              required: !question.required,
+            })
+          }
+          className={`${fieldToolbarBtn} ${
+            question.required
+              ? '!bg-red-600 !text-white hover:!bg-red-600 hover:!text-white'
+              : ''
+          }`}
+        >
+          <Asterisk className={fieldToolbarIcon} />
+        </button>
+        <button
+          type="button"
+          title={
+            question.readOnly || questionHasFormula(question)
+              ? questionHasFormula(question)
+                ? 'Campo calculado por fórmula'
+                : 'Permitir edição'
+              : 'Somente leitura (não editável)'
+          }
+          disabled={questionHasFormula(question)}
+          onClick={() =>
+            updateQuestion(sectionId, question.id, {
+              readOnly: !question.readOnly,
+            })
+          }
+          className={`${fieldToolbarBtn} ${
+            question.readOnly || questionHasFormula(question)
+              ? '!bg-gray-700 !text-white hover:!bg-gray-700 hover:!text-white dark:!bg-gray-200 dark:!text-gray-900 dark:hover:!bg-gray-200 dark:hover:!text-gray-900'
+              : ''
+          } ${questionHasFormula(question) ? 'opacity-80' : ''}`}
+        >
+          <Lock className={fieldToolbarIcon} />
+        </button>
+        <button
+          type="button"
+          title={
+            fieldWidth === 'full'
+              ? 'Largura total — clique para 50%'
+              : 'Meia largura — clique para 100%'
+          }
+          onClick={() =>
+            updateQuestion(sectionId, question.id, {
+              width: fieldWidth === 'half' ? 'full' : 'half',
+            })
+          }
+          className={fieldToolbarBtn}
+        >
+          {fieldWidth === 'full' ? (
+            <Minimize2 className={fieldToolbarIcon} />
+          ) : (
+            <Maximize2 className={fieldToolbarIcon} />
+          )}
+        </button>
+        <button
+          type="button"
+          title="Remover campo"
+          onClick={() => removeQuestion(sectionId, question.id)}
+          className={`${fieldToolbarBtn} hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-950/30`}
+        >
+          <Trash2 className={fieldToolbarIcon} />
+        </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuestionTitleInput({
+  value,
+  onChange,
+  required,
+  autoEdit = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  autoEdit?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [editing, setEditing] = useState(false);
+
+  const startEditing = useCallback((e?: React.SyntheticEvent) => {
+    e?.stopPropagation();
+    setEditing(true);
+  }, []);
+
+  const stopEditing = useCallback(() => {
+    const trimmed = value.trimEnd();
+    if (trimmed !== value) onChange(trimmed);
+    setEditing(false);
+  }, [onChange, value]);
+
+  const didFocusRef = useRef(false);
+
+  const syncHeight = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    if (!autoEdit) return;
+    setEditing(true);
+  }, [autoEdit]);
+
+  useLayoutEffect(() => {
+    if (!editing) return;
+    syncHeight();
+  }, [editing, value, syncHeight]);
+
+  useEffect(() => {
+    if (!editing) {
+      didFocusRef.current = false;
+      return;
+    }
+    if (didFocusRef.current) return;
+    didFocusRef.current = true;
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    if (autoEdit) el.select();
+    else el.setSelectionRange(value.length, value.length);
+  }, [editing, autoEdit, value.length]);
+
+  const mirrorContent = value ? (
+    <>
+      {value}
+      {required ? ' *' : ''}
+    </>
+  ) : (
+    'Pergunta'
+  );
+
+  return (
+    <div className="relative min-w-0">
+      {!editing ? (
+        <>
+          <div
+            aria-hidden
+            className="invisible whitespace-pre-wrap break-normal text-sm font-medium leading-snug select-none"
+          >
+            {mirrorContent}
+          </div>
+          <div
+            role="textbox"
+            tabIndex={0}
+            onClick={startEditing}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                startEditing(e);
+              }
+            }}
+            className="absolute inset-0 cursor-text overflow-hidden text-sm font-medium leading-snug text-gray-800 outline-none dark:text-gray-200"
+          >
+            {value ? (
+              <>
+                <span className="whitespace-pre-wrap break-normal">{value}</span>
+                {required ? (
+                  <span className="font-semibold text-red-600"> *</span>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-gray-400 dark:text-gray-500">Pergunta</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onInput={syncHeight}
+          onBlur={stopEditing}
+          onClick={(e) => e.stopPropagation()}
+          placeholder="Pergunta"
+          rows={1}
+          className="block w-full resize-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-gray-800 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-200"
+        />
+      )}
+    </div>
+  );
+}
+
 function questionDefaults(type: FormFieldType): Partial<FormQuestion> {
   const width = defaultFieldWidth(type);
   if (type === 'sim_nao') {
@@ -161,6 +467,12 @@ function questionDefaults(type: FormFieldType): Partial<FormQuestion> {
   if (type === 'text' || type === 'number') {
     return { type, title: 'Nova pergunta', placeholder: '', width };
   }
+  if (type === 'valor') {
+    return { type, title: 'Nova pergunta', placeholder: 'R$ 0,00', width };
+  }
+  if (type === 'percent') {
+    return { type, title: 'Nova pergunta', placeholder: '0%', width };
+  }
   if (type === 'profiles') {
     return { type, title: 'Nova pergunta', placeholder: 'Selecionar perfil…', width };
   }
@@ -177,7 +489,17 @@ function questionDefaults(type: FormFieldType): Partial<FormQuestion> {
     return { type, title: 'Imagem', placeholder: 'Clique ou arraste imagens', width };
   }
   if (type === 'table') {
-    return { type, title: 'Tabela', options: ['Coluna 1', 'Coluna 2'], width };
+    const tableColumns = [
+      defaultTableColumn('Coluna 1'),
+      defaultTableColumn('Coluna 2'),
+    ];
+    return {
+      type,
+      title: 'Tabela',
+      tableColumns,
+      options: syncTableColumnTitles(tableColumns),
+      width,
+    };
   }
   if (type === 'qrcode') {
     return { type, title: 'QR Code', placeholder: 'Código lido do QR', width };
@@ -209,6 +531,14 @@ export function FormStructureBuilder({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const [optionsModal, setOptionsModal] = useState<{
+    sectionId: string;
+    questionId: string;
+  } | null>(null);
+  const [formulaModal, setFormulaModal] = useState<{
+    sectionId: string;
+    questionId: string;
+  } | null>(null);
+  const [tableColumnsModal, setTableColumnsModal] = useState<{
     sectionId: string;
     questionId: string;
   } | null>(null);
@@ -255,6 +585,28 @@ export function FormStructureBuilder({
   const allSections = multiStepEnabled
     ? steps.flatMap((step) => step.sections)
     : flatSections;
+
+  const allQuestions = useMemo(
+    () => allSections.flatMap((section) => section.questions ?? []),
+    [allSections],
+  );
+
+  const questionsById = useMemo(
+    () => new Map(allQuestions.map((q) => [q.id, q])),
+    [allQuestions],
+  );
+
+  const formulaModalQuestion = formulaModal
+    ? allSections
+        .flatMap((s) => s.questions)
+        .find((q) => q.id === formulaModal.questionId) ?? null
+    : null;
+
+  const tableColumnsModalQuestion = tableColumnsModal
+    ? allSections
+        .flatMap((s) => s.questions)
+        .find((q) => q.id === tableColumnsModal.questionId) ?? null
+    : null;
 
   const setSteps = (updater: (prev: FormStep[]) => FormStep[]) => {
     onStructureChange({ steps: updater(steps) });
@@ -315,9 +667,14 @@ export function FormStructureBuilder({
           ? s
           : {
               ...s,
-              questions: s.questions.map((q) =>
-                q.id === questionId ? { ...q, ...patch } : q
-              ),
+              questions: s.questions.map((q) => {
+                if (q.id !== questionId) return q;
+                const next = { ...q, ...patch };
+                if ('formula' in patch && patch.formula === undefined) {
+                  delete next.formula;
+                }
+                return next;
+              }),
             }
       )
     );
@@ -600,10 +957,10 @@ export function FormStructureBuilder({
   };
 
   const dropZoneCls = (active: boolean) =>
-    `flex items-center justify-center rounded-lg border-2 border-dashed px-3 text-sm font-medium transition-all duration-150 ${
+    `flex items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs font-medium transition-all duration-150 sm:text-sm ${
       active
         ? 'border-red-400 bg-red-50 text-red-600 dark:border-red-500/70 dark:bg-red-950/30 dark:text-red-400'
-        : 'border-gray-300 text-gray-400 dark:border-gray-600 dark:text-gray-500'
+        : 'border-transparent bg-transparent text-transparent'
     }`;
 
   /** Em grid de 2 colunas: half sem par à direita pode receber drop ao lado. */
@@ -855,9 +1212,9 @@ export function FormStructureBuilder({
               ) : null}
 
               {sections.map((section, sectionIdx) => (
-                <section key={section.id} className="space-y-4">
-                  <div className="group flex items-start gap-2">
-                    <div className="min-w-0 flex-1 space-y-1">
+                <section key={section.id} className="relative space-y-4">
+                  <div className="group relative">
+                    <div className="min-w-0 space-y-1">
                       <input
                         type="text"
                         value={section.title}
@@ -877,7 +1234,7 @@ export function FormStructureBuilder({
                         placeholder="Descrição da seção"
                       />
                     </div>
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+                    <div className="absolute right-0 top-0 flex shrink-0 items-center gap-1.5 opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
                       <button
                         type="button"
                         title="Subir seção"
@@ -920,150 +1277,57 @@ export function FormStructureBuilder({
                         question.type
                       );
                       const sideTargetId = `side:${section.id}:${question.id}`;
-                      const showSideDrop =
+                      const canSideDrop =
                         dragging &&
                         dragKind === 'field' &&
                         hasOpenSideSlot(section.questions, qIdx);
+                      const sideDropActive = dropTarget === sideTargetId;
 
                       return (
-                        <React.Fragment key={question.id}>
-                          <div
-                            className={`${spanFull ? 'sm:col-span-2' : ''} group relative transition-all duration-300 ${
-                              justAddedId === question.id
-                                ? 'animate-[formFieldDropIn_0.4s_ease-out]'
-                                : ''
-                            }`}
-                            onClick={() =>
-                              setSelected({
-                                sectionId: section.id,
-                                questionId: question.id,
+                        <div
+                          key={question.id}
+                          className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 transition-all duration-300 ${
+                            justAddedId === question.id
+                              ? 'animate-[formFieldDropIn_0.4s_ease-out]'
+                              : ''
+                          }`}
+                          onClick={() =>
+                            setSelected({
+                              sectionId: section.id,
+                              questionId: question.id,
+                            })
+                          }
+                        >
+                          <QuestionFieldTitleRow
+                            question={question}
+                            sectionId={section.id}
+                            fieldWidth={fieldWidth}
+                            hasOptionsModal={hasOptionsModal}
+                            autoFocusTitle={justAddedId === question.id}
+                            updateQuestion={updateQuestion}
+                            removeQuestion={removeQuestion}
+                            setFormulaModal={setFormulaModal}
+                            setOptionsModal={setOptionsModal}
+                            setTableColumnsModal={setTableColumnsModal}
+                          />
+
+                          <FieldPreview
+                            question={question}
+                            questionsById={questionsById}
+                            onOptionsChange={(options) =>
+                              updateQuestion(section.id, question.id, { options })
+                            }
+                            onTableColumnsChange={(tableColumns) =>
+                              updateQuestion(section.id, question.id, {
+                                ...tableColumnsToSavePayload(tableColumns),
                               })
                             }
-                          >
-                            <div className="mb-2 flex items-center gap-2">
-                              <div className="inline-flex max-w-full items-baseline gap-0.5">
-                                <span className="inline-grid max-w-full">
-                                  <span
-                                    className="invisible col-start-1 row-start-1 whitespace-pre text-sm font-medium"
-                                    aria-hidden
-                                  >
-                                    {question.title || 'Pergunta'}
-                                  </span>
-                                  <input
-                                    type="text"
-                                    value={question.title}
-                                    onChange={(e) =>
-                                      updateQuestion(section.id, question.id, {
-                                        title: e.target.value,
-                                      })
-                                    }
-                                    onClick={(e) => e.stopPropagation()}
-                                    size={1}
-                                    className="col-start-1 row-start-1 w-full min-w-0 border-0 bg-transparent p-0 text-sm font-medium leading-normal text-gray-800 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-200"
-                                    placeholder="Pergunta"
-                                  />
-                                </span>
-                                {question.required ? (
-                                  <span
-                                    className="shrink-0 select-none text-sm font-semibold leading-normal text-red-600"
-                                    aria-hidden
-                                  >
-                                    *
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div
-                                className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {hasOptionsModal ? (
-                                  <button
-                                    type="button"
-                                    title={
-                                      question.type === 'table'
-                                        ? 'Editar colunas'
-                                        : 'Gerenciar opções'
-                                    }
-                                    onClick={() =>
-                                      setOptionsModal({
-                                        sectionId: section.id,
-                                        questionId: question.id,
-                                      })
-                                    }
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                                  >
-                                    {question.type === 'table' ? (
-                                      <Columns className="h-4 w-4" />
-                                    ) : (
-                                      <ListFilter className="h-4 w-4" />
-                                    )}
-                                  </button>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  title={
-                                    question.required
-                                      ? 'Remover obrigatória'
-                                      : 'Marcar como obrigatória'
-                                  }
-                                  onClick={() =>
-                                    updateQuestion(section.id, question.id, {
-                                      required: !question.required,
-                                    })
-                                  }
-                                  className={`inline-flex h-8 w-8 items-center justify-center rounded-md ${
-                                    question.required
-                                      ? 'bg-red-600 text-white'
-                                      : 'text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200'
-                                  }`}
-                                >
-                                  <Asterisk className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  title={
-                                    fieldWidth === 'full'
-                                      ? 'Largura total — clique para 50%'
-                                      : 'Meia largura — clique para 100%'
-                                  }
-                                  onClick={() =>
-                                    updateQuestion(section.id, question.id, {
-                                      width: fieldWidth === 'half' ? 'full' : 'half',
-                                    })
-                                  }
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                                >
-                                  {fieldWidth === 'full' ? (
-                                    <Minimize2 className="h-4 w-4" />
-                                  ) : (
-                                    <Maximize2 className="h-4 w-4" />
-                                  )}
-                                </button>
-                                <button
-                                  type="button"
-                                  title="Remover campo"
-                                  onClick={() =>
-                                    removeQuestion(section.id, question.id)
-                                  }
-                                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
+                            onPlaceholderChange={(placeholder) =>
+                              updateQuestion(section.id, question.id, { placeholder })
+                            }
+                          />
 
-                            <FieldPreview
-                              question={question}
-                              onOptionsChange={(options) =>
-                                updateQuestion(section.id, question.id, { options })
-                              }
-                              onPlaceholderChange={(placeholder) =>
-                                updateQuestion(section.id, question.id, { placeholder })
-                              }
-                            />
-                          </div>
-
-                          {showSideDrop ? (
+                          {canSideDrop ? (
                             <div
                               onDragOver={(e) => onCanvasDragOver(e, sideTargetId)}
                               onDragLeave={() => {
@@ -1076,28 +1340,40 @@ export function FormStructureBuilder({
                                   side: true,
                                 })
                               }
-                              className={`${dropZoneCls(dropTarget === sideTargetId)} min-h-[88px] self-stretch`}
+                              className={`absolute top-0 z-20 hidden h-full sm:block ${
+                                sideDropActive
+                                  ? 'left-[calc(100%+0.625rem)] w-[calc(100%-0.625rem)]'
+                                  : 'left-[calc(100%+0.25rem)] w-[calc(100%-0.25rem)]'
+                              }`}
                             >
-                              Solte aqui do lado
+                              <div
+                                className={`${dropZoneCls(sideDropActive)} h-full min-h-[3rem] px-2 text-center`}
+                              >
+                                {sideDropActive ? 'Solte aqui do lado' : ''}
+                              </div>
                             </div>
                           ) : null}
-                        </React.Fragment>
+                        </div>
                       );
                     })}
                   </div>
 
                   {dragging && dragKind === 'field' ? (
                     <div
-                      onDragOver={(e) =>
-                        onCanvasDragOver(e, `below:${section.id}`)
-                      }
+                      onDragOver={(e) => onCanvasDragOver(e, `below:${section.id}`)}
                       onDragLeave={() => {
                         if (dropTarget === `below:${section.id}`) setDropTarget(null);
                       }}
                       onDrop={(e) => onCanvasDrop(e, { sectionId: section.id })}
-                      className={`${dropZoneCls(dropTarget === `below:${section.id}`)} min-h-[52px] w-full`}
+                      className={`absolute inset-x-0 bottom-0 z-20 translate-y-1/2 transition-all duration-150 ${
+                        dropTarget === `below:${section.id}` ? 'h-10' : 'h-3'
+                      }`}
                     >
-                      Solte aqui embaixo
+                      <div
+                        className={`${dropZoneCls(dropTarget === `below:${section.id}`)} h-full w-full`}
+                      >
+                        {dropTarget === `below:${section.id}` ? 'Solte aqui embaixo' : ''}
+                      </div>
                     </div>
                   ) : null}
                 </section>
@@ -1110,9 +1386,13 @@ export function FormStructureBuilder({
                     if (dropTarget === 'new-section') setDropTarget(null);
                   }}
                   onDrop={(e) => onCanvasDrop(e, { newSection: true })}
-                  className={`${dropZoneCls(dropTarget === 'new-section')} min-h-[64px] w-full`}
+                  className={`transition-all duration-150 ${
+                    dropTarget === 'new-section' ? 'h-14' : 'h-2'
+                  }`}
                 >
-                  Solte aqui para adicionar seção
+                  <div className={`${dropZoneCls(dropTarget === 'new-section')} h-full w-full`}>
+                    {dropTarget === 'new-section' ? 'Solte aqui para adicionar seção' : ''}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -1204,6 +1484,34 @@ export function FormStructureBuilder({
           </div>
         </div>
       </Modal>
+
+      <FormFormulaModal
+        isOpen={!!formulaModal}
+        question={formulaModalQuestion}
+        allQuestions={allQuestions}
+        onClose={() => setFormulaModal(null)}
+        onSave={(formula) => {
+          if (!formulaModal) return;
+          updateQuestion(formulaModal.sectionId, formulaModal.questionId, {
+            formula: formula ?? undefined,
+            readOnly: formula ? true : false,
+          });
+          setFormulaModal(null);
+        }}
+      />
+
+      <FormTableColumnsModal
+        isOpen={!!tableColumnsModal}
+        columns={resolveTableColumns(tableColumnsModalQuestion ?? {})}
+        onClose={() => setTableColumnsModal(null)}
+        onSave={(tableColumns) => {
+          if (!tableColumnsModal) return;
+          updateQuestion(tableColumnsModal.sectionId, tableColumnsModal.questionId, {
+            ...tableColumnsToSavePayload(tableColumns),
+          });
+          setTableColumnsModal(null);
+        }}
+      />
     </div>
   );
 }
@@ -1215,6 +1523,10 @@ function defaultPlaceholder(type: FormFieldType): string {
       return 'Texto longo';
     case 'number':
       return '0';
+    case 'valor':
+      return 'R$ 0,00';
+    case 'percent':
+      return '0%';
     case 'date':
       return 'dd/mm/aaaa';
     case 'datetime':
@@ -1488,16 +1800,54 @@ function SliderPreview({
   );
 }
 
-function FieldPreview({
+function NumericFieldPreview({
   question,
-  onOptionsChange,
+  questionsById,
   onPlaceholderChange,
 }: {
   question: FormQuestion;
-  onOptionsChange?: (options: string[]) => void;
+  questionsById: Map<string, FormQuestion>;
   onPlaceholderChange?: (placeholder: string) => void;
 }) {
   const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center text-gray-400 dark:text-gray-500`;
+  const readOnlyCls =
+    'cursor-not-allowed bg-gray-50 text-gray-500 dark:bg-gray-800/60 dark:text-gray-400';
+  const hasFormula = questionHasFormula(question);
+
+  return (
+    <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+      <div className={`${inputPreviewCls} ${hasFormula || question.readOnly ? readOnlyCls : ''}`}>
+        <PlaceholderInput
+          value={question.placeholder}
+          fallback={defaultPlaceholder(question.type)}
+          onChange={onPlaceholderChange}
+        />
+      </div>
+      {hasFormula ? (
+        <p className="text-xs text-indigo-600 dark:text-indigo-400">
+          {describeFormula(question.formula, questionsById)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function FieldPreview({
+  question,
+  questionsById,
+  onOptionsChange,
+  onTableColumnsChange,
+  onPlaceholderChange,
+}: {
+  question: FormQuestion;
+  questionsById: Map<string, FormQuestion>;
+  onOptionsChange?: (options: string[]) => void;
+  onTableColumnsChange?: (columns: FormTableColumn[]) => void;
+  onPlaceholderChange?: (placeholder: string) => void;
+}) {
+  const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center text-gray-400 dark:text-gray-500`;
+  const readOnlyCls =
+    'cursor-not-allowed bg-gray-50 text-gray-500 dark:bg-gray-800/60 dark:text-gray-400';
 
   if (question.type === 'textarea') {
     return (
@@ -1515,15 +1865,13 @@ function FieldPreview({
     );
   }
 
-  if (question.type === 'number') {
+  if (question.type === 'number' || question.type === 'valor' || question.type === 'percent') {
     return (
-      <div className={inputPreviewCls} onClick={(e) => e.stopPropagation()}>
-        <PlaceholderInput
-          value={question.placeholder}
-          fallback={defaultPlaceholder('number')}
-          onChange={onPlaceholderChange}
-        />
-      </div>
+      <NumericFieldPreview
+        question={question}
+        questionsById={questionsById}
+        onPlaceholderChange={onPlaceholderChange}
+      />
     );
   }
 
@@ -1671,43 +2019,13 @@ function FieldPreview({
   }
 
   if (question.type === 'table') {
-    const cols = question.options?.length ? question.options : ['Coluna 1', 'Coluna 2'];
+    const cols = resolveTableColumns(question);
     return (
-      <div
-        className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-600"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          className="grid gap-px bg-gray-200 dark:bg-gray-700"
-          style={{
-            gridTemplateColumns: `repeat(${cols.length}, minmax(88px, 1fr))`,
-          }}
-        >
-          {cols.map((col, idx) => (
-            <div
-              key={`h-${idx}`}
-              className="bg-gray-50 px-2 py-1.5 dark:bg-gray-900/60"
-            >
-              <input
-                type="text"
-                value={col}
-                onChange={(e) => {
-                  const next = [...cols];
-                  next[idx] = e.target.value;
-                  onOptionsChange?.(next);
-                }}
-                className="w-full border-0 bg-transparent p-0 text-xs font-medium text-gray-700 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-200"
-                placeholder={`Coluna ${idx + 1}`}
-              />
-            </div>
-          ))}
-          {cols.map((_, idx) => (
-            <div
-              key={`c-${idx}`}
-              className="bg-white px-3 py-4 dark:bg-gray-800"
-            />
-          ))}
-        </div>
+      <div onClick={(e) => e.stopPropagation()}>
+        <FormTableFieldPreview
+          columns={cols}
+          onColumnsChange={(tableColumns) => onTableColumnsChange?.(tableColumns)}
+        />
       </div>
     );
   }

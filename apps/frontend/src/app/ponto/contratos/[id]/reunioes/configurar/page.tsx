@@ -229,7 +229,7 @@ export default function ConfigurarFormularioReuniaoPage() {
             </Link>
             <div className="w-full max-w-3xl px-14 text-center sm:px-20">
               <h1 className="break-words text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
-                {contract?.name || 'Histórico de Reuniões'}
+                {contract?.name || 'Reuniões Quinzenais'}
               </h1>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
                 Configurar formulário de reunião

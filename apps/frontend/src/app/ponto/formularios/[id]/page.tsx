@@ -18,6 +18,7 @@ import {
   type FormEditorStructure,
 } from '@/components/forms/formStructureTypes';
 import api from '@/lib/api';
+import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
 
 export default function FormularioEditorPage() {
   const params = useParams();
@@ -92,6 +93,12 @@ export default function FormularioEditorPage() {
   }, [dirty, saveMutation]);
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
+
+  useBreadcrumbEntity(
+    name.trim() && formId
+      ? { label: name.trim(), href: `/ponto/formularios/${formId}` }
+      : null,
+  );
 
   if (!formId || loadingUser) {
     return <Loading message="Carregando..." fullScreen size="lg" />;

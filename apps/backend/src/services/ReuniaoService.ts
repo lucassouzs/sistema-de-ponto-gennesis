@@ -2,6 +2,8 @@ import AWS from 'aws-sdk';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { formatMonthLabel, getIsoMonthKey } from '../lib/monthPeriod';
+import { formatWeekLabel, getFortnightKey } from '../lib/weekPeriod';
 import { backendUploadsRoot } from '../lib/uploads';
 
 export type ReuniaoFieldType =
@@ -51,6 +53,13 @@ export interface ReuniaoSection {
   questions: ReuniaoQuestion[];
 }
 
+export interface ReuniaoFormStep {
+  id: string;
+  title: string;
+  description?: string;
+  sections: ReuniaoSection[];
+}
+
 export interface ReuniaoTemplate {
   sections: ReuniaoSection[];
   updatedAt: string;
@@ -86,6 +95,8 @@ export interface ReuniaoData {
     id: string;
     name: string;
     description?: string;
+    multiStepEnabled?: boolean;
+    steps?: ReuniaoFormStep[];
     sections: ReuniaoSection[];
   } | null;
 }
@@ -95,16 +106,67 @@ export interface ReuniaoIndexEntry {
   data: string;
   responsavelPreenchimento: string;
   nome: string;
+  /** Chave do mês (ex.: 2026-08) para relatório mensal. */
+  monthKey?: string;
+  /** Chave da quinzena (semana ISO inicial do bloco de 14 dias, ex.: 2026-W35). */
+  weekKey?: string;
   /** Nome do formulário (template) usado na criação. */
   formularioName?: string;
   /** Descrição do formulário (template). */
   formularioDescription?: string;
   createdAt: string;
   updatedAt: string;
+  /** Preenchido somente ao salvar/finalizar o formulário (não em rascunho). */
+  submittedAt?: string;
+}
+
+export type ReuniaoKind = 'mensal' | 'semanal';
+
+export function parseReuniaoKind(value: string): ReuniaoKind {
+  if (value === 'mensal' || value === 'semanal') return value;
+  throw new Error('Tipo de acompanhamento inválido.');
 }
 
 export interface ReuniaoIndex {
   reunioes: ReuniaoIndexEntry[];
+}
+
+export interface ReuniaoContractConfig {
+  formularioId: string;
+  formularioName?: string;
+  updatedAt: string;
+}
+
+export type MensalReportStatus = 'sem_formulario' | 'pendente' | 'preenchido';
+
+export interface MensalOverviewRow {
+  contractId: string;
+  contractName: string;
+  contractNumber: string;
+  costCenterCode?: string;
+  formularioId?: string;
+  formularioName?: string;
+  monthKey: string;
+  status: MensalReportStatus;
+  entryId?: string;
+  responsavelPreenchimento?: string;
+  updatedAt?: string;
+  totalRegistros: number;
+}
+
+export interface SemanalOverviewRow {
+  contractId: string;
+  contractName: string;
+  contractNumber: string;
+  costCenterCode?: string;
+  formularioId?: string;
+  formularioName?: string;
+  weekKey: string;
+  status: MensalReportStatus;
+  entryId?: string;
+  responsavelPreenchimento?: string;
+  updatedAt?: string;
+  totalRegistros: number;
 }
 
 function q(
@@ -296,6 +358,8 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
         id?: string;
         name?: string;
         description?: string;
+        multiStepEnabled?: boolean;
+        steps?: ReuniaoFormStep[];
         sections?: ReuniaoSection[];
       };
       if (ft.id && Array.isArray(ft.sections)) {
@@ -303,6 +367,8 @@ function normalizeReuniaoData(raw: unknown): ReuniaoData {
           id: String(ft.id),
           name: String(ft.name || 'Formulário'),
           description: ft.description ? String(ft.description) : undefined,
+          multiStepEnabled: ft.multiStepEnabled === true ? true : undefined,
+          steps: Array.isArray(ft.steps) ? ft.steps : undefined,
           sections: ft.sections,
         };
       }
@@ -392,12 +458,102 @@ export class ReuniaoService {
     this.localBasePath = path.join(backendUploadsRoot, 'reunioes');
   }
 
-  private getIndexKey(contractId: string): string {
+  private scopedBase(contractId: string, kind: ReuniaoKind): string {
+    return `reunioes/${contractId}/${kind}`;
+  }
+
+  private getIndexKey(contractId: string, kind: ReuniaoKind): string {
+    return `${this.scopedBase(contractId, kind)}/index.json`;
+  }
+
+  private getLegacyIndexKey(contractId: string): string {
     return `reunioes/${contractId}/index.json`;
   }
 
-  private getReuniaoKey(contractId: string, reuniaoId: string): string {
+  private getReuniaoKey(contractId: string, kind: ReuniaoKind, reuniaoId: string): string {
+    return `${this.scopedBase(contractId, kind)}/${reuniaoId}.json`;
+  }
+
+  private getLegacyReuniaoKey(contractId: string, reuniaoId: string): string {
     return `reunioes/${contractId}/${reuniaoId}.json`;
+  }
+
+  private getConfigKey(contractId: string, kind: ReuniaoKind): string {
+    return `${this.scopedBase(contractId, kind)}/config.json`;
+  }
+
+  private getLegacyConfigKey(contractId: string): string {
+    return `reunioes/${contractId}/config.json`;
+  }
+
+  async getContractConfig(
+    contractId: string,
+    kind: ReuniaoKind,
+  ): Promise<ReuniaoContractConfig | null> {
+    let raw = await this.readJson<ReuniaoContractConfig>(this.getConfigKey(contractId, kind));
+    if (!raw?.formularioId && kind === 'mensal') {
+      raw = await this.readJson<ReuniaoContractConfig>(this.getLegacyConfigKey(contractId));
+    }
+    if (!raw?.formularioId) return null;
+    return raw;
+  }
+
+  async saveContractConfig(
+    contractId: string,
+    kind: ReuniaoKind,
+    formularioId: string,
+  ): Promise<ReuniaoContractConfig> {
+    const id = String(formularioId || '').trim();
+    if (!id) throw new Error('Selecione um formulário.');
+
+    const { FormularioTemplateService } = await import('./FormularioTemplateService');
+    const formService = new FormularioTemplateService();
+    const tpl = await formService.get(id);
+    if (!tpl) throw new Error('Formulário não encontrado.');
+
+    const config: ReuniaoContractConfig = {
+      formularioId: tpl.id,
+      formularioName: tpl.name,
+      updatedAt: new Date().toISOString(),
+    };
+    await this.writeJson(this.getConfigKey(contractId, kind), config);
+    return config;
+  }
+
+  /** Abre ou cria o preenchimento do período corrente (mês ou quinzena). */
+  async ensurePeriodoAtual(contractId: string, kind: ReuniaoKind): Promise<ReuniaoIndexEntry> {
+    const config = await this.getContractConfig(contractId, kind);
+    if (!config?.formularioId) {
+      throw new Error(
+        kind === 'mensal'
+          ? 'Configure o formulário de relatório mensal antes de preencher.'
+          : 'Configure o formulário de reunião quinzenal antes de preencher.',
+      );
+    }
+
+    if (kind === 'mensal') {
+      const monthKey = getIsoMonthKey();
+      const idx = await this.getIndex(contractId, kind);
+      const existing = idx.reunioes.find((row) => row.monthKey === monthKey);
+      if (existing) return existing;
+
+      return this.createReuniao(contractId, kind, {
+        formularioId: config.formularioId,
+        monthKey,
+        nome: formatMonthLabel(monthKey),
+      });
+    }
+
+    const weekKey = getFortnightKey();
+    const idx = await this.getIndex(contractId, kind);
+    const existing = idx.reunioes.find((row) => row.weekKey === weekKey);
+    if (existing) return existing;
+
+    return this.createReuniao(contractId, kind, {
+      formularioId: config.formularioId,
+      weekKey,
+      nome: formatWeekLabel(weekKey),
+    });
   }
 
   private async readJson<T>(key: string): Promise<T | null> {
@@ -481,10 +637,12 @@ export class ReuniaoService {
 
   // ---- Reuniões ----
 
-  async getIndex(contractId: string): Promise<ReuniaoIndex> {
-    const idx = await this.readJson<ReuniaoIndex>(this.getIndexKey(contractId));
+  async getIndex(contractId: string, kind: ReuniaoKind): Promise<ReuniaoIndex> {
+    let idx = await this.readJson<ReuniaoIndex>(this.getIndexKey(contractId, kind));
+    if (!idx?.reunioes?.length && kind === 'mensal') {
+      idx = await this.readJson<ReuniaoIndex>(this.getLegacyIndexKey(contractId));
+    }
     if (!idx) return { reunioes: [] };
-    // Compat: índices antigos usavam `contrato` no lugar de `nome`
     return {
       reunioes: (idx.reunioes || []).map((r) => {
         const raw = r as ReuniaoIndexEntry & { contrato?: string };
@@ -499,13 +657,13 @@ export class ReuniaoService {
   }
 
   /** Lista com enriquecimento do nome/descrição do formulário quando faltar no índice. */
-  async listReunioes(contractId: string): Promise<ReuniaoIndexEntry[]> {
-    const idx = await this.getIndex(contractId);
+  async listReunioes(contractId: string, kind: ReuniaoKind): Promise<ReuniaoIndexEntry[]> {
+    const idx = await this.getIndex(contractId, kind);
     let dirty = false;
     for (const entry of idx.reunioes) {
       if (entry.formularioName) continue;
       try {
-        const data = await this.getReuniao(contractId, entry.id);
+        const data = await this.getReuniao(contractId, kind, entry.id);
         if (data?.formTemplate?.name) {
           entry.formularioName = data.formTemplate.name;
           entry.formularioDescription = data.formTemplate.description || '';
@@ -516,14 +674,133 @@ export class ReuniaoService {
       }
     }
     if (dirty) {
-      await this.writeJson(this.getIndexKey(contractId), idx);
+      await this.writeJson(this.getIndexKey(contractId, kind), idx);
     }
     return idx.reunioes;
   }
 
+  private reuniaoDataLooksSubmitted(data: ReuniaoData): boolean {
+    if (data.identificacao?.responsavelPreenchimento?.trim()) return true;
+    if (data.ata?.key || data.video?.key) return true;
+    const answers = data.answers || {};
+    for (const key of Object.keys(answers)) {
+      const answer = answers[key];
+      if (!answer) continue;
+      const value = answer.value;
+      if (value !== null && value !== undefined && value !== '') return true;
+      if (answer.followUp?.trim()) return true;
+    }
+    return false;
+  }
+
+  private async isEntrySubmitted(
+    contractId: string,
+    kind: ReuniaoKind,
+    entry: ReuniaoIndexEntry,
+  ): Promise<boolean> {
+    if (entry.submittedAt) return true;
+    if (entry.responsavelPreenchimento?.trim()) return true;
+    const data = await this.getReuniao(contractId, kind, entry.id);
+    return data ? this.reuniaoDataLooksSubmitted(data) : false;
+  }
+
+  private async buildOverviewEntryFields(
+    contractId: string,
+    kind: ReuniaoKind,
+    entry: ReuniaoIndexEntry | undefined,
+    hasForm: boolean,
+  ): Promise<{
+    status: MensalReportStatus;
+    entryId?: string;
+    responsavelPreenchimento?: string;
+    updatedAt?: string;
+  }> {
+    if (!hasForm) return { status: 'sem_formulario' };
+    if (!entry) return { status: 'pendente' };
+
+    const submitted = await this.isEntrySubmitted(contractId, kind, entry);
+    return {
+      status: submitted ? 'preenchido' : 'pendente',
+      entryId: entry.id,
+      responsavelPreenchimento: submitted ? entry.responsavelPreenchimento || undefined : undefined,
+      updatedAt: submitted ? entry.submittedAt || entry.updatedAt : undefined,
+    };
+  }
+
+  async getMensalOverviewRow(
+    contract: {
+      id: string;
+      name: string;
+      number: string;
+      costCenter?: { code: string } | null;
+    },
+    monthKey: string,
+  ): Promise<MensalOverviewRow> {
+    const config = await this.getContractConfig(contract.id, 'mensal');
+    const idx = await this.getIndex(contract.id, 'mensal');
+    const entry = idx.reunioes.find((row) => row.monthKey === monthKey);
+    const overview = await this.buildOverviewEntryFields(
+      contract.id,
+      'mensal',
+      entry,
+      Boolean(config?.formularioId),
+    );
+
+    return {
+      contractId: contract.id,
+      contractName: contract.name,
+      contractNumber: contract.number,
+      costCenterCode: contract.costCenter?.code || undefined,
+      formularioId: config?.formularioId,
+      formularioName: config?.formularioName,
+      monthKey,
+      status: overview.status,
+      entryId: overview.entryId,
+      responsavelPreenchimento: overview.responsavelPreenchimento,
+      updatedAt: overview.updatedAt,
+      totalRegistros: idx.reunioes.length,
+    };
+  }
+
+  async getSemanalOverviewRow(
+    contract: {
+      id: string;
+      name: string;
+      number: string;
+      costCenter?: { code: string } | null;
+    },
+    weekKey: string,
+  ): Promise<SemanalOverviewRow> {
+    const config = await this.getContractConfig(contract.id, 'semanal');
+    const idx = await this.getIndex(contract.id, 'semanal');
+    const entry = idx.reunioes.find((row) => row.weekKey === weekKey);
+    const overview = await this.buildOverviewEntryFields(
+      contract.id,
+      'semanal',
+      entry,
+      Boolean(config?.formularioId),
+    );
+
+    return {
+      contractId: contract.id,
+      contractName: contract.name,
+      contractNumber: contract.number,
+      costCenterCode: contract.costCenter?.code || undefined,
+      formularioId: config?.formularioId,
+      formularioName: config?.formularioName,
+      weekKey,
+      status: overview.status,
+      entryId: overview.entryId,
+      responsavelPreenchimento: overview.responsavelPreenchimento,
+      updatedAt: overview.updatedAt,
+      totalRegistros: idx.reunioes.length,
+    };
+  }
+
   async createReuniao(
     contractId: string,
-    opts: { formularioId: string }
+    kind: ReuniaoKind,
+    opts: { formularioId: string; weekKey?: string; monthKey?: string; nome?: string },
   ): Promise<ReuniaoIndexEntry> {
     const formularioId = String(opts.formularioId || '').trim();
     if (!formularioId) {
@@ -539,11 +816,17 @@ export class ReuniaoService {
 
     const id = randomUUID();
     const now = new Date().toISOString();
+    const weekKey = opts.weekKey?.trim() || undefined;
+    const monthKey = opts.monthKey?.trim() || undefined;
     const entry: ReuniaoIndexEntry = {
       id,
       data: '',
       responsavelPreenchimento: '',
-      nome: '',
+      nome:
+        opts.nome?.trim() ||
+        (monthKey ? formatMonthLabel(monthKey) : weekKey ? formatWeekLabel(weekKey) : ''),
+      monthKey,
+      weekKey,
       formularioName: tpl.name || '',
       formularioDescription: tpl.description || '',
       createdAt: now,
@@ -552,24 +835,37 @@ export class ReuniaoService {
 
     const initial: ReuniaoData = {
       ...EMPTY_DATA,
+      identificacao: {
+        ...EMPTY_DATA.identificacao,
+        nome: entry.nome,
+      },
       formTemplate: {
         id: tpl.id,
         name: tpl.name,
         description: tpl.description,
+        multiStepEnabled: tpl.multiStepEnabled,
+        steps: tpl.steps,
         sections: tpl.sections as ReuniaoSection[],
       },
     };
 
-    const idx = await this.getIndex(contractId);
+    const idx = await this.getIndex(contractId, kind);
     idx.reunioes.unshift(entry);
-    await this.writeJson(this.getIndexKey(contractId), idx);
-    await this.writeJson(this.getReuniaoKey(contractId, id), initial);
+    await this.writeJson(this.getIndexKey(contractId, kind), idx);
+    await this.writeJson(this.getReuniaoKey(contractId, kind, id), initial);
 
     return entry;
   }
 
-  async getReuniao(contractId: string, reuniaoId: string): Promise<ReuniaoData | null> {
-    const raw = await this.readJson<unknown>(this.getReuniaoKey(contractId, reuniaoId));
+  async getReuniao(
+    contractId: string,
+    kind: ReuniaoKind,
+    reuniaoId: string,
+  ): Promise<ReuniaoData | null> {
+    let raw = await this.readJson<unknown>(this.getReuniaoKey(contractId, kind, reuniaoId));
+    if (!raw && kind === 'mensal') {
+      raw = await this.readJson<unknown>(this.getLegacyReuniaoKey(contractId, reuniaoId));
+    }
     if (!raw) return null;
     const data = normalizeReuniaoData(raw);
     if (data.ata?.key) data.ata = { ...data.ata, url: await this.getAnexoUrl(data.ata.key) };
@@ -577,35 +873,47 @@ export class ReuniaoService {
     return data;
   }
 
-  async saveReuniao(contractId: string, reuniaoId: string, data: ReuniaoData): Promise<void> {
+  async saveReuniao(
+    contractId: string,
+    kind: ReuniaoKind,
+    reuniaoId: string,
+    data: ReuniaoData,
+    opts?: { finalize?: boolean },
+  ): Promise<void> {
     const normalized = normalizeReuniaoData(data);
-    await this.writeJson(this.getReuniaoKey(contractId, reuniaoId), normalized);
+    await this.writeJson(this.getReuniaoKey(contractId, kind, reuniaoId), normalized);
 
-    const idx = await this.getIndex(contractId);
+    const idx = await this.getIndex(contractId, kind);
     const entry = idx.reunioes.find((r) => r.id === reuniaoId);
     if (entry) {
-      entry.updatedAt = new Date().toISOString();
+      const now = new Date().toISOString();
+      entry.updatedAt = now;
       entry.data = normalized.identificacao?.data || '';
       entry.responsavelPreenchimento = normalized.identificacao?.responsavelPreenchimento || '';
-      entry.nome = normalized.identificacao?.nome || '';
+      if (opts?.finalize) {
+        entry.submittedAt = now;
+      }
+      if (!entry.weekKey && !entry.monthKey) {
+        entry.nome = normalized.identificacao?.nome || entry.nome;
+      }
       if (normalized.formTemplate?.name) {
         entry.formularioName = normalized.formTemplate.name;
         entry.formularioDescription = normalized.formTemplate.description || '';
       }
-      await this.writeJson(this.getIndexKey(contractId), idx);
+      await this.writeJson(this.getIndexKey(contractId, kind), idx);
     }
   }
 
-  async deleteReuniao(contractId: string, reuniaoId: string): Promise<void> {
-    const existing = await this.getReuniao(contractId, reuniaoId);
+  async deleteReuniao(contractId: string, kind: ReuniaoKind, reuniaoId: string): Promise<void> {
+    const existing = await this.getReuniao(contractId, kind, reuniaoId);
     if (existing?.ata?.key) await this.deleteAnexoFile(existing.ata.key).catch(() => {});
     if (existing?.video?.key) await this.deleteAnexoFile(existing.video.key).catch(() => {});
 
-    await this.deleteKey(this.getReuniaoKey(contractId, reuniaoId));
+    await this.deleteKey(this.getReuniaoKey(contractId, kind, reuniaoId));
 
-    const idx = await this.getIndex(contractId);
+    const idx = await this.getIndex(contractId, kind);
     idx.reunioes = idx.reunioes.filter((r) => r.id !== reuniaoId);
-    await this.writeJson(this.getIndexKey(contractId), idx);
+    await this.writeJson(this.getIndexKey(contractId, kind), idx);
   }
 
   // ---- Anexos ----
@@ -626,6 +934,7 @@ export class ReuniaoService {
 
   async uploadAnexo(
     contractId: string,
+    kind: ReuniaoKind,
     reuniaoId: string,
     tipo: 'ata' | 'video',
     file: { buffer: Buffer; originalname: string; mimetype: string; size: number }
@@ -635,7 +944,7 @@ export class ReuniaoService {
     const now = new Date().toISOString();
 
     if (this.useLocal || !this.s3) {
-      const relativeDir = path.join('reunioes', contractId, reuniaoId);
+      const relativeDir = path.join('reunioes', contractId, kind, reuniaoId);
       const absoluteDir = path.join(backendUploadsRoot, relativeDir);
       fs.mkdirSync(absoluteDir, { recursive: true });
       fs.writeFileSync(path.join(absoluteDir, fileName), file.buffer);

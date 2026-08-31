@@ -2,6 +2,8 @@ export type FormFieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'valor'
+  | 'percent'
   | 'date'
   | 'datetime'
   | 'sim_nao'
@@ -21,6 +23,28 @@ export type FormFieldType =
 /** Largura do campo no grid do formulário. */
 export type FormFieldWidth = 'half' | 'full';
 
+export type FormFieldFormulaOp = 'sum' | 'subtract' | 'multiply' | 'divide';
+
+export type FormFieldFormulaResultFormat = 'number' | 'valor' | 'percent';
+
+export interface FormFieldFormula {
+  op: FormFieldFormulaOp;
+  sourceIds: string[];
+  resultFormat?: FormFieldFormulaResultFormat;
+}
+
+export type FormTableColumnAlign = 'left' | 'center' | 'right';
+
+export type FormTableColumnType = 'text' | 'number' | 'valor' | 'percent';
+
+export interface FormTableColumn {
+  id: string;
+  title: string;
+  align?: FormTableColumnAlign;
+  bold?: boolean;
+  type?: FormTableColumnType;
+}
+
 export interface FormFollowUp {
   whenValue: string;
   type: 'text' | 'textarea' | 'pills';
@@ -37,6 +61,12 @@ export interface FormQuestion {
   placeholder?: string;
   /** `half` = 50% (lado a lado); `full` = 100% da linha */
   width?: FormFieldWidth;
+  /** Quando true, o campo não pode ser editado no preenchimento. */
+  readOnly?: boolean;
+  /** Configuração de cálculo automático (tipo `formula`). */
+  formula?: FormFieldFormula;
+  /** Colunas configuráveis (tipo `table`). */
+  tableColumns?: FormTableColumn[];
   followUp?: FormFollowUp | null;
 }
 
@@ -73,6 +103,8 @@ export const FORM_FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   text: 'Texto curto',
   textarea: 'Texto longo',
   number: 'Número',
+  valor: 'Valor',
+  percent: 'Porcentagem',
   date: 'Data',
   datetime: 'Data e hora',
   sim_nao: 'Sim / Não',
@@ -90,13 +122,12 @@ export const FORM_FIELD_TYPE_LABELS: Record<FormFieldType, string> = {
   signature: 'Assinatura',
 };
 
-/** Tipos com opções/colunas editáveis via modal. */
+/** Tipos com opções editáveis via modal genérico. */
 export const FORM_FIELD_TYPES_WITH_OPTIONS: FormFieldType[] = [
   'dropdown',
   'checklist',
   'pills',
   'checkbox',
-  'table',
 ];
 
 export function formFieldOptionsModalCopy(type: FormFieldType): {
@@ -184,6 +215,29 @@ export function newFormStep(title = 'Nova etapa'): FormStep {
   };
 }
 
+export function normalizeFormQuestion(question: FormQuestion): FormQuestion {
+  if ((question.type as string) !== 'formula') return question;
+
+  const resultFormat = question.formula?.resultFormat ?? 'valor';
+  const type: FormFieldType =
+    resultFormat === 'percent' ? 'percent' : resultFormat === 'valor' ? 'valor' : 'number';
+
+  return {
+    ...question,
+    type,
+    readOnly: true,
+    placeholder:
+      question.placeholder === 'Calculado automaticamente' ? '' : question.placeholder,
+  };
+}
+
+export function normalizeFormSection(section: FormSection): FormSection {
+  return {
+    ...section,
+    questions: (section.questions ?? []).map(normalizeFormQuestion),
+  };
+}
+
 export function normalizeFormSteps(data: {
   steps?: FormStep[];
   sections?: FormSection[];
@@ -193,11 +247,15 @@ export function normalizeFormSteps(data: {
       id: step.id || formUid(),
       title: step.title?.trim() || 'Nova etapa',
       description: step.description?.trim() || '',
-      sections: Array.isArray(step.sections) ? step.sections : [],
+      sections: Array.isArray(step.sections)
+        ? step.sections.map(normalizeFormSection)
+        : [],
     }));
   }
 
-  const sections = data.sections?.length ? data.sections : [newFormSection()];
+  const sections = data.sections?.length
+    ? data.sections.map(normalizeFormSection)
+    : [newFormSection()];
   return [
     {
       id: formUid(),
@@ -234,11 +292,19 @@ export function loadFormEditorStructure(tpl: {
   }
 
   if (tpl.sections?.length) {
-    return { multiStepEnabled: false, steps: [], sections: tpl.sections };
+    return {
+      multiStepEnabled: false,
+      steps: [],
+      sections: tpl.sections.map(normalizeFormSection),
+    };
   }
 
   if (tpl.steps?.length === 1) {
-    return { multiStepEnabled: false, steps: [], sections: tpl.steps[0]!.sections };
+    return {
+      multiStepEnabled: false,
+      steps: [],
+      sections: tpl.steps[0]!.sections.map(normalizeFormSection),
+    };
   }
 
   return { multiStepEnabled: false, steps: [], sections: [newFormSection()] };

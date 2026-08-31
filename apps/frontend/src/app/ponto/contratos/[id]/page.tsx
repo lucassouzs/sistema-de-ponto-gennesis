@@ -31,7 +31,7 @@ import {
   Filter,
   MoreVertical,
   Clock,
-  History,
+  Video,
   Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -1496,9 +1496,15 @@ export default function ContractDetailPage() {
     enabled: !!contractId && canAccessRelatorios,
   });
 
-  const { data: reunioesListaData, isLoading: loadingReunioesCount } = useQuery({
-    queryKey: ['reunioes', contractId],
-    queryFn: async () => (await api.get(`/reunioes/${contractId}`)).data,
+  const { data: semanalListaData, isLoading: loadingSemanalCount } = useQuery({
+    queryKey: ['reunioes', 'semanal', contractId],
+    queryFn: async () => (await api.get(`/reunioes/${contractId}/semanal`)).data,
+    enabled: !!contractId && canAccessReunioes,
+  });
+
+  const { data: mensalListaData, isLoading: loadingMensalCount } = useQuery({
+    queryKey: ['reunioes', 'mensal', contractId],
+    queryFn: async () => (await api.get(`/reunioes/${contractId}/mensal`)).data,
     enabled: !!contractId && canAccessReunioes,
   });
 
@@ -1508,9 +1514,8 @@ export default function ContractDetailPage() {
   const relatoriosCount = Array.isArray(relatoriosListaData?.data)
     ? relatoriosListaData.data.length
     : 0;
-  const reunioesCount = Array.isArray(reunioesListaData?.data)
-    ? reunioesListaData.data.length
-    : 0;
+  const semanalCount = Array.isArray(semanalListaData?.data) ? semanalListaData.data.length : 0;
+  const mensalCount = Array.isArray(mensalListaData?.data) ? mensalListaData.data.length : 0;
 
 
   const paidDisplay = useMemo(() => {
@@ -3858,23 +3863,52 @@ export default function ContractDetailPage() {
                     <CardContent className="p-4 sm:p-6">
                       <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
                         <div className="flex min-w-[120px] flex-1 items-center pr-2">
-                          <div className="flex-shrink-0 rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30 sm:p-3">
-                            <History className="h-5 w-5 text-indigo-600 dark:text-indigo-400 sm:h-6 sm:w-6" />
+                          <div className="flex-shrink-0 rounded-lg bg-sky-100 p-2 dark:bg-sky-900/30 sm:p-3">
+                            <FileText className="h-5 w-5 text-sky-600 dark:text-sky-400 sm:h-6 sm:w-6" />
                           </div>
                           <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
                             <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
-                              Histórico de Reuniões
+                              Relatório Mensal
                             </p>
                             <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
-                              {loadingReunioesCount ? '…' : reunioesCount}
+                              {loadingMensalCount ? '…' : mensalCount}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/ponto/contratos/${contractId}/acompanhamento-mensal`}
+                          className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                          aria-label="Abrir relatório mensal"
+                          title="Abrir relatório mensal"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+                {canAccessReunioes ? (
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                        <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                          <div className="flex-shrink-0 rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30 sm:p-3">
+                            <Video className="h-5 w-5 text-indigo-600 dark:text-indigo-400 sm:h-6 sm:w-6" />
+                          </div>
+                          <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                            <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                              Reuniões Quinzenais
+                            </p>
+                            <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                              {loadingSemanalCount ? '…' : semanalCount}
                             </p>
                           </div>
                         </div>
                         <Link
                           href={`/ponto/contratos/${contractId}/reunioes`}
                           className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
-                          aria-label="Abrir histórico de reuniões"
-                          title="Abrir histórico de reuniões"
+                          aria-label="Abrir reuniões quinzenais"
+                          title="Abrir reuniões quinzenais"
                         >
                           <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
                         </Link>

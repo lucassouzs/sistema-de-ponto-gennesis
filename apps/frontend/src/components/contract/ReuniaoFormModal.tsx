@@ -6,6 +6,11 @@ import {
   Loader2,
   QrCode,
   X,
+  Upload,
+  Trash2,
+  FileText,
+  Video,
+  ExternalLink,
 } from 'lucide-react';
 import { Modal, useModalRequestClose } from '@/components/ui/Modal';
 import { Loading } from '@/components/ui/Loading';
@@ -32,12 +37,28 @@ import {
 import { fetchEmployeeSelectOptions } from '@/lib/employeeSelectOptions';
 import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import toast from 'react-hot-toast';
-import api from '@/lib/api';
+import { FormCurrencyField } from '@/components/forms/FormCurrencyField';
+import { FormPercentField } from '@/components/forms/FormPercentField';
+import { FormTableField } from '@/components/forms/FormTableField';
+import { parseCurrencyInputBr } from '@/lib/maskCurrencyBr';
+import { parsePercentInput } from '@/lib/maskPercent';
+import {
+  evaluateFormula,
+  flattenFormQuestions,
+  getNumericFieldValue,
+  isQuestionReadOnly,
+  questionHasFormula,
+} from '@/lib/formFormula';
+import { normalizeFormQuestion, type FormFieldFormulaResultFormat, type FormTableColumn } from '@/components/forms/formStructureTypes';
+import { isTableAnswerEmpty, resolveTableColumns } from '@/lib/formTable';
+import type { AcompanhamentoKind } from '@/lib/acompanhamentoTypes';
 
 type FieldType =
   | 'text'
   | 'textarea'
   | 'number'
+  | 'valor'
+  | 'percent'
   | 'date'
   | 'datetime'
   | 'sim_nao'
@@ -69,6 +90,13 @@ interface Question {
   required?: boolean;
   placeholder?: string;
   width?: 'half' | 'full';
+  readOnly?: boolean;
+  formula?: {
+    op: 'sum' | 'subtract' | 'multiply' | 'divide';
+    sourceIds: string[];
+    resultFormat?: FormFieldFormulaResultFormat;
+  };
+  tableColumns?: FormTableColumn[];
   followUp?: FollowUp | null;
 }
 
@@ -122,6 +150,7 @@ export interface ReuniaoListPatch {
   responsavelPreenchimento: string;
   nome: string;
   updatedAt: string;
+  submittedAt?: string;
 }
 
 const EMPTY_DATA: ReuniaoData = {
@@ -133,6 +162,16 @@ const EMPTY_DATA: ReuniaoData = {
 };
 
 const inputClasse = `${FORM_FIELD_INPUT_CLS} h-10`;
+const readOnlyInputCls =
+  'cursor-not-allowed bg-gray-50 text-gray-700 dark:bg-gray-800/60 dark:text-gray-300';
+
+function formulaValuesEqual(current: unknown, computed: number | null): boolean {
+  if (computed === null) {
+    return current === null || current === undefined || current === '';
+  }
+  if (typeof current === 'number') return current === computed;
+  return getNumericFieldValue(current) === computed;
+}
 
 function parseSliderBound(raw: string): number | null {
   const t = raw.trim().replace(',', '.');
@@ -176,6 +215,26 @@ function isAnswerEmpty(question: Question, answer: ReuniaoAnswer | undefined): b
       .filter(Boolean);
     return selected.length === 0;
   }
+  if (question.type === 'valor') {
+    const v = answer?.value;
+    if (typeof v === 'number') return !Number.isFinite(v);
+    if (v === null || v === undefined || v === '') return true;
+    return parseCurrencyInputBr(String(v)) === null;
+  }
+  if (question.type === 'percent') {
+    const v = answer?.value;
+    if (typeof v === 'number') return !Number.isFinite(v);
+    if (v === null || v === undefined || v === '') return true;
+    return parsePercentInput(String(v)) === null;
+  }
+  if (questionHasFormula(question)) {
+    const v = answer?.value;
+    if (typeof v === 'number' && Number.isFinite(v)) return false;
+    return true;
+  }
+  if (question.type === 'table') {
+    return isTableAnswerEmpty(answer?.value, resolveTableColumns(question));
+  }
   if (answer == null || answer.value === null || answer.value === undefined) {
     return true;
   }
@@ -184,9 +243,9 @@ function isAnswerEmpty(question: Question, answer: ReuniaoAnswer | undefined): b
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="mb-2 flex items-baseline gap-0.5 text-sm font-medium text-gray-800 dark:text-gray-200">
-      <span>{children}</span>
-      {required ? <span className="text-sm font-semibold text-red-600">*</span> : null}
+    <label className="mb-2 block text-sm font-medium text-gray-800 dark:text-gray-200">
+      <span className="break-words whitespace-pre-wrap">{children}</span>
+      {required ? <span className="text-sm font-semibold text-red-600"> *</span> : null}
     </label>
   );
 }
@@ -292,20 +351,28 @@ function RatingPills({
 function QuestionField({
   question,
   answer,
+  allAnswers,
   onChange,
   profileOptions,
 }: {
   question: Question;
   answer: ReuniaoAnswer | undefined;
+  allAnswers: Record<string, ReuniaoAnswer>;
   onChange: (next: ReuniaoAnswer) => void;
   profileOptions: MultiSelectSearchOption[];
 }) {
-  const value = answer?.value ?? (question.type === 'rating' ? null : '');
+  const normalizedQuestion = normalizeFormQuestion(question as Parameters<typeof normalizeFormQuestion>[0]);
+  const value = answer?.value ?? (normalizedQuestion.type === 'rating' ? null : '');
   const followUpValue = answer?.followUp || '';
+  const hasFormula = questionHasFormula(normalizedQuestion);
+  const computedValue =
+    hasFormula && normalizedQuestion.formula
+      ? evaluateFormula(normalizedQuestion.formula, allAnswers)
+      : null;
   const options =
-    question.options?.length
-      ? question.options
-      : question.type === 'sim_nao'
+    normalizedQuestion.options?.length
+      ? normalizedQuestion.options
+      : normalizedQuestion.type === 'sim_nao'
         ? ['SIM', 'NÃO']
         : [];
 
@@ -314,7 +381,7 @@ function QuestionField({
   };
 
   const showFollowUp =
-    !!question.followUp && String(value ?? '') === question.followUp.whenValue;
+    !!normalizedQuestion.followUp && String(value ?? '') === normalizedQuestion.followUp.whenValue;
 
   const sliderMinLabel = options[0] ?? '1';
   const sliderMaxLabel = options[1] ?? '10';
@@ -334,12 +401,14 @@ function QuestionField({
       : ((sliderValue - sliderMin) / (sliderMax - sliderMin)) * 100;
   const thumbPx = 16;
   const sliderFill = `calc((100% - ${thumbPx}px) * ${sliderPct / 100} + ${thumbPx / 2}px)`;
+  const locked = isQuestionReadOnly(normalizedQuestion);
+  const displayValue = hasFormula ? computedValue : value;
 
   return (
     <div>
-      <FieldLabel required={question.required}>{question.title}</FieldLabel>
+      <FieldLabel required={normalizedQuestion.required}>{normalizedQuestion.title}</FieldLabel>
 
-      {question.type === 'sim_nao' && (
+      {normalizedQuestion.type === 'sim_nao' && (
         <SimNaoGroup options={options} value={String(value ?? '')} onChange={setValue} />
       )}
       {question.type === 'pills' && (
@@ -352,30 +421,58 @@ function QuestionField({
         <input
           type="text"
           value={String(value ?? '')}
+          readOnly={locked}
+          disabled={locked}
           onChange={(e) => setValue(e.target.value)}
           placeholder={question.placeholder || 'Texto curto'}
-          className={inputClasse}
+          className={`${inputClasse} ${locked ? readOnlyInputCls : ''}`}
         />
       )}
       {question.type === 'textarea' && (
         <textarea
           value={String(value ?? '')}
+          readOnly={locked}
+          disabled={locked}
           onChange={(e) => setValue(e.target.value)}
           placeholder={question.placeholder || 'Texto longo'}
           rows={4}
-          className={`${FORM_FIELD_TEXTAREA_CLS} min-h-[140px]`}
+          className={`${FORM_FIELD_TEXTAREA_CLS} min-h-[140px] ${locked ? readOnlyInputCls : ''}`}
         />
       )}
-      {question.type === 'number' && (
+      {normalizedQuestion.type === 'number' && (
         <input
           type="number"
-          value={String(value ?? '')}
+          value={displayValue === null || displayValue === undefined ? '' : String(displayValue)}
+          readOnly={locked}
+          disabled={locked}
           onChange={(e) => setValue(e.target.value)}
-          placeholder={question.placeholder || '0'}
-          className={inputClasse}
+          placeholder={normalizedQuestion.placeholder || '0'}
+          className={`${inputClasse} ${locked ? readOnlyInputCls : ''}`}
         />
       )}
-      {question.type === 'date' && (
+      {normalizedQuestion.type === 'valor' && (
+        <FormCurrencyField
+          value={typeof displayValue === 'number' ? displayValue : null}
+          onChange={(v) => setValue(v)}
+          placeholder={normalizedQuestion.placeholder || 'R$ 0,00'}
+          className={inputClasse}
+          readOnly={locked}
+        />
+      )}
+      {normalizedQuestion.type === 'percent' && (
+        <FormPercentField
+          value={
+            typeof displayValue === 'number'
+              ? displayValue
+              : displayValue ?? null
+          }
+          onChange={(v) => setValue(v)}
+          placeholder={normalizedQuestion.placeholder || '0%'}
+          className={inputClasse}
+          readOnly={locked}
+        />
+      )}
+      {normalizedQuestion.type === 'date' && (
         <DatePickerField
           value={String(value ?? '')}
           onChange={(v) => setValue(v)}
@@ -510,41 +607,12 @@ function QuestionField({
         />
       )}
       {question.type === 'table' && (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-600">
-          <div
-            className="grid gap-px bg-gray-200 dark:bg-gray-700"
-            style={{
-              gridTemplateColumns: `repeat(${Math.max(options.length, 2)}, minmax(88px, 1fr))`,
-            }}
-          >
-            {(options.length ? options : ['Coluna 1', 'Coluna 2']).map((col) => (
-              <div
-                key={col}
-                className="bg-gray-50 px-2 py-1.5 text-xs font-medium text-gray-700 dark:bg-gray-900/60 dark:text-gray-200"
-              >
-                {col}
-              </div>
-            ))}
-            {(options.length ? options : ['Coluna 1', 'Coluna 2']).map((col) => (
-              <div key={`c-${col}`} className="bg-white px-2 py-2 dark:bg-gray-800">
-                <input
-                  type="text"
-                  value=""
-                  readOnly
-                  className="w-full border-0 bg-transparent p-0 text-sm outline-none"
-                  aria-hidden
-                />
-              </div>
-            ))}
-          </div>
-          <textarea
-            value={String(value ?? '')}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Preencha os dados da tabela…"
-            rows={2}
-            className={`${FORM_FIELD_TEXTAREA_CLS} mt-2 border-0 shadow-none`}
-          />
-        </div>
+        <FormTableField
+          columns={resolveTableColumns(question)}
+          value={value}
+          readOnly={locked}
+          onChange={(v) => setValue(v)}
+        />
       )}
       {question.type === 'qrcode' && (
         <div className="flex items-center gap-3">
@@ -619,15 +687,160 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   contractId: string;
+  kind: AcompanhamentoKind;
   reuniaoId: string | null;
   /** Atualiza a linha na lista em tempo real */
   onListPatch?: (reuniaoId: string, patch: ReuniaoListPatch) => void;
 };
 
+function ReuniaoAnexosSection({
+  contractId,
+  kind,
+  reuniaoId,
+  ata,
+  video,
+  onAnexoChange,
+}: {
+  contractId: string;
+  kind: AcompanhamentoKind;
+  reuniaoId: string;
+  ata: ReuniaoAnexoInfo | null;
+  video: ReuniaoAnexoInfo | null;
+  onAnexoChange: (tipo: 'ata' | 'video', value: ReuniaoAnexoInfo | null) => void;
+}) {
+  const [uploading, setUploading] = useState<'ata' | 'video' | null>(null);
+  const ataInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const apiBase = `/reunioes/${contractId}/${kind}/${reuniaoId}`;
+
+  const handleUpload = async (tipo: 'ata' | 'video', file: File) => {
+    setUploading(tipo);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post(`${apiBase}/anexo/${tipo}`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      onAnexoChange(tipo, res.data?.data ?? null);
+      toast.success(tipo === 'ata' ? 'Ata enviada!' : 'Vídeo enviado!');
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Erro ao enviar arquivo.';
+      toast.error(msg);
+    } finally {
+      setUploading(null);
+      if (tipo === 'ata' && ataInputRef.current) ataInputRef.current.value = '';
+      if (tipo === 'video' && videoInputRef.current) videoInputRef.current.value = '';
+    }
+  };
+
+  const handleRemove = async (tipo: 'ata' | 'video') => {
+    if (!confirm(`Remover ${tipo === 'ata' ? 'a ata' : 'o vídeo'} desta reunião?`)) return;
+    setUploading(tipo);
+    try {
+      await api.delete(`${apiBase}/anexo/${tipo}`);
+      onAnexoChange(tipo, null);
+      toast.success('Anexo removido.');
+    } catch {
+      toast.error('Erro ao remover anexo.');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const renderAnexo = (tipo: 'ata' | 'video', info: ReuniaoAnexoInfo | null, label: string) => (
+    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+      <div className="mb-3 flex items-center gap-2">
+        {tipo === 'ata' ? (
+          <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+        ) : (
+          <Video className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+        )}
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{label}</h4>
+      </div>
+      {info?.url ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={info.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm font-medium text-red-600 hover:underline dark:text-red-400"
+          >
+            <ExternalLink className="h-4 w-4" />
+            {info.originalName || (tipo === 'ata' ? 'Ata' : 'Vídeo')}
+          </a>
+          <button
+            type="button"
+            onClick={() => void handleRemove(tipo)}
+            disabled={uploading === tipo}
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            <Trash2 className="h-4 w-4" />
+            Remover
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => (tipo === 'ata' ? ataInputRef : videoInputRef).current?.click()}
+          disabled={uploading === tipo}
+          className="inline-flex items-center gap-2 rounded-lg border border-dashed border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+        >
+          {uploading === tipo ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4" />
+          )}
+          Enviar {tipo === 'ata' ? 'ata (PDF/Word)' : 'vídeo'}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <section className="space-y-4 border-t border-gray-200 pt-6 dark:border-gray-700">
+      <div>
+        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+          Gravação da reunião
+        </h3>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Anexe a ata e o vídeo gravado nesta reunião quinzenal.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {renderAnexo('ata', ata, 'Ata da reunião')}
+        {renderAnexo('video', video, 'Vídeo da reunião')}
+      </div>
+      <input
+        ref={ataInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleUpload('ata', file);
+        }}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*,.mp4,.mov,.webm,.avi,.mkv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleUpload('video', file);
+        }}
+      />
+    </section>
+  );
+}
+
 export function ReuniaoFormModal({
   isOpen,
   onClose,
   contractId,
+  kind,
   reuniaoId,
   onListPatch,
 }: Props) {
@@ -677,9 +890,11 @@ export function ReuniaoFormModal({
       ? form.formTemplate.sections
       : ((templateRes?.data as Template | undefined)?.sections ?? []);
 
+  const apiBase = reuniaoId ? `/reunioes/${contractId}/${kind}/${reuniaoId}` : '';
+
   const { data: reuniaoResponse, isLoading: loadingReuniao } = useQuery({
-    queryKey: ['reuniao', contractId, reuniaoId],
-    queryFn: async () => (await api.get(`/reunioes/${contractId}/${reuniaoId}`)).data,
+    queryKey: ['reuniao', kind, contractId, reuniaoId],
+    queryFn: async () => (await api.get(apiBase)).data,
     enabled: isOpen && !!reuniaoId,
   });
 
@@ -726,17 +941,8 @@ export function ReuniaoFormModal({
 
     if (needsSeed && next.identificacao.data) {
       seededRef.current = true;
-      void api.put(`/reunioes/${contractId}/${reuniaoId}`, { data: next }).then(() => {
-        onListPatch?.(reuniaoId, {
-          data: next.identificacao.data,
-          responsavelPreenchimento: next.identificacao.responsavelPreenchimento,
-          nome: next.identificacao.nome,
-          updatedAt: new Date().toISOString(),
-        });
-        queryClient.invalidateQueries({ queryKey: ['reunioes', contractId] });
-      });
     }
-  }, [reuniaoResponse, isOpen, reuniaoId, contractId, onListPatch, queryClient]);
+  }, [reuniaoResponse, isOpen, reuniaoId]);
 
   // Atualiza estrutura/opções do formulário a partir do template vivo (Lista, etc.)
   useEffect(() => {
@@ -774,28 +980,33 @@ export function ReuniaoFormModal({
   }, [liveFormRes]);
 
   const persist = useCallback(
-    async (data: ReuniaoData) => {
+    async (data: ReuniaoData, opts?: { finalize?: boolean }) => {
       if (!reuniaoId) return false;
       setSaving(true);
       try {
-        await api.put(`/reunioes/${contractId}/${reuniaoId}`, { data });
+        const now = new Date().toISOString();
+        await api.put(apiBase, { data, finalize: Boolean(opts?.finalize) });
         onListPatch?.(reuniaoId, {
           data: data.identificacao.data,
           responsavelPreenchimento: data.identificacao.responsavelPreenchimento,
           nome: data.identificacao.nome,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
+          ...(opts?.finalize ? { submittedAt: now } : {}),
         });
-        queryClient.invalidateQueries({ queryKey: ['reuniao', contractId, reuniaoId] });
-        queryClient.invalidateQueries({ queryKey: ['reunioes', contractId] });
+        queryClient.invalidateQueries({ queryKey: ['reuniao', kind, contractId, reuniaoId] });
+        queryClient.invalidateQueries({ queryKey: ['reunioes', kind, contractId] });
+        if (opts?.finalize) {
+          queryClient.invalidateQueries({ queryKey: [`reunioes-${kind}-overview`] });
+        }
         return true;
       } catch {
-        toast.error('Erro ao salvar reunião.');
+        toast.error(kind === 'mensal' ? 'Erro ao salvar relatório.' : 'Erro ao salvar reunião.');
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [contractId, reuniaoId, onListPatch, queryClient]
+    [apiBase, contractId, kind, onListPatch, queryClient, reuniaoId]
   );
 
   const updateForm = (updater: (prev: ReuniaoData) => ReuniaoData) => {
@@ -820,6 +1031,36 @@ export function ReuniaoFormModal({
   const visibleSections = multiStep ? currentStep?.sections ?? [] : allSections;
   const formTitle = form.formTemplate?.name?.trim() || 'Formulário de reunião';
   const formDescription = form.formTemplate?.description?.trim() || '';
+
+  const allTemplateQuestions = useMemo(() => {
+    if (!form.formTemplate) return [] as Question[];
+    return flattenFormQuestions({
+      sections: templateSections,
+      steps: formSteps,
+    }) as Question[];
+  }, [form.formTemplate, templateSections, formSteps]);
+
+  useEffect(() => {
+    if (!form.formTemplate) return;
+    const formulaQuestions = allTemplateQuestions.filter((q) => questionHasFormula(q));
+    if (!formulaQuestions.length) return;
+
+    setForm((prev) => {
+      let changed = false;
+      const nextAnswers = { ...prev.answers };
+      for (const q of formulaQuestions) {
+        if (!q.formula) continue;
+        const computed = evaluateFormula(q.formula, nextAnswers);
+        const current = nextAnswers[q.id]?.value;
+        if (!formulaValuesEqual(current, computed)) {
+          nextAnswers[q.id] = { ...nextAnswers[q.id], value: computed };
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      return { ...prev, answers: nextAnswers };
+    });
+  }, [form.answers, form.formTemplate, allTemplateQuestions]);
 
   const validateSections = (
     sections: Section[],
@@ -888,9 +1129,9 @@ export function ReuniaoFormModal({
       toast.error(validation.message);
       return;
     }
-    const ok = await persist(form);
+    const ok = await persist(form, { finalize: true });
     if (!ok) return;
-    toast.success('Reunião salva!');
+    toast.success(kind === 'mensal' ? 'Relatório salvo!' : 'Reunião salva!');
     onClose();
   };
 
@@ -908,10 +1149,11 @@ export function ReuniaoFormModal({
         {section.questions.map((q) => {
           const full = resolveFieldWidth(q as FormQuestion) === 'full';
           return (
-            <div key={q.id} className={full ? 'sm:col-span-2' : undefined}>
+            <div key={q.id} className={`min-w-0 ${full ? 'sm:col-span-2' : ''}`}>
               <QuestionField
                 question={q}
                 answer={form.answers[q.id]}
+                allAnswers={form.answers}
                 profileOptions={profileSelectOptions}
                 onChange={(ans) =>
                   updateForm((prev) => ({
@@ -983,6 +1225,19 @@ export function ReuniaoFormModal({
                 Nenhuma pergunta neste formulário.
               </p>
             )}
+
+            {kind === 'semanal' && reuniaoId ? (
+              <ReuniaoAnexosSection
+                contractId={contractId}
+                kind={kind}
+                reuniaoId={reuniaoId}
+                ata={form.ata}
+                video={form.video}
+                onAnexoChange={(tipo, value) =>
+                  updateForm((prev) => ({ ...prev, [tipo]: value }))
+                }
+              />
+            ) : null}
           </div>
 
           <div className="flex justify-end gap-2 border-t border-gray-200 pt-6 dark:border-gray-700">

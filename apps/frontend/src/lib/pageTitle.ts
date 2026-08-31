@@ -20,6 +20,7 @@ const EXTRA_PAGE_TITLES: Record<string, { title: string; category?: string; href
   },
   '/ponto/veiculos': { title: 'Veículos', category: 'Cadastros' },
   '/ponto/formularios': { title: 'Formulários', category: 'Cadastros' },
+  '/ponto/metricas/relatorios-contrato': { title: 'Relatórios de Contrato', category: 'Métricas' },
   '/ponto/seguranca-do-trabalho': {
     title: 'Segurança do Trabalho',
     category: 'Departamento Pessoal',
@@ -33,7 +34,8 @@ const SUB_PATH_TITLES: Record<string, string> = {
   'historico-os': 'Histórico OS',
   faturamento: 'Faturamento',
   relatorios: 'Relatórios Fotográficos',
-  reunioes: 'Reuniões',
+  'acompanhamento-mensal': 'Relatório Mensal',
+  reunioes: 'Reuniões Quinzenais',
 };
 
 const MODULES_BY_HREF_LENGTH = [...PERMISSION_MODULES].sort(

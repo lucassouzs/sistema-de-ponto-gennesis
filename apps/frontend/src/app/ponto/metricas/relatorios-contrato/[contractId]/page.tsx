@@ -9,17 +9,16 @@ import {
 const CONFIG: ContratoAcompanhamentoListConfig = {
   kind: 'semanal',
   pageTitle: 'Reuniões Quinzenais',
-  sectionTitle: 'Reuniões Quinzenais',
-  sectionDescription:
-    'Configure o formulário usado nas reuniões gravadas com a equipe do contrato.',
+  sectionTitle: 'Histórico quinzenal',
+  sectionDescription: 'Reuniões quinzenais registradas para este contrato.',
   Icon: Video,
   periodColumnLabel: 'Quinzena',
   searchPlaceholder: 'Buscar por quinzena ou responsável...',
   emptyMessage:
-    'Nenhuma reunião registrada ainda. Configure o formulário e clique em "Registrar reunião da quinzena".',
+    'Nenhuma reunião quinzenal ainda. Configure o formulário no painel de Métricas e registre a reunião da quinzena.',
   configModalTitle: 'Formulário de reunião quinzenal',
   configModalDescription:
-    'Escolha o formulário usado nas reuniões quinzenais gravadas com a equipe do contrato. Os templates vêm de Cadastros → Formulários.',
+    'Escolha o formulário usado nas reuniões quinzenais deste contrato. Você também pode atribuir em Métricas → Relatórios de Contrato.',
   fillButtonLabel: 'Registrar reunião da quinzena',
   fillButtonContinueLabel: 'Continuar reunião da quinzena',
   currentPeriodSummaryLabel: 'Quinzena atual',
@@ -27,8 +26,11 @@ const CONFIG: ContratoAcompanhamentoListConfig = {
     `${count} ${count === 1 ? 'quinzena registrada' : 'quinzenas registradas'}`,
   saveSuccessToast: 'Formulário de reunião quinzenal configurado!',
   openSuccessToast: 'Reunião da quinzena aberta para registro.',
+  backHref: () => '/ponto/metricas/relatorios-contrato',
+  backLabel: 'Voltar ao painel',
+  protectedRoute: '/ponto/metricas/relatorios-contrato',
 };
 
-export default function ContratoReunioesPage() {
+export default function RelatorioContratoDetalhePage() {
   return <ContratoAcompanhamentoListPage config={CONFIG} />;
 }

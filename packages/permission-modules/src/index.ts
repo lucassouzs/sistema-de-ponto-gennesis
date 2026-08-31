@@ -136,6 +136,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/contratos/controle-geral'), name: 'Controle Geral de Contratos', href: '/ponto/contratos/controle-geral', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/contratos/socios'), name: 'Contratos Sócios', href: '/ponto/contratos/socios', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/contratos/gastos-operacionais'), name: 'Gastos Operacionais', href: '/ponto/contratos/gastos-operacionais', category: 'Métricas' },
+  { key: pathToModuleKey('/ponto/metricas/relatorios-contrato'), name: 'Relatórios de Contrato', href: '/ponto/metricas/relatorios-contrato', category: 'Métricas' },
   { key: pathToModuleKey('/ponto/andamento-da-os'), name: 'Ordem de Serviço', href: '/ponto/andamento-da-os', category: 'Engenharia' },
   { key: pathToModuleKey('/ponto/sistema-gestao-os'), name: 'Central de Chamados', href: '/ponto/sistema-gestao-os', category: 'Engenharia' },
   {

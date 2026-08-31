@@ -661,6 +661,11 @@ export function useRoutePermission(route: string) {
     '/ponto/contratos/socios': isAdministrator || can(pk('/ponto/contratos/socios')),
     '/ponto/contratos/gastos-operacionais':
       isAdministrator || can(pk('/ponto/contratos/gastos-operacionais')),
+    '/ponto/metricas/relatorios-contrato':
+      isAdministrator ||
+      can(pk('/ponto/metricas/relatorios-contrato')) ||
+      can(pk('/ponto/contratos/controle-geral')) ||
+      can(pk('/ponto/contratos')),
     '/ponto/pleitos-gerados': isAdministrator || can(pk('/ponto/pleitos-gerados')),
     '/ponto/aprovacao-fds': isAdministrator || can(pk('/ponto/aprovacao-fds')),
     '/ponto/recebimento-entregas': canAccessRecebimentoEntregasRoutePage,
