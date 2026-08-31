@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlignLeft,
   Asterisk,
@@ -352,22 +352,10 @@ function QuestionTitleInput({
 
   const didFocusRef = useRef(false);
 
-  const syncHeight = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = '0px';
-    el.style.height = `${el.scrollHeight}px`;
-  }, []);
-
   useEffect(() => {
     if (!autoEdit) return;
     setEditing(true);
   }, [autoEdit]);
-
-  useLayoutEffect(() => {
-    if (!editing) return;
-    syncHeight();
-  }, [editing, value, syncHeight]);
 
   useEffect(() => {
     if (!editing) {
@@ -394,49 +382,45 @@ function QuestionTitleInput({
 
   return (
     <div className="relative min-w-0">
+      <div
+        aria-hidden
+        className="pointer-events-none invisible whitespace-pre-wrap break-normal text-sm font-medium leading-snug select-none"
+      >
+        {mirrorContent}
+      </div>
       {!editing ? (
-        <>
-          <div
-            aria-hidden
-            className="invisible whitespace-pre-wrap break-normal text-sm font-medium leading-snug select-none"
-          >
-            {mirrorContent}
-          </div>
-          <div
-            role="textbox"
-            tabIndex={0}
-            onClick={startEditing}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                startEditing(e);
-              }
-            }}
-            className="absolute inset-0 cursor-text overflow-hidden text-sm font-medium leading-snug text-gray-800 outline-none dark:text-gray-200"
-          >
-            {value ? (
-              <>
-                <span className="whitespace-pre-wrap break-normal">{value}</span>
-                {required ? (
-                  <span className="font-semibold text-red-600"> *</span>
-                ) : null}
-              </>
-            ) : (
-              <span className="text-gray-400 dark:text-gray-500">Pergunta</span>
-            )}
-          </div>
-        </>
+        <div
+          role="textbox"
+          tabIndex={0}
+          onClick={startEditing}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              startEditing(e);
+            }
+          }}
+          className="absolute inset-0 cursor-text overflow-hidden text-sm font-medium leading-snug text-gray-800 outline-none dark:text-gray-200"
+        >
+          {value ? (
+            <>
+              <span className="whitespace-pre-wrap break-normal">{value}</span>
+              {required ? (
+                <span className="font-semibold text-red-600"> *</span>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-gray-400 dark:text-gray-500">Pergunta</span>
+          )}
+        </div>
       ) : (
         <textarea
           ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onInput={syncHeight}
           onBlur={stopEditing}
           onClick={(e) => e.stopPropagation()}
           placeholder="Pergunta"
-          rows={1}
-          className="block w-full resize-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-gray-800 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-200"
+          className="absolute inset-0 m-0 box-border w-full min-h-0 resize-none border-0 bg-transparent p-0 text-sm font-medium leading-snug text-gray-800 outline-none placeholder:text-gray-400 focus:ring-0 dark:text-gray-200"
         />
       )}
     </div>
@@ -960,7 +944,7 @@ export function FormStructureBuilder({
     `flex items-center justify-center rounded-lg border-2 border-dashed px-3 text-xs font-medium transition-all duration-150 sm:text-sm ${
       active
         ? 'border-red-400 bg-red-50 text-red-600 dark:border-red-500/70 dark:bg-red-950/30 dark:text-red-400'
-        : 'border-transparent bg-transparent text-transparent'
+        : 'border-gray-300 bg-gray-50 text-gray-400 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-500'
     }`;
 
   /** Em grid de 2 colunas: half sem par à direita pode receber drop ao lado. */
@@ -1349,7 +1333,7 @@ export function FormStructureBuilder({
                               <div
                                 className={`${dropZoneCls(sideDropActive)} h-full min-h-[3rem] px-2 text-center`}
                               >
-                                {sideDropActive ? 'Solte aqui do lado' : ''}
+                                Solte aqui do lado
                               </div>
                             </div>
                           ) : null}
@@ -1365,14 +1349,12 @@ export function FormStructureBuilder({
                         if (dropTarget === `below:${section.id}`) setDropTarget(null);
                       }}
                       onDrop={(e) => onCanvasDrop(e, { sectionId: section.id })}
-                      className={`absolute inset-x-0 bottom-0 z-20 translate-y-1/2 transition-all duration-150 ${
-                        dropTarget === `below:${section.id}` ? 'h-10' : 'h-3'
-                      }`}
+                      className="mt-2 h-10 w-full transition-all duration-150"
                     >
                       <div
                         className={`${dropZoneCls(dropTarget === `below:${section.id}`)} h-full w-full`}
                       >
-                        {dropTarget === `below:${section.id}` ? 'Solte aqui embaixo' : ''}
+                        Solte aqui embaixo
                       </div>
                     </div>
                   ) : null}
@@ -1386,12 +1368,10 @@ export function FormStructureBuilder({
                     if (dropTarget === 'new-section') setDropTarget(null);
                   }}
                   onDrop={(e) => onCanvasDrop(e, { newSection: true })}
-                  className={`transition-all duration-150 ${
-                    dropTarget === 'new-section' ? 'h-14' : 'h-2'
-                  }`}
+                  className="mt-2 h-10 w-full transition-all duration-150"
                 >
                   <div className={`${dropZoneCls(dropTarget === 'new-section')} h-full w-full`}>
-                    {dropTarget === 'new-section' ? 'Solte aqui para adicionar seção' : ''}
+                    Solte aqui para adicionar seção
                   </div>
                 </div>
               ) : null}
