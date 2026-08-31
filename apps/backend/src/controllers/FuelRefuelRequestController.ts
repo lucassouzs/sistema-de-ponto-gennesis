@@ -83,7 +83,7 @@ const adminUpdateSchema = z.object({
 const createSchema = z.object({
   refuelDate: z.string().min(1, 'Informe a data do abastecimento'),
   route: z.string().min(2, 'Informe a rota'),
-  satelliteCityCode: z.string().min(1, 'Selecione a cidade de abastecimento'),
+  satelliteCityCode: z.string().optional(),
   contractId: z.string().min(1, 'Selecione o contrato'),
   vehiclePlate: z.string().min(1, 'Informe a placa do veículo'),
   vehicleDescription: z.string().optional(),

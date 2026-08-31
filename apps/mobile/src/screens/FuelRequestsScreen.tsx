@@ -96,7 +96,6 @@ type ReportFormState = {
   observations: string;
 };
 
-type SatelliteCity = { code: string; stateCode: string; name: string; stationCount?: number };
 type DriverOption = { id: string; name: string; cpf: string; costCenter: string | null };
 type FleetVehicle = {
   id: string;
@@ -109,8 +108,6 @@ type FleetVehicle = {
 type FormState = {
   refuelDate: string;
   route: string;
-  stateCode: string;
-  satelliteCityCode: string;
   contractId: string;
   driverUserId: string;
   driverNamePreview: string;
@@ -178,8 +175,6 @@ function EMPTY_FORM(): FormState {
   return {
     refuelDate: todayInputValue(),
     route: '',
-    stateCode: '',
-    satelliteCityCode: '',
     contractId: '',
     driverUserId: '',
     driverNamePreview: '',
@@ -375,8 +370,6 @@ export default function FuelRequestsScreen() {
   const [detailTarget, setDetailTarget] = useState<FuelRequestRow | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const [states, setStates] = useState<string[]>([]);
-  const [cities, setCities] = useState<SatelliteCity[]>([]);
   const [contracts, setContracts] = useState<Array<{ id: string; name: string; number?: string }>>(
     [],
   );
@@ -416,21 +409,15 @@ export default function FuelRequestsScreen() {
   const loadFormOptions = useCallback(async () => {
     setLoadingOptions(true);
     try {
-      const [citiesRes, driversRes, vehiclesRes, contractsRes] = await Promise.all([
-        api.get('/api/fuel-refuel-requests/satellite-cities'),
+      const [driversRes, vehiclesRes, contractsRes] = await Promise.all([
         api.get('/api/fuel-refuel-requests/driver-options'),
         api.get('/api/vehicles?isActive=true&limit=100&page=1'),
         api.get('/api/contracts?limit=500&page=1'),
       ]);
-      const citiesJson = await citiesRes.json();
       const driversJson = await driversRes.json();
       const vehiclesJson = await vehiclesRes.json();
       const contractsJson = await contractsRes.json();
 
-      if (citiesRes.ok) {
-        setStates(citiesJson?.data?.states || []);
-        setCities(citiesJson?.data?.cities || []);
-      }
       if (contractsRes.ok) {
         setContracts(contractsJson?.data || []);
       }
@@ -505,11 +492,6 @@ export default function FuelRequestsScreen() {
     }
     return list;
   }, [rows, cardFilter, searchTerm, statusFilter]);
-
-  const citiesForState = useMemo(
-    () => cities.filter((c) => !form.stateCode || c.stateCode === form.stateCode),
-    [cities, form.stateCode],
-  );
 
   const takeDashboardPhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -596,10 +578,6 @@ export default function FuelRequestsScreen() {
       Toast.show({ type: 'error', text1: 'Informe a rota' });
       return;
     }
-    if (!form.satelliteCityCode) {
-      Toast.show({ type: 'error', text1: 'Selecione a cidade' });
-      return;
-    }
     if (!form.contractId) {
       Toast.show({ type: 'error', text1: 'Selecione o contrato' });
       return;
@@ -626,7 +604,6 @@ export default function FuelRequestsScreen() {
       const res = await api.post('/api/fuel-refuel-requests', {
         refuelDate: form.refuelDate,
         route: form.route.trim(),
-        satelliteCityCode: form.satelliteCityCode,
         contractId: form.contractId,
         vehiclePlate: form.vehiclePlate.trim().toUpperCase(),
         vehicleDescription: form.vehicleDescription.trim() || undefined,
@@ -1187,56 +1164,6 @@ export default function FuelRequestsScreen() {
                     onChangeText={(route) => setForm((f) => ({ ...f, route }))}
                     placeholder="Descreva a rota do abastecimento"
                     placeholderTextColor={colors.textSecondary}
-                  />
-
-                  <Text style={styles.sectionTitle}>Local</Text>
-                  <SelectField
-                    label="Estado"
-                    valueLabel={form.stateCode}
-                    placeholder="Selecione o estado"
-                    colors={colors}
-                    isDark={isDark}
-                    onPress={() => {
-                      setPickerSearch('');
-                      setPicker({
-                        title: 'Estado',
-                        options: states.map((s) => ({ value: s, label: s })),
-                        onSelect: (stateCode) =>
-                          setForm((f) => ({
-                            ...f,
-                            stateCode,
-                            satelliteCityCode: '',
-                          })),
-                      });
-                    }}
-                  />
-
-                  <SelectField
-                    label="Cidade"
-                    valueLabel={
-                      cities.find((c) => c.code === form.satelliteCityCode)?.name || ''
-                    }
-                    placeholder="Selecione a cidade"
-                    colors={colors}
-                    isDark={isDark}
-                    onPress={() => {
-                      setPickerSearch('');
-                      setPicker({
-                        title: 'Cidade',
-                        options: citiesForState.map((c) => ({
-                          value: c.code,
-                          label: c.name,
-                        })),
-                        onSelect: (satelliteCityCode) => {
-                          const city = cities.find((c) => c.code === satelliteCityCode);
-                          setForm((f) => ({
-                            ...f,
-                            satelliteCityCode,
-                            stateCode: city?.stateCode || f.stateCode,
-                          }));
-                        },
-                      });
-                    }}
                   />
 
                   <SelectField

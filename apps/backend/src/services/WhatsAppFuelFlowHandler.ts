@@ -6,12 +6,9 @@ import {
 } from '../lib/employeeCpfLookup';
 import { prisma } from '../lib/prisma';
 import {
-  FUEL_ABASTECIMENTO_STATE_CODES,
   findActiveVehicleByPlate,
-  listFuelSatelliteCities,
   mapVehicleUsageToFuelType,
 } from '../lib/fuelAdministrativeRegions';
-import { getFuelSatelliteCityByCode } from '../constants/fuelSatelliteCities';
 import { buildFuelSubmissionSlaLine } from '../lib/fuelRefuelChatNotify';
 import {
   buildFuelFlowStartMessage,
@@ -30,8 +27,6 @@ import type { SendAction } from './WhatsAppBotService';
 export type WhatsAppFuelFlowStatus =
   | 'FUEL_ASK_REFUEL_DATE'
   | 'FUEL_ASK_ROUTE'
-  | 'FUEL_ASK_FUEL_STATE'
-  | 'FUEL_ASK_ADMIN_REGION'
   | 'FUEL_ASK_DRIVER_CPF'
   | 'FUEL_SELECT_CONTRACT'
   | 'FUEL_ASK_PLATE_SUFFIX'
@@ -117,16 +112,12 @@ function vehicleTypeLabel(type?: FuelVehicleType): string {
 }
 
 function buildSummary(payload: Record<string, unknown>): string {
-  const stateCode = payload.fuelStateCode ? String(payload.fuelStateCode) : '';
-  const cityName = payload.administrativeRegionName || '—';
-  const regionLabel = stateCode ? `${cityName} (${stateCode})` : cityName;
   const vehicleDescription = String(payload.vehicleDescription || '').trim();
 
   return [
     'Resumo da solicitação de abastecimento:',
     `• Data: ${payload.refuelDate ? formatBrDate(String(payload.refuelDate)) : '—'}`,
     `• Rota: ${payload.route || '—'}`,
-    `• Região administrativa: ${regionLabel}`,
     `• Contrato: ${payload.costCenterLabel || payload.costCenter || '—'}`,
     `• Condutor: ${payload.driverName || '—'}${payload.driverCpfMasked ? ` (CPF ${payload.driverCpfMasked})` : ''}`,
     `• Veículo: ${payload.vehiclePlate || '—'}`,
@@ -137,76 +128,6 @@ function buildSummary(payload: Record<string, unknown>): string {
     '',
     'Confirma o envio? (sim / não)',
   ].join('\n');
-}
-
-function parseStateSelection(content: string): string | null {
-  const fromId = content.match(/^fuel_state_(DF|GO)$/i);
-  if (fromId) return fromId[1].toUpperCase();
-  const text = content.trim().toUpperCase();
-  if (text === 'DF' || text.includes('DISTRITO')) return 'DF';
-  if (text === 'GO' || text.includes('GOI')) return 'GO';
-  return null;
-}
-
-async function buildCityListAction(stateCode: string): Promise<SendAction> {
-  const cities = listFuelSatelliteCities(stateCode);
-  if (!cities.length) {
-    return waButtons(
-      `Não há cidades cadastradas para ${stateCode}. Fale com o Suprimentos.`,
-    );
-  }
-  return waList(
-    `Selecione a cidade em ${stateCode}:`,
-    cities.map((city) => ({
-      id: `fuel_region_${city.code}`,
-      title: city.name.length > 24 ? `${city.name.slice(0, 21)}...` : city.name,
-    })),
-    'Ver cidades',
-  );
-}
-
-function parseRegionSelection(
-  content: string,
-  textRaw: string,
-  payload: Record<string, unknown>,
-): { regionId: string; regionName: string } | null {
-  const options =
-    (payload.adminRegionOptions as Array<{ id: string; name: string }> | undefined) ?? [];
-  const stateCode = String(payload.fuelStateCode || '').trim().toUpperCase();
-
-  const fromId = content.match(/^fuel_region_(.+)$/i);
-  if (fromId) {
-    const cityCode = fromId[1].trim().toUpperCase();
-    const fromOptions = options.find((item) => item.id.toUpperCase() === cityCode);
-    if (fromOptions) {
-      return { regionId: fromOptions.id, regionName: fromOptions.name };
-    }
-    const fromConstant = getFuelSatelliteCityByCode(cityCode);
-    if (fromConstant) {
-      return { regionId: fromConstant.code, regionName: fromConstant.name };
-    }
-  }
-
-  const nameCandidate = textRaw.trim();
-  if (nameCandidate) {
-    const normalizedName = nameCandidate.toLowerCase();
-    const fromOptionsByName = options.find(
-      (item) => item.name.trim().toLowerCase() === normalizedName,
-    );
-    if (fromOptionsByName) {
-      return { regionId: fromOptionsByName.id, regionName: fromOptionsByName.name };
-    }
-
-    const cities = stateCode ? listFuelSatelliteCities(stateCode) : listFuelSatelliteCities();
-    const fromListByName = cities.find(
-      (city) => city.name.trim().toLowerCase() === normalizedName,
-    );
-    if (fromListByName) {
-      return { regionId: fromListByName.code, regionName: fromListByName.name };
-    }
-  }
-
-  return null;
 }
 
 function getVehicleOptions(payload: Record<string, unknown>): VehicleOptionPayload[] {
@@ -459,81 +380,6 @@ export async function processWhatsAppFuelFlow(params: {
         };
       }
       newPayload.route = textRaw.trim();
-      return {
-        sendAction: {
-          type: 'buttons',
-          body: 'O abastecimento será em qual local?\n\nEscolha DF ou GO:',
-          buttons: [
-            { id: 'fuel_state_DF', title: 'DF' },
-            { id: 'fuel_state_GO', title: 'GO' },
-            { id: 'MENU', title: 'Menu' },
-          ],
-        },
-        newStatus: 'FUEL_ASK_FUEL_STATE',
-        newPayload,
-      };
-    }
-
-    case 'FUEL_ASK_FUEL_STATE': {
-      const stateCode = parseStateSelection(content);
-      if (!stateCode || !FUEL_ABASTECIMENTO_STATE_CODES.includes(stateCode as 'DF' | 'GO')) {
-        return {
-          sendAction: {
-            type: 'buttons',
-            body: 'Selecione DF ou GO para continuar.',
-            buttons: [
-              { id: 'fuel_state_DF', title: 'DF' },
-              { id: 'fuel_state_GO', title: 'GO' },
-              { id: 'MENU', title: 'Menu' },
-            ],
-          },
-          newStatus,
-          newPayload,
-        };
-      }
-
-      const cities = listFuelSatelliteCities(stateCode);
-      if (!cities.length) {
-        return {
-          sendAction: {
-            type: 'buttons',
-            body: `Não há cidades cadastradas para ${stateCode}. Fale com o Suprimentos.`,
-            buttons: [
-              { id: 'fuel_state_DF', title: 'DF' },
-              { id: 'fuel_state_GO', title: 'GO' },
-              { id: 'MENU', title: 'Menu' },
-            ],
-          },
-          newStatus,
-          newPayload,
-        };
-      }
-
-      newPayload.fuelStateCode = stateCode;
-      newPayload.adminRegionOptions = cities.map((city) => ({
-        id: city.code,
-        name: city.name,
-      }));
-
-      return {
-        sendAction: await buildCityListAction(stateCode),
-        newStatus: 'FUEL_ASK_ADMIN_REGION',
-        newPayload,
-      };
-    }
-
-    case 'FUEL_ASK_ADMIN_REGION': {
-      const selected = parseRegionSelection(content, textRaw, newPayload);
-      if (!selected) {
-        const stateCode = String(newPayload.fuelStateCode || 'DF');
-        return {
-          sendAction: await buildCityListAction(stateCode),
-          newStatus,
-          newPayload,
-        };
-      }
-      newPayload.satelliteCityCode = selected.regionId;
-      newPayload.administrativeRegionName = selected.regionName;
       return {
         sendAction: waButtons(
           'Qual o CPF do condutor? (somente números — precisa estar cadastrado no sistema)',
@@ -793,7 +639,6 @@ export async function processWhatsAppFuelFlow(params: {
         !requesterUserId ||
         !newPayload.refuelDate ||
         !newPayload.route ||
-        !newPayload.satelliteCityCode ||
         !newPayload.contractId ||
         !newPayload.driverName ||
         !newPayload.vehiclePlate ||
@@ -812,7 +657,6 @@ export async function processWhatsAppFuelFlow(params: {
         requesterId: requesterUserId,
         refuelDate: new Date(`${newPayload.refuelDate}T12:00:00`),
         route: String(newPayload.route),
-        satelliteCityCode: String(newPayload.satelliteCityCode),
         contractId: String(newPayload.contractId),
         costCenter: String(newPayload.costCenterLabel || newPayload.costCenter || ''),
         driverName: String(newPayload.driverName),

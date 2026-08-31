@@ -133,10 +133,7 @@ export class FuelRefuelRequestService {
       costCenter || contract.name.trim() || contract.number;
 
     const satelliteCityCode = input.satelliteCityCode?.trim().toUpperCase() || null;
-    if (!satelliteCityCode) {
-      throw createError('Cidade é obrigatória', 400);
-    }
-    if (!getFuelSatelliteCityByCode(satelliteCityCode)) {
+    if (satelliteCityCode && !getFuelSatelliteCityByCode(satelliteCityCode)) {
       throw createError('Cidade satélite inválida', 400);
     }
 

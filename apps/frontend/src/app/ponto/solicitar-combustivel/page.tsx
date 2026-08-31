@@ -114,13 +114,6 @@ type ReportFormState = {
   observations: string;
 };
 
-type SatelliteCity = {
-  code: string;
-  stateCode: string;
-  name: string;
-  stationCount?: number;
-};
-
 type FleetVehicle = {
   id: string;
   code?: string | null;
@@ -145,8 +138,6 @@ type DriverOption = {
 type FormState = {
   refuelDate: string;
   route: string;
-  stateCode: string;
-  satelliteCityCode: string;
   contractId: string;
   driverUserId: string;
   driverNamePreview: string;
@@ -207,8 +198,6 @@ function EMPTY_FORM(): FormState {
   return {
     refuelDate: todayInputValue(),
     route: '',
-    stateCode: '',
-    satelliteCityCode: '',
     contractId: '',
     driverUserId: '',
     driverNamePreview: '',
@@ -568,16 +557,6 @@ export default function SolicitarCombustivelPage() {
     enabled: !loadingUser,
   });
 
-  const { data: citiesPayload } = useQuery({
-    queryKey: ['fuel-satellite-cities'],
-    queryFn: async () => {
-      const res = await api.get('/fuel-refuel-requests/satellite-cities');
-      return res.data?.data as { states: string[]; cities: SatelliteCity[] };
-    },
-    enabled: showForm,
-    staleTime: 5 * 60 * 1000,
-  });
-
   const { data: contractsRes } = useQuery({
     queryKey: ['contracts-for-fuel-request'],
     queryFn: async () =>
@@ -675,12 +654,6 @@ export default function SolicitarCombustivelPage() {
       }),
     [fleetVehicles],
   );
-  const citiesForState = useMemo(() => {
-    const cities = citiesPayload?.cities || [];
-    if (!formData.stateCode) return cities;
-    return cities.filter((c) => c.stateCode === formData.stateCode);
-  }, [citiesPayload?.cities, formData.stateCode]);
-
   const stats = useMemo(() => {
     const analysis = allRows.filter((r) => isAnalysisStatus(r.status)).length;
     const awaitingRefuel = allRows.filter((r) => isAwaitingRefuelStatus(r.status)).length;
@@ -832,10 +805,6 @@ export default function SolicitarCombustivelPage() {
       toast.error('Informe a rota');
       return;
     }
-    if (!formData.satelliteCityCode) {
-      toast.error('Selecione a cidade');
-      return;
-    }
     if (!formData.contractId) {
       toast.error('Selecione o contrato');
       return;
@@ -860,7 +829,6 @@ export default function SolicitarCombustivelPage() {
     createMutation.mutate({
       refuelDate: formData.refuelDate,
       route: formData.route.trim(),
-      satelliteCityCode: formData.satelliteCityCode,
       contractId: formData.contractId,
       vehiclePlate: formData.vehiclePlate.trim().toUpperCase(),
       vehicleDescription: formData.vehicleDescription.trim() || undefined,
@@ -1342,53 +1310,6 @@ export default function SolicitarCombustivelPage() {
                     onChange={(e) => setFormData((f) => ({ ...f, route: e.target.value }))}
                     className={FORM_FIELD_INPUT_CLS}
                     placeholder="Descreva a rota do abastecimento"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={FUEL_FORM_LABEL_CLS}>
-                    Estado *
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={formData.stateCode}
-                    onChange={(stateCode) =>
-                      setFormData((f) => ({
-                        ...f,
-                        stateCode,
-                        satelliteCityCode: '',
-                      }))
-                    }
-                    options={(citiesPayload?.states || ['DF', 'GO']).map((s) => ({
-                      value: s,
-                      label: s,
-                    }))}
-                    placeholder="Selecione DF ou GO"
-                  />
-                </div>
-                <div>
-                  <label className={FUEL_FORM_LABEL_CLS}>
-                    Cidade *
-                  </label>
-                  <SingleSelectSearchDropdown
-                    value={formData.satelliteCityCode}
-                    onChange={(satelliteCityCode) =>
-                      setFormData((f) => ({ ...f, satelliteCityCode }))
-                    }
-                    options={citiesForState.map((c) => ({
-                      value: c.code,
-                      label: c.name,
-                      searchText: c.name,
-                    }))}
-                    placeholder={
-                      formData.stateCode
-                        ? citiesForState.length
-                          ? 'Selecione a cidade'
-                          : 'Nenhuma cidade neste estado'
-                        : 'Selecione o estado antes'
-                    }
-                    emptyOptionsMessage="Nenhuma cidade disponível neste estado."
-                    disabled={!formData.stateCode}
                   />
                 </div>
               </div>
