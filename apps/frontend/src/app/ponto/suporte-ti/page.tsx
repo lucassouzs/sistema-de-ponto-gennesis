@@ -7,7 +7,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LifeBuoy, RefreshCw, Search } from 'lucide-react';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import api from '@/lib/api';
@@ -105,7 +104,6 @@ export default function SuporteTiPage() {
 
   return (
     <ProtectedRoute route="/ponto/suporte-ti">
-      <MainLayout>
         <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -293,7 +291,6 @@ export default function SuporteTiPage() {
             </div>
           </AppModalOverlay>
         )}
-      </MainLayout>
     </ProtectedRoute>
   );
 }
