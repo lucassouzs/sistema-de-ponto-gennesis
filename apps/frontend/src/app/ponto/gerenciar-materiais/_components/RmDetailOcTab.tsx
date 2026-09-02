@@ -19,6 +19,10 @@ import {
   type PaymentConditionRow
 } from '@/components/oc/PaymentConditionSelect';
 import { isOcCoveringRmItems, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
+import {
+  catalogMaterialLabel,
+  catalogMaterialSubtitle
+} from '../_lib/display';
 
 const FALLBACK_PAYMENT_CONDITION_LABELS: Record<string, string> = {
   AVISTA: 'À vista',
@@ -55,18 +59,6 @@ function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
     Number.isFinite(v) ? v : 0
   );
-}
-
-function materialLineLabel(
-  m?: NonNullable<PurchaseOrder['items']>[number]['material']
-): string {
-  if (!m) return '—';
-  const d = m.description?.trim();
-  const n = m.name?.trim();
-  if (d) return d;
-  if (n) return n;
-  if (m.sinapiCode) return m.sinapiCode;
-  return '—';
 }
 
 function itemsSubtotal(items?: { totalPrice: number }[] | null) {
@@ -274,7 +266,9 @@ function OcCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {lines.map((line, idx) => (
+                {lines.map((line, idx) => {
+                  const materialSubtitle = catalogMaterialSubtitle(line.material);
+                  return (
                   <tr
                     key={`${order.id}-${line.id || idx}`}
                     className={`text-gray-900 dark:text-gray-100 ${orderClosed ? 'opacity-80' : ''}`}
@@ -283,7 +277,12 @@ function OcCard({
                       {idx + 1}
                     </td>
                     <td className="max-w-[200px] px-2 py-2.5 align-top sm:max-w-none">
-                      {materialLineLabel(line.material)}
+                      {catalogMaterialLabel(line.material)}
+                      {materialSubtitle ? (
+                        <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
+                          {materialSubtitle}
+                        </p>
+                      ) : null}
                       {orderClosed ? (
                         <p className="mt-0.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
                           Item cancelado nesta OC
@@ -315,7 +314,8 @@ function OcCard({
                       {formatCurrency(Number(line.totalPrice))}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

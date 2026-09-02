@@ -17,6 +17,8 @@ type RmItemSituationCellProps = {
     orderNumber?: string | null;
     items?: Array<{ materialRequestItemId?: string | null } | null> | null;
   }>;
+  /** Itens abertos na RM (não cancelados) — habilita vínculo legado item único↔OC. */
+  openRmItemCount?: number;
   canCancel?: boolean;
   onCancel?: () => void;
   cancelling?: boolean;
@@ -27,11 +29,12 @@ export function RmItemSituationCell({
   requestStatus,
   requestEffectivelyCancelled,
   orders,
+  openRmItemCount,
   canCancel = false,
   onCancel,
   cancelling = false,
 }: RmItemSituationCellProps) {
-  const activeOc = getActiveOcForRmItem(item.id, orders);
+  const activeOc = getActiveOcForRmItem(item.id, orders, { openRmItemCount });
   const pendingOc =
     !activeOc &&
     !isRmItemCancelled(item) &&

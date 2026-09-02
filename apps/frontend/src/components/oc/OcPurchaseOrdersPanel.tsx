@@ -42,6 +42,10 @@ import {
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
+import {
+  catalogMaterialLabel,
+  catalogMaterialSubtitle
+} from '@/app/ponto/gerenciar-materiais/_lib/display';
 import { stripOsSePrefix } from '@/lib/formatOsSePasta';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
 import { Loading } from '@/components/ui/Loading';
@@ -1368,24 +1372,6 @@ function OcStockMovementHistoryList({
   );
 }
 
-function materialLineLabel(
-  m?:
-    | NonNullable<PurchaseOrder['items']>[number]['material']
-    | {
-        name?: string | null;
-        description?: string | null;
-        sinapiCode?: string | null;
-      }
-) {
-  if (!m) return '—';
-  const d = m.description?.trim();
-  const n = m.name?.trim();
-  if (d) return d;
-  if (n) return n;
-  if (m.sinapiCode) return m.sinapiCode;
-  return '—';
-}
-
 /** Detalhamento do item (mapa de cotação → notes da OC; fallback observação da RM). */
 function purchaseOrderItemDetailText(
   line: NonNullable<PurchaseOrder['items']>[number]
@@ -1456,6 +1442,7 @@ function OcOrderMaterialsTable({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {order.items?.map((line, idx) => {
             const detail = purchaseOrderItemDetailText(line);
+            const materialSubtitle = catalogMaterialSubtitle(line.material);
             const canReturnThis = showActions && Boolean(line.id);
             return (
               <tr key={line.id || idx} className="text-gray-900 dark:text-gray-100">
@@ -1463,7 +1450,12 @@ function OcOrderMaterialsTable({
                   {idx + 1}
                 </td>
                 <td className="py-3 px-2 align-top max-w-[220px] sm:max-w-none">
-                  <span className="block">{materialLineLabel(line.material)}</span>
+                  <span className="block">{catalogMaterialLabel(line.material)}</span>
+                  {materialSubtitle ? (
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {materialSubtitle}
+                    </p>
+                  ) : null}
                   {detail ? (
                     <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                       {detail}
@@ -4144,7 +4136,7 @@ export function OcPurchaseOrdersPanel({
 
     const formValues = buildOcFormValuesFromOrder(order, {
       stripCorrectionNotes: stripOcCorrectionBlocksFromNotes,
-      materialLineLabel,
+      materialLineLabel: catalogMaterialLabel,
       parseFreight: resolveOcFreightAmountStr
     });
 
@@ -5109,7 +5101,7 @@ export function OcPurchaseOrdersPanel({
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
               <p className="text-xs text-gray-500 dark:text-gray-400">Item</p>
               <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {materialLineLabel(returnItemTarget.item.material)}
+                {catalogMaterialLabel(returnItemTarget.item.material)}
               </p>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Qtd {Number(returnItemTarget.item.quantity)} {returnItemTarget.item.unit || ''}
@@ -5372,7 +5364,7 @@ export function OcPurchaseOrdersPanel({
                   mode="view"
                   values={buildOcFormValuesFromOrder(selectedOrder, {
                     stripCorrectionNotes: stripOcCorrectionBlocksFromNotes,
-                    materialLineLabel,
+                    materialLineLabel: catalogMaterialLabel,
                     parseFreight: resolveOcFreightAmountStr
                   })}
                   paymentConditionLabel={

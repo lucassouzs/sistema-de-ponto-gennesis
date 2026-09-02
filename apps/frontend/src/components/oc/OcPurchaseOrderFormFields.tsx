@@ -11,6 +11,7 @@ import {
   maskCurrencyInputBrOrEmpty
 } from '@/lib/maskCurrencyBr';
 import { formatCurrencyBR } from '@/app/ponto/gerenciar-materiais/_lib/ocAmounts';
+import { catalogMaterialLabel } from '@/app/ponto/gerenciar-materiais/_lib/display';
 import {
   formatOcCorrectionAuthor,
   type OcCorrectionInfo,
@@ -481,17 +482,7 @@ export function buildOcFormValuesFromOrder(
     parseFreight?: (order: OcFormOrderSource) => string;
   }
 ): OcPurchaseOrderFormValues {
-  const labelFn =
-    options?.materialLineLabel ||
-    ((m?: { name?: string | null; description?: string | null; sinapiCode?: string | null }) => {
-      if (!m) return '—';
-      const d = m.description?.trim();
-      const n = m.name?.trim();
-      if (d) return d;
-      if (n) return n;
-      if (m.sinapiCode) return m.sinapiCode;
-      return '—';
-    });
+  const labelFn = options?.materialLineLabel ?? catalogMaterialLabel;
 
   const items = (order.items || []).map((it) => ({
     materialId: it.material?.id || it.materialId || '',

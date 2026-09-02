@@ -1657,7 +1657,7 @@ export function FormStructureBuilder({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-full min-h-0 w-full overflow-hidden bg-transparent">
       <style>{`
         @keyframes formFieldDropIn {
           0% { opacity: 0; transform: translateY(10px) scale(0.96); }
@@ -1669,8 +1669,8 @@ export function FormStructureBuilder({
           100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
-      {/* Sidebar de componentes — mesmo tom da sidebar do app */}
-      <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+      {/* Sidebar de componentes — translúcida para o padrão engenharia aparecer */}
+      <aside className="flex h-full w-[340px] shrink-0 flex-col border-r border-gray-200/80 bg-white/90 backdrop-blur-sm dark:border-gray-800/80 dark:bg-gray-900/85">
         <div className="border-b border-gray-100 p-5 dark:border-gray-800">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

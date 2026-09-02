@@ -733,22 +733,46 @@ export default function GerenciarMateriaisPage() {
     return s;
   }, [allOrders]);
 
-  /** OCs vinculadas por requisição (mapa de cotação pode gerar várias por RM). */
+  /** OCs vinculadas por requisição — prioriza purchaseOrders da RM (traz vínculo item↔OC). */
   const ordersByMaterialRequestId = useMemo(() => {
     const map = new Map<string, PurchaseOrder[]>();
-    for (const o of allOrders) {
-      const mid = o.materialRequestId ?? o.materialRequest?.id;
-      if (!mid) continue;
-      if (!map.has(mid)) map.set(mid, []);
-      map.get(mid)!.push(o);
+
+    const upsert = (requestId: string, order: PurchaseOrder) => {
+      if (!map.has(requestId)) map.set(requestId, []);
+      const list = map.get(requestId)!;
+      const idx = list.findIndex((row) => row.id === order.id);
+      if (idx < 0) {
+        list.push(order);
+        return;
+      }
+      const prev = list[idx]!;
+      const prevItems = prev.items ?? [];
+      const nextItems = order.items ?? [];
+      if (nextItems.length > 0 && prevItems.length === 0) {
+        list[idx] = { ...prev, ...order, items: nextItems };
+      }
+    };
+
+    for (const request of normalizedRequests) {
+      const embedded = (request as MaterialRequest & { purchaseOrders?: PurchaseOrder[] })
+        .purchaseOrders;
+      if (!Array.isArray(embedded)) continue;
+      for (const order of embedded) upsert(request.id, order);
     }
+
+    for (const order of allOrders) {
+      const requestId = order.materialRequestId ?? order.materialRequest?.id;
+      if (!requestId) continue;
+      upsert(requestId, order);
+    }
+
     map.forEach((list) => {
       list.sort((a, b) =>
         (b.orderNumber || '').localeCompare(a.orderNumber || '', 'pt-BR', { numeric: true })
       );
     });
     return map;
-  }, [allOrders]);
+  }, [normalizedRequests, allOrders]);
 
   const stats = {
     total: normalizedRequests.length,
@@ -857,7 +881,15 @@ export default function GerenciarMateriaisPage() {
 
         {/* Modal Detalhes */}
         {showDetailsModal && selectedRequest && (() => {
-          const detailOrders = ordersByMaterialRequestId.get(selectedRequest.id) ?? [];
+          const embeddedOrders = (
+            selectedRequest as MaterialRequest & { purchaseOrders?: PurchaseOrder[] }
+          ).purchaseOrders;
+          const detailOrders =
+            Array.isArray(embeddedOrders) && embeddedOrders.length > 0
+              ? embeddedOrders
+              : ordersByMaterialRequestId.get(selectedRequest.id) ?? [];
+          const openRmItemCount =
+            selectedRequest.items?.filter((row) => !isRmItemCancelled(row)).length ?? 0;
           const userCanCancelItems = canUserCancelRmItem({
             userId: userData?.data?.id,
             requestedBy: rmSolicitante(selectedRequest)?.id,
@@ -1131,6 +1163,7 @@ export default function GerenciarMateriaisPage() {
                                       detailOrders
                                     )}
                                     orders={detailOrders}
+                                    openRmItemCount={openRmItemCount}
                                     canCancel={userCanCancelItems}
                                     cancelling={
                                       cancelRmItemMutation.isPending &&

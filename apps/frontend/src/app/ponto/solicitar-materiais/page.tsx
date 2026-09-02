@@ -70,7 +70,7 @@ import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { formatOcListDisplayId } from '@/components/oc/ocListDisplay';
 import { RmLinkedOcDocuments } from '@/components/material-requests/RmLinkedOcDocuments';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
-import { getRmItemCoverageCounts, canUserCancelRmItem } from '@/lib/rmProcurementCoverage';
+import { getRmItemCoverageCounts, canUserCancelRmItem, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 import { RmItemSituationCell } from '@/components/material-requests/RmItemSituationCell';
 import { formatRmItemProductKinds } from '@/lib/rmItemProductKinds';
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
@@ -3015,6 +3015,9 @@ function SolicitarMateriaisPage() {
                       purchaseOrders?: PurchaseOrder[];
                     };
                     const pos = Array.isArray(d.purchaseOrders) ? d.purchaseOrders : [];
+                    const openRmItemCount = (d.items ?? []).filter(
+                      (row) => !isRmItemCancelled(row)
+                    ).length;
                     const requestedByRaw = (d as { requestedBy?: unknown; requester?: { id?: string } })
                       .requestedBy;
                     const requestedById =
@@ -3219,6 +3222,7 @@ function SolicitarMateriaisPage() {
                                               pos
                                             )}
                                             orders={pos}
+                                            openRmItemCount={openRmItemCount}
                                             canCancel={userCanCancelItems}
                                             cancelling={
                                               cancelRmItemMutation.isPending &&

@@ -161,6 +161,22 @@ export function materialItemSubtitle(item: MaterialLineItem): string | null {
   return null;
 }
 
+/** Rótulo de material/serviço em linhas de OC (nome do cadastro em destaque). */
+export function catalogMaterialLabel(
+  material?: MaterialLineItem['material'] | null
+): string {
+  if (!material) return '—';
+  return materialItemLabel({ material });
+}
+
+/** Subtítulo em linhas de OC quando a descrição difere do nome. */
+export function catalogMaterialSubtitle(
+  material?: MaterialLineItem['material'] | null
+): string | null {
+  if (!material) return null;
+  return materialItemSubtitle({ material });
+}
+
 export function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('pt-BR', {
     day: '2-digit',

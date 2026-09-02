@@ -80,7 +80,33 @@ export function getCoveredRmItemIds(
 ): Set<string> {
   const source =
     orders && orders.length > 0 ? orders : (request.purchaseOrders ?? []);
-  return getCoveredRmItemIdsFromOrders(source);
+  const covered = getCoveredRmItemIdsFromOrders(source);
+  applyLegacySingleLineOcCoverage(request, source, covered);
+  return covered;
+}
+
+/**
+ * RM com item único + OC ativa com linha sem materialRequestItemId (legado / vínculo incompleto).
+ */
+function applyLegacySingleLineOcCoverage(
+  request: RmCoverageRequest,
+  orders: OcCoverageOrder[],
+  covered: Set<string>
+): void {
+  const openItems = (request.items ?? []).filter((item) => !isRmItemCancelled(item));
+  if (openItems.length !== 1) return;
+
+  const onlyId = openItems[0]!.id;
+  if (covered.has(onlyId)) return;
+
+  for (const order of orders) {
+    if (!isOcCoveringRmItems(order.status)) continue;
+    const lines = (order.items ?? []).filter(Boolean);
+    if (lines.length !== 1) continue;
+    if (lines[0]?.materialRequestItemId) continue;
+    covered.add(onlyId);
+    return;
+  }
 }
 
 export function getOpenRmItemIds(
@@ -104,7 +130,8 @@ export function getActiveOcForRmItem(
     status: string;
     orderNumber?: string | null;
     items?: Array<{ materialRequestItemId?: string | null } | null> | null;
-  }>
+  }>,
+  opts?: { openRmItemCount?: number }
 ): { orderNumber: string } | null {
   for (const order of orders) {
     if (!isOcCoveringRmItems(order.status)) continue;
@@ -115,6 +142,17 @@ export function getActiveOcForRmItem(
     const orderNumber = (order.orderNumber || '').trim();
     return orderNumber ? { orderNumber } : { orderNumber: '' };
   }
+
+  if (opts?.openRmItemCount === 1) {
+    for (const order of orders) {
+      if (!isOcCoveringRmItems(order.status)) continue;
+      const lines = (order.items ?? []).filter(Boolean);
+      if (lines.length !== 1 || lines[0]?.materialRequestItemId) continue;
+      const orderNumber = (order.orderNumber || '').trim();
+      return orderNumber ? { orderNumber } : { orderNumber: '' };
+    }
+  }
+
   return null;
 }
 
