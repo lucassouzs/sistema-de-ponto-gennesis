@@ -3,6 +3,7 @@ import {
   View,
   Pressable,
   StyleSheet,
+  Platform,
   Animated,
   Easing,
 } from 'react-native';
@@ -17,6 +18,8 @@ const RADIUS = 20;
 const GAP = 10;
 const HORIZONTAL_PADDING = 24;
 const BOTTOM_PADDING = 18;
+/** No Android o inset inferior costuma ser 0 (nav bar leanback / edge-to-edge). */
+const ANDROID_BOTTOM_PADDING = 34;
 
 const ICONS: Record<string, LucideIcon> = {
   Home: House,
@@ -135,7 +138,10 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
 
   const iconColor = isDark ? 'rgba(248,250,252,0.92)' : '#111827';
   const activeColor = colors.primary;
-  const bottomPad = Math.max(insets.bottom, BOTTOM_PADDING);
+  const bottomPad =
+    Platform.OS === 'android'
+      ? Math.max(insets.bottom + 16, ANDROID_BOTTOM_PADDING)
+      : Math.max(insets.bottom, BOTTOM_PADDING);
 
   useEffect(() => {
     if (prevShowFab.current === showFab) return;
