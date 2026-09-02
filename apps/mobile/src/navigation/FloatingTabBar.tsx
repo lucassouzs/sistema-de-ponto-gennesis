@@ -55,9 +55,7 @@ function TabIconView({
     <Icon
       size={focused ? 24 : 22}
       color={color}
-      strokeWidth={focused ? 2.35 : 1.85}
-      fill={color}
-      fillOpacity={focused ? 0.18 : 0}
+      strokeWidth={focused ? 2.4 : 1.85}
     />
   );
 }
