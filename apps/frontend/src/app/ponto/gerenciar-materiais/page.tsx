@@ -31,6 +31,7 @@ import type { MaterialRequest } from './_lib/types';
 import {
   getPriorityInfo,
   getStatusInfo,
+  formatDateTime,
   materialItemLabel,
   rmContractDisplay,
   rmOsDisplay,
@@ -921,27 +922,14 @@ export default function GerenciarMateriaisPage() {
             { label: 'Solicitante', value: rmSolicitante(selectedRequest)?.name || '—' },
             { label: 'Contrato', value: rmContractDisplay(selectedRequest) },
             { label: 'Ordem de serviço', value: rmOsDisplay(selectedRequest) },
-            {
-              label: 'Centro de custo',
-              value: selectedRequest.costCenter?.name?.trim() || '—'
-            },
           ];
           if (selectedRequest.project?.name) {
             infoRows.push({ label: 'Projeto', value: selectedRequest.project.name });
           }
           if (selectedRequest.createdAt) {
-            const created = new Date(selectedRequest.createdAt);
             infoRows.push({
               label: 'Data',
-              value: Number.isNaN(created.getTime())
-                ? '—'
-                : created.toLocaleString('pt-BR', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
+              value: formatDateTime(selectedRequest.createdAt)
             });
           }
           if (selectedRequest.demandSheet) {

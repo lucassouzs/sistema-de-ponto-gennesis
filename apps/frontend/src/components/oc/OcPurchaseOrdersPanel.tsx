@@ -44,8 +44,11 @@ import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import {
   catalogMaterialLabel,
-  purchaseOrderLineSubtitle
+  formatDateTime,
+  purchaseOrderLineSubtitle,
+  rmContractDisplay
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
+import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { stripOsSePrefix } from '@/lib/formatOsSePasta';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
 import { Loading } from '@/components/ui/Loading';
@@ -5373,12 +5376,6 @@ export function OcPurchaseOrdersPanel({
             >
               {ocDetailTab === 'resumo' ? (
                 (() => {
-                  const cc = selectedOrder.materialRequest?.costCenter;
-                  const costCenterLabel = (() => {
-                    if (!cc) return '—';
-                    const name = cc.name != null ? String(cc.name).trim() : '';
-                    return name || '—';
-                  })();
                   const showValues = [
                     'APPROVED',
                     'PENDING_PROOF_VALIDATION',
@@ -5395,10 +5392,6 @@ export function OcPurchaseOrdersPanel({
                   const paymentTypeLabel = selectedOrder.paymentType
                     ? OC_PAYMENT_TYPE_LABELS[selectedOrder.paymentType] || selectedOrder.paymentType
                     : null;
-                  const paymentConditionLabel = selectedOrder.paymentCondition
-                    ? paymentConditionLabelMap[selectedOrder.paymentCondition] ||
-                      selectedOrder.paymentCondition
-                    : null;
 
                   const infoRows: { label: string; value: React.ReactNode; stacked?: boolean }[] = [
                     {
@@ -5406,8 +5399,10 @@ export function OcPurchaseOrdersPanel({
                       value: formatRmListDisplayId(selectedOrder.materialRequest?.requestNumber)
                     },
                     {
-                      label: 'Centro de custo',
-                      value: costCenterLabel
+                      label: 'Contrato',
+                      value: selectedOrder.materialRequest
+                        ? rmContractDisplay(selectedOrder.materialRequest as MaterialRequest)
+                        : '—'
                     },
                     {
                       label: 'Ordem de serviço',
@@ -5415,14 +5410,11 @@ export function OcPurchaseOrdersPanel({
                     },
                     {
                       label: 'Data',
-                      value: formatDate(selectedOrder.orderDate)
+                      value: formatDateTime(selectedOrder.orderDate)
                     }
                   ];
                   if (paymentTypeLabel) {
                     infoRows.push({ label: 'Tipo de pagamento', value: paymentTypeLabel });
-                  }
-                  if (paymentConditionLabel) {
-                    infoRows.push({ label: 'Condição', value: paymentConditionLabel });
                   }
                   if (selectedOrder.paymentType === 'AVISTA' && selectedOrder.pixKeyType) {
                     infoRows.push({ label: 'Tipo de chave PIX', value: selectedOrder.pixKeyType });

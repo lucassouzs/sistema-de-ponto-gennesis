@@ -206,14 +206,32 @@ export function purchaseOrderLineSubtitle(
   return catalogMaterialSubtitle(line.material);
 }
 
-export function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('pt-BR', {
+export function formatDateOnly(value?: string | Date | null): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+export function formatDateTime(value?: string | Date | null): string {
+  if (!value) return '—';
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+export function formatDate(dateString: string): string {
+  return formatDateTime(dateString);
 }
 
 /** Lista em pt-BR: "A", "A e B", "A, B e C" */

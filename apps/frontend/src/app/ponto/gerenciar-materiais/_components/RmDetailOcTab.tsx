@@ -21,6 +21,7 @@ import {
 import { isOcCoveringRmItems, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 import {
   catalogMaterialLabel,
+  formatDateTime,
   purchaseOrderLineSubtitle
 } from '../_lib/display';
 
@@ -182,11 +183,9 @@ function OcCard({
       : order.id.slice(0, 8);
   const statusLabel = purchaseOrderPhaseLabelForOrder(order).replace(/^OC\s*-\s*/i, '').trim();
   const paymentLabel = paymentConditionDisplay(order, paymentLabelMap);
-  const orderDate = order.orderDate ? new Date(order.orderDate) : null;
-  const dateLabel =
-    orderDate && !Number.isNaN(orderDate.getTime())
-      ? orderDate.toLocaleDateString('pt-BR')
-      : null;
+  const dateDisplayRaw = order.orderDate ? formatDateTime(order.orderDate) : null;
+  const dateDisplay =
+    dateDisplayRaw && dateDisplayRaw !== '—' ? dateDisplayRaw : null;
   const lines = resolvePurchaseOrderDisplayLines(
     order,
     rmItems,
@@ -219,11 +218,11 @@ function OcCard({
       </div>
 
       <dl className="divide-y divide-gray-200 dark:divide-gray-700">
-        {dateLabel ? (
+        {dateDisplay ? (
           <div className="flex flex-col gap-0.5 py-2.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
             <dt className="shrink-0 text-xs font-medium text-gray-500 dark:text-gray-400">Data</dt>
             <dd className="min-w-0 text-sm text-gray-900 dark:text-gray-100 sm:text-right">
-              {dateLabel}
+              {dateDisplay}
             </dd>
           </div>
         ) : null}
