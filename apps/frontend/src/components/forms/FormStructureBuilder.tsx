@@ -858,6 +858,10 @@ const FIELD_TYPE_SWITCH_ITEMS = PALETTE_GROUPS.flatMap((group) =>
   ),
 );
 
+const FIELD_TYPE_MENU_WIDTH = 208;
+const FIELD_TYPE_MENU_GAP = 4;
+const FIELD_TYPE_MENU_VIEWPORT_PAD = 8;
+
 function QuestionFieldTypeMenu({
   question,
   sectionId,
@@ -875,31 +879,130 @@ function QuestionFieldTypeMenu({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState<{
+    top: number;
+    left: number;
+    maxHeight: number;
+  } | null>(null);
   const currentItem =
     FIELD_TYPE_SWITCH_ITEMS.find((item) => item.type === question.type) ??
     FIELD_TYPE_SWITCH_ITEMS[0]!;
   const CurrentIcon = currentItem.Icon;
 
-  useEffect(() => {
-    if (!open) return;
+  const updateMenuPos = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const menuHeight = menuRef.current?.offsetHeight ?? 360;
+    const gap = FIELD_TYPE_MENU_GAP;
+    const pad = FIELD_TYPE_MENU_VIEWPORT_PAD;
+    const spaceBelow = window.innerHeight - rect.bottom - gap - pad;
+    const spaceAbove = rect.top - gap - pad;
+    const openUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+    const maxHeight = Math.max(120, openUp ? spaceAbove : spaceBelow);
+    const visibleHeight = Math.min(menuHeight, maxHeight);
+    const top = openUp
+      ? Math.max(pad, rect.top - gap - visibleHeight)
+      : rect.bottom + gap;
+    const left = Math.min(
+      Math.max(pad, rect.right - FIELD_TYPE_MENU_WIDTH),
+      window.innerWidth - FIELD_TYPE_MENU_WIDTH - pad,
+    );
+
+    setMenuPos({
+      top: Math.round(top),
+      left: Math.round(left),
+      maxHeight: Math.round(maxHeight),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+
+    updateMenuPos();
+    const raf = window.requestAnimationFrame(updateMenuPos);
+
     const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        onOpenChange(false);
-      }
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      onOpenChange(false);
     };
-    const onScroll = () => onOpenChange(false);
+    const onReposition = () => updateMenuPos();
+
     document.addEventListener('mousedown', onPointerDown);
-    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+
     return () => {
+      window.cancelAnimationFrame(raf);
       document.removeEventListener('mousedown', onPointerDown);
-      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
     };
-  }, [open, onOpenChange]);
+  }, [open, onOpenChange, updateMenuPos]);
+
+  const menuContent = (
+    <>
+      <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        Tipo do campo
+      </p>
+      {PALETTE_GROUPS.map((group) => {
+        const fields = group.items.filter(
+          (item): item is Extract<PaletteAction, { kind: 'field' }> =>
+            item.kind === 'field',
+        );
+        if (!fields.length) return null;
+        return (
+          <div
+            key={group.title}
+            className="border-t border-gray-100 first:border-t-0 dark:border-gray-700"
+          >
+            <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              {group.title}
+            </p>
+            {fields.map((item) => {
+              const Icon = item.Icon;
+              const selected = question.type === item.type;
+              return (
+                <button
+                  key={item.type}
+                  type="button"
+                  onClick={() => {
+                    updateQuestion(
+                      sectionId,
+                      question.id,
+                      patchQuestionType(question, item.type),
+                    );
+                    onOpenChange(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
+                    selected
+                      ? 'bg-red-50 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                      : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60'
+                  }`}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
+  );
 
   return (
-    <div ref={rootRef} className="relative">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         title={`Tipo: ${FORM_FIELD_TYPE_LABELS[question.type]} — clique para alterar`}
         onClick={() => onOpenChange(!open)}
@@ -907,57 +1010,24 @@ function QuestionFieldTypeMenu({
       >
         <CurrentIcon className={fieldToolbarIcon} />
       </button>
-      {open ? (
-        <div className="absolute right-0 top-[calc(100%+4px)] z-50 w-52 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-gray-800">
-          <p className="px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-            Tipo do campo
-          </p>
-          {PALETTE_GROUPS.map((group) => {
-            const fields = group.items.filter(
-              (item): item is Extract<PaletteAction, { kind: 'field' }> =>
-                item.kind === 'field',
-            );
-            if (!fields.length) return null;
-            return (
-              <div
-                key={group.title}
-                className="border-t border-gray-100 first:border-t-0 dark:border-gray-700"
-              >
-                <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                  {group.title}
-                </p>
-                {fields.map((item) => {
-                  const Icon = item.Icon;
-                  const selected = question.type === item.type;
-                  return (
-                    <button
-                      key={item.type}
-                      type="button"
-                      onClick={() => {
-                        updateQuestion(
-                          sectionId,
-                          question.id,
-                          patchQuestionType(question, item.type),
-                        );
-                        onOpenChange(false);
-                      }}
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
-                        selected
-                          ? 'bg-red-50 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-300'
-                          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                      <span>{item.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+      {open && menuPos && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                top: menuPos.top,
+                left: menuPos.left,
+                width: FIELD_TYPE_MENU_WIDTH,
+                maxHeight: menuPos.maxHeight,
+              }}
+              className="fixed z-[100000] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-gray-800"
+            >
+              {menuContent}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
