@@ -5,6 +5,7 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Menu as MenuIcon, ArrowLeft, Bell } from 'lucide-react-native';
@@ -49,7 +50,7 @@ function NotificationBell({ iconColor }: { iconColor: string }) {
 
   return (
     <HeaderIconButton onPress={openSheet} accessibilityLabel="Notificações">
-      <View>
+      <View style={styles.bellWrap}>
         <Bell size={22} color={iconColor} strokeWidth={2.1} />
         {unreadCount > 0 ? (
           <View style={styles.badge}>
@@ -194,24 +195,40 @@ const styles = StyleSheet.create({
     width: 168,
     height: 44,
   },
+  bellWrap: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   badge: {
     position: 'absolute',
-    top: -5,
-    right: -7,
+    top: -6,
+    right: -8,
     minWidth: 16,
     height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
+    borderRadius: 5,
+    paddingHorizontal: 4,
     backgroundColor: '#ce3736',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#fff',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.16,
+        shadowRadius: 1.2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   badgeText: {
     color: '#fff',
-    fontSize: 9,
-    fontWeight: '800',
-    lineHeight: 11,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+    letterSpacing: -0.2,
   },
 });
