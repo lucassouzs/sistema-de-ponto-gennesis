@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Users, Search, AlertTriangle, X, Download, Eye, EyeOff, Plus, ChevronDown, ChevronUp, CheckCircle, RotateCcw, Upload, Loader2, MoreVertical, UserX, Shield, Filter, KeyRound } from 'lucide-react';
+import { Trash2, Users, Search, AlertTriangle, X, Download, Eye, EyeOff, Plus, ChevronDown, ChevronUp, CheckCircle, RotateCcw, Upload, Loader2, MoreVertical, UserX, Shield, Filter, KeyRound, LogIn } from 'lucide-react';
 import { TableCheckbox } from '@/components/ui/Checkbox';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
@@ -30,6 +30,7 @@ import { CARGOS_LIST } from '@/constants/cargos';
 import { usePermissions } from '@/hooks/usePermissions';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import api from '@/lib/api';
+import { authService } from '@/lib/auth';
 import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import toast from 'react-hot-toast';
@@ -630,6 +631,7 @@ export function EmployeeList({
     isAdministrator,
     can,
     canAction,
+    user: currentUser,
   } = usePermissions();
 
   /** Mesma ideia da página de contratos: matriz (Permissões / Controle), não só cargo Administrador. */
@@ -1295,6 +1297,37 @@ export function EmployeeList({
                   <Eye className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
                   <span>Ver detalhes</span>
                 </button>
+                {isAdministrator &&
+                  employeeForActionMenu.isActive &&
+                  employeeForActionMenu.id !== currentUser?.id &&
+                  (employeeForActionMenu.employee?.position || '').toLowerCase() !==
+                    'administrador' && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setEmployeeActionMenu(null);
+                      try {
+                        const result = await authService.startImpersonation(employeeForActionMenu.id);
+                        await queryClient.clear();
+                        toast.success(
+                          `Entrando como ${result.targetName || employeeForActionMenu.name}`
+                        );
+                        router.replace('/ponto/home');
+                        router.refresh();
+                      } catch (error: unknown) {
+                        const msg =
+                          error instanceof Error ? error.message : 'Erro ao entrar como usuário';
+                        toast.error(msg);
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
+                  >
+                    <LogIn className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                    <span>Entrar como</span>
+                  </button>
+                )}
                 {canChangeEmployeePassword && employeeForActionMenu.isActive && (
                   <button
                     type="button"

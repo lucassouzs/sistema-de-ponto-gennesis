@@ -226,6 +226,112 @@ class AuthService {
     localStorage.removeItem(this.userKey);
     sessionStorage.removeItem(this.tokenKey);
     sessionStorage.removeItem(this.userKey);
+    this.clearImpersonationMeta();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('impersonation-changed'));
+    }
+  }
+
+  private impersonationAdminTokenKey = 'impersonationAdminToken';
+  private impersonationTargetNameKey = 'impersonationTargetName';
+
+  private clearImpersonationMeta(): void {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem(this.impersonationAdminTokenKey);
+    sessionStorage.removeItem(this.impersonationTargetNameKey);
+  }
+
+  isImpersonating(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !!sessionStorage.getItem(this.impersonationAdminTokenKey);
+  }
+
+  getImpersonationTargetName(): string | null {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem(this.impersonationTargetNameKey);
+  }
+
+  async startImpersonation(userId: string): Promise<AuthResponse & { targetName?: string }> {
+    const adminToken = this.getToken();
+    if (!adminToken) {
+      throw new Error('Sessão de administrador não encontrada');
+    }
+
+    const response = await fetch(this.authUrl(`/impersonate/${encodeURIComponent(userId)}`), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const body = await this.parseJson(response);
+    if (!response.ok) {
+      throw new Error(body?.error || body?.message || 'Erro ao entrar como usuário');
+    }
+    if (!body?.success || !body.data?.token || !body.data?.user) {
+      throw new Error(body?.message || 'Resposta inválida do servidor');
+    }
+
+    const targetName =
+      (body.data as { impersonation?: { targetName?: string } }).impersonation?.targetName ||
+      body.data.user.name ||
+      'usuário';
+
+    sessionStorage.setItem(this.impersonationAdminTokenKey, adminToken);
+    sessionStorage.setItem(this.impersonationTargetNameKey, targetName);
+
+    // Impersonação fica só na sessão do navegador (aba)
+    this.setToken(body.data.token, false);
+    this.setUser(body.data.user, false);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('impersonation-changed'));
+    }
+
+    return { user: body.data.user, token: body.data.token, targetName };
+  }
+
+  async stopImpersonation(): Promise<AuthResponse> {
+    const response = await fetch(this.authUrl('/stop-impersonation'), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.getToken()}`,
+        Accept: 'application/json',
+      },
+    });
+
+    const body = await this.parseJson(response);
+
+    // Preferência: token devolvido pela API; fallback: token admin guardado
+    const savedAdminToken = sessionStorage.getItem(this.impersonationAdminTokenKey);
+
+    if (response.ok && body?.success && body.data?.token && body.data?.user) {
+      this.clearImpersonationMeta();
+      this.setToken(body.data.token, true);
+      this.setUser(body.data.user, true);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('impersonation-changed'));
+      }
+      return { user: body.data.user, token: body.data.token };
+    }
+
+    if (savedAdminToken) {
+      this.clearImpersonationMeta();
+      this.setToken(savedAdminToken, true);
+      try {
+        const user = await this.getProfile();
+        this.setUser(user, true);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('impersonation-changed'));
+        }
+        return { user, token: savedAdminToken };
+      } catch {
+        this.clearAuth();
+        throw new Error(body?.error || body?.message || 'Erro ao voltar ao administrador');
+      }
+    }
+
+    throw new Error(body?.error || body?.message || 'Erro ao encerrar impersonação');
   }
 
   isAuthenticated(): boolean {

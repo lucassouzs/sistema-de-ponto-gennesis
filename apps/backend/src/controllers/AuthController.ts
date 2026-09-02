@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { SignOptions } from 'jsonwebtoken';
+import type { SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
@@ -7,6 +8,8 @@ import { comparePassword, hashPassword } from '../lib/passwordHash';
 import { ChatService } from '../services/ChatService';
 import { findUserByLoginIdentifier, normalizeLoginIdentifier } from '../lib/loginIdentifier';
 import { recordSuccessfulLogin, recordSuccessfulLogout } from './UserActivityController';
+import { recordAuditEvent } from '../lib/auditLog';
+import { getRequestContext } from '../lib/requestContext';
 
 const chatUploadService = new ChatService();
 
@@ -28,6 +31,58 @@ const userMeSelect = {
   updatedAt: true,
   employee: true,
 } as const;
+
+type SignSessionUser = {
+  id: string;
+  email: string;
+  role: string;
+};
+
+function signSessionToken(
+  user: SignSessionUser,
+  opts?: { impersonating?: boolean; originalAdminId?: string; expiresIn?: SignOptions['expiresIn'] }
+) {
+  const payload: Record<string, unknown> = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+  };
+  if (opts?.impersonating && opts.originalAdminId) {
+    payload.impersonating = true;
+    payload.originalAdminId = opts.originalAdminId;
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET as string, {
+    expiresIn: opts?.expiresIn ?? '7d',
+  });
+}
+
+async function recordImpersonationLoginEvent(
+  req: Request,
+  adminUserId: string,
+  type: 'impersonate' | 'stop_impersonate'
+) {
+  const ctx = getRequestContext();
+  const forwarded = req.headers['x-forwarded-for'];
+  const ipAddress =
+    ctx?.ipAddress ||
+    (typeof forwarded === 'string' && forwarded.split(',')[0]?.trim()) ||
+    req.ip ||
+    null;
+  const userAgent =
+    ctx?.userAgent ||
+    (typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null);
+
+  await prisma.userLoginEvent.create({
+    data: {
+      userId: adminUserId,
+      type,
+      success: true,
+      source: 'web',
+      ipAddress,
+      userAgent,
+    },
+  });
+}
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -118,11 +173,11 @@ export class AuthController {
       }
 
       // Gerar token
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = signSessionToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
 
       try {
         await recordSuccessfulLogin(req, user.id, req.body?.source);
@@ -174,10 +229,166 @@ export class AuthController {
 
       return res.json({
         success: true,
-        data: user,
+        data: {
+          ...user,
+          impersonation: req.user?.impersonating
+            ? {
+                active: true,
+                originalAdminId: req.user.originalAdminId || null,
+              }
+            : null,
+        },
       });
     } catch (error: any) {
       console.error('Erro ao buscar perfil do usuário:', error);
+      return next(error);
+    }
+  }
+
+  /** Administrador entra na sessão de outro usuário (sem senha dele). */
+  async startImpersonation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!process.env.JWT_SECRET) {
+        throw createError('Erro de configuração do servidor', 500);
+      }
+      if (!req.user?.isAdmin) {
+        throw createError('Acesso permitido apenas para Administrador', 403);
+      }
+      if (req.user.impersonating) {
+        throw createError('Encerre a sessão atual antes de entrar como outro usuário', 400);
+      }
+
+      const targetUserId = String(req.params.userId || '').trim();
+      if (!targetUserId) {
+        throw createError('Usuário alvo é obrigatório', 400);
+      }
+      if (targetUserId === req.user.id) {
+        throw createError('Você já está na sua própria conta', 400);
+      }
+
+      const target = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: userMeSelect,
+      });
+
+      if (!target) {
+        throw createError('Usuário não encontrado', 404);
+      }
+      if (!target.isActive) {
+        throw createError('Não é possível entrar como um usuário inativo', 400);
+      }
+
+      const targetIsAdmin =
+        (target.employee?.position || '').toLowerCase() === 'administrador';
+      if (targetIsAdmin) {
+        throw createError('Não é permitido entrar como outro Administrador', 403);
+      }
+
+      const token = signSessionToken(
+        { id: target.id, email: target.email, role: target.role },
+        {
+          impersonating: true,
+          originalAdminId: req.user.id,
+          expiresIn: '2h',
+        }
+      );
+
+      try {
+        await recordImpersonationLoginEvent(req, req.user.id, 'impersonate');
+        recordAuditEvent({
+          action: 'CREATE',
+          entity: 'User',
+          entityId: target.id,
+          userId: req.user.id,
+          summary: `Impersonação iniciada: ${req.user.email} → ${target.name} (${target.email})`,
+          newData: {
+            type: 'impersonate',
+            adminUserId: req.user.id,
+            targetUserId: target.id,
+          },
+        });
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar impersonação:', trackErr);
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          user: target,
+          token,
+          impersonation: {
+            active: true,
+            originalAdminId: req.user.id,
+            targetUserId: target.id,
+            targetName: target.name,
+          },
+        },
+        message: `Sessão iniciada como ${target.name}`,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /** Volta da impersonação para a conta do administrador. */
+  async stopImpersonation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!process.env.JWT_SECRET) {
+        throw createError('Erro de configuração do servidor', 500);
+      }
+      if (!req.user?.impersonating || !req.user.originalAdminId) {
+        throw createError('Nenhuma sessão de impersonação ativa', 400);
+      }
+
+      const admin = await prisma.user.findUnique({
+        where: { id: req.user.originalAdminId },
+        select: userMeSelect,
+      });
+
+      if (!admin || !admin.isActive) {
+        throw createError('Administrador original não encontrado ou inativo. Faça login novamente.', 401);
+      }
+
+      const adminIsAdmin =
+        (admin.employee?.position || '').toLowerCase() === 'administrador';
+      if (!adminIsAdmin) {
+        throw createError('Conta original não é mais Administrador. Faça login novamente.', 403);
+      }
+
+      const token = signSessionToken({
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+      });
+
+      try {
+        await recordImpersonationLoginEvent(req, admin.id, 'stop_impersonate');
+        recordAuditEvent({
+          action: 'CREATE',
+          entity: 'User',
+          entityId: req.user.id,
+          userId: admin.id,
+          summary: `Impersonação encerrada: voltou de ${req.user.email} para ${admin.email}`,
+          newData: {
+            type: 'stop_impersonate',
+            adminUserId: admin.id,
+            targetUserId: req.user.id,
+          },
+        });
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar fim da impersonação:', trackErr);
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          user: admin,
+          token,
+          impersonation: null,
+        },
+        message: 'Sessão de administrador restaurada',
+      });
+    } catch (error) {
       return next(error);
     }
   }
@@ -249,12 +460,13 @@ export class AuthController {
   async refreshToken(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       // authenticate já validou usuário ativo em req.user
-      const { id, email, role } = req.user!;
+      const { id, email, role, impersonating, originalAdminId } = req.user!;
 
-      const token = jwt.sign(
+      const token = signSessionToken(
         { id, email, role },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '7d' }
+        impersonating && originalAdminId
+          ? { impersonating: true, originalAdminId, expiresIn: '2h' }
+          : { expiresIn: '7d' }
       );
 
       return res.json({
@@ -270,12 +482,13 @@ export class AuthController {
   // Refresh via authenticateForRefresh (já validou usuário ativo)
   async publicRefreshToken(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { id, email, role } = req.user!;
+      const { id, email, role, impersonating, originalAdminId } = req.user!;
 
-      const token = jwt.sign(
+      const token = signSessionToken(
         { id, email, role },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '7d' }
+        impersonating && originalAdminId
+          ? { impersonating: true, originalAdminId, expiresIn: '2h' }
+          : { expiresIn: '7d' }
       );
 
       return res.json({
@@ -290,6 +503,12 @@ export class AuthController {
 
   async changePassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      if (req.user?.impersonating) {
+        throw createError(
+          'Não é possível alterar senha durante impersonação. Volte à sua conta de administrador.',
+          403
+        );
+      }
       const { currentPassword, newPassword } = req.body;
       const userId = req.user!.id;
 

@@ -825,12 +825,12 @@ export default function GerenciarMateriaisPage() {
         userName={user.name}
         onLogout={handleLogout}
       >
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
               Requisições de Materiais
             </h1>
-            <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
+            <p className="mt-1 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Acompanhe o status das requisições de materiais.
             </p>
           </div>

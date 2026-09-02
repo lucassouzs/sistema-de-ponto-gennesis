@@ -31,6 +31,12 @@ router.put('/profile', authController.updateProfile);
 router.patch('/me/photo', uploadAvatar.single('profileAvatar'), authController.uploadProfilePhoto);
 router.delete('/me/photo', authController.removeProfilePhoto);
 router.put('/change-password', authController.changePassword);
+router.post(
+  '/impersonate/:userId',
+  requireAdministrator,
+  authController.startImpersonation
+);
+router.post('/stop-impersonation', authController.stopImpersonation);
 // Rota protegida de refresh (para compatibilidade, mantém a antiga)
 router.post('/refresh-token-protected', authController.refreshToken);
 
