@@ -262,23 +262,11 @@ function placeQuestionAtIndex(
   return next;
 }
 
+type FieldMoveTarget = { sectionId: string; insertAt: number };
+
 type GridRenderItem =
   | { key: string; kind: 'question'; question: FormQuestion }
   | { key: string; kind: 'placeholder'; width: FormFieldWidth };
-
-function parseSequenceInsertIndex(
-  remaining: FormQuestion[],
-  dropTarget: string | null,
-  sectionId: string,
-): number | null {
-  if (!dropTarget) return null;
-  if (dropTarget === `below:${sectionId}`) return remaining.length;
-  const match = dropTarget.match(/^insert:([^:]+):([^:]+):(before|after)$/);
-  if (!match || match[1] !== sectionId) return null;
-  const index = remaining.findIndex((q) => q.id === match[2]);
-  if (index < 0) return null;
-  return match[3] === 'before' ? index : index + 1;
-}
 
 function buildSequencePreviewItems(
   questions: FormQuestion[],
@@ -302,12 +290,21 @@ function buildSequencePreviewItems(
   return items;
 }
 
-function questionGridColumn(
-  questions: FormQuestion[],
-  index: number,
-): 1 | 2 | null {
+type FrozenDropSlot = {
+  sectionId: string;
+  originalIndex: number;
+  rect: DOMRect;
+};
+
+function distanceToRect(x: number, y: number, rect: DOMRect): number {
+  const dx = x < rect.left ? rect.left - x : x > rect.right ? x - rect.right : 0;
+  const dy = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+  return Math.hypot(dx, dy);
+}
+
+function fieldGridColumn(questions: FormQuestion[], index: number): 1 | 2 | null {
   let col = 0;
-  for (let i = 0; i < questions.length; i++) {
+  for (let i = 0; i < questions.length; i += 1) {
     if (resolveFieldWidth(questions[i]!) === 'full') {
       if (i === index) return null;
       col = 0;
@@ -318,6 +315,127 @@ function questionGridColumn(
     if (col === 2) col = 0;
   }
   return null;
+}
+
+function afterLastSlotRect(
+  questions: FormQuestion[],
+  fieldEls: Map<string, HTMLElement>,
+): DOMRect | null {
+  if (questions.length === 0) return null;
+  const lastIndex = questions.length - 1;
+  const last = questions[lastIndex]!;
+  const lastEl = fieldEls.get(last.id);
+  if (!lastEl) return null;
+  const lastRect = lastEl.getBoundingClientRect();
+  const gap = 20;
+  const lastIsFull = resolveFieldWidth(last) === 'full';
+  const lastCol = fieldGridColumn(questions, lastIndex);
+  if (!lastIsFull && lastCol === 1) {
+    return new DOMRect(lastRect.right + gap, lastRect.top, lastRect.width, lastRect.height);
+  }
+  return new DOMRect(lastRect.left, lastRect.bottom + gap, lastRect.width, lastRect.height);
+}
+
+function snapshotFrozenDropSlots(
+  sections: FormSection[],
+  fieldEls: Map<string, HTMLElement>,
+): FrozenDropSlot[] {
+  const slots: FrozenDropSlot[] = [];
+  for (const section of sections) {
+    section.questions.forEach((question, index) => {
+      const el = fieldEls.get(question.id);
+      if (!el) return;
+      slots.push({
+        sectionId: section.id,
+        originalIndex: index,
+        rect: el.getBoundingClientRect(),
+      });
+    });
+    const afterRect = afterLastSlotRect(section.questions, fieldEls);
+    if (afterRect) {
+      slots.push({
+        sectionId: section.id,
+        originalIndex: section.questions.length,
+        rect: afterRect,
+      });
+    }
+  }
+  return slots;
+}
+
+function pickFrozenInsertAt(
+  x: number,
+  y: number,
+  slots: FrozenDropSlot[],
+  remainingLength: number,
+  prevInsertAt: number | null,
+): number {
+  if (slots.length === 0) return 0;
+
+  let best = slots[0]!;
+  let bestDist = Infinity;
+  for (const slot of slots) {
+    const inside =
+      x >= slot.rect.left &&
+      x <= slot.rect.right &&
+      y >= slot.rect.top &&
+      y <= slot.rect.bottom;
+    const dist = inside ? 0 : distanceToRect(x, y, slot.rect);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = slot;
+    }
+  }
+
+  const candidate = Math.min(best.originalIndex, remainingLength);
+  if (prevInsertAt == null || candidate === prevInsertAt) return candidate;
+
+  const prevSlot =
+    slots.find((slot) => Math.min(slot.originalIndex, remainingLength) === prevInsertAt) ??
+    null;
+  if (!prevSlot) return candidate;
+
+  const distPrev = distanceToRect(x, y, prevSlot.rect);
+  if (bestDist === 0 && distPrev > 8) return candidate;
+  if (bestDist < distPrev - 28) return candidate;
+  return prevInsertAt;
+}
+
+function resolveFieldMoveTarget(
+  x: number,
+  y: number,
+  draggedQuestionId: string,
+  sections: FormSection[],
+  frozenSlots: FrozenDropSlot[],
+  prev: FieldMoveTarget | null,
+): FieldMoveTarget | null {
+  const hit = document.elementFromPoint(x, y);
+  const sectionEl = hit?.closest('[data-form-section]');
+  const sectionId =
+    sectionEl?.getAttribute('data-form-section-id') ??
+    frozenSlots.find((slot) => {
+      return (
+        x >= slot.rect.left &&
+        x <= slot.rect.right &&
+        y >= slot.rect.top &&
+        y <= slot.rect.bottom
+      );
+    })?.sectionId ??
+    prev?.sectionId ??
+    null;
+  if (!sectionId) return prev;
+
+  const section = sections.find((s) => s.id === sectionId);
+  if (!section) return prev;
+
+  const remainingLength = section.questions.filter((q) => q.id !== draggedQuestionId).length;
+  const sectionSlots = frozenSlots.filter((slot) => slot.sectionId === sectionId);
+  const prevInsertAt = prev?.sectionId === sectionId ? prev.insertAt : null;
+
+  return {
+    sectionId,
+    insertAt: pickFrozenInsertAt(x, y, sectionSlots, remainingLength, prevInsertAt),
+  };
 }
 
 function QuestionFieldTitleRow({
@@ -870,6 +988,11 @@ export function FormStructureBuilder({
   const [draggedPaletteFieldType, setDraggedPaletteFieldType] =
     useState<FormFieldType | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [fieldMoveTarget, setFieldMoveTarget] = useState<FieldMoveTarget | null>(null);
+  const [draggedFieldSize, setDraggedFieldSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [justAddedId, setJustAddedId] = useState<string | null>(null);
   const [optionsModal, setOptionsModal] = useState<{
     sectionId: string;
@@ -888,8 +1011,13 @@ export function FormStructureBuilder({
   const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null);
   const [dragPreviewLabel, setDragPreviewLabel] = useState<string | null>(null);
   const dragGhostRef = useRef<HTMLElement | null>(null);
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  const canvasScrollRef = useRef<HTMLDivElement | null>(null);
   const fieldElsRef = useRef(new Map<string, HTMLElement>());
   const flipFromRef = useRef(new Map<string, DOMRect>());
+  const dragFromIndexRef = useRef(0);
+  const frozenSlotsRef = useRef<FrozenDropSlot[]>([]);
+  const draggedFieldRectRef = useRef<{ width: number; height: number } | null>(null);
   const pointerDragRef = useRef<{
     pointerId: number;
     sectionId: string;
@@ -898,9 +1026,14 @@ export function FormStructureBuilder({
     startX: number;
     startY: number;
     active: boolean;
+    gripEl: HTMLElement | null;
   } | null>(null);
   const dropTargetRef = useRef<string | null>(null);
   dropTargetRef.current = dropTarget;
+  const fieldMoveTargetRef = useRef<FieldMoveTarget | null>(null);
+  fieldMoveTargetRef.current = fieldMoveTarget;
+  const moveFrameRef = useRef<number | null>(null);
+  const pendingMoveRef = useRef<{ x: number; y: number } | null>(null);
 
   const stepActionBtn =
     'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:pointer-events-none disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200';
@@ -916,6 +1049,8 @@ export function FormStructureBuilder({
       setDragging(false);
       setDragKind(null);
       setDropTarget(null);
+      setFieldMoveTarget(null);
+      setDraggedFieldSize(null);
       setDraggedField(null);
       setDraggedPaletteFieldType(null);
       setDragPointer(null);
@@ -1298,14 +1433,26 @@ export function FormStructureBuilder({
   };
 
   const clearDrag = () => {
+    if (moveFrameRef.current != null) {
+      cancelAnimationFrame(moveFrameRef.current);
+      moveFrameRef.current = null;
+    }
+    pendingMoveRef.current = null;
+    document.body.style.userSelect = '';
     setDragging(false);
     setDragKind(null);
     setDropTarget(null);
+    setFieldMoveTarget(null);
+    setDraggedFieldSize(null);
     setDraggedField(null);
     setDraggedPaletteFieldType(null);
     setDragPointer(null);
     setDragPreviewLabel(null);
     resetFieldMotion();
+    draggedFieldRectRef.current = null;
+    dragFromIndexRef.current = 0;
+    frozenSlotsRef.current = [];
+    setDraggedFieldSize(null);
     if (dragGhostRef.current) {
       dragGhostRef.current.remove();
       dragGhostRef.current = null;
@@ -1350,7 +1497,24 @@ export function FormStructureBuilder({
       startX: e.clientX,
       startY: e.clientY,
       active: false,
+      gripEl: e.currentTarget as HTMLElement,
     };
+  };
+
+  const updateDragPreviewPosition = (x: number, y: number) => {
+    const preview = dragPreviewRef.current;
+    if (!preview) return;
+    preview.style.transform = `translate3d(${x + 16}px, ${y + 12}px, 0)`;
+  };
+
+  const autoScrollCanvas = (y: number) => {
+    const container = canvasScrollRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const edge = 56;
+    const step = 10;
+    if (y - rect.top < edge) container.scrollTop -= step;
+    else if (rect.bottom - y < edge) container.scrollTop += step;
   };
 
   const snapshotFieldRects = () => {
@@ -1371,29 +1535,36 @@ export function FormStructureBuilder({
   clearDragRef.current = clearDrag;
 
   useEffect(() => {
-    const resolveTarget = (x: number, y: number, draggedId: string) => {
-      const hits = document.elementsFromPoint(x, y);
-      for (const node of hits) {
-        if (!(node instanceof Element)) continue;
-        const slot = node.closest('[data-drop-id]');
-        if (slot) return slot.getAttribute('data-drop-id');
-        const card = node.closest('[data-field-card]');
-        if (!card) continue;
-        const questionId = card.getAttribute('data-question-id');
-        const sectionId = card.getAttribute('data-section-id');
-        if (!questionId || !sectionId || questionId === draggedId) continue;
-        const rect = card.getBoundingClientRect();
-        const spanFull = card.getAttribute('data-span-full') === '1';
-        const edge = spanFull
-          ? y < rect.top + rect.height / 2
-            ? 'before'
-            : 'after'
-          : x < rect.left + rect.width / 2
-            ? 'before'
-            : 'after';
-        return `insert:${sectionId}:${questionId}:${edge}`;
+    const applyPendingMove = () => {
+      moveFrameRef.current = null;
+      const pending = pendingMoveRef.current;
+      const drag = pointerDragRef.current;
+      if (!pending || !drag?.active) return;
+
+      updateDragPreviewPosition(pending.x, pending.y);
+      autoScrollCanvas(pending.y);
+
+      const next = resolveFieldMoveTarget(
+        pending.x,
+        pending.y,
+        drag.questionId,
+        allSectionsRef.current,
+        frozenSlotsRef.current,
+        fieldMoveTargetRef.current,
+      );
+
+      const prev = fieldMoveTargetRef.current;
+      if (
+        next &&
+        prev &&
+        next.sectionId === prev.sectionId &&
+        next.insertAt === prev.insertAt
+      ) {
+        return;
       }
-      return null;
+
+      snapshotFieldRectsRef.current();
+      setFieldMoveTarget(next);
     };
 
     const onMove = (e: PointerEvent) => {
@@ -1402,18 +1573,36 @@ export function FormStructureBuilder({
       if (!drag.active) {
         if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
         drag.active = true;
+        frozenSlotsRef.current = snapshotFrozenDropSlots(
+          allSectionsRef.current,
+          fieldElsRef.current,
+        );
         snapshotFieldRectsRef.current();
+        const fromIndex =
+          allSectionsRef.current
+            .find((section) => section.id === drag.sectionId)
+            ?.questions.findIndex((question) => question.id === drag.questionId) ?? 0;
+        dragFromIndexRef.current = fromIndex;
+        const cardEl = fieldElsRef.current.get(drag.questionId);
+        if (cardEl) {
+          const rect = cardEl.getBoundingClientRect();
+          draggedFieldRectRef.current = { width: rect.width, height: rect.height };
+          setDraggedFieldSize({ width: rect.width, height: rect.height });
+        }
+        drag.gripEl?.setPointerCapture(e.pointerId);
+        document.body.style.userSelect = 'none';
         setDragKind('field-move');
         setDraggedField({ sectionId: drag.sectionId, questionId: drag.questionId });
         setDragPreviewLabel(drag.title.trim() || 'Campo');
-        setDropTarget(null);
+        setFieldMoveTarget({ sectionId: drag.sectionId, insertAt: fromIndex });
         setDragging(true);
+        pendingMoveRef.current = { x: e.clientX, y: e.clientY };
+        requestAnimationFrame(() => updateDragPreviewPosition(e.clientX, e.clientY));
       }
-      setDragPointer({ x: e.clientX, y: e.clientY });
-      const next = resolveTarget(e.clientX, e.clientY, drag.questionId);
-      if (next !== dropTargetRef.current) {
-        snapshotFieldRectsRef.current();
-        setDropTarget(next);
+
+      pendingMoveRef.current = { x: e.clientX, y: e.clientY };
+      if (moveFrameRef.current == null) {
+        moveFrameRef.current = requestAnimationFrame(applyPendingMove);
       }
     };
 
@@ -1421,24 +1610,18 @@ export function FormStructureBuilder({
       const drag = pointerDragRef.current;
       if (!drag || e.pointerId !== drag.pointerId) return;
       pointerDragRef.current = null;
+      if (drag.gripEl?.hasPointerCapture(e.pointerId)) {
+        drag.gripEl.releasePointerCapture(e.pointerId);
+      }
       if (drag.active) {
-        const target = dropTargetRef.current;
-        if (target) {
-          const toSectionId = target.startsWith('below:')
-            ? target.slice(6)
-            : target.match(/^insert:([^:]+):/)?.[1];
-          if (toSectionId) {
-            const section = allSectionsRef.current.find((s) => s.id === toSectionId);
-            const remaining = (section?.questions ?? []).filter((q) => q.id !== drag.questionId);
-            const insertAt =
-              parseSequenceInsertIndex(remaining, target, toSectionId) ?? remaining.length;
-            placeQuestionRef.current(
-              drag.sectionId,
-              drag.questionId,
-              toSectionId,
-              insertAt,
-            );
-          }
+        const target = fieldMoveTargetRef.current;
+        if (target && target.insertAt !== dragFromIndexRef.current) {
+          placeQuestionRef.current(
+            drag.sectionId,
+            drag.questionId,
+            target.sectionId,
+            target.insertAt,
+          );
         }
       }
       clearDragRef.current();
@@ -1451,10 +1634,12 @@ export function FormStructureBuilder({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+      if (moveFrameRef.current != null) cancelAnimationFrame(moveFrameRef.current);
     };
   }, []);
 
   const onCanvasDragOver = (e: React.DragEvent, targetId: string) => {
+    if (dragKind === 'field-move') return;
     const types = Array.from(e.dataTransfer.types);
     if (!types.includes(FORM_DND_MIME) && !types.includes('text/plain')) return;
     e.preventDefault();
@@ -1479,14 +1664,14 @@ export function FormStructureBuilder({
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
 
       el.style.transition = 'none';
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
       void el.offsetWidth;
-      el.style.transition = 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1)';
+      el.style.transition = 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)';
       el.style.transform = '';
     });
 
     flipFromRef.current = new Map();
-  }, [dropTarget, draggedField]);
+  }, [dropTarget, fieldMoveTarget, dragKind]);
 
   const onCanvasDrop = (
     e: React.DragEvent,
@@ -1641,6 +1826,20 @@ export function FormStructureBuilder({
     </div>
   );
 
+  const renderMovePlaceholder = (width: FormFieldWidth, height: number) => (
+    <div
+      className={`${width === 'full' ? 'sm:col-span-2' : ''} min-w-0`}
+      style={{ minHeight: height }}
+    >
+      <div
+        className={`${dropZoneCls(true)} flex h-full w-full items-center justify-center transition-[min-height,opacity] duration-300 ease-out`}
+        style={{ minHeight: height }}
+      >
+        Solte aqui
+      </div>
+    </div>
+  );
+
   /**
    * Metade esquerda (ou superior, em largura total) insere antes do campo;
    * metade direita (ou inferior) insere depois.
@@ -1734,6 +1933,7 @@ export function FormStructureBuilder({
 
       {/* Canvas — preenche a área útil */}
       <div
+        ref={canvasScrollRef}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto"
         onDragOver={(e) => {
           const types = Array.from(e.dataTransfer.types);
@@ -1860,7 +2060,12 @@ export function FormStructureBuilder({
                     : section.questions;
 
                 return (
-                <section key={section.id} className="relative space-y-4">
+                <section
+                  key={section.id}
+                  data-form-section
+                  data-form-section-id={section.id}
+                  className="relative space-y-4"
+                >
                   <div className="group relative">
                     <div className="min-w-0 space-y-1">
                       <input
@@ -1919,19 +2124,17 @@ export function FormStructureBuilder({
 
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     {(() => {
-                      const moving = dragKind === 'field-move' && !!draggedField;
+                      const moving =
+                        dragKind === 'field-move' &&
+                        draggedField?.sectionId === section.id;
                       const draggedQuestion = moving
-                        ? allSections
-                            .find((s) => s.id === draggedField.sectionId)
-                            ?.questions.find((q) => q.id === draggedField.questionId)
+                        ? section.questions.find((q) => q.id === draggedField.questionId)
                         : undefined;
-                      const insertAt = moving
-                        ? parseSequenceInsertIndex(
-                            layoutQuestions,
-                            dropTarget,
-                            section.id,
-                          )
-                        : null;
+                      const insertAt =
+                        moving && fieldMoveTarget?.sectionId === section.id
+                          ? fieldMoveTarget.insertAt
+                          : null;
+                      const placeholderHeight = draggedFieldSize?.height ?? 88;
                       const gridItems = moving
                         ? buildSequencePreviewItems(
                             section.questions,
@@ -1943,35 +2146,12 @@ export function FormStructureBuilder({
                             kind: 'question' as const,
                             question: q,
                           }));
-                      const lastRemaining = layoutQuestions[layoutQuestions.length - 1];
-                      const lastCol =
-                        layoutQuestions.length > 0
-                          ? questionGridColumn(
-                              layoutQuestions,
-                              layoutQuestions.length - 1,
-                            )
-                          : null;
-                      const afterLastId =
-                        lastRemaining && moving
-                          ? `insert:${section.id}:${lastRemaining.id}:after`
-                          : null;
-                      const showAfterLastHit =
-                        !!afterLastId &&
-                        lastCol === 1 &&
-                        insertAt !== layoutQuestions.length;
 
-                      return (
-                        <>
-                          {gridItems.map((item) => {
+                      return gridItems.map((item) => {
                         if (item.kind === 'placeholder') {
-                          const placeholderId = dropTarget ?? `below:${section.id}`;
                           return (
                             <React.Fragment key={item.key}>
-                              {renderFieldDropSlot(
-                                placeholderId,
-                                item.width,
-                                (e) => e.preventDefault(),
-                              )}
+                              {renderMovePlaceholder(item.width, placeholderHeight)}
                             </React.Fragment>
                           );
                         }
@@ -1985,8 +2165,7 @@ export function FormStructureBuilder({
                         const beforeTargetId = `insert:${section.id}:${question.id}:before`;
                         const afterTargetId = `insert:${section.id}:${question.id}:after`;
                         const layoutIndex = layoutQuestions.findIndex((q) => q.id === question.id);
-                        const canReceiveDrop =
-                          isFieldDragging && dragKind === 'field';
+                        const canReceiveDrop = isFieldDragging && dragKind === 'field';
                         const dropsBesideField =
                           !spanFull &&
                           layoutIndex >= 0 &&
@@ -2023,7 +2202,7 @@ export function FormStructureBuilder({
                               data-section-id={section.id}
                               data-question-id={question.id}
                               data-span-full={spanFull ? '1' : '0'}
-                              className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 ${
+                              className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 will-change-transform ${
                                 justAddedId === question.id
                                   ? 'animate-[formFieldDropIn_0.4s_ease-out]'
                                   : ''
@@ -2102,16 +2281,7 @@ export function FormStructureBuilder({
                               : null}
                           </React.Fragment>
                         );
-                      })}
-                          {showAfterLastHit && afterLastId ? (
-                            <div
-                              data-drop-id={afterLastId}
-                              className="min-h-[5.5rem]"
-                              aria-hidden
-                            />
-                          ) : null}
-                        </>
-                      );
+                      });
                     })()}
 
                     {dropTarget === belowTargetId && dragKind !== 'field-move'
@@ -2129,7 +2299,7 @@ export function FormStructureBuilder({
                       data-drop-id={belowTargetId}
                       onDragOver={(e) => onCanvasDragOver(e, belowTargetId)}
                       onDrop={(e) => onCanvasDrop(e, { sectionId: section.id })}
-                      className="h-8 w-full"
+                      className={`w-full ${dragKind === 'field-move' ? 'h-12' : 'h-8'}`}
                       aria-hidden
                     />
                   ) : null}
@@ -2268,15 +2438,26 @@ export function FormStructureBuilder({
           setTableColumnsModal(null);
         }}
       />
-      {dragging && dragPreviewLabel && dragPointer
+      {dragging && dragPreviewLabel
         ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[100000] flex max-w-xs items-center gap-2 rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-xl dark:border-red-500/70 dark:bg-gray-900 dark:text-gray-100"
-              style={{ left: dragPointer.x + 16, top: dragPointer.y + 12 }}
-            >
-              <GripVertical className="h-4 w-4 shrink-0 text-gray-400" />
-              <span className="truncate">{dragPreviewLabel}</span>
-            </div>,
+            dragKind === 'field-move' ? (
+              <div
+                ref={dragPreviewRef}
+                className="pointer-events-none fixed left-0 top-0 z-[100000] flex max-w-xs items-center gap-2 rounded-xl border border-red-300 bg-white/95 px-3 py-2 text-sm font-medium text-gray-800 shadow-lg backdrop-blur-sm will-change-transform dark:border-red-500/70 dark:bg-gray-900/95 dark:text-gray-100"
+                style={{ transform: 'translate3d(0, 0, 0)' }}
+              >
+                <GripVertical className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="truncate">{dragPreviewLabel}</span>
+              </div>
+            ) : dragPointer ? (
+              <div
+                className="pointer-events-none fixed z-[100000] flex max-w-xs items-center gap-2 rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-medium text-gray-800 shadow-xl dark:border-red-500/70 dark:bg-gray-900 dark:text-gray-100"
+                style={{ left: dragPointer.x + 16, top: dragPointer.y + 12 }}
+              >
+                <GripVertical className="h-4 w-4 shrink-0 text-gray-400" />
+                <span className="truncate">{dragPreviewLabel}</span>
+              </div>
+            ) : null,
             document.body,
           )
         : null}
