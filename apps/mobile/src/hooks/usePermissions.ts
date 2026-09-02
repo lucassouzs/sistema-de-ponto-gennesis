@@ -78,14 +78,14 @@ export function usePermissions() {
   const canSeeReservas =
     isElevated || isDepartmentCompras || hasModule(RESERVAS_KEY);
 
-  const canSeePncp =
-    isElevated ||
-    (ready && (allowedModules.has(PNCP_KEY) || allowedModules.has(LICITACOES_KEY)));
+  /** Licitações PNCP — oculta no mobile (só web). */
+  const canSeePncp = false;
 
   const canSeeDpRequests =
     isElevated || isDepartmentPessoal || hasModule(SOLICITACOES_DP_KEY);
 
-  const canSeeGestaoOs = isElevated || hasModule(GESTAO_OS_KEY);
+  /** Central de Chamados — oculta no mobile (só web). */
+  const canSeeGestaoOs = false;
 
   return {
     isLoading: isAuthenticated && !!user?.id && !isElevated && (isPending || !isFetched),

@@ -1669,6 +1669,13 @@ export function FormStructureBuilder({
       void el.offsetWidth;
       el.style.transition = 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)';
       el.style.transform = '';
+      const onEnd = (event: TransitionEvent) => {
+        if (event.propertyName !== 'transform') return;
+        el.style.transition = '';
+        el.style.transform = '';
+        el.removeEventListener('transitionend', onEnd);
+      };
+      el.addEventListener('transitionend', onEnd);
     });
 
     flipFromRef.current = new Map();
@@ -1860,9 +1867,8 @@ export function FormStructureBuilder({
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-transparent">
       <style>{`
         @keyframes formFieldDropIn {
-          0% { opacity: 0; transform: translateY(10px) scale(0.96); }
-          60% { opacity: 1; transform: translateY(-2px) scale(1.01); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
+          0% { opacity: 0; transform: translateY(8px); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes formDropSlotIn {
           0% { opacity: 0; transform: scale(0.92); }
@@ -2203,7 +2209,7 @@ export function FormStructureBuilder({
                               data-section-id={section.id}
                               data-question-id={question.id}
                               data-span-full={spanFull ? '1' : '0'}
-                              className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 will-change-transform ${
+                              className={`${spanFull ? 'sm:col-span-2' : ''} group relative min-w-0 ${
                                 justAddedId === question.id
                                   ? 'animate-[formFieldDropIn_0.4s_ease-out]'
                                   : ''
@@ -2759,7 +2765,7 @@ function NumericFieldPreview({
   questionsById: Map<string, FormQuestion>;
   onPlaceholderChange?: (placeholder: string) => void;
 }) {
-  const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center text-gray-400 dark:text-gray-500`;
+  const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center`;
   const readOnlyCls =
     'cursor-not-allowed bg-gray-50 text-gray-500 dark:bg-gray-800/60 dark:text-gray-400';
   const hasFormula = questionHasFormula(question);
@@ -2795,7 +2801,7 @@ function FieldPreview({
   onTableColumnsChange?: (columns: FormTableColumn[]) => void;
   onPlaceholderChange?: (placeholder: string) => void;
 }) {
-  const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center text-gray-400 dark:text-gray-500`;
+  const inputPreviewCls = `${FORM_FIELD_INPUT_CLS} flex h-10 items-center`;
   const readOnlyCls =
     'cursor-not-allowed bg-gray-50 text-gray-500 dark:bg-gray-800/60 dark:text-gray-400';
 

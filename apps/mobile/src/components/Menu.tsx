@@ -19,17 +19,14 @@ import {
   Moon,
   Sun,
   LogOut,
-  ClipboardList,
   Calendar,
   LayoutGrid,
-  Wrench,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { usePermissions } from '../hooks/usePermissions';
 import { openFavoriteKanbanBoard } from '../lib/openFavoriteKanbanBoard';
 import type { RootStackParamList } from '../../App';
 
@@ -81,7 +78,6 @@ function MenuItemRow({
 export default function Menu({ visible, onClose }: MenuProps) {
   const { colors, isDark, toggleTheme } = useTheme();
   const { logout, user } = useAuth();
-  const { canSeePncp, canSeeGestaoOs } = usePermissions();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const queryClient = useQueryClient();
@@ -125,12 +121,6 @@ export default function Menu({ visible, onClose }: MenuProps) {
         });
       },
     },
-    ...(canSeePncp
-      ? [{ key: 'pncp', label: 'Licitações PNCP', icon: ClipboardList, onPress: () => go('Pncp') }]
-      : []),
-    ...(canSeeGestaoOs
-      ? [{ key: 'gestao-os', label: 'Central de Chamados', icon: Wrench, onPress: () => go('GestaoOs') }]
-      : []),
   ];
 
   useEffect(() => {

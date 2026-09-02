@@ -47,6 +47,8 @@ import {
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
 import UserAvatar from '../components/UserAvatar';
+import { PersonPickerListRow } from '../components/PersonPickerUi';
+import { formatCpfDisplay } from '../lib/cpf';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import {
@@ -399,8 +401,11 @@ export default function AgendaScreen() {
       if (exclude.has(u.id)) return false;
       if (meUser?.id && u.id === meUser.id) return false;
       if (!q) return true;
+      const cpf = formatCpfDisplay(u.cpf).toLowerCase();
       return (
-        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        cpf.includes(q)
       );
     });
   }, [pickerUsersQuery.data, memberSearch, eventAttendees, meUser?.id]);
@@ -1265,7 +1270,7 @@ export default function AgendaScreen() {
             <TextInput
               value={memberSearch}
               onChangeText={setMemberSearch}
-              placeholder="Buscar por nome ou e-mail"
+              placeholder="Buscar por nome ou CPF"
               placeholderTextColor={colors.textSecondary}
               style={styles.input}
               autoFocus
@@ -1278,26 +1283,15 @@ export default function AgendaScreen() {
                   <Text style={styles.peopleEmpty}>Nenhuma pessoa encontrada.</Text>
                 ) : (
                   filteredPickerUsers.map((u) => (
-                    <TouchableOpacity
+                    <PersonPickerListRow
                       key={u.id}
-                      style={styles.pickerRow}
+                      label={u.name}
+                      subtitle={formatCpfDisplay(u.cpf) || u.email}
+                      avatarUri={u.profilePhotoUrl}
+                      colors={colors}
+                      isDark={isDark}
                       onPress={() => addAttendee(u)}
-                    >
-                      <UserAvatar
-                        uri={u.profilePhotoUrl}
-                        size={36}
-                        backgroundColor={colors.primary}
-                        iconColor="#fff"
-                      />
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.pickerName} numberOfLines={1}>
-                          {u.name}
-                        </Text>
-                        <Text style={styles.pickerEmail} numberOfLines={1}>
-                          {u.email}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
+                    />
                   ))
                 )}
               </ScrollView>

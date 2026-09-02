@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Camera as CameraIcon, Wrench, X } from 'lucide-react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { useTheme } from '../context/ThemeContext';
 import AppHeader from '../components/AppHeader';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   fetchAssignedWorkOrders,
   fetchGestaoOsMe,
@@ -51,8 +52,19 @@ function extractQrToken(raw: string): string {
 export default function GestaoOsListScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { canSeeGestaoOs, isLoading: permissionsLoading } = usePermissions();
   const [qrToken, setQrToken] = useState('');
   const [scannerOpen, setScannerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!permissionsLoading && !canSeeGestaoOs) {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Main', { screen: 'Home' });
+      }
+    }
+  }, [permissionsLoading, canSeeGestaoOs, navigation]);
   const [permission, requestPermission] = useCameraPermissions();
   const scanLockRef = useRef(false);
 

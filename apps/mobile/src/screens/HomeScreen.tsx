@@ -15,7 +15,6 @@ import UserAvatar from '../components/UserAvatar';
 import LiveActivitySection from '../components/LiveActivitySection';
 import HomeAgendaCard from '../components/HomeAgendaCard';
 import HomeTarefasCard from '../components/HomeTarefasCard';
-import PncpCaptacoesCard from '../components/PncpCaptacoesCard';
 import { useLiveActivities, LiveActivity } from '../hooks/useLiveActivities';
 import { usePermissions } from '../hooks/usePermissions';
 import type { RootStackParamList } from '../../App';
@@ -31,7 +30,7 @@ export default function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { user } = useAuth();
   const { colors, isDark } = useTheme();
-  const { canSeeCombustivel, canSeeReservas, canSeePncp } = usePermissions();
+  const { canSeeCombustivel, canSeeReservas } = usePermissions();
   const { items: liveItems } = useLiveActivities();
   const styles = getStyles(colors, isDark);
 
@@ -85,8 +84,6 @@ export default function HomeScreen() {
         <HomeAgendaCard />
 
         <HomeTarefasCard />
-
-        {canSeePncp ? <PncpCaptacoesCard /> : null}
       </ScrollView>
     </View>
   );

@@ -26,3 +26,10 @@ export function serializeLoginIdentifier(value: string): string {
   if (looksLikeEmail(trimmed)) return trimmed.toLowerCase();
   return onlyDigits(trimmed);
 }
+
+/** Exibe CPF mascarado (000.000.000-00) quando houver 11 dígitos. */
+export function formatCpfDisplay(value?: string | null): string {
+  const digits = onlyDigits(String(value || ''));
+  if (digits.length !== 11) return String(value || '').trim();
+  return formatCpfInput(digits);
+}

@@ -34,6 +34,8 @@ import {
 import Toast from 'react-native-toast-message';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
+import { PersonPickerListRow, PersonSelectField } from '../components/PersonPickerUi';
+import { formatCpfDisplay } from '../lib/cpf';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { onFabBarPress } from '../navigation/fabBarEvents';
@@ -120,7 +122,12 @@ const TIPO_RESCISAO_OPTIONS = [
   { value: 'OUTRO', label: 'Outro' },
 ] as const;
 
-type PickerOption = { value: string; label: string; subtitle?: string };
+type PickerOption = {
+  value: string;
+  label: string;
+  subtitle?: string;
+  avatarUri?: string | null;
+};
 
 function mapPolo(raw?: string | null): string {
   const s = (raw ?? '').trim();
@@ -519,7 +526,8 @@ export default function DpRequestsScreen() {
       .map((e) => ({
         value: e.id,
         label: e.name,
-        subtitle: e.department || undefined,
+        subtitle: formatCpfDisplay(e.cpf) || e.department || undefined,
+        avatarUri: e.profilePhotoUrl ?? null,
       }));
   };
 
@@ -1381,8 +1389,9 @@ export default function DpRequestsScreen() {
 
                   {requestType
                     ? rows.map((row, index) => {
+                        const selectedEmployee = employees.find((e) => e.id === row.employeeId);
                         const empLabel =
-                          employees.find((e) => e.id === row.employeeId)?.name ||
+                          selectedEmployee?.name ||
                           (row.employeeId ? 'Colaborador selecionado' : '');
                         return (
                           <View key={`row-${index}`} style={styles.itemCard}>
@@ -1402,9 +1411,15 @@ export default function DpRequestsScreen() {
                             </View>
 
                             {requestType !== 'ADMISSAO' ? (
-                              <SelectField
+                              <PersonSelectField
                                 label="Colaborador"
                                 valueLabel={empLabel}
+                                valueSubtitle={
+                                  selectedEmployee
+                                    ? formatCpfDisplay(selectedEmployee.cpf) || undefined
+                                    : undefined
+                                }
+                                valueAvatarUri={selectedEmployee?.profilePhotoUrl}
                                 placeholder="Selecionar colaborador"
                                 colors={colors}
                                 isDark={isDark}
@@ -2135,24 +2150,38 @@ export default function DpRequestsScreen() {
               keyExtractor={(item) => item.value}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.pickerItem,
-                    { backgroundColor: isDark ? colors.card : colors.surface },
-                  ]}
-                  onPress={() => {
-                    picker?.onSelect(item.value);
-                    setPicker(null);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.pickerItemLabel}>{item.label}</Text>
-                  {item.subtitle ? (
-                    <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
-                  ) : null}
-                </TouchableOpacity>
-              )}
+              renderItem={({ item }) =>
+                'avatarUri' in item ? (
+                  <PersonPickerListRow
+                    label={item.label}
+                    subtitle={item.subtitle}
+                    avatarUri={item.avatarUri}
+                    colors={colors}
+                    isDark={isDark}
+                    onPress={() => {
+                      picker?.onSelect(item.value);
+                      setPicker(null);
+                    }}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerItem,
+                      { backgroundColor: isDark ? colors.card : colors.surface },
+                    ]}
+                    onPress={() => {
+                      picker?.onSelect(item.value);
+                      setPicker(null);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.pickerItemLabel}>{item.label}</Text>
+                    {item.subtitle ? (
+                      <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                )
+              }
               ListEmptyComponent={
                 <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
               }

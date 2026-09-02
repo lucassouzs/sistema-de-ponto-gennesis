@@ -41,6 +41,8 @@ import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
+import { PersonPickerListRow, PersonSelectField } from '../components/PersonPickerUi';
+import { formatCpfDisplay } from '../lib/cpf';
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
 type FuelRefuelStatus =
   | 'PENDING_MANAGER'
@@ -96,7 +98,13 @@ type ReportFormState = {
   observations: string;
 };
 
-type DriverOption = { id: string; name: string; cpf: string; costCenter: string | null };
+type DriverOption = {
+  id: string;
+  name: string;
+  cpf: string;
+  costCenter: string | null;
+  profilePhotoUrl?: string | null;
+};
 type FleetVehicle = {
   id: string;
   placaVeic: string;
@@ -268,7 +276,12 @@ function statusColor(status: FuelRefuelStatus, colors: any) {
   return '#d97706';
 }
 
-type PickerOption = { value: string; label: string; subtitle?: string };
+type PickerOption = {
+  value: string;
+  label: string;
+  subtitle?: string;
+  avatarUri?: string | null;
+};
 
 function SelectField({
   label,
@@ -767,42 +780,56 @@ export default function FuelRequestsScreen() {
             keyExtractor={(item) => item.value}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.pickerItem,
-                  { backgroundColor: isDark ? colors.card : colors.surface },
-                ]}
-                onPress={() => {
-                  picker.onSelect(item.value);
-                  setPicker(null);
-                }}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 15,
-                    fontWeight: '600',
-                    letterSpacing: -0.2,
+            renderItem={({ item }) =>
+              'avatarUri' in item ? (
+                <PersonPickerListRow
+                  label={item.label}
+                  subtitle={item.subtitle}
+                  avatarUri={item.avatarUri}
+                  colors={colors}
+                  isDark={isDark}
+                  onPress={() => {
+                    picker.onSelect(item.value);
+                    setPicker(null);
                   }}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.pickerItem,
+                    { backgroundColor: isDark ? colors.card : colors.surface },
+                  ]}
+                  onPress={() => {
+                    picker.onSelect(item.value);
+                    setPicker(null);
+                  }}
+                  activeOpacity={0.75}
                 >
-                  {item.label}
-                </Text>
-                {item.subtitle ? (
                   <Text
                     style={{
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      marginTop: 3,
-                      fontWeight: '500',
+                      color: colors.text,
+                      fontSize: 15,
+                      fontWeight: '600',
+                      letterSpacing: -0.2,
                     }}
                   >
-                    {item.subtitle}
+                    {item.label}
                   </Text>
-                ) : null}
-              </TouchableOpacity>
-            )}
+                  {item.subtitle ? (
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        marginTop: 3,
+                        fontWeight: '500',
+                      }}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              )
+            }
             ListEmptyComponent={
               <Text
                 style={{
@@ -1192,9 +1219,18 @@ export default function FuelRequestsScreen() {
                   />
 
                   <Text style={styles.sectionTitle}>Condutor e veículo</Text>
-                  <SelectField
+                  <PersonSelectField
                     label="Condutor"
                     valueLabel={form.driverNamePreview}
+                    valueSubtitle={
+                      drivers.find((d) => d.id === form.driverUserId)
+                        ? formatCpfDisplay(drivers.find((d) => d.id === form.driverUserId)?.cpf) ||
+                          undefined
+                        : undefined
+                    }
+                    valueAvatarUri={
+                      drivers.find((d) => d.id === form.driverUserId)?.profilePhotoUrl
+                    }
                     placeholder="Selecione o condutor"
                     colors={colors}
                     isDark={isDark}
@@ -1205,7 +1241,8 @@ export default function FuelRequestsScreen() {
                         options: drivers.map((d) => ({
                           value: d.id,
                           label: d.name,
-                          subtitle: d.cpf,
+                          subtitle: formatCpfDisplay(d.cpf) || undefined,
+                          avatarUri: d.profilePhotoUrl ?? null,
                         })),
                         onSelect: (driverUserId) => {
                           const d = drivers.find((x) => x.id === driverUserId);

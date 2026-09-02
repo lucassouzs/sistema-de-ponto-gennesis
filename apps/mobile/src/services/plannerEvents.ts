@@ -80,6 +80,7 @@ export type KanbanPickerUser = {
   id: string;
   name: string;
   email: string;
+  cpf?: string | null;
   profilePhotoUrl?: string | null;
 };
 

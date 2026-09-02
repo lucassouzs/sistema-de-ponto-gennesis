@@ -45,6 +45,8 @@ import api from '../services/api';
 import { onFabBarPress } from '../navigation/fabBarEvents';
 import AppHeader from '../components/AppHeader';
 import DateField from '../components/DateField';
+import { PersonPickerListRow, PersonSelectField } from '../components/PersonPickerUi';
+import { formatCpfDisplay } from '../lib/cpf';
 type VehicleReservationStatus =
   | 'PENDING_SUPPLIES'
   | 'APPROVED'
@@ -88,7 +90,12 @@ type VehicleReservation = {
   vistoriaReportedBy?: { id: string; name: string } | null;
 };
 
-type EmployeeOption = { id: string; name: string; cpf: string };
+type EmployeeOption = {
+  id: string;
+  name: string;
+  cpf: string;
+  profilePhotoUrl?: string | null;
+};
 type CostCenterOption = { label: string };
 
 type FormState = {
@@ -187,7 +194,12 @@ function isCancelled(status: VehicleReservationStatus) {
   return status === 'CANCELLED' || status === 'REJECTED';
 }
 
-type PickerOption = { value: string; label: string; subtitle?: string };
+type PickerOption = {
+  value: string;
+  label: string;
+  subtitle?: string;
+  avatarUri?: string | null;
+};
 
 function formatCpfLabel(value?: string | null): string {
   const digits = String(value || '').replace(/\D/g, '');
@@ -474,12 +486,14 @@ export default function VehicleReservationsScreen() {
           id: string;
           name: string;
           cpf?: string;
+          profilePhotoUrl?: string | null;
         }>;
         const opts = list
           .map((d) => ({
             id: String(d.id),
             name: String(d.name || '').trim(),
             cpf: formatCpfLabel(d.cpf),
+            profilePhotoUrl: d.profilePhotoUrl ?? null,
           }))
           .filter((e: EmployeeOption) => e.name)
           .sort((a: EmployeeOption, b: EmployeeOption) =>
@@ -734,42 +748,56 @@ export default function VehicleReservationsScreen() {
             keyExtractor={(item) => item.value}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.pickerItem,
-                  { backgroundColor: isDark ? colors.card : colors.surface },
-                ]}
-                onPress={() => {
-                  picker.onSelect(item.value);
-                  setPicker(null);
-                }}
-                activeOpacity={0.75}
-              >
-                <Text
-                  style={{
-                    color: colors.text,
-                    fontSize: 15,
-                    fontWeight: '600',
-                    letterSpacing: -0.2,
+            renderItem={({ item }) =>
+              'avatarUri' in item ? (
+                <PersonPickerListRow
+                  label={item.label}
+                  subtitle={item.subtitle}
+                  avatarUri={item.avatarUri}
+                  colors={colors}
+                  isDark={isDark}
+                  onPress={() => {
+                    picker.onSelect(item.value);
+                    setPicker(null);
                   }}
+                />
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.pickerItem,
+                    { backgroundColor: isDark ? colors.card : colors.surface },
+                  ]}
+                  onPress={() => {
+                    picker.onSelect(item.value);
+                    setPicker(null);
+                  }}
+                  activeOpacity={0.75}
                 >
-                  {item.label}
-                </Text>
-                {item.subtitle ? (
                   <Text
                     style={{
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      marginTop: 3,
-                      fontWeight: '500',
+                      color: colors.text,
+                      fontSize: 15,
+                      fontWeight: '600',
+                      letterSpacing: -0.2,
                     }}
                   >
-                    {item.subtitle}
+                    {item.label}
                   </Text>
-                ) : null}
-              </TouchableOpacity>
-            )}
+                  {item.subtitle ? (
+                    <Text
+                      style={{
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        marginTop: 3,
+                        fontWeight: '500',
+                      }}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              )
+            }
             ListEmptyComponent={
               <Text
                 style={{
@@ -1416,11 +1444,14 @@ export default function VehicleReservationsScreen() {
                   showsVerticalScrollIndicator={false}
                 >
                   <Text style={styles.sectionTitle}>Pessoas</Text>
-                  <SelectField
+                  <PersonSelectField
                     label="Motorista"
                     valueLabel={form.motorista}
                     valueSubtitle={
                       employees.find((e) => e.name === form.motorista)?.cpf || undefined
+                    }
+                    valueAvatarUri={
+                      employees.find((e) => e.name === form.motorista)?.profilePhotoUrl
                     }
                     placeholder="Selecione"
                     colors={colors}
@@ -1433,6 +1464,7 @@ export default function VehicleReservationsScreen() {
                           value: e.name,
                           label: e.name,
                           subtitle: e.cpf || undefined,
+                          avatarUri: e.profilePhotoUrl ?? null,
                         })),
                         onSelect: (motorista) => setForm((f) => ({ ...f, motorista })),
                       });

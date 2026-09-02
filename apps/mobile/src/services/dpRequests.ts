@@ -73,6 +73,7 @@ export type PayrollEmployeeOption = {
   department?: string;
   position?: string;
   cpf?: string;
+  profilePhotoUrl?: string | null;
   company?: string | null;
   polo?: string | null;
   costCenter?: string | null;
