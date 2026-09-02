@@ -4553,7 +4553,7 @@ export function OcPurchaseOrdersPanel({
                         Fornecedor
                       </th>
                       <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Centro de Custo
+                        Contrato
                       </th>
                       <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         RM
@@ -4594,7 +4594,7 @@ export function OcPurchaseOrdersPanel({
                         <th className={ocListDocThCls}>Vencimento</th>
                       )}
                       {ocListShowsInstallmentAmountColumn(activeTab) && (
-                        <th className={ocListDocThCls}>Valor parcela</th>
+                        <th className={ocListDocThCls}>Valor</th>
                       )}
                       {ocListShowsDocumentColumns(activeTab) && (
                         <>
