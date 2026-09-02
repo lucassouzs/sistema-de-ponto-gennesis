@@ -8,7 +8,8 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import {
@@ -23,7 +24,11 @@ import {
   saveFeed,
   saveSnapshot,
 } from './activityStorage';
-
+import {
+  ensureSystemNotificationPermissions,
+  presentSystemNotifications,
+  syncAppIconBadge,
+} from './systemNotifications';
 const POLL_MS = 40_000;
 
 type NotificationsContextValue = {
@@ -128,6 +133,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       }
       if (fresh.length === 0) return;
 
+      void presentSystemNotifications(fresh);
+
       setNotifications((curr) => {
         const ids = new Set(fresh.map((f) => f.id));
         const merged = [...fresh, ...curr.filter((c) => !ids.has(c.id))];
@@ -180,6 +187,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (Platform.OS !== 'web') {
+      void ensureSystemNotificationPermissions();
+    }
     void refresh();
     const id = setInterval(() => {
       void refresh();
@@ -212,13 +222,30 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setSheetVisible(false);
   }, []);
 
-  const unreadCount = useMemo(
-    () => notifications.reduce((acc, n) => acc + (n.read ? 0 : 1), 0),
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Notifications.addNotificationResponseReceivedListener(() => {
+      openSheet();
+    });
+    return () => sub.remove();
+  }, [openSheet]);
+
+  const unreadCount = useMemo(    () => notifications.reduce((acc, n) => acc + (n.read ? 0 : 1), 0),
     [notifications],
   );
 
-  const value = useMemo(
-    () => ({
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    void syncAppIconBadge(unreadCount);
+  }, [unreadCount]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      void syncAppIconBadge(0);
+    }
+  }, [isAuthenticated]);
+
+  const value = useMemo(    () => ({
       notifications,
       unreadCount,
       sheetVisible,

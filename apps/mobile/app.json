@@ -46,7 +46,9 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {
@@ -66,6 +68,14 @@
               "numbersSelectorColor": { "light": "#ce3736", "dark": "#ef4444" }
             }
           }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/favicon.png",
+          "color": "#ce3736",
+          "defaultChannel": "gennesis-activity"
         }
       ]
     ],
