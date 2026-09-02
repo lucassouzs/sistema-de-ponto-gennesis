@@ -111,6 +111,45 @@ export class QuoteMapService {
     return Number(value);
   }
 
+  /** Nome do material/serviço em destaque (cadastro). */
+  private materialCatalogLabel(m?: {
+    name?: string | null;
+    description?: string | null;
+    sinapiCode?: string | null;
+  } | null): string {
+    if (!m) return '—';
+    const name = (m.name || '').trim();
+    if (name) return name;
+    const desc = (m.description || '').trim();
+    if (desc) return desc;
+    const sinapi = (m.sinapiCode || '').trim();
+    if (sinapi) return sinapi;
+    return '—';
+  }
+
+  /** Descrição do cadastro quando difere do nome. */
+  private materialCatalogSubtitle(m?: {
+    name?: string | null;
+    description?: string | null;
+  } | null): string {
+    if (!m) return '';
+    const name = (m.name || '').trim();
+    const desc = (m.description || '').trim();
+    if (desc && name && desc !== name) return desc;
+    return '';
+  }
+
+  /** Linha secundária: detalhamento (mapa/OC/RM) ou descrição do cadastro. */
+  private purchaseOrderLineDetail(
+    detailFromNotes: string,
+    material?: { name?: string | null; description?: string | null } | null
+  ): string | null {
+    const detail = detailFromNotes.trim();
+    if (detail) return detail;
+    const subtitle = this.materialCatalogSubtitle(material);
+    return subtitle || null;
+  }
+
   private findCompanyLogoPath(...contextLabels: (string | null | undefined)[]): string | null {
     const useUnb = shouldUseUnbBranding(...contextLabels);
     return resolvePdfLogoPathFromPublic(useUnb);
@@ -251,16 +290,12 @@ export class QuoteMapService {
             (typeof mri?.observation === 'string' && mri.observation.trim()) ||
             '';
           return {
-            label:
-              mri?.material?.description?.trim() ||
-              mri?.material?.name?.trim() ||
-              itemId ||
-              '—',
+            label: this.materialCatalogLabel(mri?.material),
             quantity: qty,
             unit: mri?.unit || '—',
             unitPrice,
             totalPrice: qty * unitPrice,
-            notes: rmNote || null,
+            notes: this.purchaseOrderLineDetail(rmNote, mri?.material),
             isWinner,
           };
         });
@@ -300,16 +335,15 @@ export class QuoteMapService {
             const total =
               it.totalPrice != null ? this.toNumber(it.totalPrice) : qty * unitPrice;
             return {
-              label:
-                it.material?.description?.trim() ||
-                it.material?.name?.trim() ||
-                it.materialId ||
-                '—',
+              label: this.materialCatalogLabel(it.material),
               quantity: qty,
               unit: it.unit || '—',
               unitPrice,
               totalPrice: total,
-              notes: typeof it.notes === 'string' ? it.notes.trim() || null : null,
+              notes: this.purchaseOrderLineDetail(
+                typeof it.notes === 'string' ? it.notes : '',
+                it.material
+              ),
             };
           }),
         });
@@ -337,16 +371,12 @@ export class QuoteMapService {
             (typeof mri?.observation === 'string' && mri.observation.trim()) ||
             '';
           return {
-            label:
-              mri?.material?.description?.trim() ||
-              mri?.material?.name?.trim() ||
-              w.materialRequestItemId ||
-              '—',
+            label: this.materialCatalogLabel(mri?.material),
             quantity: qty,
             unit: mri?.unit || '—',
             unitPrice,
             totalPrice: qty * unitPrice,
-            notes: rmNote || null,
+            notes: this.purchaseOrderLineDetail(rmNote, mri?.material),
           };
         });
         sections.push({

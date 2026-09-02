@@ -37,7 +37,7 @@ import {
 import { formatRmListDisplayId } from '../gerenciar-materiais/_lib/rmListDisplay';
 import type { MaterialRequest as MaterialRequestBase } from '../gerenciar-materiais/_lib/types';
 import {
-  getCoveredRmItemIdsFromOrders,
+  getCoveredRmItemIds,
   getRmItemCoverageCounts,
   rmHasOpenItemsForProcurement,
 } from '@/lib/rmProcurementCoverage';
@@ -628,7 +628,6 @@ export default function MapaCotacaoPage() {
     for (const r of rawApprovedRequestsForCoverage) {
       if (r.status !== 'APPROVED') continue;
       const orders = ordersByRm.get(r.id) ?? [];
-      if (orders.length === 0) continue;
       if (!rmHasOpenItemsForProcurement(r, orders)) s.add(r.id);
     }
     return s;
@@ -765,12 +764,25 @@ export default function MapaCotacaoPage() {
 
   const coveredItemIdsForSelected = useMemo(() => {
     if (!selectedRequestId) return new Set<string>();
-    return getCoveredRmItemIdsFromOrders(
-      allOrders.filter(
-        (o) => (o.materialRequestId ?? o.materialRequest?.id) === selectedRequestId
-      )
+    const orders = allOrders.filter(
+      (o) => (o.materialRequestId ?? o.materialRequest?.id) === selectedRequestId
     );
-  }, [allOrders, selectedRequestId]);
+    const summaryRequest = rawApprovedRequestsForCoverage.find((r) => r.id === selectedRequestId);
+    const requestForCoverage = selectedRequestRaw ?? summaryRequest;
+    if (!requestForCoverage) {
+      return getCoveredRmItemIds({ id: selectedRequestId, status: 'APPROVED' }, orders);
+    }
+    return getCoveredRmItemIds(
+      {
+        id: requestForCoverage.id,
+        status: String(requestForCoverage.status || ''),
+        items: requestForCoverage.items,
+        _count: (requestForCoverage as { _count?: { items?: number } })._count,
+        purchaseOrders: (requestForCoverage as { purchaseOrders?: PurchaseOrderLite[] }).purchaseOrders,
+      },
+      orders
+    );
+  }, [allOrders, selectedRequestId, selectedRequestRaw, rawApprovedRequestsForCoverage]);
 
   /** Itens ainda sem OC ativa — mapa de cotação só trabalha com estes. */
   const selectedRequest = useMemo(() => {

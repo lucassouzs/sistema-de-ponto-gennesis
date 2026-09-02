@@ -44,7 +44,7 @@ import { buildOcPdfDownloadFileName, formatOcListDisplayId } from '@/components/
 import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 import {
   catalogMaterialLabel,
-  catalogMaterialSubtitle
+  purchaseOrderLineSubtitle
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
 import { stripOsSePrefix } from '@/lib/formatOsSePasta';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
@@ -1372,20 +1372,6 @@ function OcStockMovementHistoryList({
   );
 }
 
-/** Detalhamento do item (mapa de cotação → notes da OC; fallback observação da RM). */
-function purchaseOrderItemDetailText(
-  line: NonNullable<PurchaseOrder['items']>[number]
-): string {
-  const fromOc = typeof line.notes === 'string' ? line.notes.trim() : '';
-  if (fromOc) return fromOc;
-  const mri = line.materialRequestItem;
-  if (!mri || typeof mri !== 'object') return '';
-  const fromRmNotes = typeof mri.notes === 'string' ? mri.notes.trim() : '';
-  if (fromRmNotes) return fromRmNotes;
-  const fromRmObs = typeof mri.observation === 'string' ? mri.observation.trim() : '';
-  return fromRmObs;
-}
-
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 }
@@ -1441,8 +1427,7 @@ function OcOrderMaterialsTable({
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {order.items?.map((line, idx) => {
-            const detail = purchaseOrderItemDetailText(line);
-            const materialSubtitle = catalogMaterialSubtitle(line.material);
+            const lineSubtitle = purchaseOrderLineSubtitle(line);
             const canReturnThis = showActions && Boolean(line.id);
             return (
               <tr key={line.id || idx} className="text-gray-900 dark:text-gray-100">
@@ -1451,14 +1436,9 @@ function OcOrderMaterialsTable({
                 </td>
                 <td className="py-3 px-2 align-top max-w-[220px] sm:max-w-none">
                   <span className="block">{catalogMaterialLabel(line.material)}</span>
-                  {materialSubtitle ? (
+                  {lineSubtitle ? (
                     <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {materialSubtitle}
-                    </p>
-                  ) : null}
-                  {detail ? (
-                    <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {detail}
+                      {lineSubtitle}
                     </p>
                   ) : null}
                 </td>

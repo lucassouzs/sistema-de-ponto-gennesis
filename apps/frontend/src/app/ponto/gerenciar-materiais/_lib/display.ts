@@ -177,6 +177,35 @@ export function catalogMaterialSubtitle(
   return materialItemSubtitle({ material });
 }
 
+export type PurchaseOrderLineDetailSource = {
+  notes?: string | null;
+  materialRequestItem?: {
+    notes?: string | null;
+    observation?: string | null;
+  } | null;
+};
+
+/** Detalhamento do item (mapa de cotação → notes da OC; fallback observação da RM). */
+export function purchaseOrderItemDetailText(line: PurchaseOrderLineDetailSource): string {
+  const fromOc = typeof line.notes === 'string' ? line.notes.trim() : '';
+  if (fromOc) return fromOc;
+  const mri = line.materialRequestItem;
+  if (!mri || typeof mri !== 'object') return '';
+  const fromRmNotes = typeof mri.notes === 'string' ? mri.notes.trim() : '';
+  if (fromRmNotes) return fromRmNotes;
+  const fromRmObs = typeof mri.observation === 'string' ? mri.observation.trim() : '';
+  return fromRmObs;
+}
+
+/** Linha secundária na OC: detalhamento do mapa (se houver), senão descrição do cadastro. */
+export function purchaseOrderLineSubtitle(
+  line: PurchaseOrderLineDetailSource & { material?: MaterialLineItem['material'] | null }
+): string | null {
+  const detail = purchaseOrderItemDetailText(line);
+  if (detail) return detail;
+  return catalogMaterialSubtitle(line.material);
+}
+
 export function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('pt-BR', {
     day: '2-digit',

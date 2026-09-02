@@ -21,7 +21,7 @@ import {
 import { isOcCoveringRmItems, isRmItemCancelled } from '@/lib/rmProcurementCoverage';
 import {
   catalogMaterialLabel,
-  catalogMaterialSubtitle
+  purchaseOrderLineSubtitle
 } from '../_lib/display';
 
 const FALLBACK_PAYMENT_CONDITION_LABELS: Record<string, string> = {
@@ -267,7 +267,7 @@ function OcCard({
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {lines.map((line, idx) => {
-                  const materialSubtitle = catalogMaterialSubtitle(line.material);
+                  const lineSubtitle = purchaseOrderLineSubtitle(line);
                   return (
                   <tr
                     key={`${order.id}-${line.id || idx}`}
@@ -278,9 +278,9 @@ function OcCard({
                     </td>
                     <td className="max-w-[200px] px-2 py-2.5 align-top sm:max-w-none">
                       {catalogMaterialLabel(line.material)}
-                      {materialSubtitle ? (
+                      {lineSubtitle ? (
                         <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
-                          {materialSubtitle}
+                          {lineSubtitle}
                         </p>
                       ) : null}
                       {orderClosed ? (
@@ -288,18 +288,6 @@ function OcCard({
                           Item cancelado nesta OC
                         </p>
                       ) : null}
-                      {(() => {
-                        const detail =
-                          line.notes?.trim() ||
-                          (typeof line.materialRequestItem?.notes === 'string'
-                            ? line.materialRequestItem.notes.trim()
-                            : '');
-                        return detail ? (
-                          <p className="mt-0.5 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400">
-                            {detail}
-                          </p>
-                        ) : null;
-                      })()}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-right align-top tabular-nums">
                       {Number(line.quantity)}

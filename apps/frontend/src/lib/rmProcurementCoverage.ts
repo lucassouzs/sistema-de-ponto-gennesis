@@ -94,19 +94,30 @@ function applyLegacySingleLineOcCoverage(
   covered: Set<string>
 ): void {
   const openItems = (request.items ?? []).filter((item) => !isRmItemCancelled(item));
-  if (openItems.length !== 1) return;
+  if (openItems.length === 1) {
+    const onlyId = openItems[0]!.id;
+    if (covered.has(onlyId)) return;
+    if (applyLegacySingleLineOcCoverageForOrders(orders, onlyId, covered)) return;
+  }
 
-  const onlyId = openItems[0]!.id;
-  if (covered.has(onlyId)) return;
+  if (openItems.length === 0 && request._count?.items === 1 && covered.size === 0) {
+    applyLegacySingleLineOcCoverageForOrders(orders, '__legacy_single_rm_item__', covered);
+  }
+}
 
+function applyLegacySingleLineOcCoverageForOrders(
+  orders: OcCoverageOrder[],
+  itemId: string,
+  covered: Set<string>
+): boolean {
   for (const order of orders) {
     if (!isOcCoveringRmItems(order.status)) continue;
     const lines = (order.items ?? []).filter(Boolean);
-    if (lines.length !== 1) continue;
-    if (lines[0]?.materialRequestItemId) continue;
-    covered.add(onlyId);
-    return;
+    if (lines.length !== 1 || lines[0]?.materialRequestItemId) continue;
+    covered.add(itemId);
+    return true;
   }
+  return false;
 }
 
 export function getOpenRmItemIds(
@@ -198,9 +209,7 @@ export function rmHasOpenItemsForProcurement(
   orders?: OcCoverageOrder[]
 ): boolean {
   if (request.status !== 'APPROVED') return false;
-  const source =
-    orders && orders.length > 0 ? orders : (request.purchaseOrders ?? []);
-  const covered = getCoveredRmItemIdsFromOrders(source);
+  const covered = getCoveredRmItemIds(request, orders);
   const items = request.items ?? [];
 
   if (items.length > 0) {
@@ -213,6 +222,8 @@ export function rmHasOpenItemsForProcurement(
     if (covered.size >= total) return false;
   }
 
+  const source =
+    orders && orders.length > 0 ? orders : (request.purchaseOrders ?? []);
   return !source.some((o) => isOcCoveringRmItems(o.status));
 }
 
