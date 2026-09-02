@@ -4,6 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 type Theme = 'light' | 'dark';
 
 interface ThemeColors {
+  /** Base sólida por trás do padrão de engenharia. */
+  appShell: string;
+  /** Raiz das telas — transparente para o padrão aparecer. */
+  screenRoot: 'transparent';
   background: string;
   surface: string;
   card: string;
@@ -29,7 +33,9 @@ interface ThemeContextData {
 }
 
 const lightColors: ThemeColors = {
-  background: '#f2f2f7',
+  appShell: '#f4f6f8',
+  screenRoot: 'transparent',
+  background: '#f4f6f8',
   surface: '#ffffff',
   card: '#ffffff',
   text: '#111827',
@@ -47,6 +53,8 @@ const lightColors: ThemeColors = {
 };
 
 const darkColors: ThemeColors = {
+  appShell: '#111827',
+  screenRoot: 'transparent',
   background: '#111827',
   surface: '#1f2937',
   card: '#374151',

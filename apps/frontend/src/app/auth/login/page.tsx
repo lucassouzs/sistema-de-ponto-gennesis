@@ -4,8 +4,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Moon, Sun, ArrowRight, MessageCircle, X } from 'lucide-react';
+import { Eye, EyeOff, UserRound, Lock, AlertCircle, Moon, Sun, ArrowRight, MessageCircle, X } from 'lucide-react';
 import { authService } from '@/lib/auth';
+import { normalizeLoginIdentifierInput } from '@/lib/cpf';
 import { toast } from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
@@ -22,7 +23,7 @@ export default function LoginPage() {
   const { isDark, toggleTheme } = useTheme();
   const { logoSrc, logoAlt } = useBrandingLogo();
   const [formData, setFormData] = useState({
-    email: '',
+    identifier: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -121,7 +122,7 @@ export default function LoginPage() {
       if (error.message?.includes('Credenciais inválidas') || 
           error.message?.includes('incorreta') ||
           error.message?.includes('inválidas')) {
-        setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+        setError('E-mail, CPF ou senha incorretos. Verifique suas credenciais e tente novamente.');
       } else {
         setError(error.message || 'Erro ao fazer login');
       }
@@ -134,11 +135,11 @@ export default function LoginPage() {
     'login-form-field w-full py-4 text-base rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: name === 'identifier' ? normalizeLoginIdentifierInput(value) : value,
     }));
-    // Limpar erro quando usuário começar a digitar
     if (error) {
       setError('');
     }
@@ -227,22 +228,23 @@ export default function LoginPage() {
               Entrar na sua conta
             </h2>
             <p className="text-gray-600 dark:text-gray-400 mb-8 text-center">
-              Digite suas credenciais para acessar o sistema
+              Use seu e-mail ou CPF e a senha para acessar
             </p>
           </div>
 
         <form onSubmit={handleSubmit} method="post" action="#" className="login-page-enter login-page-enter--form space-y-6">
           <div>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
+              <UserRound className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
               <input
-                type="email"
-                name="email"
-                value={formData.email}
+                type="text"
+                name="identifier"
+                value={formData.identifier}
                 onChange={handleChange}
                 required
                 autoComplete="username"
-                placeholder="Email"
+                inputMode="text"
+                placeholder="E-mail ou CPF"
                 className={`${loginInputClassName} pl-12 pr-4`}
               />
             </div>

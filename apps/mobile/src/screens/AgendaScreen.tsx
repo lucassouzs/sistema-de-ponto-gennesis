@@ -1388,7 +1388,7 @@ function getStyles(colors: any, isDark: boolean) {
   const selectedFg = isDark ? '#111827' : '#fff';
 
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.background },
+    safe: { flex: 1, backgroundColor: colors.screenRoot },
     switcher: {
       flexDirection: 'row',
       marginHorizontal: 20,

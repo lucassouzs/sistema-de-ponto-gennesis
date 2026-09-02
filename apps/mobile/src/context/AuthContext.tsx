@@ -3,11 +3,12 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import { buildApiUrl } from '../config/api';
+import { serializeLoginIdentifier } from '../lib/cpf';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -81,13 +82,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     try {
       console.log('🔐 Tentando fazer login...');
-      console.log('📧 Email:', email);
       console.log('🌐 URL:', buildApiUrl('/api/auth/login'));
       
-      // Adicionar timeout de 10 segundos
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
@@ -96,7 +95,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          identifier: serializeLoginIdentifier(identifier),
+          password,
+          source: 'mobile',
+        }),
         signal: controller.signal,
       });
       

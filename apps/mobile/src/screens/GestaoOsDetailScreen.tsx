@@ -346,7 +346,7 @@ export default function GestaoOsDetailScreen({ route }: Props) {
     );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.screenRoot }]}>
       <AppHeader title="Detalhe da OS" showBack />
       {query.isLoading || !wo ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />

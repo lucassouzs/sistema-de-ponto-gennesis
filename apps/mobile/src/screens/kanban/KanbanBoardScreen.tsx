@@ -633,7 +633,7 @@ const stylesLocal = StyleSheet.create({
 
 function getStyles(colors: any, isDark: boolean, columnHeight: number) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.background },
+    safe: { flex: 1, backgroundColor: colors.screenRoot },
     boardArea: {
       flex: 1,
     },

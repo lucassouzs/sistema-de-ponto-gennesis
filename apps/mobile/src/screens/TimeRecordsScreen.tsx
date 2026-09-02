@@ -239,11 +239,11 @@ export default function TimeRecordsScreen() {
 const getStyles = (colors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   loadingContainer: {
     flex: 1,

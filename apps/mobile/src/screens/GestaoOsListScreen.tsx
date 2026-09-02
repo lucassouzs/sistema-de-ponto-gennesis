@@ -99,7 +99,7 @@ export default function GestaoOsListScreen() {
   const memberships = meQuery.data?.memberships ?? [];
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.screenRoot }]}>
       <AppHeader title="Central de Chamados" />
       <View style={styles.body}>
         {memberships.length > 1 ? (

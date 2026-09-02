@@ -236,15 +236,15 @@ const getStyles = (colors: any, isDark: boolean) =>
   StyleSheet.create({
     safeArea: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: colors.screenRoot,
     },
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: colors.screenRoot,
     },
     scrollContent: {
       paddingBottom: 40,
-      backgroundColor: colors.background,
+      backgroundColor: colors.screenRoot,
       flexGrow: 1,
     },
     hero: {

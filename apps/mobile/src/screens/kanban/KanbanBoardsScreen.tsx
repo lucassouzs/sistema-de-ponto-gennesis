@@ -223,7 +223,7 @@ export default function KanbanBoardsScreen() {
 
 function getStyles(colors: any, _isDark: boolean) {
   return StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.background },
+    safe: { flex: 1, backgroundColor: colors.screenRoot },
     toolbar: {
       flexDirection: 'row',
       alignItems: 'center',

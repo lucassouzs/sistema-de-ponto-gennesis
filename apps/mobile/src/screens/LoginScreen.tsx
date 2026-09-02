@@ -19,10 +19,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Eye, EyeOff, Mail, Lock, MessageCircle, X, Check } from 'lucide-react-native';
+import { Eye, EyeOff, UserRound, Lock, MessageCircle, X, Check } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../context/AuthContext';
 import { API_CONFIG } from '../config/api';
+import { normalizeLoginIdentifierInput } from '../lib/cpf';
 import { SPLASH_BG, SPLASH_LOGO_SIZE } from '../components/AuthBrandSplash';
 
 const SUPPORT_WHATSAPP = '5561981622021';
@@ -41,13 +42,13 @@ type Props = {
 };
 
 export default function LoginScreen({ fromBootSplash = true }: Props) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
-  const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+  const [focusedField, setFocusedField] = useState<'identifier' | 'password' | null>(null);
   const [error, setError] = useState('');
   const [introDone, setIntroDone] = useState(false);
   const passwordRef = useRef<TextInput>(null);
@@ -109,20 +110,20 @@ export default function LoginScreen({ fromBootSplash = true }: Props) {
     outputRange: [10, 0],
   });
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
+  const canSubmit = identifier.trim().length > 0 && password.length > 0 && !loading;
   const styles = useMemo(() => getStyles(insets.bottom), [insets.bottom]);
 
   const handleLogin = async () => {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
-      setError('Preencha e-mail e senha.');
+    const trimmedIdentifier = identifier.trim();
+    if (!trimmedIdentifier || !password) {
+      setError('Preencha e-mail/CPF e senha.');
       return;
     }
 
     setError('');
     setLoading(true);
     try {
-      await login(trimmedEmail, password);
+      await login(trimmedIdentifier, password);
       Toast.show({
         type: 'success',
         text1: 'Bem-vindo',
@@ -134,7 +135,7 @@ export default function LoginScreen({ fromBootSplash = true }: Props) {
         message.toLowerCase().includes('credenciais') ||
         message.toLowerCase().includes('incorret')
       ) {
-        setError('E-mail ou senha incorretos.');
+        setError('E-mail, CPF ou senha incorretos.');
       } else {
         setError(message || 'Não foi possível entrar. Tente de novo.');
       }
@@ -206,30 +207,30 @@ export default function LoginScreen({ fromBootSplash = true }: Props) {
             <View style={styles.formFields}>
               <View style={styles.inputContainer}>
                 <View style={styles.fieldIcon}>
-                  <Mail size={20} color="#9ca3af" />
+                  <UserRound size={20} color="#9ca3af" />
                 </View>
                 <TextInput
                   style={[
                     styles.input,
                     styles.inputWithIcon,
-                    focusedField === 'email' && styles.inputFocused,
+                    focusedField === 'identifier' && styles.inputFocused,
                   ]}
-                  value={email}
+                  value={identifier}
                   onChangeText={(v) => {
-                    setEmail(v);
+                    setIdentifier(normalizeLoginIdentifierInput(v));
                     if (error) setError('');
                   }}
-                  placeholder="E-mail"
-                  keyboardType="email-address"
+                  placeholder="E-mail ou CPF"
+                  keyboardType="default"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  autoComplete="email"
-                  textContentType="emailAddress"
+                  autoComplete="username"
+                  textContentType="username"
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   blurOnSubmit={false}
                   placeholderTextColor="#9ca3af"
-                  onFocus={() => setFocusedField('email')}
+                  onFocus={() => setFocusedField('identifier')}
                   onBlur={() => setFocusedField(null)}
                   editable={!loading && introDone}
                 />

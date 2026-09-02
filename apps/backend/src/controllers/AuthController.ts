@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { comparePassword, hashPassword } from '../lib/passwordHash';
 import { ChatService } from '../services/ChatService';
+import { findUserByLoginIdentifier, normalizeLoginIdentifier } from '../lib/loginIdentifier';
 import { recordSuccessfulLogin, recordSuccessfulLogout } from './UserActivityController';
 
 const chatUploadService = new ChatService();
@@ -83,11 +84,11 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, password } = req.body;
+      const identifier = normalizeLoginIdentifier(req.body?.identifier ?? req.body?.email);
+      const { password } = req.body;
 
-      // Validar campos obrigatórios
-      if (!email || !password) {
-        throw createError('Email e senha são obrigatórios', 400);
+      if (!identifier || !password) {
+        throw createError('E-mail/CPF e senha são obrigatórios', 400);
       }
 
       // Verificar se JWT_SECRET está configurado
@@ -96,13 +97,7 @@ export class AuthController {
         throw createError('Erro de configuração do servidor', 500);
       }
 
-      // Buscar usuário
-      const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase().trim() },
-        include: {
-          employee: true,
-        }
-      });
+      const user = await findUserByLoginIdentifier(identifier);
 
       if (!user) {
         throw createError('Credenciais inválidas', 401);

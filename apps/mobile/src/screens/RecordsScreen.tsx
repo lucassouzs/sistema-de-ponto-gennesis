@@ -358,7 +358,7 @@ export default function DashboardScreen() {
 const getStyles = (colors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.screenRoot,
   },
   topSafeArea: {
     backgroundColor: colors.headerBackground,
@@ -374,7 +374,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   scrollContent: {
     flexGrow: 1,

@@ -1102,8 +1102,8 @@ export default function PncpLicitacoesScreen() {
 
 const getStyles = (colors: any, isDark: boolean) =>
   StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: colors.background },
-    container: { flex: 1, backgroundColor: colors.background },
+    safeArea: { flex: 1, backgroundColor: colors.screenRoot },
+    container: { flex: 1, backgroundColor: colors.screenRoot },
     scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
     pageTitle: {
       color: colors.text,
@@ -1296,7 +1296,7 @@ const getStyles = (colors: any, isDark: boolean) =>
     pagerBtnDisabled: { opacity: 0.4 },
     pagerBtnText: { color: colors.primary, fontWeight: '700', fontSize: 13 },
     pagerLabel: { color: colors.textSecondary, fontWeight: '600', fontSize: 13 },
-    detailSafe: { flex: 1, backgroundColor: colors.background },
+    detailSafe: { flex: 1, backgroundColor: colors.screenRoot },
     formHeader: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -102,7 +102,7 @@ export default function GestaoOsQrScreen({ route, navigation }: Props) {
   const isClose = resolved?.kind === 'building-close';
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.screenRoot }]}>
       <AppHeader title={isClose ? 'QR da localidade' : 'QR do ativo'} showBack />
       {loading && !resolved ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />

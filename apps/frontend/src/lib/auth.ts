@@ -1,8 +1,9 @@
 import { User } from '@/types';
 import { API_BASE_URL } from './apiBaseUrl';
+import { serializeLoginIdentifier } from './cpf';
 
 export interface LoginCredentials {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -49,7 +50,11 @@ class AuthService {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify({ ...credentials, source: 'web' }),
+      body: JSON.stringify({
+        identifier: serializeLoginIdentifier(credentials.identifier),
+        password: credentials.password,
+        source: 'web',
+      }),
     });
 
     const body = await this.parseJson(response);

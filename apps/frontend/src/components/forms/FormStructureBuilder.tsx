@@ -1639,12 +1639,13 @@ export function FormStructureBuilder({
   }, []);
 
   const onCanvasDragOver = (e: React.DragEvent, targetId: string) => {
+    // field-move usa pointer events; HTML5 DnD aqui é só da paleta (copy).
     if (dragKind === 'field-move') return;
     const types = Array.from(e.dataTransfer.types);
     if (!types.includes(FORM_DND_MIME) && !types.includes('text/plain')) return;
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = dragKind === 'field-move' ? 'move' : 'copy';
+    e.dataTransfer.dropEffect = 'copy';
     if (dropTarget !== targetId) {
       snapshotFieldRects();
       setDropTarget(targetId);

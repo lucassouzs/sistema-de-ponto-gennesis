@@ -23,6 +23,7 @@ import GestaoOsListScreen from './src/screens/GestaoOsListScreen';
 import GestaoOsDetailScreen from './src/screens/GestaoOsDetailScreen';
 import GestaoOsQrScreen from './src/screens/GestaoOsQrScreen';
 import AuthBrandSplash, { SPLASH_BG } from './src/components/AuthBrandSplash';
+import ThemeBackground from './src/components/ThemeBackground';
 
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 
@@ -56,7 +57,6 @@ const MIN_SPLASH_MS = 1600;
 
 function AppNavigator() {
   const { isAuthenticated, loading } = useAuth();
-  const { colors } = useTheme();
   const [minSplashDone, setMinSplashDone] = React.useState(false);
   const [bootFade] = React.useState(() => new Animated.Value(1));
   const [showBootSplash, setShowBootSplash] = React.useState(true);
@@ -93,38 +93,40 @@ function AppNavigator() {
   // Autenticado ainda com splash sumindo
   if (showBootSplash && isAuthenticated) {
     return (
-      <View style={{ flex: 1 }}>
-        <NavigationContainer>
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="Main" component={BottomTabNavigator} />
-          </Stack.Navigator>
-        </NavigationContainer>
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            opacity: bootFade,
-            zIndex: 50,
-          }}
-        >
-          <AuthBrandSplash />
-        </Animated.View>
-      </View>
+      <ThemeBackground>
+        <View style={{ flex: 1 }}>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Main" component={BottomTabNavigator} />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              opacity: bootFade,
+              zIndex: 50,
+            }}
+          >
+            <AuthBrandSplash />
+          </Animated.View>
+        </View>
+      </ThemeBackground>
     );
   }
 
-  return (
-    <View style={{ flex: 1, backgroundColor: isAuthenticated ? colors.background : SPLASH_BG }}>
+  const shell = (
+    <View style={{ flex: 1, backgroundColor: isAuthenticated ? 'transparent' : SPLASH_BG }}>
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
             contentStyle: {
-              backgroundColor: isAuthenticated ? colors.background : SPLASH_BG,
+              backgroundColor: isAuthenticated ? 'transparent' : SPLASH_BG,
             },
             animation: 'slide_from_right',
           }}
@@ -156,6 +158,12 @@ function AppNavigator() {
       </NavigationContainer>
     </View>
   );
+
+  if (isAuthenticated) {
+    return <ThemeBackground>{shell}</ThemeBackground>;
+  }
+
+  return shell;
 }
 
 function StatusBarComponent() {

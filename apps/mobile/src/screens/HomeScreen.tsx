@@ -94,8 +94,8 @@ export default function HomeScreen() {
 
 const getStyles = (colors: any, _isDark: boolean) =>
   StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: colors.background },
-    container: { flex: 1, backgroundColor: colors.background },
+    safeArea: { flex: 1, backgroundColor: colors.screenRoot },
+    container: { flex: 1, backgroundColor: colors.screenRoot },
     scrollContent: {
       paddingHorizontal: 20,
       paddingTop: 8,

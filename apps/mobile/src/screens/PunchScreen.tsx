@@ -644,7 +644,7 @@ export default function PunchScreen() {
 const getStyles = (colors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   header: {
     flexDirection: 'row',
@@ -671,7 +671,7 @@ const getStyles = (colors: any) => StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   scrollContent: {
     padding: 20,

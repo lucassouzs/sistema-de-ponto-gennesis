@@ -2275,8 +2275,8 @@ function AttachButton({
 
 function getStyles(colors: any, isDark: boolean) {
   return StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: colors.background },
-    container: { flex: 1, backgroundColor: colors.background },
+    safeArea: { flex: 1, backgroundColor: colors.screenRoot },
+    container: { flex: 1, backgroundColor: colors.screenRoot },
     scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
     pad: { padding: 16, paddingBottom: 48 },
     pageTitle: {
