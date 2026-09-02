@@ -13,7 +13,7 @@ import {
   formatRefuelDeadlineLabel,
 } from '../lib/fuelSuppliesSla';
 import { prisma } from '../lib/prisma';
-import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
+import { findUserIdsMatchingSearch, findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 import { createError } from '../middleware/errorHandler';
 import {
   notifyFuelRequesterApprovedBySupplies,
@@ -192,20 +192,34 @@ export class FuelRefuelRequestService {
     const search = params.search?.trim();
     if (search) {
       const asNumber = parseInt(search, 10);
-      const matchedRequesterIds = await findUserIdsMatchingSearch(search);
+      const [matchedRequesterIds, fuelIds, contractIds] = await Promise.all([
+        findUserIdsMatchingSearch(search),
+        findIdsByUnaccentSearch({
+          from: Prisma.sql`fuel_refuel_requests`,
+          columns: ['route', '"driverName"', '"vehiclePlate"', '"costCenter"'],
+          search,
+        }),
+        findIdsByUnaccentSearch({
+          from: Prisma.sql`contracts`,
+          columns: ['name', 'number'],
+          search,
+        }),
+      ]);
       where.OR = [
-        { route: { contains: search, mode: 'insensitive' } },
-        { driverName: { contains: search, mode: 'insensitive' } },
-        { vehiclePlate: { contains: search, mode: 'insensitive' } },
+        ...(fuelIds?.length ? [{ id: { in: fuelIds } }] : []),
         {
           requesterId: {
             in: matchedRequesterIds.length > 0 ? matchedRequesterIds : ['__none__'],
           },
         },
-        { contract: { name: { contains: search, mode: 'insensitive' } } },
-        { contract: { number: { contains: search, mode: 'insensitive' } } },
-        { costCenter: { contains: search, mode: 'insensitive' } },
+        ...(contractIds?.length ? [{ contractId: { in: contractIds } }] : []),
         ...(Number.isFinite(asNumber) ? [{ displayNumber: asNumber }] : []),
+        ...(!fuelIds?.length &&
+        !matchedRequesterIds.length &&
+        !contractIds?.length &&
+        !Number.isFinite(asNumber)
+          ? [{ id: '__none__' }]
+          : []),
       ];
     }
 

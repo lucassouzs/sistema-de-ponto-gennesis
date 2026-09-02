@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
@@ -11,6 +12,7 @@ import {
   assertCostCenterAllowedForUnbUser,
   getUserUnbCostCenterScope,
 } from '../lib/unbCostCenterScope';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 const purchaseOrderService = new PurchaseOrderService();
 
@@ -152,11 +154,24 @@ export class StockController {
 
       if (search) {
         const searchStr = String(search);
+        const [materialIdsMatch, costCenterIdsMatch] = await Promise.all([
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`construction_materials`,
+            columns: ['name', 'description'],
+            search: searchStr,
+          }),
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`cost_centers`,
+            columns: ['name', 'code'],
+            search: searchStr,
+          }),
+        ]);
+        const matIds = materialIdsMatch ?? [];
+        const ccIds = costCenterIdsMatch ?? [];
         movementsWhere.OR = [
-          { material: { name: { contains: searchStr, mode: 'insensitive' } } },
-          { material: { description: { contains: searchStr, mode: 'insensitive' } } },
-          { costCenter: { name: { contains: searchStr, mode: 'insensitive' } } },
-          { costCenter: { code: { contains: searchStr, mode: 'insensitive' } } },
+          ...(matIds.length ? [{ materialId: { in: matIds } }] : []),
+          ...(ccIds.length ? [{ costCenterId: { in: ccIds } }] : []),
+          ...(!matIds.length && !ccIds.length ? [{ id: '__none__' }] : []),
         ];
       }
 

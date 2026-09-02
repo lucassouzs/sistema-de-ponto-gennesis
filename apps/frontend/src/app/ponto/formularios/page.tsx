@@ -14,6 +14,7 @@ import {
   CadastroListLoading,
   CadastroListSummary,
 } from '@/components/ui/CadastroListSummary';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import {
   RowActionMenuCell,
   RowActionMenuPortal,
@@ -93,12 +94,11 @@ export default function FormulariosPage() {
   const rows = Array.isArray(listData) ? listData : [];
 
   const filtered = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
     return rows.filter((row) => {
-      if (!q) return true;
+      if (!searchTerm.trim()) return true;
       return (
-        row.name.toLowerCase().includes(q) ||
-        (row.description || '').toLowerCase().includes(q)
+        textMatchesSearch(row.name, searchTerm) ||
+        textMatchesSearch(row.description, searchTerm)
       );
     });
   }, [rows, searchTerm]);

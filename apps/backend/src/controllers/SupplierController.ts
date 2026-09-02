@@ -1,7 +1,9 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 function normalizeOptionalString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -124,16 +126,12 @@ export class SupplierController {
       const { search, isActive, page = 1, limit = 20 } = req.query;
       const where: Record<string, unknown> = {};
       if (search) {
-        const term = search as string;
-        where.OR = [
-          { code: { contains: term, mode: 'insensitive' } },
-          { name: { contains: term, mode: 'insensitive' } },
-          { tradeName: { contains: term, mode: 'insensitive' } },
-          { cnpj: { contains: term, mode: 'insensitive' } },
-          { partyType: { contains: term, mode: 'insensitive' } },
-          { category: { contains: term, mode: 'insensitive' } },
-          { city: { contains: term, mode: 'insensitive' } }
-        ];
+        const ids = await findIdsByUnaccentSearch({
+          from: Prisma.sql`suppliers`,
+          columns: ['code', 'name', '"tradeName"', 'cnpj', '"partyType"', 'category', 'city'],
+          search: String(search),
+        });
+        where.id = { in: ids && ids.length > 0 ? ids : ['__none__'] };
       }
       if (isActive !== undefined) where.isActive = isActive === 'true';
       const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 2000);

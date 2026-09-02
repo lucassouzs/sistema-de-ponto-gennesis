@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -760,11 +761,11 @@ function AprovacoesPage() {
   }, [detailRequest, detailModalRows, employeeNameByIdForDetail]);
 
   const dpFiltered = useMemo(() => {
-    const q = searchDp.trim().toLowerCase();
+    const q = searchDp.trim();
     if (!q) return dpRequests;
     return dpRequests.filter((r) => {
       if (r.displayNumber != null && String(r.displayNumber).includes(q)) return true;
-      return r.id.toLowerCase().includes(q);
+      return textMatchesSearch(r.id, q);
     });
   }, [dpRequests, searchDp]);
 

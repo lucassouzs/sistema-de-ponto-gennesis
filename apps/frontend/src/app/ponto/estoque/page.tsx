@@ -1370,20 +1370,18 @@ export default function EstoquePage() {
   const showingMaterialStock = balanceView === 'material' && Boolean(selectedMaterialId);
   const contractStockLines = useMemo(() => {
     const lines = selectedContractGroup?.lines ?? [];
-    const q = filtersSearch.trim().toLowerCase();
-    if (!showingContractStock || !q) return lines;
+    if (!showingContractStock || !filtersSearch.trim()) return lines;
     return lines.filter(
       (line) =>
-        line.material.name.toLowerCase().includes(q) ||
-        (line.material.category || '').toLowerCase().includes(q)
+        textMatchesSearch(line.material.name, filtersSearch) ||
+        textMatchesSearch(line.material.category, filtersSearch)
     );
   }, [selectedContractGroup, showingContractStock, filtersSearch]);
   const materialStockLines = useMemo(() => {
     const lines = selectedMaterialGroup?.lines ?? [];
-    const q = filtersSearch.trim().toLowerCase();
-    if (!showingMaterialStock || !q) return lines;
+    if (!showingMaterialStock || !filtersSearch.trim()) return lines;
     return lines.filter((line) =>
-      (line.costCenter?.name || 'Não informado').toLowerCase().includes(q)
+      textMatchesSearch(line.costCenter?.name || 'Não informado', filtersSearch)
     );
   }, [selectedMaterialGroup, showingMaterialStock, filtersSearch]);
   const balanceTotal = showingContractStock

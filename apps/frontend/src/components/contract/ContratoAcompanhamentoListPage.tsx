@@ -22,6 +22,7 @@ import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { ReuniaoFormModal, type ReuniaoListPatch } from '@/components/contract/ReuniaoFormModal';
@@ -349,14 +350,13 @@ export function ContratoAcompanhamentoListPage({ config }: { config: ContratoAco
     [reunioes, kind]
   );
 
-  const q = searchTerm.trim().toLowerCase();
   const reunioesFiltradas = reunioes.filter(
     (r) =>
-      !q ||
-      entryPeriodLabel(kind, r).toLowerCase().includes(q) ||
-      (r.formularioName || '').toLowerCase().includes(q) ||
-      (r.formularioDescription || '').toLowerCase().includes(q) ||
-      r.responsavelPreenchimento.toLowerCase().includes(q)
+      !searchTerm.trim() ||
+      textMatchesSearch(entryPeriodLabel(kind, r), searchTerm) ||
+      textMatchesSearch(r.formularioName, searchTerm) ||
+      textMatchesSearch(r.formularioDescription, searchTerm) ||
+      textMatchesSearch(r.responsavelPreenchimento, searchTerm)
   );
 
   if (!contractId || loadingUser) {

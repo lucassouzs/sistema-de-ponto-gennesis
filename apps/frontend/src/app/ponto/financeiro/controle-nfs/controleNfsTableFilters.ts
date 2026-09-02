@@ -1,12 +1,7 @@
-export const EMPTY_FILTER_VALUE = '__EMPTY__';
+export { normalizeSearchText } from '@/lib/normalizeSearchText';
+import { normalizeSearchText } from '@/lib/normalizeSearchText';
 
-export function normalizeSearchText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
+export const EMPTY_FILTER_VALUE = '__EMPTY__';
 
 export function cellFilterKey(value: string): string {
   const trimmed = value.trim();

@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { Prisma } from '@prisma/client';
 import { parseDateInput } from '../utils/dateInput';
 import {
   resolvePleitoCreateCore,
@@ -16,6 +16,7 @@ import {
   syncPleitoFromBillings,
   upsertBillingFromPleitoFaturamento
 } from '../utils/contractBillingPleitoSync';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 /** Cópia criada em "Gerar pleito"; distinta da linha principal da OS no contrato. */
 const PLEITO_HISTORICO_MARKER = '__PLEITO_HISTORICO__';
@@ -68,18 +69,36 @@ export class PleitoController {
       const andParts: Prisma.PleitoWhereInput[] = [];
 
       if (search) {
-        const s = search as string;
+        const s = String(search);
+        const [pleitoIds, contractIds] = await Promise.all([
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`pleitos`,
+            columns: [
+              '"serviceDescription"',
+              '"folderNumber"',
+              'location',
+              'engineer',
+              '"divSe"',
+              '"invoiceNumber"',
+            ],
+            search: s,
+          }),
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`contracts`,
+            columns: ['name', 'number'],
+            search: s,
+          }),
+        ]);
         andParts.push({
           OR: [
-            { serviceDescription: { contains: s, mode: 'insensitive' } },
-            { folderNumber: { contains: s, mode: 'insensitive' } },
-            { location: { contains: s, mode: 'insensitive' } },
-            { engineer: { contains: s, mode: 'insensitive' } },
-            { divSe: { contains: s, mode: 'insensitive' } },
-            { invoiceNumber: { contains: s, mode: 'insensitive' } },
-            { updatedContract: { is: { name: { contains: s, mode: 'insensitive' } } } },
-            { updatedContract: { is: { number: { contains: s, mode: 'insensitive' } } } }
-          ]
+            ...(pleitoIds?.length ? [{ id: { in: pleitoIds } }] : []),
+            ...(contractIds?.length
+              ? [{ updatedContractId: { in: contractIds } }]
+              : []),
+            ...(!pleitoIds?.length && !contractIds?.length
+              ? [{ id: '__none__' }]
+              : []),
+          ],
         });
       }
 

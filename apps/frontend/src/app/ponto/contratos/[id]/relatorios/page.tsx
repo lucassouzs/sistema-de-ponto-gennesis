@@ -227,7 +227,7 @@ export default function ContratoRelatoriosPage() {
   const contract = contractData?.data as Contract | undefined;
   const relatorios: RelatorioEntry[] = relatoriosData?.data ?? [];
   const relatoriosFiltrados = relatorios.filter((r) =>
-    r.titulo.toLowerCase().includes(searchTerm.trim().toLowerCase())
+    textMatchesSearch(r.titulo, searchTerm)
   );
 
   useEffect(() => {

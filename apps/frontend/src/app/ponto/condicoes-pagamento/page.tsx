@@ -17,6 +17,7 @@ import { Loading } from '@/components/ui/Loading';
 import { ListPagination } from '@/components/ui/ListPagination';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { deletePaymentCondition } from '@/lib/paymentConditions';
 import {
   type PaymentConditionRow,
@@ -77,10 +78,9 @@ export default function CondicoesPagamentoPage() {
   });
 
   const filtered = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
     return (listData || []).filter((r) => {
-      if (!q) return true;
-      return r.label.toLowerCase().includes(q) || r.code.toLowerCase().includes(q);
+      if (!searchTerm.trim()) return true;
+      return textMatchesSearch(r.label, searchTerm) || textMatchesSearch(r.code, searchTerm);
     });
   }, [listData, searchTerm]);
 

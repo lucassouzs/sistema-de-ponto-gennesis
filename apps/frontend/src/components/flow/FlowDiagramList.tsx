@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Loading } from '@/components/ui/Loading';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 type Props = {
   onOpen: (id: string) => void;
@@ -46,10 +47,6 @@ const sortSelectOptions = SORT_OPTIONS.map((option) => ({
   value: option.value,
   label: option.label,
 }));
-
-function normalizeSearch(value: string): string {
-  return value.trim().toLowerCase();
-}
 
 function matchesDateFilter(item: FlowDiagramSummary, filter: DateFilter): boolean {
   if (filter === 'all') return true;
@@ -93,22 +90,18 @@ function filterDiagrams(
   query: string,
   dateFilter: DateFilter,
 ): FlowDiagramSummary[] {
-  const term = normalizeSearch(query);
-
   return items.filter((item) => {
     if (!matchesDateFilter(item, dateFilter)) return false;
-    if (!term) return true;
+    if (!query.trim()) return true;
 
-    const name = item.name.toLowerCase();
-    const description = (item.description ?? '').toLowerCase();
     const updatedLabel = format(new Date(item.updatedAt), 'dd/MM/yyyy HH:mm');
     const createdLabel = format(new Date(item.createdAt), 'dd/MM/yyyy HH:mm');
 
     return (
-      name.includes(term) ||
-      description.includes(term) ||
-      updatedLabel.includes(term) ||
-      createdLabel.includes(term)
+      textMatchesSearch(item.name, query) ||
+      textMatchesSearch(item.description, query) ||
+      textMatchesSearch(updatedLabel, query) ||
+      textMatchesSearch(createdLabel, query)
     );
   });
 }

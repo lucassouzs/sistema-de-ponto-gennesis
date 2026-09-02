@@ -12,6 +12,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTheme } from '@/context/ThemeContext';
 import { resolveModuleCategoryIcon } from '@/lib/moduleNavIcons';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 type SearchItem = {
   name: string;
@@ -106,13 +107,10 @@ export function NavSearch({ inputRef }: NavSearchProps) {
   }, [catalog, can, isAdministrator, canSeeApprovals, canAccessCollaborationTools]);
 
   const results = useMemo(() => {
-    const q = term.trim().toLowerCase();
+    const q = term.trim();
     if (!q) return [];
     return accessible
-      .filter((item) => {
-        const hay = `${item.name} ${item.category}`.toLowerCase();
-        return hay.includes(q);
-      })
+      .filter((item) => textMatchesSearch(`${item.name} ${item.category}`, q))
       .slice(0, 12);
   }, [accessible, term]);
 

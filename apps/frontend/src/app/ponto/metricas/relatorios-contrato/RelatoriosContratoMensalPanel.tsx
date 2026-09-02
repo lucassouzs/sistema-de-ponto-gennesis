@@ -30,6 +30,7 @@ import { Modal } from '@/components/ui/Modal';
 import { ReuniaoFormModal } from '@/components/contract/ReuniaoFormModal';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { formatMonthLabel, getIsoMonthKey, shiftIsoMonthKey } from '@/lib/monthPeriod';
 import { getListTableRowClassName } from '@/components/ui/listTableUi';
 
@@ -205,15 +206,14 @@ export function RelatoriosContratoMensalPanel() {
     return { total, semFormulario, pendente, preenchido };
   }, [rows]);
 
-  const q = searchTerm.trim().toLowerCase();
   const filteredRows = rows.filter((row) => {
     if (statusFilter !== 'todos' && row.status !== statusFilter) return false;
-    if (!q) return true;
+    if (!searchTerm.trim()) return true;
     return (
-      row.contractName.toLowerCase().includes(q) ||
-      row.contractNumber.toLowerCase().includes(q) ||
-      (row.formularioName || '').toLowerCase().includes(q) ||
-      (row.costCenterCode || '').toLowerCase().includes(q)
+      textMatchesSearch(row.contractName, searchTerm) ||
+      textMatchesSearch(row.contractNumber, searchTerm) ||
+      textMatchesSearch(row.formularioName, searchTerm) ||
+      textMatchesSearch(row.costCenterCode, searchTerm)
     );
   });
 

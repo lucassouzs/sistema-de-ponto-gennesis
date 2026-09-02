@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import type { VehicleUsageType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
@@ -15,6 +16,7 @@ import {
   normalizeVehicleImportFields,
   repairExistingVehicleModelsFromFipe
 } from '../lib/vehicleImportNormalize';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 function normalizeOptionalString(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -136,16 +138,20 @@ export class VehicleController {
       const where: Record<string, unknown> = {};
 
       if (search) {
-        const term = search as string;
-        where.OR = [
-          { code: { contains: term, mode: 'insensitive' } },
-          { marcaVeic: { contains: term, mode: 'insensitive' } },
-          { modeloVeic: { contains: term, mode: 'insensitive' } },
-          { placaVeic: { contains: term, mode: 'insensitive' } },
-          { polo: { contains: term, mode: 'insensitive' } },
-          { contrato: { contains: term, mode: 'insensitive' } },
-          { responsavel: { contains: term, mode: 'insensitive' } }
-        ];
+        const ids = await findIdsByUnaccentSearch({
+          from: Prisma.sql`vehicles`,
+          columns: [
+            'code',
+            '"marcaVeic"',
+            '"modeloVeic"',
+            '"placaVeic"',
+            'polo',
+            'contrato',
+            'responsavel',
+          ],
+          search: String(search),
+        });
+        where.id = { in: ids && ids.length > 0 ? ids : ['__none__'] };
       }
 
       if (isActive !== undefined) where.isActive = isActive === 'true';

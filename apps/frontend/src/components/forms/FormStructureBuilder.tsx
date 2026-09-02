@@ -49,6 +49,7 @@ import {
   X,
 } from 'lucide-react';
 import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { Button } from '@/components/ui/Button';
 import { CheckboxIndicator } from '@/components/ui/Checkbox';
 import { Modal } from '@/components/ui/Modal';
@@ -1215,11 +1216,10 @@ export function FormStructureBuilder({
   };
 
   const filteredGroups = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return PALETTE_GROUPS;
+    if (!search.trim()) return PALETTE_GROUPS;
     return PALETTE_GROUPS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
+      items: group.items.filter((item) => textMatchesSearch(item.label, search)),
     })).filter((group) => group.items.length > 0);
   }, [search]);
 

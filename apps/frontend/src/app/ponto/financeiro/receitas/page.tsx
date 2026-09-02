@@ -41,6 +41,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { formatDateBr } from '@/lib/dateTimeBr';
 import {
   formatCurrencyInputBrFromNumber,
@@ -430,7 +431,6 @@ export default function ReceitasPage() {
 
   const receitasFiltradas = useMemo(() => {
     if (!consorcio) return [];
-    const q = searchTerm.trim().toLowerCase();
     return receitas
       .filter((row) => {
         if (row.consorcio !== consorcio) return false;
@@ -439,27 +439,27 @@ export default function ReceitasPage() {
           const key = parseMesAno(row.mes)?.key ?? row.mes;
           if (key !== mesFilter) return false;
         }
-        if (!q) return true;
+        if (!searchTerm.trim()) return true;
         const parts = parseMesAno(row.mes);
         const mesTxt = parts
           ? `${parts.mesLabel} ${parts.ano}`
           : row.mes;
-        const hay = `${mesTxt} ${row.nf} ${receitaStatusLabel(row)}`.toLowerCase();
-        return hay.includes(q);
+        return textMatchesSearch(`${mesTxt} ${row.nf} ${receitaStatusLabel(row)}`, searchTerm);
       })
       .sort((a, b) => mesSortValue(b.mes) - mesSortValue(a.mes));
   }, [consorcio, mesFilter, receitas, searchTerm, statusFilter]);
 
   const repassesFiltrados = useMemo(() => {
     if (!consorcio) return [];
-    const q = searchTerm.trim().toLowerCase();
     return repasses
       .filter((row) => {
         if (row.consorcio !== consorcio) return false;
         if (boletoFilter && row.boleto !== boletoFilter) return false;
-        if (!q) return true;
-        const hay = `${row.fornecedor} ${row.parcela} ${row.dataEmissao} ${row.pagamento}`.toLowerCase();
-        return hay.includes(q);
+        if (!searchTerm.trim()) return true;
+        return textMatchesSearch(
+          `${row.fornecedor} ${row.parcela} ${row.dataEmissao} ${row.pagamento}`,
+          searchTerm
+        );
       })
       .sort((a, b) => {
         const byDate =
@@ -470,12 +470,11 @@ export default function ReceitasPage() {
   }, [boletoFilter, consorcio, repasses, searchTerm]);
 
   const resumoFiltrado = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
     return buildResumoReceitas(receitas).filter((row) => {
       if (statusFilter && row.status !== statusFilter) return false;
       if (mesFilter && row.key !== mesFilter) return false;
-      if (!q) return true;
-      return `${row.mesLabel} ${row.ano} ${row.status}`.toLowerCase().includes(q);
+      if (!searchTerm.trim()) return true;
+      return textMatchesSearch(`${row.mesLabel} ${row.ano} ${row.status}`, searchTerm);
     });
   }, [mesFilter, receitas, searchTerm, statusFilter]);
 

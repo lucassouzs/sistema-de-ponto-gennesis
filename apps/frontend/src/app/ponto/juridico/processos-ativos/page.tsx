@@ -54,6 +54,7 @@ import { JuridicoProcessoAnexosModal } from '@/components/juridico/JuridicoProce
 import { JuridicoProcessoEditModal } from '@/components/juridico/JuridicoProcessoEditModal';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import api from '@/lib/api';
+import { normalizeSearchText } from '@/lib/normalizeSearchText';
 import { resolveContratoNome } from '@/data/juridico-contratos';
 import {
   cellText,
@@ -106,13 +107,6 @@ function cellValue(row: JuridicoProcesso, col: ListColumn): string {
   return cellText(value);
 }
 
-function normalizeSearch(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
 function matchesSearch(row: JuridicoProcesso, term: string): boolean {
   const haystack = [
     row.reclamante,
@@ -129,7 +123,7 @@ function matchesSearch(row: JuridicoProcesso, term: string): boolean {
     row.contrato,
     resolveContratoNome(row.contrato),
   ]
-    .map((value) => normalizeSearch(String(value ?? '')))
+    .map((value) => normalizeSearchText(String(value ?? '')))
     .join(' | ');
   return term.split(/\s+/).every((piece) => haystack.includes(piece));
 }
@@ -259,7 +253,7 @@ export default function ProcessosAtivosPage() {
         return total > 0 && arquivosPendentesCount(row) === 0;
       });
     }
-    const term = normalizeSearch(searchTerm.trim());
+    const term = normalizeSearchText(searchTerm.trim());
     if (term) next = next.filter((row) => matchesSearch(row, term));
     return next;
   }, [data?.rows, listFilters, searchTerm]);

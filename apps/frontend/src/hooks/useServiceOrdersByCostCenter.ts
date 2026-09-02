@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
 export type ServiceOrderOption = {
   id: string;
@@ -61,20 +62,17 @@ export function filterServiceOrdersByQuery(
   orders: ServiceOrderOption[],
   query: string
 ): ServiceOrderOption[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return orders;
-  return orders.filter((os) => {
-    const label = os.label.toLowerCase();
-    return (
-      label.includes(q) ||
-      (os.divSe || '').toLowerCase().includes(q) ||
-      (os.folderNumber || '').toLowerCase().includes(q) ||
-      (os.contractNumber || '').toLowerCase().includes(q) ||
-      (os.contractName || '').toLowerCase().includes(q) ||
-      `${os.numero}/${os.ano}`.includes(q) ||
-      String(os.numero).includes(q)
-    );
-  });
+  if (!query.trim()) return orders;
+  return orders.filter(
+    (os) =>
+      textMatchesSearch(os.label, query) ||
+      textMatchesSearch(os.divSe, query) ||
+      textMatchesSearch(os.folderNumber, query) ||
+      textMatchesSearch(os.contractNumber, query) ||
+      textMatchesSearch(os.contractName, query) ||
+      textMatchesSearch(`${os.numero}/${os.ano}`, query) ||
+      textMatchesSearch(String(os.numero), query)
+  );
 }
 
 export function useServiceOrdersByCostCenter(costCenterId: string) {

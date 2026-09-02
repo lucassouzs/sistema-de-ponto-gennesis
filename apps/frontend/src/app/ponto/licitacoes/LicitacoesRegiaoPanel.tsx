@@ -24,6 +24,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { normalizeSearchText } from '@/lib/normalizeSearchText';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import {
@@ -191,14 +192,6 @@ const CANONICAL_HEADERS_BY_REGIAO: Record<string, string[]> = {
 function getCanonicalHeaders(regiaoKey: string): string[] {
   if (regiaoKey === 'centro-oeste') return CANONICAL_HEADERS_BY_REGIAO['centro-oeste'];
   return CANONICAL_HEADERS_BY_REGIAO.sudeste;
-}
-
-function normalizeSearchText(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
 }
 
 function isUrl(value: string): boolean {

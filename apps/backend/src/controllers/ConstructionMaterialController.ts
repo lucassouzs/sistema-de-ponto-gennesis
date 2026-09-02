@@ -4,6 +4,10 @@ import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { getTotvsRmRelatorioFinService } from '../services/TotvsRmRelatorioFinService';
+import {
+  ensureUnaccentExtension,
+  unaccentIlikeOr,
+} from '../lib/normalizeSearchText';
 
 const materialInclude = {
   budgetNature: {
@@ -209,21 +213,25 @@ export class ConstructionMaterialController {
     return code;
   }
 
-  private buildMaterialsWhereSql(search?: string, isActive?: string): Prisma.Sql {
+  private async buildMaterialsWhereSql(search?: string, isActive?: string): Promise<Prisma.Sql> {
     const parts: Prisma.Sql[] = [Prisma.sql`TRUE`];
 
     if (search) {
-      const term = `%${search}%`;
-      parts.push(Prisma.sql`(
-        cm.code ILIKE ${term}
-        OR cm.name ILIKE ${term}
-        OR cm.description ILIKE ${term}
-        OR cm.unit ILIKE ${term}
-        OR cm."productType" ILIKE ${term}
-        OR cm.category ILIKE ${term}
-        OR bn.name ILIKE ${term}
-        OR bn.code ILIKE ${term}
-      )`);
+      await ensureUnaccentExtension();
+      const pred = unaccentIlikeOr(
+        [
+          'cm.code',
+          'cm.name',
+          'cm.description',
+          'cm.unit',
+          'cm."productType"',
+          'cm.category',
+          'bn.name',
+          'bn.code',
+        ],
+        search,
+      );
+      if (pred) parts.push(Prisma.sql`(${pred})`);
     }
 
     if (isActive !== undefined) {
@@ -420,7 +428,7 @@ export class ConstructionMaterialController {
       const skip = (Number(page) - 1) * limitNum;
       const searchTerm = search ? String(search) : undefined;
       const activeFilter = isActive !== undefined ? String(isActive) : undefined;
-      const whereSql = this.buildMaterialsWhereSql(searchTerm, activeFilter);
+      const whereSql = await this.buildMaterialsWhereSql(searchTerm, activeFilter);
 
       const [idRows, countRows] = await Promise.all([
         prisma.$queryRaw<Array<{ id: string }>>`

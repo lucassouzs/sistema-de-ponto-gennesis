@@ -13,6 +13,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { useEspelhoNfBootstrap } from '@/hooks/useEspelhoNfBootstrap';
 import {
   EspelhoNfTaxCodeContractFields,
@@ -178,10 +179,12 @@ export default function CodigosTributariosEspelhoNfPage() {
   const rows = useMemo(() => {
     const raw = bootstrap?.taxCodes ?? [];
     const list = raw.map((item) => normalizeTaxCodeRow(item));
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((t) =>
-      [t.cityName, t.issRate, String(t.abatesMaterial)].join(' ').toLowerCase().includes(q)
+    if (!searchTerm.trim()) return list;
+    return list.filter(
+      (t) =>
+        textMatchesSearch(t.cityName, searchTerm) ||
+        textMatchesSearch(String(t.issRate), searchTerm) ||
+        textMatchesSearch(String(t.abatesMaterial), searchTerm)
     );
   }, [bootstrap?.taxCodes, searchTerm]);
 

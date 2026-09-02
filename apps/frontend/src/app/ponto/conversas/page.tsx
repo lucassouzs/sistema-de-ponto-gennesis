@@ -2365,12 +2365,12 @@ function ConversasContent() {
   }, [showMsgSearch]);
 
   const msgSearchResults = useMemo(() => {
-    const query = msgSearchQuery.trim().toLowerCase();
+    const query = msgSearchQuery.trim();
     if (!query || !activeChat) return [];
     return activeChat.messages
       .filter(
         (m) =>
-          !m.deletedAt && m.content && m.content !== '📎' && m.content.toLowerCase().includes(query)
+          !m.deletedAt && m.content && m.content !== '📎' && textMatchesSearch(m.content, query)
       )
       .slice()
       .reverse();
@@ -2420,12 +2420,11 @@ function ConversasContent() {
       : null;
 
   const starredMsgSearchResults = useMemo(() => {
-    const q = starredMsgSearchQuery.trim().toLowerCase();
+    const q = starredMsgSearchQuery.trim();
     if (!q) return favoritedMessagesInChat;
     return favoritedMessagesInChat.filter((m) => {
-      const t = (m.content || '').toLowerCase();
-      if (t && t !== '📎' && t.includes(q)) return true;
-      return m.attachments?.some((a) => (a.fileName || '').toLowerCase().includes(q)) ?? false;
+      if (m.content && m.content !== '📎' && textMatchesSearch(m.content, q)) return true;
+      return m.attachments?.some((a) => textMatchesSearch(a.fileName, q)) ?? false;
     });
   }, [favoritedMessagesInChat, starredMsgSearchQuery]);
 

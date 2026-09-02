@@ -20,13 +20,14 @@ import {
   MultiSelectSearchDropdown,
   type MultiSelectSearchOption,
 } from '@/components/ui/MultiSelectSearchDropdown';
+import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import {
   CadastroListEmpty,
   CadastroListLoading,
   CadastroListSummary,
   getCadastroListRange,
 } from '@/components/ui/CadastroListSummary';
-import api from '@/lib/api';
 import {
   cadastroListClasses,
   ListRowNavigableLabel,
@@ -192,18 +193,17 @@ export default function RegioesPostosCombustivelPage() {
   }, [formCities]);
 
   const filteredStations = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) return stations;
+    if (!searchTerm.trim()) return stations;
     return stations.filter(
       (station) =>
-        String(station.displayNumber).includes(term) ||
-        station.name.toLowerCase().includes(term) ||
-        (station.address ?? '').toLowerCase().includes(term) ||
-        (station.city?.name ?? '').toLowerCase().includes(term) ||
+        textMatchesSearch(String(station.displayNumber), searchTerm) ||
+        textMatchesSearch(station.name, searchTerm) ||
+        textMatchesSearch(station.address, searchTerm) ||
+        textMatchesSearch(station.city?.name, searchTerm) ||
         (station.contracts ?? []).some(
           (c) =>
-            c.name.toLowerCase().includes(term) ||
-            c.number.toLowerCase().includes(term),
+            textMatchesSearch(c.name, searchTerm) ||
+            textMatchesSearch(c.number, searchTerm),
         ),
     );
   }, [stations, searchTerm]);

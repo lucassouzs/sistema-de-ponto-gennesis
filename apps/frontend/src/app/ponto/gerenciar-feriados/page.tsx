@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { listTableRowClasses } from '@/components/ui/listTableUi';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
@@ -154,8 +155,8 @@ function GerenciarFeriadosPageContent() {
 
   // Filtrar por termo de busca
   const filteredHolidays = holidays.filter(holiday =>
-    holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    holiday.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    textMatchesSearch(holiday.name, searchTerm) ||
+    textMatchesSearch(holiday.description, searchTerm)
   );
 
   // Mutation para criar feriado

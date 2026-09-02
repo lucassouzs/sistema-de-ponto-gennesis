@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
@@ -19,6 +20,7 @@ import {
   normalizeCentroCustoName,
   resolveGastosPoloForContract
 } from '../lib/gastosOperacionaisPolo';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 /** Igual ao filtro da tela do contrato: não somar pleitos gerados para histórico. */
 const PLEITO_HISTORICO_MARKER = '__PLEITO_HISTORICO__';
@@ -120,10 +122,19 @@ export class ContractController {
       }
 
       if (search) {
-        where.OR = [
-          { name: { contains: search as string, mode: 'insensitive' } },
-          { number: { contains: search as string, mode: 'insensitive' } },
-        ];
+        const ids = await findIdsByUnaccentSearch({
+          from: Prisma.sql`contracts`,
+          columns: ['name', 'number'],
+          search: String(search),
+        });
+        const matched = ids && ids.length > 0 ? ids : ['__none__'];
+        if (where.id?.in) {
+          const allowed = new Set(where.id.in as string[]);
+          where.id = { in: matched.filter((id) => allowed.has(id)) };
+          if ((where.id.in as string[]).length === 0) where.id = { in: ['__none__'] };
+        } else {
+          where.id = { in: matched };
+        }
       }
 
       const limitNum = Math.min(Number(limit) || 20, 200);

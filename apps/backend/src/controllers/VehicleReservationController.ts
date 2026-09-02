@@ -1,10 +1,11 @@
 import { Response, NextFunction } from 'express';
-import { VehicleReservationStatus } from '@prisma/client';
+import { Prisma, VehicleReservationStatus } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { assertUserHasVehicleReservationSuppliesAccess, userHasVehicleReservationSuppliesAccess } from '../lib/vehicleReservationSuppliesAccess';
 import { PhotoService } from '../services/PhotoService';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 const PERIODO_USO_VALUES = new Set(['INTEGRAL', 'MATUTINO', 'VESPERTINO', 'NOTURNO']);
 const photoService = new PhotoService();
@@ -141,10 +142,10 @@ function userCanSubmitReturn(
   return userOwnsReservation(reservation, user);
 }
 
-function buildListWhere(
+async function buildListWhere(
   query: AuthRequest['query'],
   ownership?: { userId: string; userName?: string | null }
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const where: Record<string, unknown> = {};
   const { search, status } = query;
 
@@ -156,17 +157,33 @@ function buildListWhere(
   }
 
   if (search) {
-    const term = search as string;
+    const term = String(search);
+    const [reservationIds, vehicleIds] = await Promise.all([
+      findIdsByUnaccentSearch({
+        from: Prisma.sql`vehicle_reservations`,
+        columns: [
+          'code',
+          'solicitante',
+          'motorista',
+          'atividade',
+          '"localDestino"',
+          'contrato',
+          '"observacaoCapacidadeVeiculo"',
+        ],
+        search: term,
+      }),
+      findIdsByUnaccentSearch({
+        from: Prisma.sql`vehicles`,
+        columns: ['"placaVeic"', '"modeloVeic"'],
+        search: term,
+      }),
+    ]);
     where.OR = [
-      { code: { contains: term, mode: 'insensitive' } },
-      { solicitante: { contains: term, mode: 'insensitive' } },
-      { motorista: { contains: term, mode: 'insensitive' } },
-      { atividade: { contains: term, mode: 'insensitive' } },
-      { localDestino: { contains: term, mode: 'insensitive' } },
-      { contrato: { contains: term, mode: 'insensitive' } },
-      { observacaoCapacidadeVeiculo: { contains: term, mode: 'insensitive' } },
-      { vehicle: { placaVeic: { contains: term, mode: 'insensitive' } } },
-      { vehicle: { modeloVeic: { contains: term, mode: 'insensitive' } } },
+      ...(reservationIds?.length ? [{ id: { in: reservationIds } }] : []),
+      ...(vehicleIds?.length ? [{ vehicleId: { in: vehicleIds } }] : []),
+      ...(!reservationIds?.length && !vehicleIds?.length
+        ? [{ id: '__none__' }]
+        : []),
     ];
   }
 
@@ -250,7 +267,7 @@ export class VehicleReservationController {
     ownership?: { userId: string; userName?: string | null }
   ) {
     const { page = 1, limit = 20 } = req.query;
-    const where = buildListWhere(req.query, ownership);
+    const where = await buildListWhere(req.query, ownership);
 
     const limitNum = Math.min(Math.max(Number(limit) || 20, 1), 500);
     const pageNum = Math.max(1, Number(page) || 1);

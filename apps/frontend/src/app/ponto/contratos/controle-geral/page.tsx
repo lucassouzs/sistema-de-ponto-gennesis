@@ -11,6 +11,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { listTableRowClasses } from '@/components/ui/listTableUi';
 import { ControleGeralGastosOperacionaisPanel } from './ControleGeralGastosOperacionaisPanel';
 import {
@@ -228,13 +229,12 @@ export default function ControleGeralContratosPage() {
 
   const filteredContracts = useMemo(() => {
     if (!searchTerm.trim()) return rawList;
-    const term = searchTerm.toLowerCase().trim();
     return rawList.filter(
       (c) =>
-        c.name.toLowerCase().includes(term) ||
-        c.number.toLowerCase().includes(term) ||
-        (c.costCenter?.name ?? '').toLowerCase().includes(term) ||
-        (c.costCenter?.code ?? '').toLowerCase().includes(term)
+        textMatchesSearch(c.name, searchTerm) ||
+        textMatchesSearch(c.number, searchTerm) ||
+        textMatchesSearch(c.costCenter?.name, searchTerm) ||
+        textMatchesSearch(c.costCenter?.code, searchTerm)
     );
   }, [rawList, searchTerm]);
 

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import api from '@/lib/api';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { buildFluigApproversNavHref } from '@/lib/fluigWorkflowApproval';
 import {
   fetchGastosOperacionaisTotvs,
@@ -594,17 +595,17 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
   const navItemHasActiveChild = (item: SidebarNavItem): boolean =>
     Boolean(item.children?.some((child) => child.permission && isActive(child.href)));
 
-  const navItemMatchesSearch = (item: SidebarNavItem, searchLower: string): boolean => {
+  const navItemMatchesSearch = (item: SidebarNavItem, searchQuery: string): boolean => {
     const selfMatch =
-      item.name.toLowerCase().includes(searchLower) ||
-      Boolean(item.description?.toLowerCase().includes(searchLower));
+      textMatchesSearch(item.name, searchQuery) ||
+      textMatchesSearch(item.description, searchQuery);
     if (selfMatch) return true;
     return Boolean(
       item.children?.some(
         (child) =>
           child.permission &&
-          (child.name.toLowerCase().includes(searchLower) ||
-            Boolean(child.description?.toLowerCase().includes(searchLower))),
+          (textMatchesSearch(child.name, searchQuery) ||
+            textMatchesSearch(child.description, searchQuery)),
       ),
     );
   };
@@ -1377,7 +1378,7 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
 
     // Aplicar filtro de pesquisa se houver termo de busca
     if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase().trim();
+      const searchQuery = searchTerm.trim();
       filteredCategories = filteredCategories
         .map((category) => {
           const filteredItems = category.items
@@ -1385,22 +1386,21 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
               const navItem = item as SidebarNavItem;
               if (!navItemIsVisible(navItem)) return null;
               if (!navItem.children?.length) {
-                const matchesName = navItem.name.toLowerCase().includes(searchLower);
-                const matchesDescription =
-                  navItem.description?.toLowerCase().includes(searchLower) || false;
+                const matchesName = textMatchesSearch(navItem.name, searchQuery);
+                const matchesDescription = textMatchesSearch(navItem.description, searchQuery);
                 return matchesName || matchesDescription ? navItem : null;
               }
 
               const parentMatches = navItemMatchesSearch(
                 { ...navItem, children: undefined },
-                searchLower,
+                searchQuery,
               );
               const matchingChildren = navItem.children.filter((child) => {
                 if (!child.permission) return false;
                 if (parentMatches) return true;
                 return (
-                  child.name.toLowerCase().includes(searchLower) ||
-                  Boolean(child.description?.toLowerCase().includes(searchLower))
+                  textMatchesSearch(child.name, searchQuery) ||
+                  textMatchesSearch(child.description, searchQuery)
                 );
               });
               if (matchingChildren.length === 0 && !parentMatches) return null;

@@ -15,6 +15,7 @@ import {
   labelKey,
 } from './kanbanLabels';
 import { KanbanLabelColorMapInline } from './KanbanLabelColorPicker';
+import { normalizeSearchText } from '@/lib/normalizeSearchText';
 
 export interface KanbanCardLabelsPanelProps {
   labels: KanbanCardLabel[];
@@ -40,14 +41,6 @@ export interface KanbanCardLabelsPanelProps {
 }
 
 type PanelView = 'list' | 'create' | 'edit';
-
-function normalizeSearch(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
-}
 
 function getErrorMessage(err: unknown, fallback: string): string {
   if (err && typeof err === 'object' && 'response' in err) {
@@ -256,9 +249,9 @@ export function KanbanCardLabelsPanel({
   }
 
   const filteredPalette = useMemo(() => {
-    const q = normalizeSearch(query);
+    const q = normalizeSearchText(query);
     if (!q) return palette;
-    return palette.filter((preset) => normalizeSearch(displayName(preset)).includes(q));
+    return palette.filter((preset) => normalizeSearchText(displayName(preset)).includes(q));
   }, [palette, query, nameOverrides]);
 
   if (view === 'create' || view === 'edit') {
