@@ -3,13 +3,11 @@ import {
   View,
   Pressable,
   StyleSheet,
-  Platform,
   Animated,
   Easing,
 } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { House, Fuel, CarFront, Inbox, Plus, type LucideIcon } from 'lucide-react-native';
 import { useTheme } from '../context/ThemeContext';
 import { emitFabBarPress, FabBarTabName } from './fabBarEvents';
@@ -60,33 +58,6 @@ function TabIconView({
   );
 }
 
-function GlassFill({ isDark }: { isDark: boolean }) {
-  const overlay = isDark ? 'rgba(31, 41, 55, 0.42)' : 'rgba(255, 255, 255, 0.62)';
-  if (Platform.OS === 'web') {
-    return (
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFillObject, { backgroundColor: isDark ? '#1f2937' : '#FFFFFF' }]}
-      />
-    );
-  }
-  return (
-    <>
-      <BlurView
-        pointerEvents="none"
-        intensity={Platform.OS === 'ios' ? 48 : 36}
-        tint={isDark ? 'dark' : 'light'}
-        experimentalBlurMethod="dimezisBlurView"
-        style={StyleSheet.absoluteFillObject}
-      />
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFillObject, { backgroundColor: overlay }]}
-      />
-    </>
-  );
-}
-
 function SquircleButton({
   children,
   focused,
@@ -103,13 +74,8 @@ function SquircleButton({
   accessibilityLabel: string;
 }) {
   const pressScale = useRef(new Animated.Value(1)).current;
-  const borderColor = focused
-    ? isDark
-      ? 'rgba(255,255,255,0.28)'
-      : 'rgba(255,255,255,0.95)'
-    : isDark
-      ? 'rgba(255,255,255,0.14)'
-      : 'rgba(255,255,255,0.72)';
+  const bg = isDark ? '#1f2937' : '#FFFFFF';
+  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.06)';
 
   return (
     <Animated.View
@@ -142,9 +108,8 @@ function SquircleButton({
             useNativeDriver: true,
           }).start();
         }}
-        style={[styles.squircle, { borderColor }]}
+        style={[styles.squircle, { backgroundColor: bg, borderColor }]}
       >
-        <GlassFill isDark={isDark} />
         <View style={styles.iconWrap}>{children}</View>
       </Pressable>
     </Animated.View>
