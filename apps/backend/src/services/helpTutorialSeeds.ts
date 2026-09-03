@@ -364,28 +364,6 @@ export const HELP_TUTORIAL_SEEDS: HelpTutorialCreateInput[] = [
     ],
   },
   {
-    slug: 'usar-suporte-ao-sistema',
-    title: 'Usar Suporte ao Sistema',
-    summary: 'Como abrir e acompanhar tickets de suporte de TI/sistema.',
-    setor: 'Departamento Pessoal',
-    keywords: ['suporte', 'TI', 'chamado', 'ticket', 'ajuda técnica'],
-    href: '/ponto/suporte-ti',
-    steps: [
-      {
-        title: 'Abra Suporte ao Sistema',
-        body: 'No menu Departamento Pessoal, acesse Suporte ao Sistema.',
-      },
-      {
-        title: 'Abra um ticket',
-        body: 'Descreva o problema, o módulo afetado e anexe print se possível. Envie para a fila de atendimento.',
-      },
-      {
-        title: 'Acompanhe a resposta',
-        body: 'Veja status e comentários da equipe. Responda no mesmo ticket até o fechamento.',
-      },
-    ],
-  },
-  {
     slug: 'usar-ferias',
     title: 'Usar Férias',
     summary: 'Como solicitar férias e acompanhar a programação.',

@@ -227,7 +227,6 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/gerenciar-solicitacoes',
       '/ponto/gerenciar-solicitacoes-dp',
       '/ponto/conversas-whatsapp',
-      '/ponto/suporte-ti',
       '/ponto/ferias',
       '/ponto/gerenciar-ferias',
       '/ponto/gerenciar-feriados',

@@ -97,12 +97,6 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     href: '/ponto/conversas-whatsapp',
     category: 'Departamento Pessoal',
   },
-  {
-    key: pathToModuleKey('/ponto/suporte-ti'),
-    name: 'Suporte ao Sistema',
-    href: '/ponto/suporte-ti',
-    category: 'Departamento Pessoal',
-  },
   // ADM/TST
   {
     key: pathToModuleKey('/ponto/gerenciar-solicitacoes-adm-tst'),

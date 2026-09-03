@@ -10,6 +10,7 @@ import { findUserByLoginIdentifier, normalizeLoginIdentifier } from '../lib/logi
 import { recordSuccessfulLogin, recordSuccessfulLogout } from './UserActivityController';
 import { recordAuditEvent } from '../lib/auditLog';
 import { getRequestContext } from '../lib/requestContext';
+import { encodeImpersonationSource } from '../lib/impersonationLoginEvents';
 
 const chatUploadService = new ChatService();
 
@@ -58,8 +59,14 @@ function signSessionToken(
 
 async function recordImpersonationLoginEvent(
   req: Request,
-  adminUserId: string,
-  type: 'impersonate' | 'stop_impersonate'
+  opts: {
+    userId: string;
+    type: 'impersonate' | 'stop_impersonate' | 'impersonated_by';
+    targetUserId?: string;
+    targetName?: string;
+    adminUserId?: string;
+    adminName?: string;
+  }
 ) {
   const ctx = getRequestContext();
   const forwarded = req.headers['x-forwarded-for'];
@@ -74,10 +81,16 @@ async function recordImpersonationLoginEvent(
 
   await prisma.userLoginEvent.create({
     data: {
-      userId: adminUserId,
-      type,
+      userId: opts.userId,
+      type: opts.type,
       success: true,
-      source: 'web',
+      source: encodeImpersonationSource({
+        channel: 'web',
+        targetUserId: opts.targetUserId,
+        targetName: opts.targetName,
+        adminUserId: opts.adminUserId,
+        adminName: opts.adminName,
+      }),
       ipAddress,
       userAgent,
     },
@@ -294,17 +307,42 @@ export class AuthController {
       );
 
       try {
-        await recordImpersonationLoginEvent(req, req.user.id, 'impersonate');
+        const adminName =
+          (
+            await prisma.user.findUnique({
+              where: { id: req.user.id },
+              select: { name: true },
+            })
+          )?.name?.trim() || req.user.email;
+
+        await recordImpersonationLoginEvent(req, {
+          userId: req.user.id,
+          type: 'impersonate',
+          targetUserId: target.id,
+          targetName: target.name,
+          adminUserId: req.user.id,
+          adminName,
+        });
+        await recordImpersonationLoginEvent(req, {
+          userId: target.id,
+          type: 'impersonated_by',
+          targetUserId: target.id,
+          targetName: target.name,
+          adminUserId: req.user.id,
+          adminName,
+        });
         recordAuditEvent({
           action: 'CREATE',
           entity: 'User',
           entityId: target.id,
           userId: req.user.id,
-          summary: `Impersonação iniciada: ${req.user.email} → ${target.name} (${target.email})`,
+          summary: `Impersonação iniciada: ${adminName} → ${target.name} (${target.email})`,
           newData: {
             type: 'impersonate',
             adminUserId: req.user.id,
+            adminName,
             targetUserId: target.id,
+            targetName: target.name,
           },
         });
       } catch (trackErr) {
@@ -362,17 +400,34 @@ export class AuthController {
       });
 
       try {
-        await recordImpersonationLoginEvent(req, admin.id, 'stop_impersonate');
+        const targetName =
+          (
+            await prisma.user.findUnique({
+              where: { id: req.user.id },
+              select: { name: true },
+            })
+          )?.name?.trim() || req.user.email;
+
+        await recordImpersonationLoginEvent(req, {
+          userId: admin.id,
+          type: 'stop_impersonate',
+          targetUserId: req.user.id,
+          targetName,
+          adminUserId: admin.id,
+          adminName: admin.name,
+        });
         recordAuditEvent({
           action: 'CREATE',
           entity: 'User',
           entityId: req.user.id,
           userId: admin.id,
-          summary: `Impersonação encerrada: voltou de ${req.user.email} para ${admin.email}`,
+          summary: `Impersonação encerrada: ${admin.name} voltou de ${targetName}`,
           newData: {
             type: 'stop_impersonate',
             adminUserId: admin.id,
+            adminName: admin.name,
             targetUserId: req.user.id,
+            targetName,
           },
         });
       } catch (trackErr) {

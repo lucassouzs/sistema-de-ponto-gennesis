@@ -9,6 +9,10 @@ import {
   resolveTimelineRef,
   type AuditAction,
 } from '../lib/auditLog';
+import {
+  loginEventSourceChannelLabel,
+  loginEventTypeLabel,
+} from '../lib/impersonationLoginEvents';
 
 function clientIp(req: Request): string | null {
   const forwarded = req.headers['x-forwarded-for'];
@@ -351,13 +355,6 @@ export class UserActivityController {
         byHour[hourInSaoPaulo(visit.createdAt)].total += 1;
       }
 
-      const sourceSubtitle = (source?: string | null) =>
-        String(source || '').toLowerCase() === 'mobile'
-          ? 'App mobile'
-          : String(source || '').toLowerCase() === 'web'
-            ? 'Web'
-            : source || null;
-
       const auditType = (action: string): 'create' | 'delete' | 'approve' | 'reject' => {
         const a = String(action || '').toUpperCase();
         if (a === 'DELETE') return 'delete';
@@ -371,13 +368,22 @@ export class UserActivityController {
       const TIMELINE_MAX = 2000;
       const timelineAll = [
         ...logins.map((login) => {
-          const isLogout = String(login.type || 'login').toLowerCase() === 'logout';
+          const typeRaw = String(login.type || 'login').toLowerCase();
+          const title = loginEventTypeLabel(login.type, login.source);
+          const timelineType =
+            typeRaw === 'logout'
+              ? ('logout' as const)
+              : typeRaw === 'impersonate' ||
+                  typeRaw === 'stop_impersonate' ||
+                  typeRaw === 'impersonated_by'
+                ? ('create' as const)
+                : ('login' as const);
           return {
-            id: `${isLogout ? 'logout' : 'login'}-${login.id}`,
-            type: (isLogout ? 'logout' : 'login') as 'login' | 'logout',
+            id: `login-${login.id}`,
+            type: timelineType,
             at: login.createdAt,
-            title: isLogout ? 'Saída' : 'Login',
-            subtitle: sourceSubtitle(login.source),
+            title,
+            subtitle: loginEventSourceChannelLabel(login.source),
           };
         }),
         ...visits.map((visit) => ({
