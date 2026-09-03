@@ -2042,6 +2042,116 @@ export class PurchaseOrderService {
   }
 
   /**
+   * Administrador: força esta OC a ter apenas 1 parcela de boleto (total integral),
+   * trocando a condição de pagamento para uma de 1 parcela.
+   */
+  async forceSingleBoletoParcel(id: string, _userId?: string) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true,
+        amountToPay: true,
+        orderDate: true,
+      },
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+    if (order.paymentType !== 'BOLETO') {
+      throw new Error('Só é possível ajustar parcelas em OC com pagamento em boleto');
+    }
+    if (order.status !== 'APPROVED') {
+      throw new Error('Só é possível forçar 1 boleto em OC aprovada (fase de anexar boleto)');
+    }
+    if (order.paymentBoletoPhaseReleased) {
+      throw new Error(
+        'Não é possível reduzir parcelas depois que a OC já foi enviada para a fase Pagamento'
+      );
+    }
+
+    const [metaBefore] = await enrichOrdersParcelPlans([
+      { paymentCondition: order.paymentCondition },
+    ]);
+    if (metaBefore.paymentParcelCount <= 1) {
+      const current = await prisma.purchaseOrder.findUniqueOrThrow({
+        where: { id },
+        include: purchaseOrderIncludeListSummary,
+      });
+      const [already] = await enrichOrdersParcelPlans([current]);
+      return already;
+    }
+
+    const existing = parseStoredInstallments(order.paymentBoletoInstallments);
+    for (const row of existing) {
+      const st = rowStatus(row);
+      if (st === 'PAID' || st === 'AWAITING_PAYMENT') {
+        throw new Error(
+          'Não é possível reduzir para 1 boleto: já há parcela em pagamento ou paga'
+        );
+      }
+    }
+
+    const oneParcelCondition = await prisma.paymentCondition.findFirst({
+      where: { paymentType: 'BOLETO', parcelCount: 1, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      select: { code: true, parcelDueDays: true },
+    });
+    if (!oneParcelCondition) {
+      throw new Error(
+        'Não há condição de pagamento de boleto com 1 parcela ativa. Cadastre uma em Condições de pagamento.'
+      );
+    }
+
+    const total =
+      order.amountToPay != null && String(order.amountToPay).trim() !== ''
+        ? Number(order.amountToPay)
+        : NaN;
+    if (!Number.isFinite(total) || total < 0) {
+      throw new Error('Total da OC inválido para montar a parcela única');
+    }
+
+    const first = existing[0] || {};
+    const dueDaysList = normalizeParcelDueDaysJson(oneParcelCondition.parcelDueDays);
+    const dueDays = dueDaysList[0] ?? metaBefore.paymentParcelDueDays?.[0] ?? 0;
+    const baseDate =
+      order.orderDate instanceof Date
+        ? order.orderDate
+        : new Date(order.orderDate || Date.now());
+    const fallbackDue = new Date(baseDate);
+    fallbackDue.setDate(fallbackDue.getDate() + (Number.isFinite(dueDays) ? Number(dueDays) : 0));
+    const fallbackDueYmd = fallbackDue.toISOString().slice(0, 10);
+    const dueDate =
+      typeof first.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(first.dueDate.slice(0, 10))
+        ? first.dueDate.slice(0, 10)
+        : fallbackDueYmd;
+
+    const single: BoletoInstallmentStored = {
+      amount: total,
+      dueDate,
+      boletoUrl: first.boletoUrl || null,
+      boletoName: first.boletoName || null,
+      paymentStatus: 'PENDING_BOLETO',
+    };
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        paymentCondition: oneParcelCondition.code,
+        paymentBoletoInstallments: [single] as unknown as Prisma.InputJsonValue,
+        paymentBoletoUrl: single.boletoUrl || null,
+        paymentBoletoName: single.boletoName || null,
+        updatedAt: new Date(),
+      },
+      include: purchaseOrderIncludeListSummary,
+    });
+    const [e] = await enrichOrdersParcelPlans([updated]);
+    return e;
+  }
+
+  /**
    * Atualiza só a data de vencimento de parcelas ainda não pagas (fase Pagamento).
    * Parcelas PAID ficam bloqueadas.
    */

@@ -63,23 +63,25 @@ async function downloadQuoteMapSnapshotPdf(
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
 
-async function openQuoteMapComparisonPdf(mapId: string) {
+async function openQuoteMapComparisonPdf(mapId: string, purchaseOrderId?: string) {
   const response = await api.get(`/quote-maps/${mapId}/comparison-pdf`, {
     responseType: 'blob',
+    params: purchaseOrderId ? { purchaseOrderId } : undefined,
   });
   const blobUrl = window.URL.createObjectURL(response.data);
   window.open(blobUrl, '_blank', 'noopener,noreferrer');
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
 
-async function downloadQuoteMapComparisonPdf(mapId: string) {
+async function downloadQuoteMapComparisonPdf(mapId: string, purchaseOrderId?: string) {
   const response = await api.get(`/quote-maps/${mapId}/comparison-pdf`, {
     responseType: 'blob',
+    params: purchaseOrderId ? { purchaseOrderId } : undefined,
   });
   const blobUrl = window.URL.createObjectURL(response.data);
   const anchor = document.createElement('a');
   anchor.href = blobUrl;
-  anchor.download = `mapa-cotacao-comparativo-${mapId}.pdf`;
+  anchor.download = `mapa-cotacao-comparativo-${purchaseOrderId || mapId}.pdf`;
   anchor.click();
   setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
 }
@@ -255,17 +257,17 @@ function SingleOcDocuments({
               />
               <DocItem
                 label="Comparativo"
-                subtitle="Todas as cotações + vencedor"
+                subtitle="Cotações desta OC + vencedor"
                 onView={async () => {
                   try {
-                    await openQuoteMapComparisonPdf(quoteMap.id);
+                    await openQuoteMapComparisonPdf(quoteMap.id, order.id);
                   } catch {
                     toast.error('Não foi possível abrir o PDF comparativo.');
                   }
                 }}
                 onDownload={async () => {
                   try {
-                    await downloadQuoteMapComparisonPdf(quoteMap.id);
+                    await downloadQuoteMapComparisonPdf(quoteMap.id, order.id);
                   } catch {
                     toast.error('Não foi possível baixar o PDF comparativo.');
                   }

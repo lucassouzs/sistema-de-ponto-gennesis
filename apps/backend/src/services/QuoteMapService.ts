@@ -39,6 +39,19 @@ export class QuoteMapService {
     return `${date}, ${time}`;
   }
 
+  /** Número curto da RM no PDF (`REQ-2026-055` → `55`). */
+  private formatRmDisplayId(requestNumber?: string | null): string {
+    const trimmed = String(requestNumber ?? '').trim();
+    if (!trimmed) return '';
+    const match = trimmed.match(/^REQ-\d{4}-(\d+)$/i);
+    if (match) return String(parseInt(match[1], 10));
+    const lastSegment = trimmed.split('-').pop();
+    if (lastSegment && /^\d+$/.test(lastSegment)) {
+      return String(parseInt(lastSegment, 10));
+    }
+    return trimmed;
+  }
+
   /** Rótulo da OS no PDF do mapa — sem prefixo "OS" (ex.: "AD-725"). */
   private formatRmOsLabel(mr?: {
     serviceOrder?: string | null;
@@ -212,18 +225,39 @@ export class QuoteMapService {
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
-    const purchaseOrderId = kind === 'comparison' ? '' : options?.purchaseOrderId?.trim() || '';
+    const purchaseOrderId = options?.purchaseOrderId?.trim() || '';
     const allPurchaseOrders = Array.isArray(map.purchaseOrders) ? map.purchaseOrders : [];
     const purchaseOrders = purchaseOrderId
       ? allPurchaseOrders.filter((po: { id: string }) => po.id === purchaseOrderId)
       : allPurchaseOrders;
-    if (purchaseOrderId && purchaseOrders.length === 0) {
+    if (purchaseOrderId && purchaseOrders.length === 0 && kind !== 'comparison') {
       throw new Error('OC não encontrada neste mapa de cotação');
+    }
+
+    // Comparativo aberto a partir de uma OC: só itens/fornecedores daquela OC
+    // (evita misturar outra OC da mesma RM no mesmo mapa).
+    let comparisonFocusPo: (typeof allPurchaseOrders)[number] | null = null;
+    let comparisonFocusItemIds: Set<string> | null = null;
+    if (kind === 'comparison' && purchaseOrderId) {
+      comparisonFocusPo =
+        allPurchaseOrders.find((po: { id: string }) => po.id === purchaseOrderId) || null;
+      if (!comparisonFocusPo) {
+        throw new Error('OC não encontrada neste mapa de cotação');
+      }
+      comparisonFocusItemIds = new Set(
+        (Array.isArray(comparisonFocusPo.items) ? comparisonFocusPo.items : [])
+          .map((it: { materialRequestItemId?: string | null }) =>
+            it.materialRequestItemId ? String(it.materialRequestItemId) : ''
+          )
+          .filter(Boolean)
+      );
     }
 
     const snapshotFileName =
       kind === 'comparison'
-        ? 'comparison.pdf'
+        ? purchaseOrderId
+          ? `comparison-${purchaseOrderId}.pdf`
+          : 'comparison.pdf'
         : purchaseOrderId
           ? `snapshot-${purchaseOrderId}.pdf`
           : 'snapshot.pdf';
@@ -269,16 +303,37 @@ export class QuoteMapService {
 
     if (kind === 'comparison') {
       // PDF separado: todas as cotações + ganhadora por item.
+      // Se já existir OC do fornecedor neste mapa, usa pagamento/frete da OC (mais fiel).
+      const poBySupplierId = new Map<string, (typeof allPurchaseOrders)[number]>();
+      for (const po of allPurchaseOrders) {
+        const sid = String((po as { supplierId?: string }).supplierId || '');
+        if (!sid) continue;
+        // Mantém a OC mais antiga do fornecedor neste mapa
+        if (!poBySupplierId.has(sid)) poBySupplierId.set(sid, po);
+      }
+
       for (const qs of Array.isArray(map.suppliers) ? map.suppliers : []) {
         const supplierId = String(qs.supplierId || '');
         const supplier = qs.supplier;
         if (!supplierId || !supplier) continue;
 
-        const quoted = (map.supplierItems || []).filter(
+        let quoted = (map.supplierItems || []).filter(
           (si: any) => String(si.supplierId) === supplierId
         );
+        if (comparisonFocusItemIds) {
+          quoted = quoted.filter((si: any) =>
+            comparisonFocusItemIds!.has(String(si.materialRequestItemId || ''))
+          );
+        }
         if (quoted.length === 0) continue;
 
+        const linkedPo =
+          comparisonFocusPo &&
+          String((comparisonFocusPo as { supplierId?: string }).supplierId || '') === supplierId
+            ? comparisonFocusPo
+            : comparisonFocusItemIds
+              ? null
+              : poBySupplierId.get(supplierId);
         const items = quoted.map((si: any) => {
           const mri = si.materialRequestItem;
           const qty = this.toNumber(mri?.quantity);
@@ -303,16 +358,70 @@ export class QuoteMapService {
         sections.push({
           isQuoteComparison: true,
           wonItemCount: items.filter((it: { isWinner: boolean }) => it.isWinner).length,
-          paymentType: qs.paymentType,
-          paymentCondition: qs.paymentCondition,
-          paymentDetails: qs.paymentDetails,
-          freightAmount: this.toNumber(qs.freight),
-          amountToPay: qs.amountToPay != null ? this.toNumber(qs.amountToPay) : null,
-          notes: qs.observations,
-          buyerName: map.creator?.name || null,
-          supplier,
+          paymentType: linkedPo?.paymentType ?? qs.paymentType,
+          paymentCondition: linkedPo?.paymentCondition ?? qs.paymentCondition,
+          paymentDetails: linkedPo?.paymentDetails ?? qs.paymentDetails,
+          freightAmount: linkedPo
+            ? this.toNumber(linkedPo.freightAmount)
+            : this.toNumber(qs.freight),
+          amountToPay:
+            linkedPo?.amountToPay != null
+              ? this.toNumber(linkedPo.amountToPay)
+              : qs.amountToPay != null
+                ? this.toNumber(qs.amountToPay)
+                : null,
+          notes: linkedPo?.notes ?? qs.observations,
+          buyerName:
+            linkedPo?.creator?.name || map.creator?.name || null,
+          supplier: linkedPo?.supplier || supplier,
           items,
         });
+      }
+
+      // Fallback: OCs do mapa cujo fornecedor sumiu do histórico de cotação
+      // (ex.: wipe antigo ao gerar a 2ª OC) — ainda assim aparecem no comparativo.
+      const sectionSupplierIds = new Set(
+        sections
+          .map((s) => String((s.supplier as { id?: string } | null)?.id || ''))
+          .filter(Boolean)
+      );
+      const posForFallback = comparisonFocusPo ? [comparisonFocusPo] : allPurchaseOrders;
+      for (const po of posForFallback) {
+        const sid = String((po as { supplierId?: string }).supplierId || '');
+        if (!sid || sectionSupplierIds.has(sid)) continue;
+        const poItems = Array.isArray(po.items) ? po.items : [];
+        if (poItems.length === 0) continue;
+        sections.push({
+          isQuoteComparison: true,
+          wonItemCount: poItems.length,
+          paymentType: po.paymentType,
+          paymentCondition: po.paymentCondition,
+          paymentDetails: po.paymentDetails,
+          freightAmount: this.toNumber(po.freightAmount),
+          amountToPay: po.amountToPay != null ? this.toNumber(po.amountToPay) : null,
+          notes: po.notes,
+          buyerName: po.creator?.name || map.creator?.name || null,
+          supplier: po.supplier,
+          items: poItems.map((it: any) => {
+            const qty = this.toNumber(it.quantity);
+            const unitPrice = this.toNumber(it.unitPrice);
+            const total =
+              it.totalPrice != null ? this.toNumber(it.totalPrice) : qty * unitPrice;
+            return {
+              label: this.materialCatalogLabel(it.material),
+              quantity: qty,
+              unit: it.unit || '—',
+              unitPrice,
+              totalPrice: total,
+              notes: this.purchaseOrderLineDetail(
+                typeof it.notes === 'string' ? it.notes : '',
+                it.material
+              ),
+              isWinner: true,
+            };
+          }),
+        });
+        sectionSupplierIds.add(sid);
       }
     } else if (purchaseOrders.length > 0) {
       for (const po of purchaseOrders) {
@@ -622,7 +731,8 @@ export class QuoteMapService {
       }
 
       if (kind === 'comparison' && sections.length > 0) {
-        ensureSpace(36);
+        const supplierCount = sections.length;
+        ensureSpace(48);
         doc
           .fillColor('#0F172A')
           .font('Helvetica-Bold')
@@ -640,6 +750,20 @@ export class QuoteMapService {
             width: contentWidth,
             align: 'center',
           });
+        y += 12;
+        doc
+          .font('Helvetica-Bold')
+          .fontSize(9)
+          .fillColor('#0F172A')
+          .text(
+            `${supplierCount} fornecedor${supplierCount === 1 ? '' : 'es'} cotado${supplierCount === 1 ? '' : 's'} neste mapa`,
+            left,
+            y,
+            {
+              width: contentWidth,
+              align: 'center',
+            }
+          );
         y += 16;
       }
 
@@ -764,24 +888,24 @@ export class QuoteMapService {
         );
         y += 6;
 
-        // Solicitação de compra (SC) — SC nº + Ordem de serviço (ex.: OS AD-725)
+        // Requisição de Material — ID + Ordem de serviço (ex.: AD-725)
         {
           const osLabel = this.formatRmOsLabel(mr);
-          const scNumber = (mr?.requestNumber || '').trim();
+          const rmId = this.formatRmDisplayId(mr?.requestNumber);
           const posto =
             (mr?.costCenter?.name || '').trim() || (mr?.costCenter?.code || '').trim();
           const scDesc = (mr?.description || '').trim();
-          const hasScBlock = Boolean(osLabel || scNumber || posto || scDesc);
+          const hasScBlock = Boolean(osLabel || rmId || posto || scDesc);
           if (hasScBlock) {
             ensureSpace(scDesc ? 70 : 48);
             doc
               .fillColor('#0F172A')
               .font('Helvetica-Bold')
               .fontSize(11)
-              .text('Solicitação de compra (SC)', left, y);
+              .text('Requisição de Material', left, y);
             y += 20;
             drawTwoColRow(
-              { label: 'SC nº: ', value: scNumber || '—' },
+              { label: 'ID: ', value: rmId || '—' },
               { label: 'Ordem de serviço: ', value: osLabel || '—' }
             );
             if (posto) {
@@ -1064,7 +1188,9 @@ export class QuoteMapService {
   ): string {
     const fileName =
       kind === 'comparison'
-        ? 'comparison.pdf'
+        ? purchaseOrderId?.trim()
+          ? `comparison-${purchaseOrderId.trim()}.pdf`
+          : 'comparison.pdf'
         : purchaseOrderId?.trim()
           ? `snapshot-${purchaseOrderId.trim()}.pdf`
           : 'snapshot.pdf';
@@ -1084,15 +1210,34 @@ export class QuoteMapService {
     return absPath;
   }
 
-  async getOrCreateComparisonPdfPath(quoteMapId: string): Promise<string> {
+  async getOrCreateComparisonPdfPath(
+    quoteMapId: string,
+    purchaseOrderId?: string
+  ): Promise<string> {
+    let mapId = quoteMapId;
+    const poId = purchaseOrderId?.trim() || '';
+
+    if (poId) {
+      const po = await this.db.purchaseOrder.findUnique({
+        where: { id: poId },
+        select: { id: true, quoteMapId: true },
+      });
+      if (!po) throw new Error('OC não encontrada');
+      // Sempre usa o mapa vinculado à OC (evita misturar outra cotação da mesma RM).
+      if (po.quoteMapId) mapId = po.quoteMapId;
+    }
+
     const map = await this.db.quoteMap.findUnique({
-      where: { id: quoteMapId },
+      where: { id: mapId },
       select: { id: true },
     });
     if (!map) throw new Error('Mapa de cotação não encontrado');
 
-    const absPath = this.snapshotPdfAbsolutePath(quoteMapId, undefined, 'comparison');
-    await this.saveQuoteMapSnapshotPdf(quoteMapId, { kind: 'comparison' });
+    const absPath = this.snapshotPdfAbsolutePath(mapId, poId || undefined, 'comparison');
+    await this.saveQuoteMapSnapshotPdf(mapId, {
+      kind: 'comparison',
+      purchaseOrderId: poId || undefined,
+    });
     return absPath;
   }
 
@@ -1162,25 +1307,43 @@ export class QuoteMapService {
     const supplierIds = Array.from(new Set(data.supplierIds));
     if (supplierIds.length === 0) throw new Error('Selecione ao menos um fornecedor no mapa');
 
-    // wipe total para não misturar valores antigos
+    const openItemIds = openItems.map((item: { id: string }) => item.id);
+
+    // Preserva cotações/vencedores de itens já cobertos por OC.
+    // Wipe total apagava o histórico e o PDF comparativo ficava só com o último lote.
     await this.db.$transaction([
-      this.db.quoteMapSupplierItem.deleteMany({ where: { quoteMapId } }),
-      this.db.quoteMapWinnerItem.deleteMany({ where: { quoteMapId } }),
-      this.db.quoteMapSupplier.deleteMany({ where: { quoteMapId } })
+      this.db.quoteMapSupplierItem.deleteMany({
+        where: {
+          quoteMapId,
+          ...(openItemIds.length > 0
+            ? { materialRequestItemId: { in: openItemIds } }
+            : { materialRequestItemId: { in: [] } }),
+        },
+      }),
+      this.db.quoteMapWinnerItem.deleteMany({
+        where: {
+          quoteMapId,
+          ...(openItemIds.length > 0
+            ? { materialRequestItemId: { in: openItemIds } }
+            : { materialRequestItemId: { in: [] } }),
+        },
+      }),
     ]);
 
-    // Persistir frete e preços unitários
-    await this.db.$transaction(
-      supplierIds.map((supplierId) =>
-        this.db.quoteMapSupplier.create({
-          data: {
-            quoteMapId,
-            supplierId,
-            freight: new Decimal(data.freightBySupplier[supplierId] ?? 0)
-          }
-        })
-      )
-    );
+    // Upsert frete dos fornecedores selecionados (mantém fornecedores só do histórico coberto)
+    for (const supplierId of supplierIds) {
+      await this.db.quoteMapSupplier.upsert({
+        where: { quoteMapId_supplierId: { quoteMapId, supplierId } },
+        create: {
+          quoteMapId,
+          supplierId,
+          freight: new Decimal(data.freightBySupplier[supplierId] ?? 0),
+        },
+        update: {
+          freight: new Decimal(data.freightBySupplier[supplierId] ?? 0),
+        },
+      });
+    }
 
     const unitPriceMap = new Map<string, Decimal>(); // key: supplierId:itemId
     for (const q of data.unitPrices) {
@@ -1189,25 +1352,26 @@ export class QuoteMapService {
       unitPriceMap.set(`${q.supplierId}:${q.materialRequestItemId}`, new Decimal(q.unitPrice));
     }
 
-    await this.db.$transaction(
-      data.unitPrices
-        .filter(
-          (q) =>
-            supplierIds.includes(q.supplierId) && !coveredItemIds.has(q.materialRequestItemId)
-        )
-        .map((q) =>
+    const openUnitPrices = data.unitPrices.filter(
+      (q) =>
+        supplierIds.includes(q.supplierId) && !coveredItemIds.has(q.materialRequestItemId)
+    );
+    if (openUnitPrices.length > 0) {
+      await this.db.$transaction(
+        openUnitPrices.map((q) =>
           this.db.quoteMapSupplierItem.create({
             data: {
               quoteMapId,
               supplierId: q.supplierId,
               materialRequestItemId: q.materialRequestItemId,
-              unitPrice: new Decimal(q.unitPrice)
-            }
+              unitPrice: new Decimal(q.unitPrice),
+            },
           })
         )
-    );
+      );
+    }
 
-    // Calcular vencedor por item:
+    // Calcular vencedor por item (somente itens ainda abertos):
     // score = unitPrice * quantidade + frete
     const winnersToCreate: any[] = [];
 
@@ -1264,11 +1428,13 @@ export class QuoteMapService {
         winnerSupplierId: bestSupplierId,
         winnerScore: bestScore,
         winnerUnitPrice: bestUnitPrice,
-        freight: bestFreight
+        freight: bestFreight,
       });
     }
 
-    await this.db.quoteMapWinnerItem.createMany({ data: winnersToCreate });
+    if (winnersToCreate.length > 0) {
+      await this.db.quoteMapWinnerItem.createMany({ data: winnersToCreate });
+    }
 
     return { ok: true };
   }

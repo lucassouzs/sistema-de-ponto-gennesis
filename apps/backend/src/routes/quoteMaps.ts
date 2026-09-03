@@ -137,16 +137,19 @@ router.get('/:id/snapshot-pdf', async (req: AuthRequest, res: Response, next: Ne
 });
 
 // PDF comparativo: todas as cotações + ganhadora (arquivo separado do PDF da OC)
+// Com purchaseOrderId: compara só o contexto daquela OC (não mistura outra OC da mesma RM).
 router.get('/:id/comparison-pdf', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
+    const purchaseOrderId =
+      typeof req.query.purchaseOrderId === 'string' ? req.query.purchaseOrderId.trim() : '';
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
 
-    const absPath = await service.getOrCreateComparisonPdfPath(id);
+    const absPath = await service.getOrCreateComparisonPdfPath(id, purchaseOrderId || undefined);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="mapa-cotacao-comparativo-${id}.pdf"`
+      `inline; filename="mapa-cotacao-comparativo-${purchaseOrderId || id}.pdf"`
     );
     res.sendFile(absPath);
   } catch (error) {

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { OcAttachmentActions } from '@/components/oc/OcAttachmentActions';
 import { DatePickerField } from '@/components/ui/DatePickerField';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   buyerActiveInstallmentIndex,
   hasAwaitingInstallmentPayment,
@@ -65,9 +66,11 @@ function BoletoParcelasListInner({
   releasePending = false,
   className = ''
 }: BoletoParcelasListProps) {
+  const { isAdministrator } = usePermissions();
   const n = order.paymentParcelCount ?? 1;
   const [rows, setRows] = useState<RowDraft[]>(() => buildInitialRows(order));
   const [saving, setSaving] = useState(false);
+  const [forcingSingle, setForcingSingle] = useState(false);
   const [persistedOrder, setPersistedOrder] = useState<
     (BoletoParcelasOrderFields & { id: string }) | null
   >(null);
@@ -227,6 +230,37 @@ function BoletoParcelasListInner({
     }
   };
 
+  const canForceSingleParcel =
+    isAdministrator &&
+    editable &&
+    n > 1 &&
+    order.paymentBoletoPhaseReleased !== true &&
+    !financeHasCurrentParcel;
+
+  const handleForceSingleParcel = async () => {
+    if (!canForceSingleParcel || forcingSingle) return;
+    const ok = window.confirm(
+      'Reduzir esta OC para apenas 1 boleto com o valor total? Somente Administrador pode fazer isso.'
+    );
+    if (!ok) return;
+    setForcingSingle(true);
+    try {
+      const res = await api.patch(`/purchase-orders/${order.id}/force-single-boleto-parcel`);
+      const updated = (res.data as { data?: BoletoParcelasOrderFields & { id: string } })?.data;
+      if (updated) setPersistedOrder(updated);
+      onSaved?.(res.data);
+      toast.success('OC ajustada para 1 boleto.');
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'response' in e
+          ? (e as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null;
+      toast.error(msg || 'Erro ao reduzir para 1 boleto');
+    } finally {
+      setForcingSingle(false);
+    }
+  };
+
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
       {hint ? <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{hint}</p> : null}
@@ -235,6 +269,28 @@ function BoletoParcelasListInner({
           Total da OC: <span className="font-medium text-gray-700 dark:text-gray-300">{formatMoneyDisplay(orderTotal)}</span>
           {n > 1 ? ' — ao alterar uma parcela, as demais ajustam automaticamente.' : '.'}
         </p>
+      ) : null}
+      {canForceSingleParcel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={forcingSingle || saving || releasePending}
+            onClick={() => void handleForceSingleParcel()}
+            className="inline-flex items-center justify-center rounded-lg border border-amber-500/50 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/70"
+          >
+            {forcingSingle ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Ajustando…
+              </>
+            ) : (
+              'Usar apenas 1 boleto (admin)'
+            )}
+          </button>
+          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+            Junta o valor total em uma única parcela.
+          </span>
+        </div>
       ) : null}
       {!amountValidation.valid && amountValidation.message ? (
         <p className="text-xs text-red-600 dark:text-red-400 leading-relaxed">

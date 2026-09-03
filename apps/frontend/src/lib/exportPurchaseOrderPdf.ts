@@ -8,6 +8,7 @@ import {
 } from '@/lib/unbBranding';
 import { formatPaymentConditionDisplay, type PaymentConditionRow } from '@/components/oc/PaymentConditionSelect';
 import { buildOcPdfDownloadFileName } from '@/components/oc/ocListDisplay';
+import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmListDisplay';
 
 const PAYMENT_TYPE: Record<string, string> = {
   AVISTA: 'À vista',
@@ -287,11 +288,11 @@ export async function exportPurchaseOrderPdf(
   }
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(10);
-  pdf.text('Solicitação de compra (SC)', margin, y);
+  pdf.text('Requisição de Material', margin, y);
   y += 5;
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(8);
-  pdf.text(`SC nº: ${mr?.requestNumber || '—'}`, margin, y);
+  pdf.text(`ID: ${formatRmListDisplayId(mr?.requestNumber)}`, margin, y);
   pdf.text(`Ordem de serviço: ${(mr?.serviceOrder || '').trim() || '—'}`, margin + 75, y);
   y += 5;
   pdf.text(`Centro de custo: ${mr?.costCenter?.name || '—'}`, margin, y);

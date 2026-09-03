@@ -1,6 +1,6 @@
 ﻿import { Router, Response, NextFunction } from 'express';
 import multer from 'multer';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdministrator } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
 import { PurchaseOrderService } from '../services/PurchaseOrderService';
 import { createError } from '../middleware/errorHandler';
@@ -624,6 +624,33 @@ router.patch('/:id/payment-boleto-installments', async (req: AuthRequest, res: R
     next(error);
   }
 });
+
+router.patch(
+  '/:id/force-single-boleto-parcel',
+  requireAdministrator,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+      const order = await service.forceSingleBoletoParcel(req.params.id, req.user.id);
+      res.json({
+        success: true,
+        data: order,
+        message: 'OC ajustada para 1 boleto',
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /Ordem de compra não encontrada|Só é possível|Não é possível|Total da OC|Usuário não autenticado/.test(
+          error.message
+        )
+      ) {
+        res.status(400).json({ success: false, message: error.message });
+        return;
+      }
+      next(error);
+    }
+  }
+);
 
 router.patch(
   '/:id/payment-boleto-installment-due-dates',
