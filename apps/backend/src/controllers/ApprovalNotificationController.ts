@@ -4,7 +4,10 @@ import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permis
 import { AuthRequest } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { prisma } from '../lib/prisma';
-import { getManagerDpApprovalContractScope } from '../lib/dpApprovalAccess';
+import {
+  getDpManagerApprovalVisibilityWhere,
+  getManagerDpApprovalContractScope,
+} from '../lib/dpApprovalAccess';
 import { admTstManagerApprovalExclusionWhere } from '../lib/dpRequestAdmTst';
 import { getManagerFuelApprovalContractScope } from '../lib/fuelApprovalAccess';
 import {
@@ -60,16 +63,20 @@ export class ApprovalNotificationController {
       const isAdmin = req.user.isAdmin;
 
       let dp = 0;
-      const dpScope = await getManagerDpApprovalContractScope(userId, isAdmin);
-      if (dpScope !== null) {
+      const dpVisibility = await getDpManagerApprovalVisibilityWhere(userId, isAdmin);
+      if (dpVisibility !== null) {
         dp = await prisma.dpRequest.count({
           where: {
-            status: 'WAITING_MANAGER',
-            ...dpScope,
-            ...admTstManagerApprovalExclusionWhere(),
+            AND: [
+              { status: 'WAITING_MANAGER' },
+              dpVisibility as Prisma.DpRequestWhereInput,
+              admTstManagerApprovalExclusionWhere(),
+            ],
           },
         });
       }
+
+      const dpScope = await getManagerDpApprovalContractScope(userId, isAdmin);
 
       let fd = 0;
       if (dpScope !== null) {

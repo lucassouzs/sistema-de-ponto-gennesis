@@ -6,11 +6,20 @@ import { AuthRequest } from '../middleware/auth';
 import { isAdmTstDpRequestType } from './dpRequestAdmTst';
 
 export const DP_APPROVE_MODULE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-dp');
+export const DP_RESTRICTED_APPROVE_MODULE_KEY = pathToModuleKey(
+  '/ponto/controle/aprovar-solicitacoes-restritas-dp'
+);
 export const DP_MANAGE_MODULE_KEY = pathToModuleKey('/ponto/gerenciar-solicitacoes-dp');
 export const ADM_TST_MANAGE_MODULE_KEY = pathToModuleKey('/ponto/gerenciar-solicitacoes-adm-tst');
 export const DP_SOLICITACOES_MODULE_KEY = pathToModuleKey('/ponto/solicitacoes-dp');
 /** Controle: rescisão e alteração de função/salário (além de admin, gerenciar DP ou Gestor DP no contrato). */
 export const DP_SENSITIVE_CREATE_MODULE_KEY = pathToModuleKey('/ponto/controle/criar-tipos-restritos-dp');
+
+export const SENSITIVE_DP_REQUEST_TYPES = ['RESCISAO', 'ALTERACAO_FUNCAO_SALARIO'] as const;
+
+export function isSensitiveDpRequestType(requestType: string): boolean {
+  return (SENSITIVE_DP_REQUEST_TYPES as readonly string[]).includes(requestType);
+}
 
 /**
  * Pode atuar como gestor nas rotas de aprovação DP: vínculo em `user_dp_approval_contracts`
@@ -26,6 +35,38 @@ export async function userHasDpApprovePermission(userId: string): Promise<boolea
     select: { id: true },
   });
   return !!row;
+}
+
+export async function userHasRestrictedDpApprovePermission(userId: string): Promise<boolean> {
+  const row = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: DP_RESTRICTED_APPROVE_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
+      allowed: true,
+    },
+  });
+  return !!row;
+}
+
+export async function getRestrictedDpApprovalCostCenterIds(
+  userId: string,
+  isAdmin: boolean
+): Promise<string[] | null> {
+  if (isAdmin) return null;
+  const hasPerm = await userHasRestrictedDpApprovePermission(userId);
+  if (!hasPerm) return [];
+  const rows = await prisma.userRestrictedDpApprovalCostCenter.findMany({
+    where: { userId },
+    select: { costCenterId: true },
+  });
+  return rows.map((r) => r.costCenterId);
+}
+
+/** Gestor DP comum ou aprovador de solicitações restritas (para entrar na API de aprovações). */
+export async function userHasAnyDpApproverAccess(userId: string): Promise<boolean> {
+  if (await userHasDpApprovePermission(userId)) return true;
+  return userHasRestrictedDpApprovePermission(userId);
 }
 
 export async function userHasDpManagePermission(userId: string): Promise<boolean> {
@@ -105,6 +146,30 @@ async function buildManagerDpScopeFromContractIds(contractIds: string[]): Promis
   };
 }
 
+export async function getDpManagerApprovalVisibilityWhere(
+  userId: string,
+  isAdmin: boolean
+): Promise<Record<string, unknown> | null> {
+  if (isAdmin) return {};
+  const regularScope = await getManagerDpApprovalContractScope(userId, false);
+  const restrictedCcIds = await getRestrictedDpApprovalCostCenterIds(userId, false);
+  const hasRestricted = await userHasRestrictedDpApprovePermission(userId);
+  const orParts: Record<string, unknown>[] = [];
+  if (regularScope) {
+    orParts.push({
+      AND: [regularScope, { requestType: { notIn: [...SENSITIVE_DP_REQUEST_TYPES] } }],
+    });
+  }
+  if (hasRestricted && restrictedCcIds && restrictedCcIds.length > 0) {
+    orParts.push({
+      requestType: { in: [...SENSITIVE_DP_REQUEST_TYPES] },
+      costCenterId: { in: restrictedCcIds },
+    });
+  }
+  if (orParts.length === 0) return null;
+  return { OR: orParts };
+}
+
 export async function getManagerDpApprovalContractScope(
   userId: string,
   isAdmin: boolean
@@ -174,6 +239,37 @@ export async function assertManagerCanActOnDpContract(
   throw createError('Sem permissão para aprovar solicitações deste contrato', 403);
 }
 
+export async function assertManagerCanApproveDpRequest(
+  userId: string,
+  isAdmin: boolean,
+  requestType: string,
+  contractId: string | null,
+  costCenterId?: string | null
+): Promise<void> {
+  if (isAdmin) return;
+  if (isSensitiveDpRequestType(requestType)) {
+    const hasPerm = await userHasRestrictedDpApprovePermission(userId);
+    if (!hasPerm) {
+      throw createError('Sem permissão para aprovar solicitações internas restritas', 403);
+    }
+    if (!costCenterId) {
+      throw createError('Solicitação sem centro de custo para aprovação restrita', 403);
+    }
+    const ok = await prisma.userRestrictedDpApprovalCostCenter.findFirst({
+      where: { userId, costCenterId },
+      select: { id: true },
+    });
+    if (!ok) {
+      throw createError(
+        'Sem permissão para aprovar solicitações restritas deste centro de custo',
+        403
+      );
+    }
+    return;
+  }
+  await assertManagerCanActOnDpContract(userId, isAdmin, contractId, costCenterId);
+}
+
 /** Pode vincular centro de custo ao formulário de solicitação DP. */
 export async function assertCanAttachCostCenterToDpRequest(
   req: AuthRequest,
@@ -229,15 +325,7 @@ export async function assertCanAttachContractToDpRequest(
   await assertCanAttachCostCenterToDpRequest(req, contract.costCenterId);
 }
 
-export async function userMayCreateSensitiveDpRequest(
-  userId: string,
-  isAdmin: boolean,
-  contractId: string
-): Promise<boolean> {
-  if (isAdmin) return true;
-  if (await userHasDpManagePermission(userId)) return true;
-  if (await userHasSensitiveDpCreateControlePermission(userId)) return true;
-  if (!(await userHasDpApprovePermission(userId))) return false;
+async function userIsGestorDpOnContract(userId: string, contractId: string): Promise<boolean> {
   const row = await prisma.userDpApprovalContract.findFirst({
     where: { userId, contractId },
     select: { id: true },
@@ -249,4 +337,26 @@ export async function userMayCreateSensitiveDpRequest(
   if (!legacy) return false;
   const access = await getContractAccessForUser(userId, false);
   return access.filter === 'ids' && access.ids.includes(contractId);
+}
+
+export async function userMayCreateSensitiveDpRequest(
+  userId: string,
+  isAdmin: boolean,
+  contractId?: string | null,
+  costCenterId?: string | null
+): Promise<boolean> {
+  if (isAdmin) return true;
+  if (await userHasDpManagePermission(userId)) return true;
+  if (await userHasSensitiveDpCreateControlePermission(userId)) return true;
+  if (contractId && (await userIsGestorDpOnContract(userId, contractId))) return true;
+  if (costCenterId) {
+    const contracts = await prisma.contract.findMany({
+      where: { costCenterId },
+      select: { id: true },
+    });
+    for (const c of contracts) {
+      if (await userIsGestorDpOnContract(userId, c.id)) return true;
+    }
+  }
+  return false;
 }

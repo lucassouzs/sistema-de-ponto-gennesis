@@ -7,8 +7,9 @@ import { createError } from '../middleware/errorHandler';
 import {
   assertCanAttachCostCenterToDpRequest,
   assertCanAttachContractToDpRequest,
-  assertManagerCanActOnDpContract,
-  getManagerDpApprovalContractScope,
+  assertManagerCanApproveDpRequest,
+  getDpManagerApprovalVisibilityWhere,
+  isSensitiveDpRequestType,
   userMayCreateSensitiveDpRequest,
 } from '../lib/dpApprovalAccess';
 import { parseDpRequestDetails } from '../lib/dpRequestDetails';
@@ -21,8 +22,6 @@ import {
   ADM_TST_MAY_ACT_STATUSES,
 } from '../lib/dpRequestAdmTst';
 import { assertUserCanManageDpRequest } from '../lib/dpApprovalAccess';
-
-const SENSITIVE_MANAGER_ONLY_DP_TYPES = ['RESCISAO', 'ALTERACAO_FUNCAO_SALARIO'] as const;
 
 const DP_REQUEST_TYPES = [
   'ADMISSAO',
@@ -51,13 +50,17 @@ const createDpRequestSchema = z.object({
   /** Prazo desejado para retorno/acompanhamento pelo DP (independe das datas de período em férias, atestado etc.). */
   prazoInicio: z.string().min(1).optional(),
   prazoFim: z.string().min(1).optional(),
-  contractId: z.string().min(1),
+  contractId: z.string().min(1).optional(),
+  costCenterId: z.string().min(1).optional(),
 
   // Persistimos para histórico (mesmo que possamos derivar do centro de custo depois).
   company: z.string().min(1).optional(),
   polo: z.string().min(1).optional(),
 
   details: z.unknown().optional(),
+}).refine((data) => Boolean(data.costCenterId || data.contractId), {
+  message: 'Selecione o contrato',
+  path: ['costCenterId'],
 });
 
 const approveDpRequestSchema = z.object({
@@ -215,23 +218,78 @@ function appendStatusTransition(
 }
 
 type DpContractSummary = { id: string; number: string; name: string };
+type DpCostCenterSummary = {
+  id: string;
+  name: string;
+  code: string;
+  company: string | null;
+  polo: string | null;
+};
 
-async function attachDpContractSummaries<T extends { contractId: string | null }>(
-  rows: T[]
-): Promise<(T & { contract: DpContractSummary | null })[]> {
-  const ids = [...new Set(rows.map((r) => r.contractId).filter((id): id is string => !!id))];
-  if (ids.length === 0) {
-    return rows.map((r) => ({ ...r, contract: null }));
-  }
-  const contracts = await prisma.contract.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, number: true, name: true },
+async function attachDpContractSummaries<
+  T extends { contractId: string | null; costCenterId?: string | null },
+>(rows: T[]): Promise<(T & { contract: DpContractSummary | null; costCenter: DpCostCenterSummary | null })[]> {
+  const contractIds = [...new Set(rows.map((r) => r.contractId).filter((id): id is string => !!id))];
+  const costCenterIds = [
+    ...new Set(rows.map((r) => r.costCenterId).filter((id): id is string => !!id)),
+  ];
+
+  const [contracts, costCenters] = await Promise.all([
+    contractIds.length
+      ? prisma.contract.findMany({
+          where: { id: { in: contractIds } },
+          select: { id: true, number: true, name: true, costCenterId: true },
+        })
+      : Promise.resolve([]),
+    costCenterIds.length
+      ? prisma.costCenter.findMany({
+          where: { id: { in: costCenterIds } },
+          select: { id: true, name: true, code: true, company: true, polo: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const contractById = new Map(contracts.map((c) => [c.id, c]));
+  const extraCcIds = contracts
+    .map((c) => c.costCenterId)
+    .filter((id): id is string => !!id && !costCenterIds.includes(id));
+  const extraCenters =
+    extraCcIds.length > 0
+      ? await prisma.costCenter.findMany({
+          where: { id: { in: extraCcIds } },
+          select: { id: true, name: true, code: true, company: true, polo: true },
+        })
+      : [];
+  const centerById = new Map(
+    [...costCenters, ...extraCenters].map((c) => [
+      c.id,
+      {
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        company: c.company ?? null,
+        polo: c.polo ?? null,
+      },
+    ])
+  );
+
+  return rows.map((r) => {
+    const contract = r.contractId
+      ? contractById.get(r.contractId)
+        ? {
+            id: contractById.get(r.contractId)!.id,
+            number: contractById.get(r.contractId)!.number,
+            name: contractById.get(r.contractId)!.name,
+          }
+        : null
+      : null;
+    const ccId = r.costCenterId || (r.contractId ? contractById.get(r.contractId)?.costCenterId : null);
+    return {
+      ...r,
+      contract,
+      costCenter: ccId ? centerById.get(ccId) ?? null : null,
+    };
   });
-  const byId = new Map(contracts.map((c) => [c.id, c]));
-  return rows.map((r) => ({
-    ...r,
-    contract: r.contractId ? byId.get(r.contractId) ?? null : null,
-  }));
 }
 
 export class DpRequestController {
@@ -275,6 +333,44 @@ export class DpRequestController {
         return res.status(err.statusCode).json({ error: err.message || 'Erro' });
       }
       return res.status(500).json({ error: 'Erro ao listar contratos' });
+    }
+  }
+
+  /** Centros de custo ativos para o campo «Contrato» das solicitações internas. */
+  async getEligibleCostCenters(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+
+      const centers = await prisma.costCenter.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          company: true,
+          polo: true,
+          contracts: { select: { id: true } },
+        },
+        orderBy: { name: 'asc' },
+        take: 2000,
+      });
+
+      const data = centers.map((c) => ({
+        id: c.id,
+        name: c.name.trim() || c.code,
+        code: c.code,
+        company: c.company ?? null,
+        polo: c.polo ?? null,
+        contractIds: c.contracts.map((x) => x.id),
+      }));
+
+      return res.json({ success: true, data });
+    } catch (e: unknown) {
+      const err = e as { statusCode?: number; message?: string };
+      if (err?.statusCode && typeof err.statusCode === 'number') {
+        return res.status(err.statusCode).json({ error: err.message || 'Erro' });
+      }
+      return res.status(500).json({ error: 'Erro ao listar centros de custo' });
     }
   }
 
@@ -337,28 +433,59 @@ export class DpRequestController {
         return res.status(400).json({ error: msg });
       }
 
-      await assertCanAttachContractToDpRequest(req, validated.contractId);
+      let costCenter: {
+        id: string;
+        company: string | null;
+        polo: string | null;
+        isActive: boolean;
+      } | null = null;
+      let contract: { id: string } | null = null;
 
-      const contract = await prisma.contract.findUnique({
-        where: { id: validated.contractId },
-        include: {
-          costCenter: true,
-        },
-      });
-      if (!contract || !contract.costCenter?.isActive) {
-        throw createError('Contrato não encontrado', 404);
+      if (validated.costCenterId) {
+        await assertCanAttachCostCenterToDpRequest(req, validated.costCenterId);
+        costCenter = await prisma.costCenter.findFirst({
+          where: { id: validated.costCenterId, isActive: true },
+          select: { id: true, company: true, polo: true, isActive: true },
+        });
+        if (!costCenter) throw createError('Centro de custo não encontrado', 404);
+
+        if (validated.contractId) {
+          const linked = await prisma.contract.findUnique({
+            where: { id: validated.contractId },
+            select: { id: true, costCenterId: true },
+          });
+          if (!linked || linked.costCenterId !== costCenter.id) {
+            throw createError('Contrato não pertence ao centro de custo selecionado', 400);
+          }
+          contract = { id: linked.id };
+        } else {
+          const first = await prisma.contract.findFirst({
+            where: { costCenterId: costCenter.id },
+            select: { id: true },
+          });
+          contract = first;
+        }
+      } else if (validated.contractId) {
+        await assertCanAttachContractToDpRequest(req, validated.contractId);
+        const found = await prisma.contract.findUnique({
+          where: { id: validated.contractId },
+          include: { costCenter: true },
+        });
+        if (!found || !found.costCenter?.isActive) {
+          throw createError('Contrato não encontrado', 404);
+        }
+        contract = { id: found.id };
+        costCenter = found.costCenter;
       }
 
-      const costCenter = contract.costCenter;
+      if (!costCenter) throw createError('Selecione o contrato', 400);
 
-      const isSensitiveType = (SENSITIVE_MANAGER_ONLY_DP_TYPES as readonly string[]).includes(
-        validated.requestType
-      );
-      if (isSensitiveType) {
+      if (isSensitiveDpRequestType(validated.requestType)) {
         const ok = await userMayCreateSensitiveDpRequest(
           actorUserId,
           req.user.isAdmin,
-          contract.id
+          contract?.id ?? null,
+          costCenter.id
         );
         if (!ok) {
           throw createError(
@@ -422,7 +549,7 @@ export class DpRequestController {
             prazoInicio,
             prazoFim,
             details: parsedDetails as Prisma.InputJsonValue,
-            contractId: contract.id,
+            contractId: contract?.id ?? null,
             costCenterId: costCenter.id,
             company: company || null,
             polo: polo || null,
@@ -521,8 +648,8 @@ export class DpRequestController {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
 
-      const scope = await getManagerDpApprovalContractScope(req.user.id, req.user.isAdmin);
-      if (scope === null) {
+      const visibility = await getDpManagerApprovalVisibilityWhere(req.user.id, req.user.isAdmin);
+      if (visibility === null) {
         return res.json({ success: true, data: [] });
       }
 
@@ -534,7 +661,7 @@ export class DpRequestController {
         ? (rawPhase as Phase)
         : 'PENDING';
 
-      const phaseFilter =
+      const phaseFilter: Prisma.DpRequestWhereInput =
         phase === 'PENDING'
           ? { status: 'WAITING_MANAGER' as const }
           : phase === 'APPROVED'
@@ -550,7 +677,9 @@ export class DpRequestController {
                 };
 
       const requests = await prisma.dpRequest.findMany({
-        where: { ...phaseFilter, ...scope, ...admTstManagerApprovalExclusionWhere() },
+        where: {
+          AND: [phaseFilter, visibility as Prisma.DpRequestWhereInput, admTstManagerApprovalExclusionWhere()],
+        },
         include: {
           employee: {
             select: {
@@ -585,9 +714,10 @@ export class DpRequestController {
         throw createError('Solicitações ADM/TST não passam por aprovação do gestor', 400);
       }
 
-      await assertManagerCanActOnDpContract(
+      await assertManagerCanApproveDpRequest(
         req.user.id,
         req.user.isAdmin,
+        dpRequest.requestType,
         dpRequest.contractId,
         dpRequest.costCenterId
       );
@@ -647,9 +777,10 @@ export class DpRequestController {
         throw createError('Solicitações ADM/TST não passam por aprovação do gestor', 400);
       }
 
-      await assertManagerCanActOnDpContract(
+      await assertManagerCanApproveDpRequest(
         req.user.id,
         req.user.isAdmin,
+        dpRequest.requestType,
         dpRequest.contractId,
         dpRequest.costCenterId
       );

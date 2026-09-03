@@ -10,6 +10,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { PayrollDetailModal } from '@/components/payroll/PayrollDetailModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui/listTableUi';
@@ -1189,10 +1190,7 @@ export default function FolhaPagamentoPage() {
                   ) : loadingPayroll ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-8 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                          <span className="text-gray-600 dark:text-gray-400">Carregando folha de pagamento...</span>
-                        </div>
+                        <CadastroListLoading message="Carregando folha de pagamento..." />
                       </td>
                     </tr>
                   ) : !Array.isArray(employees) || employees.length === 0 ? (

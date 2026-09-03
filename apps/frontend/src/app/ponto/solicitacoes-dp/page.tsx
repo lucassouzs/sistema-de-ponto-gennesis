@@ -94,6 +94,13 @@ const createTargetDepartmentButtonCls =
   'group flex w-full items-center gap-4 rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-[border-color,background-color,box-shadow] hover:border-red-300 hover:bg-red-50/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/35 dark:border-gray-600 dark:bg-gray-800/70 dark:hover:border-red-700/70 dark:hover:bg-red-950/25';
 
 type DpContractSummary = { id: string; number: string; name: string };
+type DpCostCenterSummary = {
+  id: string;
+  name: string;
+  code?: string | null;
+  company?: string | null;
+  polo?: string | null;
+};
 
 type DpRequest = {
   id: string;
@@ -109,6 +116,8 @@ type DpRequest = {
   solicitanteEmail: string;
   contractId?: string | null;
   contract?: DpContractSummary | null;
+  costCenterId?: string | null;
+  costCenter?: DpCostCenterSummary | null;
   company?: string | null;
   polo?: string | null;
   createdAt: string;
@@ -192,6 +201,13 @@ function getRequestDestinationLabel(requestType: DpRequestType): string {
 
 function isAdmTstRequestType(requestType: DpRequestType): boolean {
   return requestType.startsWith('ADM_');
+}
+
+function getRequestContratoLabel(r: {
+  costCenter?: { name?: string | null; code?: string | null } | null;
+  contract?: { name?: string | null } | null;
+}): string {
+  return r.costCenter?.name?.trim() || r.costCenter?.code?.trim() || r.contract?.name?.trim() || '—';
 }
 
 type DestinationCardFilter = 'all' | 'DP' | 'ADM_TST';
@@ -432,20 +448,21 @@ export function SolicitacoesGeraisPage() {
     router.push('/auth/login');
   };
 
-  const { data: contractsResp } = useQuery({
-    queryKey: ['solicitacoes-dp-contratos'],
+  const { data: costCentersResp } = useQuery({
+    queryKey: ['solicitacoes-dp-centros-custo'],
     queryFn: async () => {
-      const res = await api.get('/solicitacoes-dp/contratos-elegiveis');
+      const res = await api.get('/solicitacoes-dp/centros-custo-elegiveis');
       return res.data?.data ?? [];
     },
   });
 
-  const eligibleContracts = (contractsResp ?? []) as Array<{
+  const eligibleCostCenters = (costCentersResp ?? []) as Array<{
     id: string;
     name: string;
-    number?: string;
-    costCenterId?: string;
-    costCenter?: { company?: string | null; polo?: string | null; name?: string | null; code?: string | null };
+    code?: string;
+    company?: string | null;
+    polo?: string | null;
+    contractIds?: string[];
   }>;
 
   const payrollMonthYear = React.useMemo(() => {
@@ -506,7 +523,7 @@ export function SolicitacoesGeraisPage() {
     requestType: DpRequestType | '';
     prazoInicio: string;
     prazoFim: string;
-    contractId: string;
+    costCenterId: string;
     company: string;
     polo: string;
   }>({
@@ -514,7 +531,7 @@ export function SolicitacoesGeraisPage() {
     requestType: '',
     prazoInicio: '',
     prazoFim: '',
-    contractId: '',
+    costCenterId: '',
     company: '',
     polo: '',
   });
@@ -526,7 +543,7 @@ export function SolicitacoesGeraisPage() {
       requestType: '',
       prazoInicio: '',
       prazoFim: '',
-      contractId: '',
+      costCenterId: '',
       company: '',
       polo: '',
     }));
@@ -560,7 +577,7 @@ export function SolicitacoesGeraisPage() {
     setRescisaoDocumentoFileNames({});
   };
 
-  const selectedContractId = form.contractId;
+  const selectedCostCenterId = form.costCenterId;
 
   const selectableRequestTypeEntries = React.useMemo(() => {
     if (!createTargetDepartment) return [];
@@ -577,11 +594,18 @@ export function SolicitacoesGeraisPage() {
       }
       if (createTargetDepartment !== 'DP') return true;
       if ((SENSITIVE_DP_REQUEST_TYPES as readonly string[]).includes(k)) {
-        return canCreateSensitiveDpRequestType(selectedContractId);
+        const selected = eligibleCostCenters.find((c) => c.id === selectedCostCenterId);
+        return canCreateSensitiveDpRequestType(selectedCostCenterId, selected?.contractIds);
       }
       return true;
     });
-  }, [createTargetDepartment, selectedContractId, canCreateSensitiveDpRequestType, employee?.department]);
+  }, [
+    createTargetDepartment,
+    selectedCostCenterId,
+    canCreateSensitiveDpRequestType,
+    employee?.department,
+    eligibleCostCenters,
+  ]);
 
   React.useEffect(() => {
     if (form.requestType === 'ADM_ASOS' && !isDepartamentoPessoalSector(employee?.department)) {
@@ -594,12 +618,21 @@ export function SolicitacoesGeraisPage() {
     if (loadingPerms) return;
     if (
       (form.requestType === 'RESCISAO' || form.requestType === 'ALTERACAO_FUNCAO_SALARIO') &&
-      !canCreateSensitiveDpRequestType(selectedContractId)
+      !canCreateSensitiveDpRequestType(
+        selectedCostCenterId,
+        eligibleCostCenters.find((c) => c.id === selectedCostCenterId)?.contractIds
+      )
     ) {
       setForm((p) => ({ ...p, requestType: '', prazoInicio: '', prazoFim: '' }));
       setDetails({});
     }
-  }, [selectedContractId, form.requestType, canCreateSensitiveDpRequestType, loadingPerms]);
+  }, [
+    selectedCostCenterId,
+    form.requestType,
+    canCreateSensitiveDpRequestType,
+    loadingPerms,
+    eligibleCostCenters,
+  ]);
 
   useEffect(() => {
     if (form.requestType !== 'ADVERTENCIA_SUSPENSAO') return;
@@ -672,9 +705,9 @@ export function SolicitacoesGeraisPage() {
   const contractFilterOptions = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const r of myRequests) {
-      const id = r.contractId ?? r.contract?.id;
-      const name = r.contract?.name?.trim();
-      if (id && name) map.set(id, name);
+      const id = r.costCenterId ?? r.costCenter?.id ?? r.contractId ?? r.contract?.id;
+      const name = getRequestContratoLabel(r);
+      if (id && name && name !== '—') map.set(id, name);
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
   }, [myRequests]);
@@ -691,12 +724,12 @@ export function SolicitacoesGeraisPage() {
 
   const contractSelectOptions = React.useMemo<MultiSelectSearchOption[]>(
     () =>
-      eligibleContracts.map((c) => ({
+      eligibleCostCenters.map((c) => ({
         value: c.id,
         label: c.name,
-        searchText: [c.name, c.number].filter(Boolean).join(' '),
+        searchText: [c.name, c.code].filter(Boolean).join(' '),
       })),
-    [eligibleContracts]
+    [eligibleCostCenters]
   );
 
   const companySelectOptions = React.useMemo<MultiSelectSearchOption[]>(() => {
@@ -707,14 +740,19 @@ export function SolicitacoesGeraisPage() {
     return items;
   }, [form.company]);
 
-  const selectedContract = React.useMemo(
-    () => eligibleContracts.find((x) => x.id === selectedContractId),
-    [eligibleContracts, selectedContractId]
+  const selectedCostCenter = React.useMemo(
+    () => eligibleCostCenters.find((x) => x.id === selectedCostCenterId),
+    [eligibleCostCenters, selectedCostCenterId]
   );
 
   const costCenterPoloRegion = React.useMemo(
-    () => resolveCostCenterPoloRegion(selectedContract?.costCenter),
-    [selectedContract]
+    () =>
+      resolveCostCenterPoloRegion({
+        polo: selectedCostCenter?.polo,
+        name: selectedCostCenter?.name,
+        code: selectedCostCenter?.code,
+      }),
+    [selectedCostCenter]
   );
 
   const showPoloField = costCenterPoloRegion !== null;
@@ -782,16 +820,19 @@ export function SolicitacoesGeraisPage() {
 
   const handleContractChange = (id: string) => {
     if (!id) {
-      setForm((p) => ({ ...p, contractId: '', company: '', polo: '' }));
+      setForm((p) => ({ ...p, costCenterId: '', company: '', polo: '' }));
       return;
     }
-    const contract = eligibleContracts.find((x) => x.id === id);
-    const meta = contract?.costCenter;
-    const poloRegion = resolveCostCenterPoloRegion(meta);
+    const center = eligibleCostCenters.find((x) => x.id === id);
+    const poloRegion = resolveCostCenterPoloRegion({
+      polo: center?.polo,
+      name: center?.name,
+      code: center?.code,
+    });
     setForm((p) => ({
       ...p,
-      contractId: id,
-      company: meta?.company?.trim() ?? '',
+      costCenterId: id,
+      company: center?.company?.trim() ?? '',
       polo: poloRegion ?? '',
     }));
   };
@@ -802,7 +843,7 @@ export function SolicitacoesGeraisPage() {
     if (filterUrgency !== 'all' && r.urgency !== filterUrgency) return false;
     if (filterRequestType !== 'all' && r.requestType !== filterRequestType) return false;
     if (filterContractId !== 'all') {
-      const cid = r.contractId ?? r.contract?.id ?? '';
+      const cid = r.costCenterId ?? r.costCenter?.id ?? r.contractId ?? r.contract?.id ?? '';
       if (cid !== filterContractId) return false;
     }
     const qRaw = mySearch.trim();
@@ -826,7 +867,7 @@ export function SolicitacoesGeraisPage() {
   const createMutation = useMutation({
     mutationFn: async () => {
       if (!form.requestType) throw new Error('Selecione o tipo de solicitação');
-      if (!form.contractId) throw new Error('Selecione o contrato');
+      if (!form.costCenterId) throw new Error('Selecione o contrato');
 
       if (!form.prazoInicio || !form.prazoFim) {
         throw new Error('Informe o prazo (início e fim) em que o DP deve dar retorno sobre a solicitação');
@@ -881,7 +922,7 @@ export function SolicitacoesGeraisPage() {
       const payload: Record<string, unknown> = {
         urgency: form.urgency,
         requestType: form.requestType,
-        contractId: form.contractId,
+        costCenterId: form.costCenterId,
         company: form.company || undefined,
         polo: form.polo || undefined,
         details: d,
@@ -963,7 +1004,7 @@ export function SolicitacoesGeraisPage() {
       ),
     },
     { label: 'Setor', value: r.sectorSolicitante || '—' },
-    { label: 'Contrato', value: r.contract?.name ?? '—' },
+    { label: 'Contrato', value: getRequestContratoLabel(r) },
     {
       label: 'Prazo',
       value: formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim),
@@ -1187,7 +1228,7 @@ export function SolicitacoesGeraisPage() {
                                     </span>
                                   </td>
                                   <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 max-w-[280px]">
-                                    {r.contract?.name ?? '—'}
+                                    {getRequestContratoLabel(r)}
                                   </td>
                                   <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
                                     {formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim)}
@@ -1408,7 +1449,7 @@ export function SolicitacoesGeraisPage() {
               <div className="min-w-0">
                 <label className="mb-1 block text-sm font-medium">Contrato *</label>
                 <SingleSelectSearchDropdown
-                  value={form.contractId}
+                  value={form.costCenterId}
                   onChange={handleContractChange}
                   options={contractSelectOptions}
                   allowEmpty

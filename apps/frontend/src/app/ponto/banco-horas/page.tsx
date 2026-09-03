@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { DEPARTMENTS_LIST, CLIENTS_LIST, POLOS_LIST } from '@/constants/payrollFilters';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { CARGOS_LIST } from '@/constants/cargos';
@@ -608,10 +609,7 @@ function BankHoursPageContent() {
                   ) : loadingBankHours ? (
                     <tr>
                       <td colSpan={8} className="px-6 py-8 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                          <span className="text-gray-600 dark:text-gray-400">Carregando banco de horas...</span>
-                        </div>
+                        <CadastroListLoading message="Carregando banco de horas..." />
                       </td>
                     </tr>
                   ) : !Array.isArray(filteredData) || filteredData.length === 0 ? (

@@ -36,6 +36,7 @@ import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
 import { isGennecyBotUser } from '@/lib/gennecyBot';
 import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import api from '@/lib/api';
@@ -70,6 +71,7 @@ type UserPermissionPayload = {
   permissions: PermissionItem[];
   allowedContractIds: string[];
   dpApprovalContractIds?: string[];
+  restrictedDpApprovalCostCenterIds?: string[];
   contractModuleFlags?: Record<string, ContractModuleFlags>;
 };
 type PermissionUserListItem = {
@@ -107,6 +109,7 @@ const EMPLOYEES_MODULE_KEY = pathToModuleKey('/ponto/funcionarios');
 const DEPRECATED_DP_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-dp');
 const DEPRECATED_RM_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-requisicoes-materiais');
 const DEPRECATED_OC_GESTOR_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-oc-gestor');
+const RESTRICTED_DP_APPROVE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-restritas-dp');
 
 const DEPRECATED_CONTROLE_KEYS = new Set([
   DEPRECATED_DP_APPROVE_CONTROLE_KEY,
@@ -140,9 +143,10 @@ function serializeFullBaseline(
   contractIds: Set<string>,
   employeeActions: Set<ContractAction>,
   dpApprovalContractIds: Set<string>,
-  moduleFlags: Record<string, ContractModuleFlags>
+  moduleFlags: Record<string, ContractModuleFlags>,
+  restrictedDpApprovalCostCenterIds: Set<string> = new Set()
 ): string {
-  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}`;
+  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}|rdp:${serializeContractIds(restrictedDpApprovalCostCenterIds)}`;
 }
 
 /** Mesmo formato retornado por GET /permissions/users/:id (alinha cache do React Query ao PUT). */
@@ -180,6 +184,7 @@ function buildPermissionsSnapshotForCache(
 }
 
 type ContractOption = { id: string; name: string; number: string };
+type CostCenterOption = { id: string; name: string; code?: string | null };
 
 const CATEGORY_ORDER = [
   'Principal',
@@ -535,6 +540,8 @@ export function UserPermissionsEditor({
   const [employeeActionsSet, setEmployeeActionsSet] = useState<Set<ContractAction>>(new Set());
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string>>(new Set());
   const [selectedDpApprovalContractIds, setSelectedDpApprovalContractIds] = useState<Set<string>>(new Set());
+  const [selectedRestrictedDpApprovalCostCenterIds, setSelectedRestrictedDpApprovalCostCenterIds] =
+    useState<Set<string>>(new Set());
   const [contractModuleFlags, setContractModuleFlags] = useState<Record<string, ContractModuleFlags>>({});
   const [permissionActionModal, setPermissionActionModal] = useState<'menu' | 'copy' | 'restore' | null>(
     null
@@ -556,6 +563,8 @@ export function UserPermissionsEditor({
   employeeActionsRef.current = employeeActionsSet;
   const selectedDpApprovalContractIdsRef = useRef(selectedDpApprovalContractIds);
   selectedDpApprovalContractIdsRef.current = selectedDpApprovalContractIds;
+  const selectedRestrictedDpApprovalCostCenterIdsRef = useRef(selectedRestrictedDpApprovalCostCenterIds);
+  selectedRestrictedDpApprovalCostCenterIdsRef.current = selectedRestrictedDpApprovalCostCenterIds;
   const contractModuleFlagsRef = useRef(contractModuleFlags);
   contractModuleFlagsRef.current = contractModuleFlags;
 
@@ -579,6 +588,7 @@ export function UserPermissionsEditor({
           permissions: UserPermissionPayload['permissions'];
           allowedContractIds: string[];
           dpApprovalContractIds?: string[];
+          restrictedDpApprovalCostCenterIds?: string[];
           contractModuleFlags?: Record<string, ContractModuleFlags>;
         };
         return {
@@ -592,6 +602,7 @@ export function UserPermissionsEditor({
           permissions: d.permissions ?? [],
           allowedContractIds: d.allowedContractIds ?? [],
           dpApprovalContractIds: d.dpApprovalContractIds ?? [],
+          restrictedDpApprovalCostCenterIds: d.restrictedDpApprovalCostCenterIds ?? [],
           contractModuleFlags: d.contractModuleFlags ?? {},
         } as UserPermissionPayload;
       }
@@ -609,6 +620,18 @@ export function UserPermissionsEditor({
       !!userPermissionData &&
       !userPermissionData.isAdmin &&
       activeTab === 'contratos',
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: costCentersList = [] } = useQuery({
+    queryKey: ['permission-cost-centers-list'],
+    queryFn: async () => (await api.get('/permissions/cost-centers')).data?.data as CostCenterOption[],
+    enabled:
+      (isPositionMode || !!userId) &&
+      !!userPermissionData &&
+      !userPermissionData.isAdmin &&
+      activeTab === 'controle',
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
@@ -663,6 +686,7 @@ export function UserPermissionsEditor({
       setEmployeeActionsSet(new Set());
       setSelectedContractIds(new Set());
       setSelectedDpApprovalContractIds(new Set());
+      setSelectedRestrictedDpApprovalCostCenterIds(new Set());
       setContractModuleFlags({});
       baselineSerializedRef.current = serializeFullBaseline(
         new Set(),
@@ -670,7 +694,8 @@ export function UserPermissionsEditor({
         new Set(),
         new Set(),
         new Set(),
-        {}
+        {},
+        new Set()
       );
       return;
     }
@@ -694,6 +719,7 @@ export function UserPermissionsEditor({
     const nextContractIds = new Set(userPermissionData.allowedContractIds ?? []);
     const rawDp = new Set(userPermissionData.dpApprovalContractIds ?? []);
     const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const nextRestrictedCc = new Set(userPermissionData.restrictedDpApprovalCostCenterIds ?? []);
     const rawFlags = userPermissionData.contractModuleFlags ?? {};
     const emptyFlags = (): ContractModuleFlags => ({
       orcamento: false,
@@ -710,6 +736,7 @@ export function UserPermissionsEditor({
     setEmployeeActionsSet(nextEmployee);
     setSelectedContractIds(nextContractIds);
     setSelectedDpApprovalContractIds(nextDpApproval);
+    setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
     setContractModuleFlags(nextFlags);
     baselineSerializedRef.current = serializeFullBaseline(
       next,
@@ -717,7 +744,8 @@ export function UserPermissionsEditor({
       nextContractIds,
       nextEmployee,
       nextDpApproval,
-      nextFlags
+      nextFlags,
+      nextRestrictedCc
     );
   }, [userPermissionData]);
 
@@ -756,6 +784,9 @@ export function UserPermissionsEditor({
       const permissions = [...basePermissions, ...contractActionPermissions, ...employeeActionPermissions];
       const allowedContractIds = currentContractIds;
       const dpApprovalContractIds = Array.from(selectedDpApprovalContractIdsRef.current);
+      const restrictedDpApprovalCostCenterIds = currentSelected.has(RESTRICTED_DP_APPROVE_KEY)
+        ? Array.from(selectedRestrictedDpApprovalCostCenterIdsRef.current)
+        : [];
       const contractModuleFlagsPayload = contractModuleFlagsRef.current;
       if (isPositionMode) {
         await api.put('/permissions/position-template', {
@@ -763,6 +794,7 @@ export function UserPermissionsEditor({
           permissions,
           allowedContractIds,
           dpApprovalContractIds,
+          restrictedDpApprovalCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       } else {
@@ -770,6 +802,7 @@ export function UserPermissionsEditor({
           permissions,
           allowedContractIds,
           dpApprovalContractIds,
+          restrictedDpApprovalCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       }
@@ -782,7 +815,8 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current
       );
       await queryClient.invalidateQueries({ queryKey: ['permission-users'] });
       await queryClient.invalidateQueries({ queryKey: ['me-permissions'] });
@@ -807,6 +841,9 @@ export function UserPermissionsEditor({
             permissions: snapshot,
             allowedContractIds: Array.from(selectedContractIdsRef.current),
             dpApprovalContractIds: Array.from(selectedDpApprovalContractIdsRef.current),
+            restrictedDpApprovalCostCenterIds: Array.from(
+              selectedRestrictedDpApprovalCostCenterIdsRef.current
+            ),
             contractModuleFlags: updatedFlags,
           };
         });
@@ -855,7 +892,8 @@ export function UserPermissionsEditor({
       selectedContractIds,
       employeeActionsSet,
       selectedDpApprovalContractIds,
-      contractModuleFlags
+      contractModuleFlags,
+      selectedRestrictedDpApprovalCostCenterIds
     );
     if (serialized === baselineSerializedRef.current) return;
 
@@ -866,7 +904,8 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
       enqueuePersistPermissions();
@@ -879,6 +918,7 @@ export function UserPermissionsEditor({
     employeeActionsSet,
     selectedContractIds,
     selectedDpApprovalContractIds,
+    selectedRestrictedDpApprovalCostCenterIds,
     contractModuleFlags,
     loadingPermissions,
     permissionError,
@@ -896,7 +936,8 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
       enqueuePersistPermissions();
@@ -956,6 +997,9 @@ export function UserPermissionsEditor({
         }
         if (key === EMPLOYEES_MODULE_KEY) {
           setEmployeeActionsSet(new Set());
+        }
+        if (key === RESTRICTED_DP_APPROVE_KEY) {
+          setSelectedRestrictedDpApprovalCostCenterIds(new Set());
         }
       } else {
         n.add(key);
@@ -1096,6 +1140,7 @@ export function UserPermissionsEditor({
     permissions: PermissionItem[];
     allowedContractIds?: string[];
     dpApprovalContractIds?: string[];
+    restrictedDpApprovalCostCenterIds?: string[];
     contractModuleFlags?: Record<string, ContractModuleFlags>;
   }) => {
     const perms = source.permissions ?? [];
@@ -1118,6 +1163,7 @@ export function UserPermissionsEditor({
     const nextContractIds = new Set(source.allowedContractIds ?? []);
     const rawDp = new Set(source.dpApprovalContractIds ?? []);
     const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const nextRestrictedCc = new Set(source.restrictedDpApprovalCostCenterIds ?? []);
     const rawFlags = source.contractModuleFlags ?? {};
     const emptyFlags = (): ContractModuleFlags => ({
       orcamento: false,
@@ -1134,6 +1180,7 @@ export function UserPermissionsEditor({
     setEmployeeActionsSet(nextEmployee);
     setSelectedContractIds(nextContractIds);
     setSelectedDpApprovalContractIds(nextDpApproval);
+    setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
     setContractModuleFlags(nextFlags);
   };
 
@@ -1176,6 +1223,9 @@ export function UserPermissionsEditor({
           (id) => allowedSrc.has(id) && selectedContractIdsRef.current.has(id)
         )
       )
+    );
+    setSelectedRestrictedDpApprovalCostCenterIds(
+      new Set(source.restrictedDpApprovalCostCenterIds ?? [])
     );
     toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
   };
@@ -1263,12 +1313,14 @@ export function UserPermissionsEditor({
         permissions?: PermissionItem[];
         allowedContractIds?: string[];
         dpApprovalContractIds?: string[];
+        restrictedDpApprovalCostCenterIds?: string[];
         contractModuleFlags?: Record<string, ContractModuleFlags>;
       };
       applyPermissionsPayload({
         permissions: data?.permissions ?? [],
         allowedContractIds: data?.allowedContractIds ?? [],
         dpApprovalContractIds: data?.dpApprovalContractIds ?? [],
+        restrictedDpApprovalCostCenterIds: data?.restrictedDpApprovalCostCenterIds ?? [],
         contractModuleFlags: data?.contractModuleFlags ?? {},
       });
       toast.success('Padrões do cargo restaurados. Salvamento automático em andamento.');
@@ -1292,7 +1344,8 @@ export function UserPermissionsEditor({
       selectedContractIds,
       employeeActionsSet,
       selectedDpApprovalContractIds,
-      contractModuleFlags
+      contractModuleFlags,
+      selectedRestrictedDpApprovalCostCenterIds
     ) !== baselineSerializedRef.current;
 
   const handleBackWithSave = async () => {
@@ -1420,6 +1473,16 @@ export function UserPermissionsEditor({
       ? controleModulesByGroup.map(({ group, modules }) => ({ category: group, modules }))
       : modulesByCategory;
 
+  const restrictedCostCenterOptions = useMemo(
+    () =>
+      costCentersList.map((c) => ({
+        value: c.id,
+        label: c.name,
+        searchText: [c.name, c.code].filter(Boolean).join(' '),
+      })),
+    [costCentersList]
+  );
+
   const employeePosition = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
 
   const permissionActionsButton = !isPositionMode ? (
@@ -1514,6 +1577,7 @@ export function UserPermissionsEditor({
                             const Icon = moduleIcon(mod.href);
                             const lbl = labelFor(mod);
                             const liberado = selectedSet.has(mod.key);
+                            const isRestrictedApprove = mod.key === RESTRICTED_DP_APPROVE_KEY;
                             return (
                               <tr
                                 key={mod.key}
@@ -1524,12 +1588,35 @@ export function UserPermissionsEditor({
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                       <Icon className="h-4 w-4 stroke-[1.5]" aria-hidden />
                                     </div>
-                                    <span className="min-w-0 font-medium leading-snug text-gray-900 dark:text-gray-100">
-                                      {lbl}
-                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="min-w-0 font-medium leading-snug text-gray-900 dark:text-gray-100">
+                                        {lbl}
+                                      </span>
+                                      {isRestrictedApprove && liberado ? (
+                                        <div className="mt-2 max-w-xl">
+                                          <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Centros de custo que esta pessoa pode aprovar nas
+                                            solicitações internas restritas
+                                          </p>
+                                          <MultiSelectSearchDropdown
+                                            selected={Array.from(
+                                              selectedRestrictedDpApprovalCostCenterIds
+                                            )}
+                                            onChange={(ids) =>
+                                              setSelectedRestrictedDpApprovalCostCenterIds(new Set(ids))
+                                            }
+                                            options={restrictedCostCenterOptions}
+                                            placeholder="Selecionar centros de custo..."
+                                            searchPlaceholder="Pesquisar centro de custo..."
+                                            emptyOptionsMessage="Nenhum centro de custo ativo"
+                                            noFocusRing
+                                          />
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </td>
-                                <td className="py-3.5 pl-4 pr-2 text-right align-middle">
+                                <td className="py-3.5 pl-4 pr-2 text-right align-top">
                                   <div className="inline-flex justify-end">
                                     <PermissionMatrixCheckbox
                                       checked={liberado}

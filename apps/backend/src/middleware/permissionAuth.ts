@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { prisma } from '../lib/prisma';
-import { userHasDpApprovePermission } from '../lib/dpApprovalAccess';
+import { userHasAnyDpApproverAccess } from '../lib/dpApprovalAccess';
 import { userHasFuelApprovePermission } from '../lib/fuelApprovalAccess';
 import { userHasFuelSuppliesAccess } from '../lib/fuelSuppliesAccess';
 import { userHasVehicleReservationSuppliesAccess } from '../lib/vehicleReservationSuppliesAccess';
@@ -156,7 +156,7 @@ export const requireDpApproverAccess = async (req: AuthRequest, res: Response, n
     if (req.user.isAdmin) {
       return next();
     }
-    const ok = await userHasDpApprovePermission(req.user.id);
+    const ok = await userHasAnyDpApproverAccess(req.user.id);
     if (!ok) {
       return next(createError('Você não tem permissão para esta ação', 403));
     }

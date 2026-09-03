@@ -11,18 +11,18 @@ interface LoadingProps {
   className?: string;
 }
 
-export function Loading({ 
-  message = 'Carregando...', 
+export function Loading({
+  message = 'Carregando...',
   fullScreen = false,
   size = 'md',
-  className = ''
+  className = '',
 }: LoadingProps) {
   const insideShell = useIsInsideMainLayoutShell();
 
   const sizeClasses = {
     sm: 'w-6 h-6',
     md: 'w-10 h-10',
-    lg: 'w-16 h-16'
+    lg: 'w-16 h-16',
   };
 
   const spinner = (
@@ -77,4 +77,3 @@ export function LoadingOverlay({ message = 'Carregando...', show = true }: Loadi
     </div>
   );
 }
-

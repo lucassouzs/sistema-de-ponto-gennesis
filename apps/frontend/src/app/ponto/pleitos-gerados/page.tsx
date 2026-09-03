@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
@@ -195,12 +196,7 @@ export default function PleitosGeradosPage() {
             </CardHeader>
             <CardContent>
               {loadingList ? (
-                <div className="py-8 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="loading-spinner h-6 w-6" />
-                    <span className="text-gray-600 dark:text-gray-400">Carregando pleitos...</span>
-                  </div>
-                </div>
+                <CadastroListLoading message="Carregando pleitos..." />
               ) : isListEmpty ? (
                 <div className="py-8 text-center">
                   <FileCheck className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" />

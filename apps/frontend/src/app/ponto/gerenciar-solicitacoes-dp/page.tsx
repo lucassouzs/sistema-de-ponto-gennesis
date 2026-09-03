@@ -115,6 +115,8 @@ type DpRequest = {
   solicitanteEmail: string;
   contractId?: string | null;
   contract?: DpContractSummary | null;
+  costCenterId?: string | null;
+  costCenter?: { id: string; name?: string | null; code?: string | null } | null;
   company?: string | null;
   polo?: string | null;
   managerApprovalComment?: string | null;
@@ -503,8 +505,8 @@ export function GerenciarSolicitacoesGeraisPage({
   const contractFilterOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of requests) {
-      const id = r.contractId ?? r.contract?.id;
-      const name = r.contract?.name?.trim();
+      const id = r.costCenterId ?? r.costCenter?.id ?? r.contractId ?? r.contract?.id;
+      const name = r.costCenter?.name?.trim() || r.contract?.name?.trim();
       if (id && name) map.set(id, name);
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1], 'pt-BR'));
@@ -527,7 +529,7 @@ export function GerenciarSolicitacoesGeraisPage({
     if (filterUrgency !== 'all' && r.urgency !== filterUrgency) return false;
     if (filterRequestType !== 'all' && r.requestType !== filterRequestType) return false;
     if (filterContractId !== 'all') {
-      const cid = r.contractId ?? r.contract?.id ?? '';
+      const cid = r.costCenterId ?? r.costCenter?.id ?? r.contractId ?? r.contract?.id ?? '';
       if (cid !== filterContractId) return false;
     }
     const qRaw = search.trim();
@@ -549,6 +551,8 @@ export function GerenciarSolicitacoesGeraisPage({
   } = useRowActionMenu(filteredRequests);
 
   const getCostCenterLabel = (r: DpRequest): string | null => {
+    const fromLinked = r.costCenter?.name?.trim() || r.costCenter?.code?.trim() || '';
+    if (fromLinked) return fromLinked;
     const fromDetails = typeof r.details?.costCenter === 'string' ? r.details.costCenter.trim() : '';
     if (fromDetails) return fromDetails;
     const fromEmployee = typeof r.employee?.costCenter === 'string' ? r.employee.costCenter.trim() : '';
@@ -556,8 +560,7 @@ export function GerenciarSolicitacoesGeraisPage({
   };
 
   const getContratoColunaLabel = (r: DpRequest): string => {
-    if (r.requestType === 'ATESTADO_MEDICO') return getCostCenterLabel(r) || '—';
-    return r.contract?.name ?? '—';
+    return getCostCenterLabel(r) || r.contract?.name || '—';
   };
 
   const statusLabelsForScope = useMemo(
@@ -676,7 +679,7 @@ export function GerenciarSolicitacoesGeraisPage({
       ),
     },
     { label: 'Solicitante', value: r.solicitanteNome },
-    { label: 'Contrato', value: r.contract?.name ?? '—' },
+    { label: 'Contrato', value: getContratoColunaLabel(r) },
     {
       label: 'Prazo',
       value: formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim),

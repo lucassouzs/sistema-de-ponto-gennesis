@@ -13,6 +13,7 @@ import {
   User
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -119,13 +120,7 @@ export const PointCorrectionList: React.FC = () => {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-center">
-          <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Carregando solicitações...</p>
-        </div>
-      </div>
+    return <CadastroListLoading message="Carregando solicitações..." />;
     );
   }
 

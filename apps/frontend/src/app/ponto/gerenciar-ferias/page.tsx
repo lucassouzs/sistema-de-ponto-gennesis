@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
@@ -337,10 +338,7 @@ function GerenciarFeriasPageContent() {
             </CardHeader>
             <CardContent>
               {loadingPending ? (
-                <div className="text-center py-8">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">Carregando solicitações...</p>
-                </div>
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : pendingVacationsList.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle className="w-12 h-12 text-green-400 dark:text-green-500 mx-auto mb-4" />
@@ -409,10 +407,7 @@ function GerenciarFeriasPageContent() {
             </CardHeader>
             <CardContent>
               {loadingAll ? (
-                <div className="text-center py-8">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">Carregando férias...</p>
-                </div>
+                <CadastroListLoading message="Carregando férias..." />
               ) : allVacationsList.length === 0 ? (
                 <div className="text-center py-8">
                   <Calendar className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -470,10 +465,7 @@ function GerenciarFeriasPageContent() {
               </CardHeader>
               <CardContent>
                 {loadingCompliance ? (
-                  <div className="text-center py-8">
-                    <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                    <p className="text-gray-600 dark:text-gray-400">Carregando relatório...</p>
-                  </div>
+                  <CadastroListLoading message="Carregando relatório..." />
                 ) : compliance ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg">

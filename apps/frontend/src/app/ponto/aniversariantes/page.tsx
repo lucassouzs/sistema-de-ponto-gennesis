@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
@@ -285,10 +286,7 @@ export default function AniversariantesPage() {
         <Card>
           <CardContent className="p-6">
             {loadingBirthdays ? (
-              <div className="text-center py-8">
-                <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">Carregando aniversariantes...</p>
-              </div>
+              <CadastroListLoading message="Carregando aniversariantes..." />
             ) : error ? (
               <div className="text-center py-8">
                 <p className="text-red-600 dark:text-red-400">Erro ao carregar aniversariantes</p>

@@ -14,6 +14,7 @@ import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { Modal } from '@/components/ui/Modal';
 import { DatePickerField } from '@/components/ui/DatePickerField';
@@ -618,14 +619,7 @@ export default function EntregasLogisticaPageClient() {
             </CardHeader>
             <CardContent>
               {loadingList ? (
-                <div className="py-8 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="loading-spinner h-6 w-6" />
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Carregando solicitações...
-                    </span>
-                  </div>
-                </div>
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : isListEmpty ? (
                 <div className="py-8 text-center">
                   <Truck className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" />

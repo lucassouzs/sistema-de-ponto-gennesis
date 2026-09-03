@@ -18,13 +18,7 @@ export function ProtectedRoute({ children, route, contractId, fallback }: Protec
   const { hasAccess, isLoading, canAccessContract } = useRoutePermission(route);
 
   if (isLoading) {
-    return (
-      <Loading 
-        message="Verificando permissões..."
-        fullScreen
-        size="lg"
-      />
-    );
+    return <Loading message="Verificando permissões..." fullScreen size="lg" />;
   }
 
   if (contractId && hasAccess && !canAccessContract(contractId)) {

@@ -128,6 +128,9 @@ export function usePermissions() {
   const allowedContractIdSet = new Set(allowedContractIds);
   const dpApprovalContractIds: string[] = permissionData?.dpApprovalContractIds ?? [];
   const dpApprovalContractIdSet = new Set(dpApprovalContractIds);
+  const restrictedDpApprovalCostCenterIds: string[] =
+    permissionData?.restrictedDpApprovalCostCenterIds ?? [];
+  const restrictedDpApprovalCostCenterIdSet = new Set(restrictedDpApprovalCostCenterIds);
   const gestorCostCenterIds: string[] = permissionData?.gestorCostCenterIds ?? [];
   const isUnbUser = !!permissionData?.isUnbUser;
   const unbCostCenterIds: string[] = permissionData?.unbCostCenterIds ?? [];
@@ -270,20 +273,29 @@ export function usePermissions() {
     ? canAction(contractsKey, 'excluir')
     : hasContractAcesso;
 
-  /** Rescisão / alteração função-salário: admin, equipe DP (gerenciar), Controle «criar solicitações restritas» ou Gestor DP no contrato. */
-  const canCreateSensitiveDpRequestType = (contractId: string | null | undefined) => {
+  /** Rescisão / alteração função-salário: admin, equipe DP (gerenciar), Controle «criar solicitações restritas» ou Gestor DP no contrato/CC. */
+  const canCreateSensitiveDpRequestType = (
+    contractId: string | null | undefined,
+    relatedContractIds?: string[]
+  ) => {
     if (isAdministrator || permissionData?.isAdmin) return true;
     if (can(pk('/ponto/gerenciar-solicitacoes-dp'))) return true;
     if (can(pk('/ponto/controle/criar-tipos-restritos-dp'))) return true;
-    if (!contractId) return false;
-    return dpApprovalContractIdSet.has(contractId);
+    const ids = relatedContractIds?.length ? relatedContractIds : contractId ? [contractId] : [];
+    return ids.some((id) => dpApprovalContractIdSet.has(id));
   };
 
-  /** Tela / API de aprovações DP: gestor por contrato ou permissão legada (Controle). */
+  const canApproveRestrictedDpRequests =
+    isAdministrator ||
+    !!permissionData?.isAdmin ||
+    can(pk('/ponto/controle/aprovar-solicitacoes-restritas-dp'));
+
+  /** Tela / API de aprovações DP: gestor por contrato, permissão restrita ou permissão legada (Controle). */
   const canAccessDpApproverPages =
     isAdministrator ||
     !!permissionData?.isAdmin ||
     dpApprovalContractIds.length > 0 ||
+    canApproveRestrictedDpRequests ||
     can(pk('/ponto/controle/aprovar-solicitacoes-dp'));
 
   /** Bloco «Espelhos da Nota Fiscal» na tela de Aprovações: aprovação pelo Controle. */
@@ -491,6 +503,9 @@ export function usePermissions() {
     canAction,
     allowedContractIds,
     dpApprovalContractIds,
+    restrictedDpApprovalCostCenterIds,
+    restrictedDpApprovalCostCenterIdSet,
+    canApproveRestrictedDpRequests,
     gestorCostCenterIds,
     isUnbUser,
     unbCostCenterIds,
@@ -561,6 +576,7 @@ export function useRoutePermission(route: string) {
     can,
     canAccessContract,
     dpApprovalContractIds,
+    canApproveRestrictedDpRequests,
     canApproveEspelhoNf,
     canAccessOrcamentoRoutePage,
     canAccessOsRoutePage,
@@ -605,6 +621,7 @@ export function useRoutePermission(route: string) {
     '/ponto/aprovacoes':
       isAdministrator ||
       dpApprovalContractIds.length > 0 ||
+      canApproveRestrictedDpRequests ||
       can(pk('/ponto/controle/aprovar-solicitacoes-dp')) ||
       canApproveEspelhoNf ||
       can(pk('/ponto/controle/aprovar-combustivel')) ||

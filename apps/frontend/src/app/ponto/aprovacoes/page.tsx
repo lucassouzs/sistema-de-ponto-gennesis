@@ -188,6 +188,8 @@ type DpRequest = {
   solicitanteEmail: string;
   contractId?: string | null;
   contract?: DpContractSummary | null;
+  costCenterId?: string | null;
+  costCenter?: { id: string; name?: string | null; code?: string | null } | null;
   company?: string | null;
   polo?: string | null;
   managerApprovalComment?: string | null;
@@ -547,9 +549,17 @@ function AprovacoesPage() {
     }
   };
 
-  const { canAccessDpApproverPages, canApproveEspelhoNf, canApproveOc, canApproveFuel, canApproveMaterialRequests } =
-    usePermissions();
+  const {
+    canAccessDpApproverPages,
+    canApproveEspelhoNf,
+    canApproveOc,
+    canApproveFuel,
+    canApproveMaterialRequests,
+    dpApprovalContractIds,
+    isAdministrator,
+  } = usePermissions();
   const canApproveDp = canAccessDpApproverPages;
+  const canApproveFd = isAdministrator || dpApprovalContractIds.length > 0;
   const searchParams = useSearchParams();
   const tabFromUrl = searchParams?.get('tab') ?? null;
   const initialTab: AprovacaoTabId =
@@ -698,6 +708,8 @@ function AprovacoesPage() {
   );
 
   const getCostCenterLabel = (r: DpRequest): string | null => {
+    const fromLinked = r.costCenter?.name?.trim() || r.costCenter?.code?.trim() || '';
+    if (fromLinked) return fromLinked;
     const fromDetails =
       typeof r.details?.costCenter === 'string' ? r.details.costCenter.trim() : '';
     if (fromDetails) return fromDetails;
@@ -706,8 +718,7 @@ function AprovacoesPage() {
   };
 
   const getContratoColunaLabel = (r: DpRequest): string => {
-    if (r.requestType === 'ATESTADO_MEDICO') return getCostCenterLabel(r) || '—';
-    return r.contract?.name ?? '—';
+    return getCostCenterLabel(r) || r.contract?.name || '—';
   };
 
   const detailInfoRows = React.useMemo(() => {
@@ -819,7 +830,7 @@ function AprovacoesPage() {
     if (canApproveDp) {
       tabs.push({
         id: 'dp',
-        label: 'Solicitações',
+        label: 'Solicitações Internas',
         count: approvalCounts.dp,
       });
     }
@@ -830,7 +841,7 @@ function AprovacoesPage() {
         count: approvalCounts.espelho,
       });
     }
-    if (canApproveDp) {
+    if (canApproveFd) {
       tabs.push({
         id: 'fd',
         label: 'Fichas de Demanda',
@@ -859,7 +870,7 @@ function AprovacoesPage() {
       });
     }
     return tabs;
-  }, [canApproveDp, canApproveEspelhoNf, canApproveFuel, canApproveMaterialRequests, canApproveOc, approvalCounts]);
+  }, [canApproveDp, canApproveFd, canApproveEspelhoNf, canApproveFuel, canApproveMaterialRequests, canApproveOc, approvalCounts]);
 
   useEffect(() => {
     if (approvalTabs.length === 0) return;
@@ -1532,7 +1543,7 @@ function AprovacoesPage() {
               document.body
             )}
 
-          {canApproveDp && activeTab === 'fd' && <FdApprovalsSection />}
+          {canApproveFd && activeTab === 'fd' && <FdApprovalsSection />}
 
           {canApproveFuel && activeTab === 'fuel' && <FuelApprovalsSection />}
 

@@ -1,5 +1,5 @@
-import { Loading } from '@/components/ui/Loading';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
-export default function FluigAprovacoesLoading() {
-  return <Loading message="Carregando aprovações..." fullScreen size="lg" />;
+export default function FluigAprovacoesWorkflowLoading() {
+  return <PageSkeleton variant="page" label="Carregando aprovações" />;
 }

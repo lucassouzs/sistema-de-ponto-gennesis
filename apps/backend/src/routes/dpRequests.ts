@@ -14,6 +14,11 @@ const admTstManageModule = pathToModuleKey('/ponto/gerenciar-solicitacoes-adm-ts
 router.use(authenticate);
 
 router.get('/contratos-elegiveis', requireModuleAccess(myModule), controller.getEligibleContracts.bind(controller));
+router.get(
+  '/centros-custo-elegiveis',
+  requireModuleAccess(myModule),
+  controller.getEligibleCostCenters.bind(controller)
+);
 
 // Minhas solicitações (EMPLOYEE / DP usuário)
 router.get('/minhas', requireModuleAccess(myModule), controller.getMyRequests.bind(controller));

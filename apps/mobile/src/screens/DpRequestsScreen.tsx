@@ -44,14 +44,14 @@ import {
   createDpRequest,
   destinationLabel,
   DP_TYPE_LABELS,
-  fetchEligibleContracts,
+  fetchEligibleCostCenters,
   fetchMyDpRequests,
   fetchPayrollEmployees,
   isAdmTstRequestType,
   STATUS_LABELS,
   submitRequesterReturn,
   URGENCY_LABELS,
-  type DpEligibleContract,
+  type DpEligibleCostCenter,
   type DpRequest,
   type DpRequestStatus,
   type DpRequestType,
@@ -406,7 +406,7 @@ export default function DpRequestsScreen() {
   const [createTarget, setCreateTarget] = useState<CreateTarget>(null);
   const [urgency, setUrgency] = useState<DpUrgency>('MEDIUM');
   const [requestType, setRequestType] = useState<DpRequestType | ''>('');
-  const [contractId, setContractId] = useState('');
+  const [costCenterId, setCostCenterId] = useState('');
   const [company, setCompany] = useState('');
   const [polo, setPolo] = useState('');
   const [prazoInicio, setPrazoInicio] = useState('');
@@ -426,9 +426,9 @@ export default function DpRequestsScreen() {
     queryFn: () => fetchMyDpRequests('all'),
   });
 
-  const contractsQuery = useQuery({
-    queryKey: ['dp-eligible-contracts'],
-    queryFn: fetchEligibleContracts,
+  const costCentersQuery = useQuery({
+    queryKey: ['dp-eligible-cost-centers'],
+    queryFn: fetchEligibleCostCenters,
     enabled: createOpen,
   });
 
@@ -439,7 +439,7 @@ export default function DpRequestsScreen() {
   });
 
   const list = listQuery.data ?? [];
-  const contracts = contractsQuery.data ?? [];
+  const costCenters = costCentersQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
 
   const stats = useMemo(() => {
@@ -459,7 +459,7 @@ export default function DpRequestsScreen() {
       if (r.id.toLowerCase().includes(q)) return true;
       const typeLabel = (DP_TYPE_LABELS[r.requestType] || r.requestType).toLowerCase();
       if (typeLabel.includes(q)) return true;
-      if ((r.contract?.name || '').toLowerCase().includes(q)) return true;
+      if ((r.costCenter?.name || r.contract?.name || '').toLowerCase().includes(q)) return true;
       if ((STATUS_LABELS[r.status] || '').toLowerCase().includes(q)) return true;
       return false;
     });
@@ -482,7 +482,7 @@ export default function DpRequestsScreen() {
     return DP_TYPES;
   }, [createTarget, isDepartamentoPessoal]);
 
-  const selectedContract = contracts.find((c) => c.id === contractId);
+  const selectedCostCenter = costCenters.find((c) => c.id === costCenterId);
 
   const maxRows =
     requestType === 'ADMISSAO' ? MAX_ADMISSAO_CANDIDATOS : MAX_SOLICITACAO_ITENS;
@@ -490,7 +490,7 @@ export default function DpRequestsScreen() {
   const resetCreateFields = () => {
     setUrgency('MEDIUM');
     setRequestType('');
-    setContractId('');
+    setCostCenterId('');
     setCompany('');
     setPolo('');
     setPrazoInicio('');
@@ -542,15 +542,20 @@ export default function DpRequestsScreen() {
     return () => sub.remove();
   }, []);
 
-  const onPickContract = (c: DpEligibleContract) => {
-    setContractId(c.id);
-    setCompany(c.costCenter?.company?.trim() || '');
-    setPolo(resolveCostCenterPoloRegion(c.costCenter) ?? '');
+  const onPickCostCenter = (c: DpEligibleCostCenter) => {
+    setCostCenterId(c.id);
+    setCompany(c.company?.trim() || '');
+    setPolo(resolveCostCenterPoloRegion({ polo: c.polo, name: c.name, code: c.code }) ?? '');
   };
 
   const showPoloField = useMemo(
-    () => resolveCostCenterPoloRegion(selectedContract?.costCenter) !== null,
-    [selectedContract]
+    () =>
+      resolveCostCenterPoloRegion({
+        polo: selectedCostCenter?.polo,
+        name: selectedCostCenter?.name,
+        code: selectedCostCenter?.code,
+      }) !== null,
+    [selectedCostCenter]
   );
 
   const companyOptions = useMemo(() => {
@@ -836,14 +841,14 @@ export default function DpRequestsScreen() {
   const submitCreate = async () => {
     try {
       if (!requestType) throw new Error('Selecione o tipo de solicitação');
-      if (!contractId) throw new Error('Selecione o contrato');
+      if (!costCenterId) throw new Error('Selecione o contrato');
       if (!prazoInicio || !prazoFim) throw new Error('Informe o prazo de retorno (início e fim)');
       const details = buildDetails();
       setSaving(true);
       await createDpRequest({
         urgency,
         requestType,
-        contractId,
+        costCenterId,
         company: company || undefined,
         polo: polo || undefined,
         prazoInicio,
@@ -1031,9 +1036,9 @@ export default function DpRequestsScreen() {
                       {URGENCY_LABELS[row.urgency] || row.urgency}
                     </Text>
                   </View>
-                  {row.contract?.name ? (
+                  {row.costCenter?.name || row.contract?.name ? (
                     <Text style={styles.cardSub} numberOfLines={1}>
-                      {row.contract.name}
+                      {row.costCenter?.name || row.contract?.name}
                     </Text>
                   ) : null}
                   <Text style={[styles.cardHint, { color: colors.textSecondary }]}>
@@ -1071,7 +1076,11 @@ export default function DpRequestsScreen() {
                 value={URGENCY_LABELS[detail.urgency] || detail.urgency}
                 styles={styles}
               />
-              <Info label="Contrato" value={detail.contract?.name || '—'} styles={styles} />
+              <Info
+                label="Contrato"
+                value={detail.costCenter?.name || detail.contract?.name || '—'}
+                styles={styles}
+              />
               <Info label="Empresa" value={detail.company || '—'} styles={styles} />
               <Info label="Polo" value={detail.polo || '—'} styles={styles} />
               {detail.dpFeedback ? (
@@ -1314,21 +1323,21 @@ export default function DpRequestsScreen() {
 
                   <SelectField
                     label="Contrato"
-                    valueLabel={selectedContract?.name || ''}
+                    valueLabel={selectedCostCenter?.name || ''}
                     placeholder="Selecionar contrato"
                     colors={colors}
                     isDark={isDark}
                     onPress={() =>
                       openPicker(
                         'Contrato',
-                        contracts.map((c) => ({
+                        costCenters.map((c) => ({
                           value: c.id,
                           label: c.name,
-                          subtitle: c.number || undefined,
+                          subtitle: c.code || undefined,
                         })),
                         (id) => {
-                          const c = contracts.find((x) => x.id === id);
-                          if (c) onPickContract(c);
+                          const c = costCenters.find((x) => x.id === id);
+                          if (c) onPickCostCenter(c);
                         }
                       )
                     }
@@ -1357,9 +1366,20 @@ export default function DpRequestsScreen() {
                           'Polo',
                           [
                             {
-                              value: resolveCostCenterPoloRegion(selectedContract?.costCenter) || polo || 'DF',
+                              value:
+                                resolveCostCenterPoloRegion({
+                                  polo: selectedCostCenter?.polo,
+                                  name: selectedCostCenter?.name,
+                                  code: selectedCostCenter?.code,
+                                }) ||
+                                polo ||
+                                'DF',
                               label:
-                                resolveCostCenterPoloRegion(selectedContract?.costCenter) ||
+                                resolveCostCenterPoloRegion({
+                                  polo: selectedCostCenter?.polo,
+                                  name: selectedCostCenter?.name,
+                                  code: selectedCostCenter?.code,
+                                }) ||
                                 polo ||
                                 'DF',
                             },

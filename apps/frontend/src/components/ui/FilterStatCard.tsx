@@ -77,7 +77,14 @@ export function FilterStatCard({
                 compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl'
               )}
             >
-              {loading ? '—' : count}
+              {loading ? (
+                <span
+                  className="mt-1 inline-block h-6 w-12 animate-pulse rounded-md bg-gray-200/90 dark:bg-gray-700/70 sm:h-7"
+                  aria-hidden
+                />
+              ) : (
+                count
+              )}
             </p>
             {subtitle ? (
               <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">

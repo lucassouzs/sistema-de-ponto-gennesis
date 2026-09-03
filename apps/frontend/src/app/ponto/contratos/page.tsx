@@ -31,6 +31,7 @@ import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import {
   UserPermissionsEditor,
   UserPermissionsTabBar,
@@ -864,12 +865,7 @@ export default function ContratosPage() {
                     {loadingContracts ? (
                       <tr>
                         <td colSpan={tableColSpan} className="px-6 py-8 text-center">
-                          <div className="flex items-center justify-center">
-                            <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">
-                              Carregando contratos...
-                            </span>
-                          </div>
+                          <CadastroListLoading message="Carregando contratos..." />
                         </td>
                       </tr>
                     ) : contracts.length === 0 ? (

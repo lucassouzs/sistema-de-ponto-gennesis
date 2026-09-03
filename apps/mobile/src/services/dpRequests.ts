@@ -48,6 +48,15 @@ export type DpEligibleContract = {
   };
 };
 
+export type DpEligibleCostCenter = {
+  id: string;
+  name: string;
+  code?: string;
+  company?: string | null;
+  polo?: string | null;
+  contractIds?: string[];
+};
+
 export type DpRequest = {
   id: string;
   displayNumber?: number | null;
@@ -55,6 +64,7 @@ export type DpRequest = {
   requestType: DpRequestType;
   status: DpRequestStatus;
   contractId?: string | null;
+  costCenterId?: string | null;
   company?: string | null;
   polo?: string | null;
   prazoInicio?: string | null;
@@ -64,6 +74,7 @@ export type DpRequest = {
   requesterReturnComment?: string | null;
   dpFeedback?: string | null;
   contract?: { id: string; name?: string; number?: string } | null;
+  costCenter?: { id: string; name?: string; code?: string | null } | null;
   employee?: { id: string; department?: string; user?: { name?: string } } | null;
 };
 
@@ -148,6 +159,11 @@ export async function fetchEligibleContracts(): Promise<DpEligibleContract[]> {
   return (await readApiData<DpEligibleContract[]>(res)) || [];
 }
 
+export async function fetchEligibleCostCenters(): Promise<DpEligibleCostCenter[]> {
+  const res = await api.get('/api/solicitacoes-dp/centros-custo-elegiveis');
+  return (await readApiData<DpEligibleCostCenter[]>(res)) || [];
+}
+
 export async function fetchPayrollEmployees(): Promise<PayrollEmployeeOption[]> {
   const n = new Date();
   const params = new URLSearchParams({
@@ -167,7 +183,8 @@ export async function fetchPayrollEmployees(): Promise<PayrollEmployeeOption[]> 
 export async function createDpRequest(payload: {
   urgency: DpUrgency;
   requestType: DpRequestType;
-  contractId: string;
+  contractId?: string;
+  costCenterId?: string;
   company?: string;
   polo?: string;
   prazoInicio?: string;

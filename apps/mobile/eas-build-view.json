@@ -1,0 +1,49 @@
+﻿{
+  "id": "e84f7e5c-3912-4d05-823b-41d81d691467",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "01a06351-5cc9-717f-a191-d30772e3ab23",
+    "hash": "ffc7ca4c1dd05385d47c0fd87e8140ef1717c158"
+  },
+  "initiatingActor": {
+    "id": "e79d56ba-865b-4521-9596-683d54b5dac2",
+    "displayName": "lucassouzss"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/208f8118-e466-4554-97db-2e26271dd4fa/e84f7e5c-3912-4d05-823b-41d81d691467/2026-09-02T23%3A06%3A35Z-fcd9a55b-0a8b-413d-8923-3bf1a634a18d.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260903%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260903T104648Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=1260b773a0ac6c0adcdddee3562178fe882fd7d1948706d8808b339d15d58f3718ebe7ff5e4ce7c7050e87e90322b79b848aacd5a6d9df0f2ed6cfc3450f0ee7f502455560c4421d91c8b33c6438a5f7b54277339ce55e907e69396b7d62f88b2b85544e54f1721687ba7262501031f8bef971401153a2bdbf1963087de0a7cd02879483c2c7f0254be7ed09aa6b9a15bd18fa17771356a912ce17fb069142683ad91e4e977c4bfdbbbd4393be88aaeedb8c287c5782dde18f53f57d68a02d5ce80c5d5ae49d3df6a1e3082e2fa005101d16d1d1e9028a7f97c01bb2554246b8a9e995987e1a9102ec26bb4eef397ad8c02f768521c5615a9f1dcae0ff9d4fe6"
+  ],
+  "app": {
+    "id": "208f8118-e466-4554-97db-2e26271dd4fa",
+    "name": "sistema-ponto-engenharia",
+    "slug": "sistema-ponto-engenharia",
+    "ownerAccount": {
+      "id": "67c2bc1b-8f2f-4305-b13b-a03516fe4466",
+      "name": "lucassouzss"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "production",
+  "appIdentifier": "com.engenharia.sistemaponto",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.4",
+  "appBuildVersion": "5",
+  "gitCommitHash": "05918170facb0c968312f510956d15307fedcb65",
+  "gitCommitMessage": "a",
+  "priority": "NORMAL_PLUS",
+  "createdAt": "2026-09-02T18:11:11.630Z",
+  "updatedAt": "2026-09-02T23:11:25.330Z",
+  "completedAt": "2026-09-02T23:11:25.156Z",
+  "expirationDate": "2026-10-02T18:11:11.679Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 715,
+    "buildQueueTime": 17727331,
+    "buildDuration": 285480
+  }
+}

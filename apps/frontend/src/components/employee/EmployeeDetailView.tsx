@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
@@ -1786,9 +1787,8 @@ export function EmployeeDetailView({
 
                 {/* Lista de registros */}
                 {loadingRecords ? (
-                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-12 bg-white dark:bg-gray-800 text-center">
-                    <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                    <p className="text-gray-600 dark:text-gray-400 font-medium">Carregando registros...</p>
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white p-4 dark:bg-gray-800">
+                    <CadastroListLoading message="Carregando registros..." />
                   </div>
                 ) : (
                   <div className="mt-4">

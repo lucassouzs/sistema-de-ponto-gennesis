@@ -36,8 +36,8 @@ export default function DashboardPage() {
   if (loadingUser || !userData) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
+        <div className="text-center">
+          <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
           <p className="text-gray-600">Carregando...</p>
         </div>
       </div>

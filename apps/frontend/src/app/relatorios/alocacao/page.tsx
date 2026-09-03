@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
+import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
 import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { PayrollEmployee, PayrollFilters } from '@/types';
@@ -587,14 +589,7 @@ export default function AlocacaoPage() {
   }, [filters.month, filters.year]);
 
   if (loadingUser) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
-        </div>
-      </div>
-    );
+    return <Loading message="Carregando..." fullScreen size="lg" />;
   }
 
   const user = userData?.data || {
@@ -940,23 +935,11 @@ export default function AlocacaoPage() {
                     </tr>
                   ) : loadingEmployees ? (
                     <tr>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
-                      </td>
-                      <td colSpan={getDaysUntilToday(filters.year, filters.month - 1).length} className="px-3 sm:px-6 py-4 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-white dark:bg-gray-800 z-10 border-l border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
+                      <td
+                        colSpan={getDaysUntilToday(filters.year, filters.month - 1).length + 2}
+                        className="px-3 py-4 sm:px-6"
+                      >
+                        <CadastroListLoading message="Carregando..." />
                       </td>
                     </tr>
                   ) : !Array.isArray(employees) || employees.length === 0 ? (

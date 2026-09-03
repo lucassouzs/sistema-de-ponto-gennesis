@@ -1,4 +1,5 @@
-/** Lista de aprovadores: usuário com um único aprovador é redirecionado antes de renderizar conteúdo. */
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
+
 export default function FluigAprovadoresLoading() {
-  return null;
+  return <PageSkeleton variant="page" label="Carregando aprovadores" />;
 }

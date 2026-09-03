@@ -35,6 +35,7 @@ import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import toast from 'react-hot-toast';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import { ListPagination } from '@/components/ui/ListPagination';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 
 const EMPLOYEE_ACTION_MENU_WIDTH_PX = 224; // w-56
 
@@ -1095,10 +1096,7 @@ export function EmployeeList({
             </p>
           </div>
         ) : isLoading || (isFetching && employees.length === 0) ? (
-          <div className="text-center py-12">
-            <Loader2 className="w-10 h-10 animate-spin text-red-600 dark:text-red-400 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-400">Carregando funcionários...</p>
-          </div>
+          <CadastroListLoading message="Carregando funcionários..." />
         ) : filteredEmployees.length === 0 ? (
           <div className="text-center py-8">
             <Users className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
