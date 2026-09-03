@@ -5419,6 +5419,17 @@ export function OcPurchaseOrdersPanel({
                   if (paymentTypeLabel) {
                     infoRows.push({ label: 'Tipo de pagamento', value: paymentTypeLabel });
                   }
+                  if (
+                    isOcBoletoPaymentType(selectedOrder.paymentType) &&
+                    selectedOrder.paymentCondition
+                  ) {
+                    infoRows.push({
+                      label: 'Condição de pagamento',
+                      value:
+                        paymentConditionLabelMap[selectedOrder.paymentCondition] ||
+                        selectedOrder.paymentCondition
+                    });
+                  }
                   if (selectedOrder.paymentType === 'AVISTA' && selectedOrder.pixKeyType) {
                     infoRows.push({ label: 'Tipo de chave PIX', value: selectedOrder.pixKeyType });
                   }
@@ -6408,7 +6419,7 @@ export function OcPurchaseOrdersPanel({
                             />
                             <OcDetailDocumentItem
                               label="Comparativo"
-                              subtitle="Cotações desta OC + vencedor"
+                              subtitle="Fornecedores cotados neste mapa + vencedor"
                               onView={async () => {
                                 try {
                                   await openQuoteMapComparisonPdf(quoteMap.id, selectedOrder.id);

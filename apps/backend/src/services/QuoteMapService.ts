@@ -234,23 +234,15 @@ export class QuoteMapService {
       throw new Error('OC não encontrada neste mapa de cotação');
     }
 
-    // Comparativo aberto a partir de uma OC: só itens/fornecedores daquela OC
-    // (evita misturar outra OC da mesma RM no mesmo mapa).
+    // Comparativo aberto a partir de uma OC: usa o mapa vinculado a ela (não mistura
+    // outro mapa da mesma RM), mas lista TODOS os fornecedores cotados nesse mapa.
     let comparisonFocusPo: (typeof allPurchaseOrders)[number] | null = null;
-    let comparisonFocusItemIds: Set<string> | null = null;
     if (kind === 'comparison' && purchaseOrderId) {
       comparisonFocusPo =
         allPurchaseOrders.find((po: { id: string }) => po.id === purchaseOrderId) || null;
       if (!comparisonFocusPo) {
         throw new Error('OC não encontrada neste mapa de cotação');
       }
-      comparisonFocusItemIds = new Set(
-        (Array.isArray(comparisonFocusPo.items) ? comparisonFocusPo.items : [])
-          .map((it: { materialRequestItemId?: string | null }) =>
-            it.materialRequestItemId ? String(it.materialRequestItemId) : ''
-          )
-          .filter(Boolean)
-      );
     }
 
     const snapshotFileName =
@@ -317,23 +309,16 @@ export class QuoteMapService {
         const supplier = qs.supplier;
         if (!supplierId || !supplier) continue;
 
-        let quoted = (map.supplierItems || []).filter(
+        const quoted = (map.supplierItems || []).filter(
           (si: any) => String(si.supplierId) === supplierId
         );
-        if (comparisonFocusItemIds) {
-          quoted = quoted.filter((si: any) =>
-            comparisonFocusItemIds!.has(String(si.materialRequestItemId || ''))
-          );
-        }
         if (quoted.length === 0) continue;
 
         const linkedPo =
           comparisonFocusPo &&
           String((comparisonFocusPo as { supplierId?: string }).supplierId || '') === supplierId
             ? comparisonFocusPo
-            : comparisonFocusItemIds
-              ? null
-              : poBySupplierId.get(supplierId);
+            : poBySupplierId.get(supplierId);
         const items = quoted.map((si: any) => {
           const mri = si.materialRequestItem;
           const qty = this.toNumber(mri?.quantity);
@@ -385,8 +370,7 @@ export class QuoteMapService {
           .map((s) => String((s.supplier as { id?: string } | null)?.id || ''))
           .filter(Boolean)
       );
-      const posForFallback = comparisonFocusPo ? [comparisonFocusPo] : allPurchaseOrders;
-      for (const po of posForFallback) {
+      for (const po of allPurchaseOrders) {
         const sid = String((po as { supplierId?: string }).supplierId || '');
         if (!sid || sectionSupplierIds.has(sid)) continue;
         const poItems = Array.isArray(po.items) ? po.items : [];
@@ -422,6 +406,22 @@ export class QuoteMapService {
           }),
         });
         sectionSupplierIds.add(sid);
+      }
+
+      // Se abriu pela OC, prioriza o fornecedor ganhador dela no início do PDF.
+      if (comparisonFocusPo) {
+        const focusSid = String(
+          (comparisonFocusPo as { supplierId?: string }).supplierId || ''
+        );
+        if (focusSid) {
+          sections.sort((a, b) => {
+            const aId = String((a.supplier as { id?: string } | null)?.id || '');
+            const bId = String((b.supplier as { id?: string } | null)?.id || '');
+            if (aId === focusSid && bId !== focusSid) return -1;
+            if (bId === focusSid && aId !== focusSid) return 1;
+            return 0;
+          });
+        }
       }
     } else if (purchaseOrders.length > 0) {
       for (const po of purchaseOrders) {

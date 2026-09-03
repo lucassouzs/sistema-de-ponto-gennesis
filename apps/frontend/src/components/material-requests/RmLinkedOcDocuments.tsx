@@ -257,7 +257,7 @@ function SingleOcDocuments({
               />
               <DocItem
                 label="Comparativo"
-                subtitle="Cotações desta OC + vencedor"
+                subtitle="Fornecedores cotados neste mapa + vencedor"
                 onView={async () => {
                   try {
                     await openQuoteMapComparisonPdf(quoteMap.id, order.id);
