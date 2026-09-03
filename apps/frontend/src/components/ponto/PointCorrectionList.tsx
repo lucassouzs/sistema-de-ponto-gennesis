@@ -121,7 +121,6 @@ export const PointCorrectionList: React.FC = () => {
 
   if (isLoading) {
     return <CadastroListLoading message="Carregando solicitações..." />;
-    );
   }
 
   if (error) {
