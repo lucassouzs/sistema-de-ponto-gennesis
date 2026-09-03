@@ -234,15 +234,23 @@ export class QuoteMapService {
       throw new Error('OC não encontrada neste mapa de cotação');
     }
 
-    // Comparativo aberto a partir de uma OC: usa o mapa vinculado a ela (não mistura
-    // outro mapa da mesma RM), mas lista TODOS os fornecedores cotados nesse mapa.
+    // Comparativo aberto a partir de uma OC: só os itens dessa OC, com todos os
+    // fornecedores que cotaram esses itens (não mistura item da outra OC da RM).
     let comparisonFocusPo: (typeof allPurchaseOrders)[number] | null = null;
+    let comparisonFocusItemIds: Set<string> | null = null;
     if (kind === 'comparison' && purchaseOrderId) {
       comparisonFocusPo =
         allPurchaseOrders.find((po: { id: string }) => po.id === purchaseOrderId) || null;
       if (!comparisonFocusPo) {
         throw new Error('OC não encontrada neste mapa de cotação');
       }
+      comparisonFocusItemIds = new Set(
+        (Array.isArray(comparisonFocusPo.items) ? comparisonFocusPo.items : [])
+          .map((it: { materialRequestItemId?: string | null }) =>
+            it.materialRequestItemId ? String(it.materialRequestItemId) : ''
+          )
+          .filter(Boolean)
+      );
     }
 
     const snapshotFileName =
@@ -309,9 +317,14 @@ export class QuoteMapService {
         const supplier = qs.supplier;
         if (!supplierId || !supplier) continue;
 
-        const quoted = (map.supplierItems || []).filter(
+        let quoted = (map.supplierItems || []).filter(
           (si: any) => String(si.supplierId) === supplierId
         );
+        if (comparisonFocusItemIds) {
+          quoted = quoted.filter((si: any) =>
+            comparisonFocusItemIds!.has(String(si.materialRequestItemId || ''))
+          );
+        }
         if (quoted.length === 0) continue;
 
         const linkedPo =
@@ -370,7 +383,8 @@ export class QuoteMapService {
           .map((s) => String((s.supplier as { id?: string } | null)?.id || ''))
           .filter(Boolean)
       );
-      for (const po of allPurchaseOrders) {
+      const posForFallback = comparisonFocusPo ? [comparisonFocusPo] : allPurchaseOrders;
+      for (const po of posForFallback) {
         const sid = String((po as { supplierId?: string }).supplierId || '');
         if (!sid || sectionSupplierIds.has(sid)) continue;
         const poItems = Array.isArray(po.items) ? po.items : [];

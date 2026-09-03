@@ -6,7 +6,6 @@ import './globals.css';
 import { Providers } from '@/components/providers/Providers';
 import { ToasterWrapper } from '@/components/ui/ToasterWrapper';
 import { Favicon } from '@/components/Favicon';
-import { APP_TITLE } from '@/lib/pageTitle';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,10 +17,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
-        <title>{APP_TITLE}</title>
-        <meta name="description" content="Plataforma integrada de gestão da Gennesis Engenharia" />
-        <meta name="keywords" content="ponto, frequência, engenharia, controle, horas" />
-        <meta name="robots" content="noindex, nofollow" />
+        <title>Gennesis Conecta | Plataforma de Gestão Gennesis Engenharia</title>
+        <meta name="description" content="Gennesis Conecta é a plataforma integrada de gestão da Gennesis Engenharia: ponto, frequência, financeiro, licitações e muito mais em um só lugar." />
+        <meta name="keywords" content="gennesis conecta, gennesis engenharia, ponto, frequência, engenharia, controle, horas, sistema de gestão" />
+        <meta name="robots" content="index, follow" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="icon" href="/logopv.png" type="image/png" />
         <link rel="shortcut icon" href="/logopv.png" type="image/png" />
