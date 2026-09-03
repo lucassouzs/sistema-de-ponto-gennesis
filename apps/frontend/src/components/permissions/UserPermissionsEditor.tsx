@@ -986,6 +986,16 @@ export function UserPermissionsEditor({
     return [...ordered, ...extras];
   }, []);
 
+  const restrictedCostCenterOptions = useMemo(
+    () =>
+      costCentersList.map((c) => ({
+        value: c.id,
+        label: c.name,
+        searchText: [c.name, c.code].filter(Boolean).join(' '),
+      })),
+    [costCentersList]
+  );
+
   const toggleModule = (key: string) => {
     setSelectedSet((prev) => {
       const n = new Set(prev);
@@ -1472,16 +1482,6 @@ export function UserPermissionsEditor({
     activeTab === 'controle'
       ? controleModulesByGroup.map(({ group, modules }) => ({ category: group, modules }))
       : modulesByCategory;
-
-  const restrictedCostCenterOptions = useMemo(
-    () =>
-      costCentersList.map((c) => ({
-        value: c.id,
-        label: c.name,
-        searchText: [c.name, c.code].filter(Boolean).join(' '),
-      })),
-    [costCentersList]
-  );
 
   const employeePosition = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
 
