@@ -28,6 +28,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { AppUnderlineTabButton, AppUnderlineTabList, AppModalTabButton } from '@/components/ui/AppTabButton';
 import { ButtonSeg } from '../solicitacoes-dp/DpSolicitacaoTypeFields';
 import api from '@/lib/api';
@@ -2401,9 +2402,7 @@ export default function EstoquePage() {
               </CardHeader>
               <CardContent>
                 {loadingBalance ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600 dark:text-gray-400">Carregando saldo...</p>
-                  </div>
+                  <CadastroListLoading message="Carregando saldo..." />
                 ) : groupedBalances.length === 0 ? (
                   <div className="text-center py-8">
                     <Box className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -2721,9 +2720,7 @@ export default function EstoquePage() {
               </CardHeader>
               <CardContent>
                 {loadingMovements ? (
-                  <div className="text-center py-8">
-                    <p className="text-gray-600 dark:text-gray-400">Carregando histórico...</p>
-                  </div>
+                  <CadastroListLoading message="Carregando histórico..." />
                 ) : filteredMovements.length === 0 ? (
                   <div className="text-center py-8">
                     <History className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -3296,7 +3293,7 @@ export default function EstoquePage() {
                   Itens da OC *
                 </label>
                 {loadingSelectedPurchaseOrder ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Carregando itens da OC...</p>
+                  <CadastroListLoading message="Carregando itens da OC..." />
                 ) : !formData.ocNumber ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     Selecione uma OC para exibir os itens.

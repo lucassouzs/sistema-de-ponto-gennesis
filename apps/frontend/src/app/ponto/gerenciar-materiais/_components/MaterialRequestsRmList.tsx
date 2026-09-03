@@ -23,7 +23,7 @@ import { Modal } from '@/components/ui/Modal';
 import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { ListPagination } from '@/components/ui/ListPagination';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import type { PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
@@ -349,7 +349,7 @@ export function MaterialRequestsRmList({
       <CardContent>
         {loadingRequests ? (
           <div className="text-center py-8">
-            <Loading message="Carregando requisições..." />
+            <CadastroListLoading message="Carregando requisições..." />
           </div>
         ) : listTotal === 0 ? (
           <div className="text-center py-8">

@@ -6,7 +6,7 @@ import { FileDown, FileSpreadsheet, Filter, Search, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CadastroListSummary, getCadastroListRange } from '@/components/ui/CadastroListSummary';
@@ -300,7 +300,7 @@ export function ContractHistoricoOsPanel({ contractId }: ContractHistoricoOsPane
   };
 
   if (loadingContract || loadingPleitos || loadingBillings) {
-    return <Loading message="Carregando histórico..." />;
+    return <CadastroListLoading message="Carregando histórico..." />;
   }
 
   const countLabel =

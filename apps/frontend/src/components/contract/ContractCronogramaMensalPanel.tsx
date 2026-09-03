@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { formatOsSePasta, formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
 import { pleitoStatusReadOnlySpanClass } from '@/lib/pleitoStatusStyles';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
 import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
 
@@ -246,7 +246,7 @@ export function ContractCronogramaMensalPanel({
   };
 
   if (loadingContract || loadingPleitos) {
-    return <Loading message="Carregando cronograma..." />;
+    return <CadastroListLoading message="Carregando cronograma..." />;
   }
 
   if (selectedIdSet.size === 0) {

@@ -1365,7 +1365,7 @@ function AprovacoesPage() {
             </CardHeader>
             <CardContent>
               {loadingEspelhoApprovals ? (
-                <Loading message="Carregando espelhos..." />
+                <CadastroListLoading message="Carregando espelhos..." />
               ) : espelhoFiltered.length === 0 ? (
                 <div className="py-8 text-center">
                   <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" aria-hidden />

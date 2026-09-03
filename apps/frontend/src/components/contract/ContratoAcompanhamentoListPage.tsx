@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -454,7 +455,7 @@ export function ContratoAcompanhamentoListPage({ config }: { config: ContratoAco
 
               {loadingReunioes ? (
                 <div className="mt-4">
-                  <Loading message="Carregando histórico..." size="md" />
+                  <CadastroListLoading message="Carregando histórico..." />
                 </div>
               ) : reunioesFiltradas.length === 0 ? (
                 <div className="mt-4 rounded-lg border border-dashed border-gray-300 py-12 text-center text-gray-500 dark:border-gray-600 dark:text-gray-400">
@@ -590,7 +591,7 @@ export function ContratoAcompanhamentoListPage({ config }: { config: ContratoAco
             <p className="text-sm text-gray-600 dark:text-gray-400">{configModalDescription}</p>
 
             {loadingFormularios || fetchingFormularios ? (
-              <Loading message="Carregando formulários..." size="md" />
+              <CadastroListLoading message="Carregando formulários..." />
             ) : formularios.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-gray-600">
                 <ClipboardList className="mx-auto mb-2 h-8 w-8 text-gray-400" />

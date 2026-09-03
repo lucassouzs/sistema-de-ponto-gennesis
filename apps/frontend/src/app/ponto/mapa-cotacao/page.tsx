@@ -1375,9 +1375,7 @@ export default function MapaCotacaoPage() {
                       </p>
                     </div>
                   ) : loadingSelectedRequest || !selectedRequest ? (
-                    <div className="flex items-center justify-center gap-2 py-14 text-sm text-gray-500 dark:text-gray-400">
-                      <Loading message="Carregando itens da RM..." size="sm" />
-                    </div>
+                    <CadastroListLoading message="Carregando itens da RM..." />
                   ) : (
                     <>
                   <div className="table-scroll">

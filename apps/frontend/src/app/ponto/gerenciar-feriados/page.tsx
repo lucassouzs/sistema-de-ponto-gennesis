@@ -8,7 +8,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import api from '@/lib/api';
 import { textMatchesSearch } from '@/lib/normalizeSearchText';
@@ -539,7 +539,7 @@ function GerenciarFeriadosPageContent() {
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-6">
-                <Loading />
+                <CadastroListLoading message="Carregando feriados..." />
               </div>
             ) : filteredHolidays.length === 0 ? (
               <div className="p-6 text-center py-12">

@@ -8,7 +8,7 @@ import { FileText, BarChart3, Search, ExternalLink, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import api from '@/lib/api';
 import { textMatchesSearch } from '@/lib/normalizeSearchText';
@@ -331,7 +331,7 @@ export default function ControleGeralContratosPage() {
           {loadingOverview ? (
             <Card>
               <CardContent className="py-16">
-                <Loading message="Carregando controle geral..." size="lg" />
+                <CadastroListLoading message="Carregando controle geral..." />
               </CardContent>
             </Card>
           ) : (

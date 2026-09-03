@@ -9,7 +9,7 @@ import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { formatCurrencyDisplay, type FichaDemandaApprovalRecord } from '@/lib/fichaDemandaApproval';
@@ -207,7 +207,7 @@ export function FdApprovalsSection() {
         </CardHeader>
         <CardContent>
           {loadingFd ? (
-            <Loading message="Carregando fichas de demanda..." />
+            <CadastroListLoading message="Carregando fichas de demanda..." />
           ) : fdError ? (
             <div className="py-8 text-center text-sm text-red-600 dark:text-red-400">
               Não foi possível carregar as fichas de demanda. Recarregue a página ou tente novamente.

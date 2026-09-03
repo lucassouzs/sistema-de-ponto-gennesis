@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
@@ -380,7 +381,7 @@ export default function ContratoRelatoriosPage() {
 
               {loadingRelatorios ? (
                 <div className="mt-4">
-                  <Loading message="Carregando relatórios..." size="md" />
+                  <CadastroListLoading message="Carregando relatórios..." />
                 </div>
               ) : relatoriosFiltrados.length === 0 ? (
                 <div className="mt-4 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 py-12 text-center text-gray-500 dark:text-gray-400">

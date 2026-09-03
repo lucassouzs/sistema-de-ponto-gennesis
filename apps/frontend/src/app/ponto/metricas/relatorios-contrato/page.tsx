@@ -563,7 +563,7 @@ export default function RelatoriosContratoPage() {
               .
             </p>
             {loadingFormularios ? (
-              <Loading message="Carregando formulários..." size="md" />
+              <CadastroListLoading message="Carregando formulários..." />
             ) : formularios.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-gray-600">
                 <FileText className="mx-auto mb-2 h-8 w-8 text-gray-400" />

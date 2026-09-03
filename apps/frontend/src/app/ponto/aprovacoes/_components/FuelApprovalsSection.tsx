@@ -13,7 +13,7 @@ import { hasFuelStoredPhoto, resolveFuelPhotoSrc } from '@/lib/resolveMediaUrl';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -284,7 +284,7 @@ export function FuelApprovalsSection() {
           </CardHeader>
           <CardContent>
             {loadingFuel ? (
-              <Loading message="Carregando solicitações de combustível..." />
+              <CadastroListLoading message="Carregando solicitações de combustível..." />
             ) : fuelError ? (
               <div className="py-8 text-center text-sm text-red-600 dark:text-red-400">
                 Não foi possível carregar as solicitações. Recarregue a página ou tente novamente.

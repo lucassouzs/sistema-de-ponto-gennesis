@@ -29,6 +29,7 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { Modal } from '@/components/ui/Modal';
 import { SpreadsheetImportModal } from '@/components/ui/SpreadsheetImportModal';
@@ -1350,7 +1351,7 @@ export default function SegurancaDoTrabalhoPage() {
               </CardHeader>
               <CardContent className={cadastroListClasses.cardContent}>
                 {loadingList ? (
-                  <Loading message="Carregando ASOs..." />
+                  <CadastroListLoading message="Carregando ASOs..." />
                 ) : registros.length === 0 ? (
                   <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                     Nenhum registro de ASO encontrado.
@@ -1509,7 +1510,7 @@ export default function SegurancaDoTrabalhoPage() {
               </CardHeader>
               <CardContent className={cadastroListClasses.cardContent}>
                 {loadingPorFuncionario ? (
-                  <Loading message="Carregando funcionários..." />
+                  <CadastroListLoading message="Carregando funcionários..." />
                 ) : porFuncionario.length === 0 ? (
                   <p className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                     Nenhum funcionário encontrado.
@@ -1747,7 +1748,7 @@ export default function SegurancaDoTrabalhoPage() {
                   ) : null}
 
                   {loadingCargos ? (
-                    <Loading message="Carregando cargos..." />
+                    <CadastroListLoading message="Carregando cargos..." />
                   ) : cargosFiltradosPorSetor.length === 0 ? (
                     <p className="py-8 text-center text-sm text-gray-500">
                       Nenhum cadastro
@@ -1834,7 +1835,7 @@ export default function SegurancaDoTrabalhoPage() {
                 </CardHeader>
                 <CardContent className="space-y-3 p-4 sm:p-6">
                   {loadingCargosSemPeriodicidade ? (
-                    <Loading message="Carregando..." />
+                    <CadastroListLoading message="Carregando..." />
                   ) : cargosSemPeriodicidadeFiltrados.length === 0 ? (
                     <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                       {setorTab === 'todos'
@@ -2066,7 +2067,7 @@ export default function SegurancaDoTrabalhoPage() {
           size="lg"
         >
           {loadingHistorico ? (
-            <Loading message="Carregando histórico..." />
+            <CadastroListLoading message="Carregando histórico..." />
           ) : !historicoData ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum dado encontrado.</p>
           ) : (

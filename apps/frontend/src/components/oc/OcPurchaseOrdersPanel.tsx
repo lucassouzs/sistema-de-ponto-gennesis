@@ -51,7 +51,7 @@ import {
 import type { MaterialRequest } from '@/app/ponto/gerenciar-materiais/_lib/types';
 import { stripOsSePrefix } from '@/lib/formatOsSePasta';
 import { parseRmDemandSheetAttachments } from '@/lib/rmDemandSheetAttachments';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
@@ -4448,7 +4448,7 @@ export function OcPurchaseOrdersPanel({
           <CardContent className={isIntegratedFlux ? undefined : 'p-0'}>
             {listLoading ? (
               <div className={isIntegratedFlux ? 'text-center py-8' : 'px-6 py-12 text-center'}>
-                <Loading message="Carregando ordens..." />
+                <CadastroListLoading message="Carregando ordens..." />
               </div>
             ) : (
               <div className={isIntegratedFlux ? undefined : 'table-scroll'}>

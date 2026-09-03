@@ -20,7 +20,7 @@ import {
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Modal } from '@/components/ui/Modal';
 import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
@@ -393,7 +393,7 @@ export function RmApprovalsSection() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <Loading message="Carregando requisições..." />
+            <CadastroListLoading message="Carregando requisições..." />
           ) : filteredRequests.length === 0 ? (
             <div className="py-8 text-center">
               <ClipboardList className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" />

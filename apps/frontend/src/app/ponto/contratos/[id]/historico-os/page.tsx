@@ -8,6 +8,7 @@ import { ArrowLeft, ChevronDown, FileDown, FileSpreadsheet } from 'lucide-react'
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import { formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
 import { pleitoStatusReadOnlySpanClass } from '@/lib/pleitoStatusStyles';
@@ -468,7 +469,7 @@ export default function HistoricoOsPage() {
           )}
 
           {loadingPleitos || loadingBillings ? (
-            <Loading />
+            <CadastroListLoading message="Carregando histórico..." />
           ) : allOs.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">
               Nenhuma ordem de serviço cadastrada para este contrato.

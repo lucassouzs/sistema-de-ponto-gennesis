@@ -37,11 +37,7 @@ export function formatCadastroListId(code?: string | null, rowNumber?: number): 
 
 /** Skeleton da tabela/lista (não usar no loading de login/auth). */
 export function CadastroListLoading({ message }: { message: string }) {
-  return (
-    <div className="py-1">
-      <PageSkeleton variant="list" rows={7} label={message} />
-    </div>
-  );
+  return <PageSkeleton variant="list" rows={7} label={message} />;
 }
 
 type CadastroListEmptyProps = {

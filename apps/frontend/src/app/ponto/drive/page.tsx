@@ -34,6 +34,7 @@ import {
 import api from '@/lib/api';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -1335,7 +1336,7 @@ function DrivePageContent() {
         {/* ── Conteúdo ───────────────────────────────────────────────────── */}
         {isLoading ? (
           <div className="flex items-center justify-center py-24">
-            <Loading message="Carregando arquivos..." size="md" />
+            <CadastroListLoading message="Carregando arquivos..." />
           </div>
         ) : contentsError ? (
           <Card>

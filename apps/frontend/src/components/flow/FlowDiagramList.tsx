@@ -10,7 +10,7 @@ import { createFlowDiagram, deleteFlowDiagram, fetchFlowDiagrams } from '@/lib/f
 import type { FlowDiagramSummary } from '@/lib/flowTypes';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 import { textMatchesSearch } from '@/lib/normalizeSearchText';
@@ -150,7 +150,7 @@ export function FlowDiagramList({ onOpen }: Props) {
   });
 
   if (isLoading) {
-    return <Loading message="Carregando fluxogramas..." size="lg" />;
+    return <CadastroListLoading message="Carregando fluxogramas..." />;
   }
 
   return (

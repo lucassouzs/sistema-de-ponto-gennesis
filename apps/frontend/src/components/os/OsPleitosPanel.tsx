@@ -16,7 +16,7 @@ import {
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
-import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { ListPagination } from '@/components/ui/ListPagination';
 import { PleitoFormModal } from '@/components/pleito/PleitoFormModal';
 import {
@@ -274,7 +274,7 @@ export function OsPleitosPanel({
     return (
       <Card>
         <CardContent className="py-12">
-          <Loading message="Carregando ordens de serviço..." size="md" />
+          <CadastroListLoading message="Carregando ordens de serviço..." />
         </CardContent>
       </Card>
     );

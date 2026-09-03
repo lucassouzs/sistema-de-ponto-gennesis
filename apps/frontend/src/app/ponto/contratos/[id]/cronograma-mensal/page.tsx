@@ -10,6 +10,7 @@ import { ArrowLeft, FileDown, FileSpreadsheet } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import { formatOsSePasta, formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
 import { pleitoStatusReadOnlySpanClass } from '@/lib/pleitoStatusStyles';
@@ -388,7 +389,7 @@ export default function CronogramaMensalPage() {
           </div>
 
           {loadingPleitos ? (
-            <Loading />
+            <CadastroListLoading message="Carregando cronograma..." />
           ) : selectedIds.size === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">
               Nenhuma ordem de serviço selecionada. No contrato, marque as OS na tabela e use &quot;Gerar cronograma mensal&quot;.

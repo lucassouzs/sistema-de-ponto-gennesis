@@ -25,7 +25,6 @@ import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { CadastroListEmpty, CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { cadastroListClasses, RowActionMenuCell, RowActionMenuPortal } from '@/components/ui/RowActionMenu';
 import { Button } from '@/components/ui/Button';
-import { Loading } from '@/components/ui/Loading';
 import { Modal } from '@/components/ui/Modal';
 import { ReuniaoFormModal } from '@/components/contract/ReuniaoFormModal';
 import { useRowActionMenu } from '@/hooks/useRowActionMenu';
@@ -555,7 +554,7 @@ export function RelatoriosContratoMensalPanel() {
             .
           </p>
           {loadingFormularios ? (
-            <Loading message="Carregando formulários..." size="md" />
+            <CadastroListLoading message="Carregando formulários..." />
           ) : formularios.length === 0 ? (
             <div className="rounded-lg border border-dashed border-gray-300 px-4 py-8 text-center dark:border-gray-600">
               <FileText className="mx-auto mb-2 h-8 w-8 text-gray-400" />
