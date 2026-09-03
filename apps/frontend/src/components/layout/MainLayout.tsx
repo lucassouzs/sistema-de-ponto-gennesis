@@ -33,6 +33,7 @@ import { MainLayoutShellContext } from './MainLayoutShellContext';
 import { isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAccess';
 import { PageEnter } from './PageEnter';
 import { bootAuthenticatedPageReveal } from '@/lib/pageReveal';
+import { ImpersonationBanner } from './ImpersonationBanner';
 
 export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
 
@@ -236,6 +237,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
               onLogout={handleLogout}
               onOpenChangePassword={handleOpenChangePassword}
             />
+            <ImpersonationBanner />
             <main
               className={
                 isFullBleedRoute

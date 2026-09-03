@@ -25,6 +25,10 @@ import {
 import { ListPagination } from '@/components/ui/ListPagination';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { EmployeeActivityInsights } from '@/components/employee/EmployeeActivityInsights';
+import {
+  loginEventSourceChannelLabel,
+  loginEventTypeLabel,
+} from '@/lib/impersonationLoginEvents';
 import api from '@/lib/api';
 
 type LoginEvent = {
@@ -111,13 +115,11 @@ function formatRelativeHint(value?: string | null): string {
 }
 
 function sourceLabel(source?: string | null): string {
-  if (source === 'mobile') return 'App mobile';
-  if (source === 'web') return 'Web';
-  return source || '—';
+  return loginEventSourceChannelLabel(source);
 }
 
-function eventTypeLabel(type?: string | null): string {
-  return String(type || 'login').toLowerCase() === 'logout' ? 'Saída' : 'Login';
+function eventTypeLabel(type?: string | null, source?: string | null): string {
+  return loginEventTypeLabel(type, source);
 }
 
 function SectionHeader({
@@ -454,7 +456,7 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
                 <SectionHeader
                   icon={History}
                   title="Histórico de acessos"
-                  subtitle="Logins e saídas no período selecionado"
+                  subtitle="Logins, saídas e impersonações no período selecionado"
                 />
               </CardHeader>
               <CardContent className={cadastroListClasses.cardContent}>
@@ -503,7 +505,7 @@ export function EmployeeActivityTab({ userId }: { userId: string }) {
                                 {formatTimeOnly(login.createdAt)}
                               </td>
                               <td className={cadastroListClasses.tdCenter}>
-                                {eventTypeLabel(login.type)}
+                                {eventTypeLabel(login.type, login.source)}
                               </td>
                               <td className={cadastroListClasses.tdCenter}>
                                 {sourceLabel(login.source)}

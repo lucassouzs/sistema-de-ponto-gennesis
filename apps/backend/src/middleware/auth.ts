@@ -14,6 +14,42 @@ export interface AuthRequest extends Request {
     email: string;
     role: string;
     isAdmin: boolean;
+    /** true quando o token é sessão de impersonação */
+    impersonating?: boolean;
+    /** id do administrador que iniciou a impersonação */
+    originalAdminId?: string;
+  };
+}
+
+type JwtAuthClaims = {
+  id: string;
+  email?: string;
+  role?: string;
+  impersonating?: boolean;
+  originalAdminId?: string;
+  exp?: number;
+};
+
+function attachUserFromDecoded(
+  decoded: JwtAuthClaims,
+  user: {
+    id: string;
+    email: string;
+    role: string;
+    employee?: { position: string | null } | null;
+  }
+) {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    isAdmin: (user.employee?.position || '').toLowerCase() === 'administrador',
+    ...(decoded.impersonating && decoded.originalAdminId
+      ? {
+          impersonating: true as const,
+          originalAdminId: String(decoded.originalAdminId),
+        }
+      : {}),
   };
 }
 
@@ -40,9 +76,9 @@ export const authenticate = async (
       throw createError('Token inválido', 401);
     }
 
-    let decoded: any;
+    let decoded: JwtAuthClaims;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtAuthClaims;
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
         throw createError('Token expirado. Faça login novamente.', 401);
@@ -75,12 +111,7 @@ export const authenticate = async (
       throw createError('Usuário inativo', 401);
     }
 
-    req.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isAdmin: (user.employee?.position || '').toLowerCase() === 'administrador',
-    };
+    req.user = attachUserFromDecoded(decoded, user);
 
     const forwarded = req.headers['x-forwarded-for'];
     const ipAddress =
@@ -245,9 +276,9 @@ export const authenticateForRefresh = async (
       throw createError('Token inválido', 401);
     }
 
-    let decoded: { id: string; email?: string; role?: string; exp?: number };
+    let decoded: JwtAuthClaims;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET) as typeof decoded;
+      decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtAuthClaims;
     } catch (error: unknown) {
       const err = error as { name?: string };
       if (err.name !== 'TokenExpiredError') {
@@ -257,7 +288,7 @@ export const authenticateForRefresh = async (
       // Assinatura ok, só a expiração falhou — revalida com ignoreExpiration
       decoded = jwt.verify(token, process.env.JWT_SECRET, {
         ignoreExpiration: true,
-      }) as typeof decoded;
+      }) as JwtAuthClaims;
 
       if (!decoded?.exp) {
         throw createError('Token inválido', 401);
@@ -292,12 +323,7 @@ export const authenticateForRefresh = async (
       throw createError('Usuário não encontrado ou inativo', 401);
     }
 
-    req.user = {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      isAdmin: (user.employee?.position || '').toLowerCase() === 'administrador',
-    };
+    req.user = attachUserFromDecoded(decoded, user);
 
     next();
   } catch (error) {
