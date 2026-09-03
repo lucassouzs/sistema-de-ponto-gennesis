@@ -21,6 +21,7 @@ export default function RootLayout({
         <meta name="description" content="Gennesis Conecta é a plataforma integrada de gestão da Gennesis Engenharia: ponto, frequência, financeiro, licitações e muito mais em um só lugar." />
         <meta name="keywords" content="gennesis conecta, gennesis engenharia, ponto, frequência, engenharia, controle, horas, sistema de gestão" />
         <meta name="robots" content="index, follow" />
+        <meta name="google-site-verification" content="8G3AX5qUg4QPPea1ghF6fZL0teE8VA2mnf9I-6obkoQ" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="icon" href="/logopv.png" type="image/png" />
         <link rel="shortcut icon" href="/logopv.png" type="image/png" />
