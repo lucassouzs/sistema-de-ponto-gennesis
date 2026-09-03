@@ -23,6 +23,9 @@
     "production": {
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://sistema-pontobackend-production.up.railway.app"
       }
     }
   },
