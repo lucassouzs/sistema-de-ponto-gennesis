@@ -1006,7 +1006,7 @@ export function SolicitacoesGeraisPage() {
     { label: 'Setor', value: r.sectorSolicitante || '—' },
     { label: 'Contrato', value: getRequestContratoLabel(r) },
     {
-      label: 'Prazo',
+      label: 'Período de atendimento',
       value: formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim),
     },
     { label: 'Criada em', value: formatDateTime(r.createdAt) },
@@ -1137,24 +1137,25 @@ export function SolicitacoesGeraisPage() {
                       </p>
                     </div>
                   ) : filteredMyRequests.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-gray-300 py-8 text-center dark:border-gray-600">
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Nenhuma solicitação encontrada para os filtros aplicados.
+                    <div className="py-10 text-center">
+                      <ListHeaderIcon
+                        className={`mx-auto mb-3 h-10 w-10 ${listHeader.iconColor} opacity-60`}
+                        aria-hidden
+                        strokeWidth={1.25}
+                      />
+                      <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                        Nenhuma solicitação encontrada
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMySearch('');
-                          setMyStatusFilter('all');
-                          setDestinationFilter('all');
-                          setFilterUrgency('all');
-                          setFilterRequestType('all');
-                          setFilterContractId('all');
-                        }}
-                        className="mt-2 text-sm font-medium text-red-600 hover:underline dark:text-red-400"
-                      >
-                        Limpar filtros
-                      </button>
+                      <p className="mx-auto mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">
+                        {destinationFilter !== 'all' &&
+                        !mySearch.trim() &&
+                        myStatusFilter === 'all' &&
+                        filterUrgency === 'all' &&
+                        filterRequestType === 'all' &&
+                        filterContractId === 'all'
+                          ? `Não há solicitações enviadas ao ${listHeader.title} ainda.`
+                          : 'Ajuste os filtros ou aguarde novas solicitações.'}
+                      </p>
                     </div>
                   ) : (
                     <>
@@ -1175,29 +1176,31 @@ export function SolicitacoesGeraisPage() {
                         <table className="w-full text-sm">
                           <thead className="border-b border-gray-200 dark:border-gray-700">
                             <tr>
-                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 ID
                               </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Destino
-                              </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Tipo
-                              </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Urgência
-                              </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 Contrato
                               </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Prazo
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Urgência
                               </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Solicitante
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Tipo
                               </th>
-                              <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              {destinationFilter === 'all' ? (
+                                <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                  Destino
+                                </th>
+                              ) : null}
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Período de atendimento
+                              </th>
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 Status
+                              </th>
+                              <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Criado em
                               </th>
                               <th className={listTableRowClasses.actionTh}>Ação</th>
                             </tr>
@@ -1209,46 +1212,41 @@ export function SolicitacoesGeraisPage() {
                                   onClick={() => openHistoryRequest(r)}
                                   className={getListTableRowClassName(true)}
                                 >
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                                  <td className="px-3 py-3 align-middle text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
                                     <ListRowNavigableLabel className="font-medium tabular-nums">
                                       {r.displayNumber ?? '—'}
                                     </ListRowNavigableLabel>
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                    {getRequestDestinationLabel(r.requestType)}
+                                  <td className="max-w-[200px] px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                                    {getRequestContratoLabel(r)}
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
-                                    {TYPE_LABELS[r.requestType] ?? r.requestType}
-                                  </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                                  <td className="px-3 py-3 align-middle text-center">
                                     <span
                                       className={`inline-flex items-center justify-center text-xs font-medium ${URGENCY_ROW_BADGE[r.urgency]}`}
                                     >
                                       {URGENCY_LABELS[r.urgency]}
                                     </span>
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 max-w-[280px]">
-                                    {getRequestContratoLabel(r)}
+                                  <td className="px-3 py-3 align-middle text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                                    {TYPE_LABELS[r.requestType] ?? r.requestType}
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                  {destinationFilter === 'all' ? (
+                                    <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                                      {getRequestDestinationLabel(r.requestType)}
+                                    </td>
+                                  ) : null}
+                                  <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
                                     {formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim)}
                                   </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
-                                    <div className="flex flex-col items-center gap-0.5">
-                                      <span>{r.solicitanteNome || '—'}</span>
-                                      {r.sectorSolicitante?.trim() ? (
-                                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                                          {r.sectorSolicitante}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                                  <td className="px-3 py-3 align-middle text-center">
                                     <span
                                       className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-xs font-medium ${getStatusRowBadge(r)}`}
                                     >
                                       {getStatusLabel(r)}
                                     </span>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                                    {formatDateTime(r.createdAt)}
                                   </td>
                                   {r.status === 'WAITING_RETURN' ? (
                                     <td

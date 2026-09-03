@@ -7,6 +7,7 @@ import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { getListTableRowClassName, listTableRowClasses, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
@@ -15,6 +16,7 @@ import { Input } from '@/components/ui/Input';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { formatDateTimeBr } from '@/lib/dateTimeBr';
+import { formatIsoDateRangeToBr } from '@/lib/dpSolicitacoesUi';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Check, Download, Eye, FileText, Filter, MoreVertical, Wrench, Search, X, CheckCircle, Clock, LayoutList, XCircle } from 'lucide-react';
@@ -1051,7 +1053,7 @@ function AprovacoesPage() {
                       type="text"
                       value={searchDp}
                       onChange={(e) => setSearchDp(e.target.value)}
-                      placeholder="Buscar por Nº ou ID..."
+                      placeholder="Buscar por ID..."
                       className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     />
                     {searchDp && (
@@ -1090,7 +1092,7 @@ function AprovacoesPage() {
                   Você não tem permissão para aprovar solicitações do Departamento Pessoal.
                 </div>
               ) : loadingDp ? (
-                <Loading message="Carregando aprovações..." />
+                <CadastroListLoading message="Carregando aprovações..." />
               ) : dpFiltered.length === 0 ? (
                 <div className="py-8 text-center">
                   <FileText className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" aria-hidden />
@@ -1108,72 +1110,81 @@ function AprovacoesPage() {
                     <table className="w-full text-sm">
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Nº
+                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            ID
                           </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Urgência
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Tipo
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Contrato
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Prazo início
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Prazo fim
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                             Solicitante
                           </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Contrato
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Urgência
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Tipo
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Período de atendimento
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                             {APPROVAL_STATUS_COLUMN_TITLE}
                           </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Ação
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Criado em
                           </th>
+                          <th className={listTableRowClasses.actionTh}>Ação</th>
                         </tr>
                       </thead>
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                         {dpFiltered.map((r) => (
                           <tr
                             key={r.id}
                             onClick={() => setDetailRequest(r)}
                             className={getListTableRowClassName(true)}
                           >
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm tabular-nums">
-                              <ListRowNavigableLabel className="font-medium">{r.displayNumber ?? '—'}</ListRowNavigableLabel>
+                            <td className="px-3 py-3 align-middle text-sm tabular-nums text-gray-900 dark:text-gray-100">
+                              <ListRowNavigableLabel className="font-medium tabular-nums">
+                                {r.displayNumber ?? '—'}
+                              </ListRowNavigableLabel>
                             </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                            <td className="px-3 py-3 align-middle text-left text-sm text-gray-700 dark:text-gray-300">
+                              <div className="font-medium text-gray-900 dark:text-gray-100">
+                                {r.solicitanteNome || '—'}
+                              </div>
+                              {r.sectorSolicitante?.trim() ? (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {r.sectorSolicitante}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="max-w-[200px] px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                              {getContratoColunaLabel(r)}
+                            </td>
+                            <td className="px-3 py-3 align-middle text-center">
                               <span
                                 className={`inline-flex items-center justify-center text-xs font-medium ${URGENCY_ROW_BADGE[r.urgency]}`}
                               >
                                 {URGENCY_LABELS[r.urgency]}
                               </span>
                             </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <td className="px-3 py-3 align-middle text-center text-sm font-medium text-gray-900 dark:text-gray-100">
                               {TYPE_LABELS[r.requestType] ?? r.requestType}
                             </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">
-                              {getContratoColunaLabel(r)}
+                            <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                              {formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim)}
                             </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm text-gray-700 dark:text-gray-300">
-                              {formatYmd(r.prazoInicio)}
-                            </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm text-gray-700 dark:text-gray-300">
-                              {formatYmd(r.prazoFim)}
-                            </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-sm text-gray-700 dark:text-gray-300">
-                              <div className="font-medium text-gray-900 dark:text-gray-100">{r.solicitanteNome}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">{r.sectorSolicitante}</div>
-                            </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                            <td className="px-3 py-3 align-middle text-center">
                               <ApprovalStatusBadge kind={dpToApprovalStatus(r.status)} />
                             </td>
-                            <td className="px-3 sm:px-6 py-3 align-middle text-center" onClick={(e) => e.stopPropagation()}>
+                            <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                              {formatDateTime(r.createdAt)}
+                            </td>
+                            <td
+                              className="px-3 py-3 align-middle text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <div className="flex justify-center">
                                 <button
                                   type="button"

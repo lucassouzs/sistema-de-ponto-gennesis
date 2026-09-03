@@ -5,6 +5,7 @@ import api from '@/lib/api';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Button } from '@/components/ui/Button';
@@ -681,7 +682,7 @@ export function GerenciarSolicitacoesGeraisPage({
     { label: 'Solicitante', value: r.solicitanteNome },
     { label: 'Contrato', value: getContratoColunaLabel(r) },
     {
-      label: 'Prazo',
+      label: 'Período de atendimento',
       value: formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim),
     },
     { label: 'Criada em', value: formatDateTime(r.createdAt) },
@@ -808,7 +809,7 @@ export function GerenciarSolicitacoesGeraisPage({
             </CardHeader>
             <CardContent>
               {loadingList ? (
-                <Loading message="Carregando solicitações..." />
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : (
                 <>
                   {!hideTableColumns && (
@@ -825,32 +826,35 @@ export function GerenciarSolicitacoesGeraisPage({
                       {!hideTableColumns && (
                       <thead className="border-b border-gray-200 dark:border-gray-700">
                         <tr>
-                          <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                             ID
                           </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Tipo
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Urgência
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Contrato
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Prazo
-                          </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                             Solicitante
                           </th>
-                          <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Contrato
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Urgência
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Tipo
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Período de atendimento
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                             Status
+                          </th>
+                          <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Criado em
                           </th>
                           <th className={listTableRowClasses.actionTh}>Ação</th>
                         </tr>
                       </thead>
                       )}
-                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                      <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                         {filteredRequests.map((r) => {
                           return (
                             <tr
@@ -858,45 +862,46 @@ export function GerenciarSolicitacoesGeraisPage({
                               onClick={() => openHistoryRequest(r)}
                               className={getListTableRowClassName(true)}
                             >
-                              <td className="px-3 sm:px-6 py-3 align-middle text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
+                              <td className="px-3 py-3 align-middle text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100">
                                 <ListRowNavigableLabel className="font-medium tabular-nums">
                                   {r.displayNumber ?? '—'}
                                 </ListRowNavigableLabel>
                               </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
-                                {TYPE_LABELS[r.requestType] ?? r.requestType}
+                              <td className="px-3 py-3 align-middle text-left text-sm text-gray-700 dark:text-gray-300">
+                                <div className="font-medium text-gray-900 dark:text-gray-100">
+                                  {r.solicitanteNome || '—'}
+                                </div>
+                                {r.sectorSolicitante?.trim() ? (
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {r.sectorSolicitante}
+                                  </div>
+                                ) : null}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                              <td className="max-w-[200px] px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                                {getContratoColunaLabel(r)}
+                              </td>
+                              <td className="px-3 py-3 align-middle text-center">
                                 <span
                                   className={`inline-flex items-center justify-center text-xs font-medium ${URGENCY_ROW_BADGE[r.urgency]}`}
                                 >
                                   {URGENCY_LABELS[r.urgency]}
                                 </span>
                               </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">
-                                {getContratoColunaLabel(r)}
+                              <td className="px-3 py-3 align-middle text-center text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {TYPE_LABELS[r.requestType] ?? r.requestType}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                              <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
                                 {formatIsoDateRangeToBr(r.prazoInicio, r.prazoFim)}
                               </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
-                                <div className="flex flex-col items-center gap-0.5">
-                                  <span className="font-medium text-gray-900 dark:text-gray-100">
-                                    {r.solicitanteNome || '—'}
-                                  </span>
-                                  {r.sectorSolicitante?.trim() ? (
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                      {r.sectorSolicitante}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </td>
-                              <td className="px-3 sm:px-6 py-3 align-middle text-center">
+                              <td className="px-3 py-3 align-middle text-center">
                                 <span
                                   className={`inline-flex items-center justify-center rounded-full px-2.5 py-1 text-xs font-medium ${getStatusRowBadge(r.status)}`}
                                 >
                                   {getStatusLabel(r.status)}
                                 </span>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
+                                {formatDateTime(r.createdAt)}
                               </td>
                               <RowActionMenuCell
                                 isOpen={isRowMenuOpen(r.id)}
@@ -909,7 +914,7 @@ export function GerenciarSolicitacoesGeraisPage({
                         })}
                         {filteredRequests.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="px-6 py-10 text-center">
+                            <td colSpan={9} className="px-6 py-10 text-center">
                               <ListHeaderIcon
                                 className={`mx-auto mb-3 h-10 w-10 ${listHeader.iconColor} opacity-60`}
                                 aria-hidden

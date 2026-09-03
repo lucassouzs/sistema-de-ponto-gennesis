@@ -1,6 +1,7 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cadastroListClasses } from '@/components/ui/RowActionMenu';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 type CadastroListSummaryProps = {
   startItem: number;
@@ -34,13 +35,11 @@ export function formatCadastroListId(code?: string | null, rowNumber?: number): 
   return '—';
 }
 
+/** Skeleton da tabela/lista (não usar no loading de login/auth). */
 export function CadastroListLoading({ message }: { message: string }) {
   return (
-    <div className="py-8 text-center">
-      <div className="flex items-center justify-center gap-2">
-        <div className="loading-spinner h-6 w-6" />
-        <span className="text-gray-600 dark:text-gray-400">{message}</span>
-      </div>
+    <div className="py-1">
+      <PageSkeleton variant="list" rows={7} label={message} />
     </div>
   );
 }
