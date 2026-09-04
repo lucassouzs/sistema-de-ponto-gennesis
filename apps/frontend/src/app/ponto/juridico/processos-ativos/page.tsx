@@ -15,6 +15,7 @@ import {
   Plus,
   Scale,
   Search,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -41,6 +42,7 @@ import {
   rowActionMenuButtonClass,
 } from '@/components/ui/listTableUi';
 import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { DatePickerField } from '@/components/ui/DatePickerField';
 import { JuridicoImportModal } from '@/components/juridico/JuridicoImportModal';
 import {
   JuridicoImportMenu,
@@ -65,6 +67,7 @@ import {
   statusStatIconClasses,
   type JuridicoProcesso,
 } from '@/data/juridico-processos-ativos';
+import { parseBrDate } from '@/data/juridico-processos-dashboard';
 
 const ITEMS_PER_PAGE = 20;
 
@@ -73,6 +76,10 @@ type ListFilters = {
   contrato: string;
   polo: string;
   arquivos: '' | 'pendentes' | 'vinculados';
+  dataAberturaDe: string;
+  dataAberturaAte: string;
+  dataAcordoDe: string;
+  dataAcordoAte: string;
 };
 
 const EMPTY_LIST_FILTERS: ListFilters = {
@@ -80,7 +87,32 @@ const EMPTY_LIST_FILTERS: ListFilters = {
   contrato: '',
   polo: '',
   arquivos: '',
+  dataAberturaDe: '',
+  dataAberturaAte: '',
+  dataAcordoDe: '',
+  dataAcordoAte: '',
 };
+
+function dateFieldToYmd(value?: string | null): string | null {
+  const raw = (value ?? '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const parsed = parseBrDate(raw);
+  if (!parsed) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function matchesDateRange(value: string | null | undefined, de: string, ate: string): boolean {
+  if (!de && !ate) return true;
+  const ymd = dateFieldToYmd(value);
+  if (!ymd) return false;
+  if (de && ymd < de) return false;
+  if (ate && ymd > ate) return false;
+  return true;
+}
 
 type ListColumn = {
   key: keyof JuridicoProcesso;
@@ -234,6 +266,15 @@ export default function ProcessosAtivosPage() {
     };
   }, [data?.rows]);
 
+  const statusOptions = useMemo(
+    () =>
+      Object.keys(statusCount)
+        .filter((key) => key && key !== 'all')
+        .map((value) => ({ value, label: statusCardLabel(value) }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
+    [statusCount],
+  );
+
   const rows = useMemo(() => {
     let next = data?.rows || [];
     if (listFilters.empresa) {
@@ -253,12 +294,31 @@ export default function ProcessosAtivosPage() {
         return total > 0 && arquivosPendentesCount(row) === 0;
       });
     }
+    if (listFilters.dataAberturaDe || listFilters.dataAberturaAte) {
+      next = next.filter((row) =>
+        matchesDateRange(
+          row.dataAbertura,
+          listFilters.dataAberturaDe,
+          listFilters.dataAberturaAte,
+        ),
+      );
+    }
+    if (listFilters.dataAcordoDe || listFilters.dataAcordoAte) {
+      next = next.filter((row) =>
+        matchesDateRange(
+          row.dataAcordo,
+          listFilters.dataAcordoDe,
+          listFilters.dataAcordoAte,
+        ),
+      );
+    }
     const term = normalizeSearchText(searchTerm.trim());
     if (term) next = next.filter((row) => matchesSearch(row, term));
     return next;
   }, [data?.rows, listFilters, searchTerm]);
 
-  const filtersActive = Object.values(listFilters).some((value) => value !== '');
+  const filtersActive =
+    statusFilter !== 'all' || Object.values(listFilters).some((value) => value !== '');
   const totalFiltered = rows.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / ITEMS_PER_PAGE));
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -398,8 +458,21 @@ export default function ProcessosAtivosPage() {
                           setCurrentPage(1);
                         }}
                         placeholder="Buscar por reclamante, processo, empresa…"
-                        className="box-border h-full w-full rounded-lg border border-gray-300 bg-white py-0 pl-9 pr-3 text-sm font-medium leading-10 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        className="box-border h-full w-full rounded-lg border border-gray-300 bg-white py-0 pl-9 pr-9 text-sm font-medium leading-10 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       />
+                      {searchTerm ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchTerm('');
+                            setCurrentPage(1);
+                          }}
+                          aria-label="Limpar busca"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
                     </div>
                     <div className={cadastroListClasses.filterIconButtonWrap}>
                       <button
@@ -595,6 +668,19 @@ export default function ProcessosAtivosPage() {
           size="md"
         >
           <div className="space-y-4">
+            <FilterField label="Status">
+              <StringSingleSelectDropdown
+                value={statusFilter === 'all' ? '' : statusFilter}
+                onChange={(value) => {
+                  setStatusFilter(value || 'all');
+                  setCurrentPage(1);
+                }}
+                options={statusOptions}
+                placeholder="Todos"
+                emptyOptionLabel="Todos"
+                matchTriggerWidth
+              />
+            </FilterField>
             <FilterField label="Empresa">
               <StringSingleSelectDropdown
                 value={listFilters.empresa}
@@ -625,6 +711,66 @@ export default function ProcessosAtivosPage() {
                 matchTriggerWidth
               />
             </FilterField>
+            <FilterField label="Data de abertura">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    De
+                  </span>
+                  <DatePickerField
+                    value={listFilters.dataAberturaDe}
+                    onChange={setListFilter('dataAberturaDe')}
+                    placeholder="dd/mm/aaaa"
+                    noFocusRing
+                    className="w-full"
+                    aria-label="Data de abertura inicial"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Até
+                  </span>
+                  <DatePickerField
+                    value={listFilters.dataAberturaAte}
+                    onChange={setListFilter('dataAberturaAte')}
+                    placeholder="dd/mm/aaaa"
+                    noFocusRing
+                    className="w-full"
+                    aria-label="Data de abertura final"
+                  />
+                </div>
+              </div>
+            </FilterField>
+            <FilterField label="Data do acordo">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    De
+                  </span>
+                  <DatePickerField
+                    value={listFilters.dataAcordoDe}
+                    onChange={setListFilter('dataAcordoDe')}
+                    placeholder="dd/mm/aaaa"
+                    noFocusRing
+                    className="w-full"
+                    aria-label="Data do acordo inicial"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <span className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Até
+                  </span>
+                  <DatePickerField
+                    value={listFilters.dataAcordoAte}
+                    onChange={setListFilter('dataAcordoAte')}
+                    placeholder="dd/mm/aaaa"
+                    noFocusRing
+                    className="w-full"
+                    aria-label="Data do acordo final"
+                  />
+                </div>
+              </div>
+            </FilterField>
             <FilterField label="Arquivos">
               <StringSingleSelectDropdown
                 value={listFilters.arquivos}
@@ -646,6 +792,7 @@ export default function ProcessosAtivosPage() {
                 type="button"
                 onClick={() => {
                   setListFilters(EMPTY_LIST_FILTERS);
+                  setStatusFilter('all');
                   setCurrentPage(1);
                 }}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"

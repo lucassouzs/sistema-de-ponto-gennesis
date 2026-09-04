@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -26,7 +27,6 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  ArrowLeft,
   Filter,
   Paperclip,
   Search,
@@ -387,6 +387,7 @@ export default function DpRequestsScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const myEmployeeId = user?.employee?.id || '';
@@ -421,6 +422,25 @@ export default function DpRequestsScreen() {
     onSelect: (value: string) => void;
   } | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
+  const canDismissOverlayRef = useRef(false);
+
+  useEffect(() => {
+    if (!picker && !filterOpen) {
+      canDismissOverlayRef.current = false;
+      return;
+    }
+    canDismissOverlayRef.current = false;
+    const t = setTimeout(() => {
+      canDismissOverlayRef.current = true;
+    }, 350);
+    return () => clearTimeout(t);
+  }, [picker, filterOpen]);
+
+  const dismissOverlay = () => {
+    if (!canDismissOverlayRef.current) return;
+    setPicker(null);
+    setFilterOpen(false);
+  };
 
   const listQuery = useQuery({
     queryKey: ['dp-my-requests'],
@@ -1254,14 +1274,14 @@ export default function DpRequestsScreen() {
       </Modal>
 
       {/* Filter */}
-      <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
         <View style={styles.pickerOverlay}>
           <TouchableOpacity
-            style={StyleSheet.absoluteFill}
+            style={styles.pickerBackdrop}
             activeOpacity={1}
-            onPress={() => setFilterOpen(false)}
+            onPress={dismissOverlay}
           />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
+          <View style={[styles.pickerSheet, { backgroundColor: colors.card }]}>
             <View style={styles.pickerHandle} />
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Filtro de status</Text>
@@ -1319,14 +1339,14 @@ export default function DpRequestsScreen() {
         onRequestClose={() => setCreateOpen(false)}
       >
         <View
-          style={[
-            styles.safeArea,
-            {
-              backgroundColor: colors.background,
-              paddingTop: insets.top,
-              paddingBottom: insets.bottom,
-            },
-          ]}
+          style={{
+            flex: 1,
+            width: windowWidth,
+            height: windowHeight,
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            position: 'relative',
+          }}
         >
           <KeyboardAvoidingView
             style={{ flex: 1 }}
@@ -1334,20 +1354,6 @@ export default function DpRequestsScreen() {
           >
             <View style={styles.formHeader}>
               <View style={styles.formHeaderText}>
-                {createTarget ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setCreateTarget(null);
-                      setRequestType('');
-                      setRows([emptyFormRow(myEmployeeId)]);
-                    }}
-                    style={styles.formBackRow}
-                    hitSlop={6}
-                  >
-                    <ArrowLeft size={18} color={colors.primary} strokeWidth={2.2} />
-                    <Text style={styles.formBackText}>Trocar destino</Text>
-                  </TouchableOpacity>
-                ) : null}
                 <Text style={styles.formTitle}>Nova solicitação</Text>
                 <Text style={styles.formSubtitle}>
                   {!createTarget
@@ -1358,7 +1364,10 @@ export default function DpRequestsScreen() {
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setCreateOpen(false)}
+                onPress={() => {
+                  setPicker(null);
+                  setCreateOpen(false);
+                }}
                 style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
@@ -2264,87 +2273,104 @@ export default function DpRequestsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Generic option picker */}
-      <Modal
-        visible={!!picker}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPicker(null)}
-      >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setPicker(null)}
-          />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>{picker?.title}</Text>
+          {picker ? (
+            <View
+              collapsable={false}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+                justifyContent: 'flex-end',
+                padding: 16,
+                paddingBottom: Math.max(insets.bottom, 20),
+                zIndex: 99999,
+                elevation: 99999,
+              }}
+            >
               <TouchableOpacity
-                onPress={() => setPicker(null)}
-                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
-                accessibilityLabel="Fechar"
-              >
-                <X size={18} color={colors.text} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
-              <Search size={16} color={colors.textSecondary} />
-              <TextInput
-                style={styles.pickerSearchInput}
-                placeholder="Buscar..."
-                placeholderTextColor={colors.textSecondary}
-                value={pickerSearch}
-                onChangeText={setPickerSearch}
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={dismissOverlay}
               />
-            </View>
-            <FlatList
-              data={pickerFiltered}
-              keyExtractor={(item) => item.value}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) =>
-                'avatarUri' in item ? (
-                  <PersonPickerListRow
-                    label={item.label}
-                    subtitle={item.subtitle}
-                    avatarUri={item.avatarUri}
-                    colors={colors}
-                    isDark={isDark}
-                    onPress={() => {
-                      picker?.onSelect(item.value);
-                      setPicker(null);
-                    }}
+              <View
+                style={[
+                  styles.pickerSheet,
+                  {
+                    backgroundColor: colors.card,
+                    height: Math.round(windowHeight * 0.58),
+                  },
+                ]}
+              >
+                  <View style={styles.pickerHandle} />
+                  <View style={styles.pickerHeader}>
+                    <Text style={styles.pickerTitle}>{picker.title}</Text>
+                    <TouchableOpacity
+                      onPress={() => setPicker(null)}
+                      style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+                      accessibilityLabel="Fechar"
+                    >
+                      <X size={18} color={colors.text} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
+                    <Search size={16} color={colors.textSecondary} />
+                    <TextInput
+                      style={styles.pickerSearchInput}
+                      placeholder="Buscar..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={pickerSearch}
+                      onChangeText={setPickerSearch}
+                    />
+                  </View>
+                  <FlatList
+                    style={{ flex: 1 }}
+                    data={pickerFiltered}
+                    keyExtractor={(item) => item.value}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) =>
+                      'avatarUri' in item ? (
+                        <PersonPickerListRow
+                          label={item.label}
+                          subtitle={item.subtitle}
+                          avatarUri={item.avatarUri}
+                          colors={colors}
+                          isDark={isDark}
+                          onPress={() => {
+                            picker.onSelect(item.value);
+                            setPicker(null);
+                          }}
+                        />
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.pickerItem,
+                            { backgroundColor: isDark ? colors.surface : colors.background },
+                          ]}
+                          onPress={() => {
+                            picker.onSelect(item.value);
+                            setPicker(null);
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.pickerItemLabel}>{item.label}</Text>
+                          {item.subtitle ? (
+                            <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
+                          ) : null}
+                        </TouchableOpacity>
+                      )
+                    }
+                    ListEmptyComponent={
+                      <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
+                    }
+                    contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
                   />
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.pickerItem,
-                      { backgroundColor: isDark ? colors.card : colors.surface },
-                    ]}
-                    onPress={() => {
-                      picker?.onSelect(item.value);
-                      setPicker(null);
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={styles.pickerItemLabel}>{item.label}</Text>
-                    {item.subtitle ? (
-                      <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                )
-              }
-              ListEmptyComponent={
-                <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
-              }
-              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
-            />
-          </View>
+                </View>
+            </View>
+          ) : null}
         </View>
       </Modal>
     </View>
@@ -2740,17 +2766,6 @@ function getStyles(colors: any, isDark: boolean) {
       fontWeight: '500',
       marginTop: 2,
     },
-    formBackRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      marginBottom: 8,
-    },
-    formBackText: {
-      color: colors.primary,
-      fontSize: 13,
-      fontWeight: '600',
-    },
     formCloseBtn: {
       width: 40,
       height: 40,
@@ -2923,13 +2938,16 @@ function getStyles(colors: any, isDark: boolean) {
     },
     pickerOverlay: {
       flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.4)',
+      padding: 16,
+      paddingBottom: 28,
+    },
+    pickerBackdrop: {
+      ...StyleSheet.absoluteFillObject,
     },
     pickerSheet: {
-      maxHeight: '78%',
-      borderTopLeftRadius: 22,
-      borderTopRightRadius: 22,
+      borderRadius: 20,
       paddingHorizontal: 16,
       paddingBottom: 12,
     },

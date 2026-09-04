@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,24 @@ export default function NotificationsSheet() {
   const navigation = useNavigation<any>();
   const { notifications, sheetVisible, closeSheet } = useNotifications();
   const styles = getStyles(colors, isDark);
+  const canDismissRef = useRef(false);
+
+  useEffect(() => {
+    if (!sheetVisible) {
+      canDismissRef.current = false;
+      return;
+    }
+    canDismissRef.current = false;
+    const t = setTimeout(() => {
+      canDismissRef.current = true;
+    }, 350);
+    return () => clearTimeout(t);
+  }, [sheetVisible]);
+
+  const requestClose = () => {
+    if (!canDismissRef.current) return;
+    closeSheet();
+  };
 
   const openItem = (item: ActivityNotification) => {
     closeSheet();
@@ -36,23 +54,32 @@ export default function NotificationsSheet() {
   return (
     <Modal
       visible={sheetVisible}
-      animationType="slide"
+      animationType="fade"
       transparent
       onRequestClose={closeSheet}
     >
       <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+        <Pressable style={styles.backdrop} onPress={requestClose} />
         <View
           style={[
             styles.sheet,
             {
-              backgroundColor: colors.background,
+              backgroundColor: colors.card,
               paddingBottom: Math.max(insets.bottom, 16),
             },
           ]}
         >
           <View style={styles.handleWrap}>
-            <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.18)' }]} />
+            <View
+              style={[
+                styles.handle,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255,255,255,0.22)'
+                    : 'rgba(15,23,42,0.18)',
+                },
+              ]}
+            />
           </View>
 
           <View style={styles.header}>
@@ -71,13 +98,19 @@ export default function NotificationsSheet() {
           <FlatList
             data={notifications}
             keyExtractor={(item) => item.id}
+            style={styles.list}
             contentContainerStyle={
               notifications.length === 0 ? styles.emptyWrap : styles.listContent
             }
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={styles.empty}>
-                <View style={[styles.emptyIcon, { backgroundColor: isDark ? colors.card : colors.surface }]}>
+                <View
+                  style={[
+                    styles.emptyIcon,
+                    { backgroundColor: isDark ? colors.card : colors.surface },
+                  ]}
+                >
                   <Bell size={22} color={colors.textSecondary} strokeWidth={2} />
                 </View>
                 <Text style={[styles.emptyTitle, { color: colors.text }]}>Tudo em dia</Text>
@@ -93,7 +126,7 @@ export default function NotificationsSheet() {
                   style={[
                     styles.item,
                     {
-                      backgroundColor: colors.card,
+                      backgroundColor: isDark ? colors.surface : colors.background,
                       borderColor: isDark ? colors.border : 'rgba(15,23,42,0.06)',
                     },
                     !item.read && styles.itemUnread,
@@ -127,7 +160,9 @@ export default function NotificationsSheet() {
                       {formatRelativeTime(item.detectedAt || item.updatedAt)}
                     </Text>
                   </View>
-                  {!item.read ? <View style={[styles.dot, { backgroundColor: colors.primary }]} /> : null}
+                  {!item.read ? (
+                    <View style={[styles.dot, { backgroundColor: colors.primary }]} />
+                  ) : null}
                 </TouchableOpacity>
               );
             }}
@@ -143,14 +178,23 @@ const getStyles = (colors: any, isDark: boolean) =>
     overlay: {
       flex: 1,
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(15,23,42,0.35)',
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      padding: 16,
+      paddingBottom: 28,
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
     },
     sheet: {
       maxHeight: '78%',
-      borderTopLeftRadius: 22,
-      borderTopRightRadius: 22,
+      borderRadius: 20,
       paddingHorizontal: 16,
       paddingTop: 8,
+      zIndex: 1,
+      elevation: 4,
+    },
+    list: {
+      flexGrow: 0,
     },
     handleWrap: { alignItems: 'center', marginBottom: 8 },
     handle: { width: 36, height: 4, borderRadius: 999 },
