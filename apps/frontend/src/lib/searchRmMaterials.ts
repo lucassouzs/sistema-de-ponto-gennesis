@@ -14,7 +14,12 @@ export type RmMaterialListItem = {
 };
 
 export function getRmMaterialLabel(material?: RmMaterialListItem | null): string {
-  return material?.name?.trim() || material?.code?.trim() || material?.description?.trim() || 'Material sem nome';
+  const name = material?.name?.trim() || material?.description?.trim() || '';
+  const code = material?.code?.trim() || '';
+  if (code && name && code !== name) return `${code} — ${name}`;
+  if (name) return name;
+  if (code) return code;
+  return 'Material sem nome';
 }
 
 /** True quando o item do catálogo é Serviço. */

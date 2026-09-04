@@ -30,6 +30,7 @@ import {
 } from '@/lib/maskCurrencyBr';
 import {
   materialItemLabel,
+  materialProductCode,
   rmContractDisplay,
   rmOsDisplay,
   rmSolicitante,
@@ -1383,6 +1384,7 @@ export default function MapaCotacaoPage() {
                             <thead className="border-b border-gray-200 dark:border-gray-700">
                               <tr>
                                 <th className={`${cadastroListClasses.thCenter} w-12`}>Item</th>
+                                <th className={`${cadastroListClasses.th} whitespace-nowrap`}>Código</th>
                                 <th className={cadastroListClasses.th}>Material</th>
                                 <th className={cadastroListClasses.thCenter}>Unidade</th>
                                 <th className={cadastroListClasses.thCenter}>Qtd. RM</th>
@@ -1438,6 +1440,9 @@ export default function MapaCotacaoPage() {
                                   >
                                     <td className={`${cadastroListClasses.tdCenter} tabular-nums font-medium text-gray-800 dark:text-gray-200`}>
                                       {itemIndex + 1}
+                                    </td>
+                                    <td className={`${cadastroListClasses.td} whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300`}>
+                                      {materialProductCode(item.material) || '—'}
                                     </td>
                                     <td className={cadastroListClasses.td}>
                                       <p className="font-medium text-gray-900 dark:text-gray-100">
@@ -1721,6 +1726,7 @@ export default function MapaCotacaoPage() {
                       <thead className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                         <tr>
                           <th className={`${cadastroListClasses.thCenter} w-12`}>Item</th>
+                          <th className={`${cadastroListClasses.th} whitespace-nowrap`}>Código</th>
                           <th className={cadastroListClasses.th}>Material</th>
                           <th className={`${cadastroListClasses.th} min-w-[12rem]`}>Detalhamento</th>
                           <th className={cadastroListClasses.thCenter}>Unidade</th>
@@ -1745,6 +1751,9 @@ export default function MapaCotacaoPage() {
                                 className={`${cadastroListClasses.tdCenter} tabular-nums font-medium text-gray-800 dark:text-gray-200`}
                               >
                                 {itemNo > 0 ? itemNo : '—'}
+                              </td>
+                              <td className={`${cadastroListClasses.td} whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300`}>
+                                {materialProductCode(item.material) || '—'}
                               </td>
                               <td className={cadastroListClasses.td}>
                                 <p className="font-medium text-gray-900 dark:text-gray-100">

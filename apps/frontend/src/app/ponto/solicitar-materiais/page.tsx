@@ -78,7 +78,9 @@ import { isMaterialRequestEffectivelyCancelled } from '@/app/ponto/gerenciar-mat
 import {
   canUserCancelMaterialRequest,
   getPriorityInfo,
-  getStatusInfo
+  getStatusInfo,
+  materialItemLabel,
+  materialProductCode
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
 import {
   DEFAULT_RM_CARD_FILTER,
@@ -3149,6 +3151,9 @@ function SolicitarMateriaisPage() {
                                     <th className="w-12 whitespace-nowrap pb-3 pr-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Item
                                     </th>
+                                    <th className="whitespace-nowrap px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                      Código
+                                    </th>
                                     <th className="px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
                                       Material
                                     </th>
@@ -3169,11 +3174,8 @@ function SolicitarMateriaisPage() {
                                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                   {d.items.map((item, idx) => {
                                     const mat = item.material;
-                                    const line =
-                                      mat?.description?.trim() ||
-                                      mat?.name?.trim() ||
-                                      mat?.sinapiCode ||
-                                      'Material';
+                                    const line = materialItemLabel(item);
+                                    const productCode = materialProductCode(mat);
                                     const note = (item.notes || item.observation)?.trim();
                                     const bankDetails = (
                                       item as { bankDetails?: string | null }
@@ -3187,6 +3189,9 @@ function SolicitarMateriaisPage() {
                                       >
                                         <td className="py-3 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
                                           {idx + 1}
+                                        </td>
+                                        <td className="whitespace-nowrap px-2 py-3 align-top tabular-nums text-gray-700 dark:text-gray-300">
+                                          {productCode || '—'}
                                         </td>
                                         <td className="max-w-[220px] px-2 py-3 align-top sm:max-w-none">
                                           {line}

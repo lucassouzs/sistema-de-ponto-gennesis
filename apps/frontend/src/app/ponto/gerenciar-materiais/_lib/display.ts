@@ -151,6 +151,14 @@ export function materialItemLabel(item: MaterialLineItem): string {
   return 'Material';
 }
 
+/** Código de produto do catálogo (ConstructionMaterial.code), se disponível. */
+export function materialProductCode(
+  material?: MaterialLineItem['material'] | null
+): string | null {
+  const code = material?.code?.trim();
+  return code || null;
+}
+
 /** Linha auxiliar: descrição quando existir e for diferente do nome. */
 export function materialItemSubtitle(item: MaterialLineItem): string | null {
   const m = item.material;

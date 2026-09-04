@@ -124,6 +124,34 @@ export class QuoteMapService {
     return Number(value);
   }
 
+  private constructionMaterialIdFromSinapi(code?: string | null): string | null {
+    const s = (code || '').trim();
+    if (!s.startsWith('CM-')) return null;
+    const id = s.slice(3).trim();
+    return id || null;
+  }
+
+  private async loadConstructionMaterialCodes(
+    materials: Array<{ sinapiCode?: string | null } | null | undefined>
+  ): Promise<Map<string, string>> {
+    const cmIds = new Set<string>();
+    for (const m of materials) {
+      const cmId = this.constructionMaterialIdFromSinapi(m?.sinapiCode);
+      if (cmId) cmIds.add(cmId);
+    }
+    if (cmIds.size === 0) return new Map();
+    const rows = await prisma.constructionMaterial.findMany({
+      where: { id: { in: Array.from(cmIds) } },
+      select: { id: true, code: true },
+    });
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      const code = (row.code || '').trim();
+      if (code) map.set(row.id, code);
+    }
+    return map;
+  }
+
   /** Nome do material/serviço em destaque (cadastro). */
   private materialCatalogLabel(m?: {
     name?: string | null;
@@ -138,6 +166,18 @@ export class QuoteMapService {
     const sinapi = (m.sinapiCode || '').trim();
     if (sinapi) return sinapi;
     return '—';
+  }
+
+  private materialCatalogCode(
+    m?: { sinapiCode?: string | null; code?: string | null } | null,
+    catalogCodeByCmId?: Map<string, string>
+  ): string {
+    if (!m) return '';
+    const direct = (m.code || '').trim();
+    if (direct) return direct;
+    const cmId = this.constructionMaterialIdFromSinapi(m.sinapiCode);
+    if (cmId && catalogCodeByCmId) return catalogCodeByCmId.get(cmId) || '';
+    return '';
   }
 
   /** Descrição do cadastro quando difere do nome. */
@@ -225,6 +265,23 @@ export class QuoteMapService {
     });
     if (!map) throw new Error('Mapa de cotação não encontrado para gerar snapshot PDF');
 
+    const materialsForCatalogCode: Array<{ sinapiCode?: string | null } | null | undefined> = [];
+    for (const it of map.materialRequest?.items || []) {
+      materialsForCatalogCode.push(it.material);
+    }
+    for (const si of map.supplierItems || []) {
+      materialsForCatalogCode.push(si.materialRequestItem?.material);
+    }
+    for (const w of map.winners || []) {
+      materialsForCatalogCode.push(w.materialRequestItem?.material);
+    }
+    for (const po of map.purchaseOrders || []) {
+      for (const it of po.items || []) {
+        materialsForCatalogCode.push(it.material);
+      }
+    }
+    const catalogCodeByCmId = await this.loadConstructionMaterialCodes(materialsForCatalogCode);
+
     const purchaseOrderId = options?.purchaseOrderId?.trim() || '';
     const allPurchaseOrders = Array.isArray(map.purchaseOrders) ? map.purchaseOrders : [];
     const purchaseOrders = purchaseOrderId
@@ -284,6 +341,7 @@ export class QuoteMapService {
       wonItemCount?: number;
       supplier: any;
       items: Array<{
+        code?: string;
         label: string;
         quantity: number;
         unit: string;
@@ -344,6 +402,7 @@ export class QuoteMapService {
             '';
           return {
             label: this.materialCatalogLabel(mri?.material),
+            code: this.materialCatalogCode(mri?.material, catalogCodeByCmId),
             quantity: qty,
             unit: mri?.unit || '—',
             unitPrice,
@@ -407,6 +466,7 @@ export class QuoteMapService {
               it.totalPrice != null ? this.toNumber(it.totalPrice) : qty * unitPrice;
             return {
               label: this.materialCatalogLabel(it.material),
+              code: this.materialCatalogCode(it.material, catalogCodeByCmId),
               quantity: qty,
               unit: it.unit || '—',
               unitPrice,
@@ -459,6 +519,7 @@ export class QuoteMapService {
               it.totalPrice != null ? this.toNumber(it.totalPrice) : qty * unitPrice;
             return {
               label: this.materialCatalogLabel(it.material),
+              code: this.materialCatalogCode(it.material, catalogCodeByCmId),
               quantity: qty,
               unit: it.unit || '—',
               unitPrice,
@@ -495,6 +556,7 @@ export class QuoteMapService {
             '';
           return {
             label: this.materialCatalogLabel(mri?.material),
+            code: this.materialCatalogCode(mri?.material, catalogCodeByCmId),
             quantity: qty,
             unit: mri?.unit || '—',
             unitPrice,
@@ -980,27 +1042,31 @@ export class QuoteMapService {
         doc.fillColor('#0F172A').font('Helvetica-Bold').fontSize(10).text('Itens', left, y);
         y += 12;
 
-        const wItem = 28;
-        const wQty = 42;
-        const wUnit = 36;
-        const wUnitPrice = 70;
-        const wTotal = 72;
-        const wResult = section.isQuoteComparison ? 58 : 0;
-        const wDesc = contentWidth - (wItem + wQty + wUnit + wUnitPrice + wTotal + wResult);
+        const wItem = 26;
+        const wCode = 48;
+        const wQty = 40;
+        const wUnit = 34;
+        const wUnitPrice = 66;
+        const wTotal = 68;
+        const wResult = section.isQuoteComparison ? 54 : 0;
+        const wDesc =
+          contentWidth - (wItem + wCode + wQty + wUnit + wUnitPrice + wTotal + wResult);
         const col = {
           item: left,
-          desc: left + wItem,
-          qty: left + wItem + wDesc,
-          unit: left + wItem + wDesc + wQty,
-          unitPrice: left + wItem + wDesc + wQty + wUnit,
-          total: left + wItem + wDesc + wQty + wUnit + wUnitPrice,
-          result: left + wItem + wDesc + wQty + wUnit + wUnitPrice + wTotal,
+          code: left + wItem,
+          desc: left + wItem + wCode,
+          qty: left + wItem + wCode + wDesc,
+          unit: left + wItem + wCode + wDesc + wQty,
+          unitPrice: left + wItem + wCode + wDesc + wQty + wUnit,
+          total: left + wItem + wCode + wDesc + wQty + wUnit + wUnitPrice,
+          result: left + wItem + wCode + wDesc + wQty + wUnit + wUnitPrice + wTotal,
         };
 
         const drawItemsHeader = () => {
           doc.rect(left, y, contentWidth, 18).fill('#111827');
           doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(8);
-          doc.text('ITEM', col.item + 3, y + 5, { width: wItem - 4, lineBreak: false });
+          doc.text('ITEM', col.item + 2, y + 5, { width: wItem - 3, lineBreak: false });
+          doc.text('CÓDIGO', col.code, y + 5, { width: wCode - 3, lineBreak: false });
           doc.text('DESCRIÇÃO', col.desc, y + 5, { width: wDesc - 4, lineBreak: false });
           doc.text('QTD.', col.qty, y + 5, { width: wQty - 2, align: 'center', lineBreak: false });
           doc.text('UND', col.unit, y + 5, { width: wUnit, align: 'center', lineBreak: false });
@@ -1029,6 +1095,7 @@ export class QuoteMapService {
         section.items.forEach((item, idx) => {
           productsTotal += item.totalPrice;
           const detail = (item.notes || '').trim();
+          const codeText = (item.code || '').trim() || '—';
           doc.font('Helvetica').fontSize(8);
           const descHeight = doc.heightOfString(item.label || '—', { width: wDesc - 4 });
           let detailHeight = 0;
@@ -1049,7 +1116,8 @@ export class QuoteMapService {
             doc.rect(left, y, contentWidth, rowH).fill('#ECFDF5');
           }
           doc.fillColor('#0F172A').font('Helvetica').fontSize(8);
-          doc.text(String(idx + 1), col.item + 3, rowY, { width: wItem - 4, lineBreak: false });
+          doc.text(String(idx + 1), col.item + 2, rowY, { width: wItem - 3, lineBreak: false });
+          doc.text(codeText, col.code, rowY, { width: wCode - 3, lineBreak: false });
           doc.text(item.label || '—', col.desc, rowY, { width: wDesc - 4 });
           if (detail) {
             doc

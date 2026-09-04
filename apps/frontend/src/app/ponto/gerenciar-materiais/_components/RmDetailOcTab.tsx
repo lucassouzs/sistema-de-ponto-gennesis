@@ -22,6 +22,7 @@ import { isOcCoveringRmItems, isRmItemCancelled } from '@/lib/rmProcurementCover
 import {
   catalogMaterialLabel,
   formatDateTime,
+  materialProductCode,
   purchaseOrderLineSubtitle
 } from '../_lib/display';
 
@@ -247,6 +248,9 @@ function OcCard({
                   <th className="w-10 whitespace-nowrap pb-2.5 pr-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                     #
                   </th>
+                  <th className="whitespace-nowrap px-2 pb-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Código
+                  </th>
                   <th className="px-2 pb-2.5 text-xs font-medium text-gray-500 dark:text-gray-400">
                     Material
                   </th>
@@ -274,6 +278,9 @@ function OcCard({
                   >
                     <td className="py-2.5 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
                       {idx + 1}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2.5 align-top tabular-nums text-gray-700 dark:text-gray-300">
+                      {materialProductCode(line.material) || '—'}
                     </td>
                     <td className="max-w-[200px] px-2 py-2.5 align-top sm:max-w-none">
                       {catalogMaterialLabel(line.material)}

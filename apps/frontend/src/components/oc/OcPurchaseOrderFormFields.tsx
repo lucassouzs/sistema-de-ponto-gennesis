@@ -11,7 +11,7 @@ import {
   maskCurrencyInputBrOrEmpty
 } from '@/lib/maskCurrencyBr';
 import { formatCurrencyBR } from '@/app/ponto/gerenciar-materiais/_lib/ocAmounts';
-import { catalogMaterialLabel } from '@/app/ponto/gerenciar-materiais/_lib/display';
+import { catalogMaterialLabel, materialProductCode } from '@/app/ponto/gerenciar-materiais/_lib/display';
 import {
   formatOcCorrectionAuthor,
   type OcCorrectionInfo,
@@ -478,21 +478,26 @@ export function buildOcFormValuesFromOrder(
       name?: string | null;
       description?: string | null;
       sinapiCode?: string | null;
+      code?: string | null;
     }) => string;
     parseFreight?: (order: OcFormOrderSource) => string;
   }
 ): OcPurchaseOrderFormValues {
   const labelFn = options?.materialLineLabel ?? catalogMaterialLabel;
 
-  const items = (order.items || []).map((it) => ({
-    materialId: it.material?.id || it.materialId || '',
-    quantity: Number(it.quantity),
-    unit: it.unit || 'UN',
-    unitPrice: Number(it.unitPrice),
-    materialLabel: labelFn(it.material),
-    scQuantity:
-      it.materialRequestItem?.quantity != null ? Number(it.materialRequestItem.quantity) : null
-  }));
+  const items = (order.items || []).map((it) => {
+    const label = labelFn(it.material);
+    const code = materialProductCode(it.material);
+    return {
+      materialId: it.material?.id || it.materialId || '',
+      quantity: Number(it.quantity),
+      unit: it.unit || 'UN',
+      unitPrice: Number(it.unitPrice),
+      materialLabel: code ? `${code} — ${label}` : label,
+      scQuantity:
+        it.materialRequestItem?.quantity != null ? Number(it.materialRequestItem.quantity) : null
+    };
+  });
 
   let freightStored = '';
   if (options?.parseFreight) {

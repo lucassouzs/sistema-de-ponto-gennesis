@@ -45,6 +45,7 @@ import { formatRmListDisplayId } from '@/app/ponto/gerenciar-materiais/_lib/rmLi
 import {
   catalogMaterialLabel,
   formatDateTime,
+  materialProductCode,
   purchaseOrderLineSubtitle,
   rmContractDisplay
 } from '@/app/ponto/gerenciar-materiais/_lib/display';
@@ -1410,6 +1411,9 @@ function OcOrderMaterialsTable({
             <th className="pb-3 pr-2 font-medium text-xs text-gray-500 dark:text-gray-400 text-center whitespace-nowrap w-12">
               Item
             </th>
+            <th className="pb-3 px-2 font-medium text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              Código
+            </th>
             <th className="pb-3 px-2 font-medium text-xs text-gray-500 dark:text-gray-400">Material</th>
             <th className="pb-3 px-2 font-medium text-xs text-gray-500 dark:text-gray-400 text-right whitespace-nowrap">
               Qtd
@@ -1438,6 +1442,9 @@ function OcOrderMaterialsTable({
               <tr key={line.id || idx} className="text-gray-900 dark:text-gray-100">
                 <td className="py-3 pr-2 text-center tabular-nums align-top font-medium text-gray-500 dark:text-gray-400">
                   {idx + 1}
+                </td>
+                <td className="py-3 px-2 whitespace-nowrap align-top tabular-nums text-gray-700 dark:text-gray-300">
+                  {materialProductCode(line.material) || '—'}
                 </td>
                 <td className="py-3 px-2 align-top max-w-[220px] sm:max-w-none">
                   <span className="block">{catalogMaterialLabel(line.material)}</span>

@@ -34,7 +34,12 @@ export function ConstructionMaterialSearchDropdown({
       onChange={(material) => onChange(material.id, material)}
       searchFn={searchConstructionMaterials}
       getOptionId={(m) => m.id}
-      getOptionLabel={(m) => m.name}
+      getOptionLabel={(m) => {
+        const name = m.name?.trim() || '';
+        const code = m.code?.trim() || '';
+        if (code && name && code !== name) return `${code} — ${name}`;
+        return name || code || 'Material sem nome';
+      }}
       disabled={disabled}
       placeholder={placeholder}
       noFocusRing={noFocusRing}

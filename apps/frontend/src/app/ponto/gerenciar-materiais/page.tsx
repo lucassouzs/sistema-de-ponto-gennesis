@@ -33,6 +33,7 @@ import {
   getStatusInfo,
   formatDateTime,
   materialItemLabel,
+  materialProductCode,
   rmContractDisplay,
   rmOsDisplay,
   rmSolicitante,
@@ -1083,6 +1084,9 @@ export default function GerenciarMateriaisPage() {
                               <th className="w-12 whitespace-nowrap pb-3 pr-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Item
                               </th>
+                              <th className="whitespace-nowrap px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Código
+                              </th>
                               <th className="px-2 pb-3 text-xs font-medium text-gray-500 dark:text-gray-400">
                                 Material
                               </th>
@@ -1109,6 +1113,9 @@ export default function GerenciarMateriaisPage() {
                               >
                                 <td className="py-3 pr-2 text-center align-top font-medium tabular-nums text-gray-500 dark:text-gray-400">
                                   {idx + 1}
+                                </td>
+                                <td className="whitespace-nowrap px-2 py-3 align-top tabular-nums text-gray-700 dark:text-gray-300">
+                                  {materialProductCode(item.material) || '—'}
                                 </td>
                                 <td className="max-w-[220px] px-2 py-3 align-top sm:max-w-none">
                                   {materialItemLabel(item)}

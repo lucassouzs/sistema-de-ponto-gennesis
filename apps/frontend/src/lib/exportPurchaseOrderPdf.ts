@@ -102,12 +102,19 @@ function singleLineCenterY(contentTop: number, contentHeight: number, lineGap: n
   return contentTop + contentHeight / 2 + lineGap * 0.35;
 }
 
-function materialLabel(m: { name?: string | null; description?: string | null }) {
+function materialLabel(m: {
+  name?: string | null;
+  description?: string | null;
+}) {
   const desc = m.description?.trim();
   const name = m.name?.trim();
   if (desc) return desc;
   if (name) return name;
   return '—';
+}
+
+function materialCode(m?: { code?: string | null } | null): string {
+  return m?.code?.trim() || '—';
 }
 
 /** Extrai o sequencial da OC (ex.: OC-2026-0019 → "19"). */
@@ -365,14 +372,15 @@ export async function exportPurchaseOrderPdf(
 
   const items = order.items || [];
   let total = 0;
-  const col = { desc: margin + 14, vu: margin + 138 };
+  const col = { code: margin + 14, desc: margin + 36, vu: margin + 138 };
   /** Centros horizontais para ITEM / QTD / UND (colunas curtas alinhadas no meio). */
   const colMid = {
     item: margin + 7,
     qtd: margin + 116,
     und: margin + 131,
   };
-  const descMaxW = 90;
+  const codeMaxW = 20;
+  const descMaxW = 68;
   const rowH = 6;
   const lineGap = 3.5;
   const detailLineGap = 3.1;
@@ -387,6 +395,7 @@ export async function exportPurchaseOrderPdf(
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(7);
   pdf.text('ITEM', colMid.item, y, { align: 'center' });
+  pdf.text('CÓDIGO', col.code, y);
   pdf.text('MATERIAL', col.desc, y);
   pdf.text('QTD', colMid.qtd, y, { align: 'center' });
   pdf.text('UND', colMid.und, y, { align: 'center' });
@@ -403,12 +412,14 @@ export async function exportPurchaseOrderPdf(
     const unitP = Number(it.unitPrice);
     const lineT = Number(it.totalPrice);
     total += lineT;
+    const code = materialCode(it.material);
     const label = materialLabel(it.material || {});
     const detail = typeof it.notes === 'string' ? it.notes.trim() : '';
+    const codeLines = pdf.splitTextToSize(code, codeMaxW);
     const descLines = pdf.splitTextToSize(label, descMaxW);
     const detailLines = detail ? pdf.splitTextToSize(detail, descMaxW) : [];
     const descBlockHeight =
-      descLines.length * lineGap +
+      Math.max(codeLines.length, descLines.length) * lineGap +
       (detailLines.length > 0
         ? nameToDetailGap - lineGap + detailLines.length * detailLineGap
         : 0);
@@ -428,6 +439,9 @@ export async function exportPurchaseOrderPdf(
     pdf.setFontSize(7);
     pdf.setTextColor(0, 0, 0);
     pdf.text(String(idx + 1), colMid.item, centerY, { align: 'center' });
+    codeLines.forEach((ln: string, i: number) => {
+      pdf.text(ln, col.code, descStartY + i * lineGap);
+    });
     descLines.forEach((ln: string, i: number) => {
       pdf.text(ln, col.desc, descStartY + i * lineGap);
     });

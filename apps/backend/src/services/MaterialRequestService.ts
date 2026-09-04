@@ -226,13 +226,16 @@ async function withRmItemProductKinds<T extends { items?: RmItemForProductKind[]
   }
 
   const typeByCmId = new Map<string, string | null>();
+  const codeByCmId = new Map<string, string | null>();
   if (cmIds.size > 0) {
     const rows = await prisma.constructionMaterial.findMany({
       where: { id: { in: Array.from(cmIds) } },
-      select: { id: true, productType: true, category: true }
+      select: { id: true, code: true, productType: true, category: true }
     });
     for (const row of rows) {
       typeByCmId.set(row.id, row.productType || row.category);
+      const catalogCode = (row.code || '').trim();
+      codeByCmId.set(row.id, catalogCode || null);
     }
   }
 
@@ -301,7 +304,12 @@ async function withRmItemProductKinds<T extends { items?: RmItemForProductKind[]
       }
 
       if (kind) kinds.add(kind);
-      return { ...item, productKind: kind };
+      const catalogCode = cmId ? codeByCmId.get(cmId) : null;
+      const material =
+        mat && catalogCode
+          ? { ...mat, code: catalogCode }
+          : mat;
+      return { ...item, material, productKind: kind };
     });
     const itemProductKinds = (['Materiais', 'Serviços'] as RmItemProductKind[]).filter((k) =>
       kinds.has(k)
@@ -556,7 +564,7 @@ export class MaterialRequestService {
       const eng = engByCode.get(sinapiCode)!;
       return {
         id: eng.id,
-        code: cm.name,
+        code: (cm.code || '').trim() || cm.name,
         sinapiCode: eng.sinapiCode,
         name: cm.name,
         description: cm.description || eng.description || '',
@@ -1033,23 +1041,27 @@ export class MaterialRequestService {
         );
         const files = parseDemandSheetAttachments(rows[0]?.demandSheetAttachments);
         if (files.length > 0) {
-          return this.attachAvgPaidToMaterialRequestItems({
-            ...enriched,
-            demandSheetAttachments: files,
-            demandSheetAttachmentUrl:
-              (enriched as { demandSheetAttachmentUrl?: string | null }).demandSheetAttachmentUrl ??
-              files[0].url,
-            demandSheetAttachmentName:
-              (enriched as { demandSheetAttachmentName?: string | null }).demandSheetAttachmentName ??
-              files[0].name,
-          });
+          const [withKinds] = await withRmItemProductKinds([
+            {
+              ...enriched,
+              demandSheetAttachments: files,
+              demandSheetAttachmentUrl:
+                (enriched as { demandSheetAttachmentUrl?: string | null }).demandSheetAttachmentUrl ??
+                files[0].url,
+              demandSheetAttachmentName:
+                (enriched as { demandSheetAttachmentName?: string | null }).demandSheetAttachmentName ??
+                files[0].name,
+            },
+          ]);
+          return this.attachAvgPaidToMaterialRequestItems(withKinds);
         }
       } catch {
         // ignora se a coluna ainda não existir
       }
     }
 
-    return this.attachAvgPaidToMaterialRequestItems(enriched);
+    const [withKinds] = await withRmItemProductKinds([enriched]);
+    return this.attachAvgPaidToMaterialRequestItems(withKinds);
   }
 
   /** Anexa média paga (últimas 10 OCs) em cada item — só referência (mapa/modais), não afeta OC. */

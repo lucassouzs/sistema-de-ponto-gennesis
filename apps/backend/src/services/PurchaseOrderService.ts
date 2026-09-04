@@ -47,6 +47,57 @@ function labelForOcCorrectionSource(previousStatus: string): string {
   return 'Aprovação';
 }
 
+function constructionMaterialIdFromSinapi(code?: string | null): string | null {
+  const s = (code || '').trim();
+  if (!s.startsWith('CM-')) return null;
+  const id = s.slice(3).trim();
+  return id || null;
+}
+
+type PoItemWithMaterial = {
+  material?: {
+    sinapiCode?: string | null;
+    code?: string | null;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+};
+
+/** Anexa ConstructionMaterial.code em material.code (ponte CM-*). */
+async function withPurchaseOrderCatalogCodes<T extends { items?: PoItemWithMaterial[] | null }>(
+  orders: T[]
+): Promise<T[]> {
+  const cmIds = new Set<string>();
+  for (const order of orders) {
+    for (const item of order.items ?? []) {
+      const cmId = constructionMaterialIdFromSinapi(item.material?.sinapiCode);
+      if (cmId) cmIds.add(cmId);
+    }
+  }
+  if (cmIds.size === 0) return orders;
+
+  const rows = await prisma.constructionMaterial.findMany({
+    where: { id: { in: Array.from(cmIds) } },
+    select: { id: true, code: true },
+  });
+  const codeByCmId = new Map(
+    rows.map((r) => [r.id, (r.code || '').trim() || null] as const)
+  );
+
+  return orders.map((order) => ({
+    ...order,
+    items: (order.items ?? []).map((item) => {
+      const cmId = constructionMaterialIdFromSinapi(item.material?.sinapiCode);
+      const catalogCode = cmId ? codeByCmId.get(cmId) : null;
+      if (!item.material || !catalogCode) return item;
+      return {
+        ...item,
+        material: { ...item.material, code: catalogCode },
+      };
+    }),
+  }));
+}
+
 async function resolveUserDisplayName(userId?: string): Promise<string | null> {
   if (!userId) return null;
   const user = await prisma.user.findUnique({
@@ -719,7 +770,7 @@ const purchaseOrderIncludeList = {
       unitPrice: true,
       totalPrice: true,
       materialId: true,
-      material: { select: { id: true, name: true, description: true, unit: true } }
+      material: { select: { id: true, name: true, description: true, unit: true, sinapiCode: true } }
     }
   }
 } as const;
@@ -1221,7 +1272,8 @@ export class PurchaseOrderService {
     ]);
     /** Listagem = só leitura. Syncs de estoque/boleto ficam no lançamento de estoque e nas mutações. */
     const enriched = await enrichOrdersParcelPlans(orders);
-    return { orders: enriched, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    const withCodes = includeItems ? await withPurchaseOrderCatalogCodes(enriched) : enriched;
+    return { orders: withCodes, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
   /**
@@ -1314,15 +1366,19 @@ export class PurchaseOrderService {
 
     /** GET de detalhe deve ser só leitura e rápido — syncs pesados ficam na listagem / mutações / estoque. */
     const [withPlan] = await enrichOrdersParcelPlans([order]);
-    return withPlan;
+    const [withCodes] = await withPurchaseOrderCatalogCodes([withPlan]);
+    return withCodes;
   }
 
   /** Dados mínimos para gerar o PDF da OC no cliente (bem mais leve que getById). */
   async getForPdf(id: string) {
-    return prisma.purchaseOrder.findUnique({
+    const order = await prisma.purchaseOrder.findUnique({
       where: { id },
       include: purchaseOrderIncludePdf
     });
+    if (!order) return null;
+    const [withCodes] = await withPurchaseOrderCatalogCodes([order]);
+    return withCodes;
   }
 
   /** Contexto leve para PATCH /status (evita getById com joins pesados só para checar permissão). */
