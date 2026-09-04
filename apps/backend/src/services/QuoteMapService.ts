@@ -808,12 +808,18 @@ export class QuoteMapService {
 
       if (kind === 'comparison' && sections.length > 0) {
         const supplierCount = sections.length;
+        const focusOcDisplay = comparisonFocusPo?.orderNumber
+          ? this.formatOcDisplayNumber(String(comparisonFocusPo.orderNumber))
+          : '';
+        const comparisonTitle = focusOcDisplay
+          ? `Comparativo — OC No. ${focusOcDisplay}`
+          : 'Comparativo';
         ensureSpace(48);
         doc
           .fillColor('#0F172A')
           .font('Helvetica-Bold')
           .fontSize(14)
-          .text('Comparativo', left, y, {
+          .text(comparisonTitle, left, y, {
             width: contentWidth,
             align: 'center',
           });
