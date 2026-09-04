@@ -4,12 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
+  FlatList,
   TextInput,
   Modal,
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  type ListRenderItemInfo,
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -50,6 +51,17 @@ const BOARD_GAP = 12;
 const COLUMN_BOTTOM_FADE_H = 52;
 /** Verde de conclusão (mesmo do web). */
 const COMPLETE_GREEN = '#61BD4F';
+/** Quadros grandes (centenas de cards) só sobrevivem no device se a lista for virtualizada. */
+const CARDS_INITIAL_RENDER = 6;
+const COLUMNS_INITIAL_RENDER = 2;
+
+function cardKeyExtractor(card: KanbanCard) {
+  return card.id;
+}
+
+function columnKeyExtractor(column: KanbanColumn) {
+  return column.id;
+}
 
 const COLUMN_COLORS = [
   '#6B7280',
@@ -229,7 +241,7 @@ function ProgressRing({
   );
 }
 
-function BoardCard({
+function BoardCardBase({
   card,
   styles,
   colors,
@@ -243,8 +255,8 @@ function BoardCard({
   colors: any;
   isDark: boolean;
   readOnly: boolean;
-  onPress: () => void;
-  onToggleComplete: () => void;
+  onPress: (card: KanbanCard) => void;
+  onToggleComplete: (card: KanbanCard) => void;
 }) {
   const suppressOpenRef = useRef(false);
   const labels = Array.isArray(card.labels) ? card.labels : [];
@@ -273,7 +285,7 @@ function BoardCard({
           suppressOpenRef.current = false;
           return;
         }
-        onPress();
+        onPress(card);
       }}
       activeOpacity={0.82}
     >
@@ -299,7 +311,7 @@ function BoardCard({
           onPress={() => {
             if (readOnly) return;
             suppressOpenRef.current = true;
-            onToggleComplete();
+            onToggleComplete(card);
           }}
           disabled={readOnly}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -383,6 +395,8 @@ function BoardCard({
   );
 }
 
+const BoardCard = React.memo(BoardCardBase);
+
 export default function KanbanBoardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'KanbanBoard'>>();
@@ -447,71 +461,79 @@ export default function KanbanBoardScreen() {
     queryKey: ['kanban-board', departmentKey ?? 'own'],
     queryFn: () => fetchKanbanBoard(departmentKey),
     enabled: !resolvingDefault,
+    /** Quadro grande é caro de baixar: reaproveita o cache e atualiza no pull-to-refresh. */
+    staleTime: 2 * 60 * 1000,
   });
 
   const board = boardQuery.data;
   const readOnly = board?.canWrite === false;
   const displayTitle = board?.department || headerTitle;
 
-  const openCard = (card: KanbanCard) => {
-    navigation.navigate('KanbanCard', {
-      cardId: card.id,
-      departmentKey: board?.departmentKey ?? departmentKey,
-    });
-  };
+  const openCard = useCallback(
+    (card: KanbanCard) => {
+      navigation.navigate('KanbanCard', {
+        cardId: card.id,
+        departmentKey: board?.departmentKey ?? departmentKey,
+      });
+    },
+    [navigation, board?.departmentKey, departmentKey],
+  );
 
-  const boardQueryKey = ['kanban-board', departmentKey ?? 'own'] as const;
+  const openAddCard = useCallback((columnId: string) => {
+    setNewTitle('');
+    setAddColId(columnId);
+  }, []);
 
-  const toggleCardComplete = async (card: KanbanCard) => {
-    if (readOnly) return;
-    const nextCompletedAt = card.completedAt ? null : new Date().toISOString();
-    const previousCompletedAt = card.completedAt ?? null;
+  const toggleCardComplete = useCallback(
+    async (card: KanbanCard) => {
+      if (readOnly) return;
+      const boardQueryKey = ['kanban-board', departmentKey ?? 'own'] as const;
+      const nextCompletedAt = card.completedAt ? null : new Date().toISOString();
+      const previousCompletedAt = card.completedAt ?? null;
 
-    queryClient.setQueryData<KanbanBoard>(boardQueryKey, (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        columns: (old.columns ?? []).map((col) => ({
-          ...col,
-          cards: (col.cards ?? []).map((c) =>
-            c.id === card.id ? { ...c, completedAt: nextCompletedAt } : c,
-          ),
-        })),
+      const patchCompletedAt = (cardId: string, completedAt: string | null) => {
+        queryClient.setQueryData<KanbanBoard>(boardQueryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            columns: (old.columns ?? []).map((col) => ({
+              ...col,
+              cards: (col.cards ?? []).map((c) =>
+                c.id === cardId ? { ...c, completedAt } : c,
+              ),
+            })),
+          };
+        });
       };
-    });
 
-    try {
-      const updated = await updateKanbanCard(card.id, { completedAt: nextCompletedAt });
-      queryClient.setQueryData<KanbanBoard>(boardQueryKey, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          columns: (old.columns ?? []).map((col) => ({
-            ...col,
-            cards: (col.cards ?? []).map((c) =>
-              c.id === card.id
-                ? { ...c, completedAt: updated.completedAt ?? nextCompletedAt }
-                : c,
-            ),
-          })),
-        };
-      });
-    } catch {
-      queryClient.setQueryData<KanbanBoard>(boardQueryKey, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          columns: (old.columns ?? []).map((col) => ({
-            ...col,
-            cards: (col.cards ?? []).map((c) =>
-              c.id === card.id ? { ...c, completedAt: previousCompletedAt } : c,
-            ),
-          })),
-        };
-      });
-      Toast.show({ type: 'error', text1: 'Não foi possível atualizar o status do card' });
-    }
-  };
+      patchCompletedAt(card.id, nextCompletedAt);
+
+      try {
+        const updated = await updateKanbanCard(card.id, { completedAt: nextCompletedAt });
+        patchCompletedAt(card.id, updated.completedAt ?? nextCompletedAt);
+      } catch {
+        patchCompletedAt(card.id, previousCompletedAt);
+        Toast.show({ type: 'error', text1: 'Não foi possível atualizar o status do card' });
+      }
+    },
+    [readOnly, departmentKey, queryClient],
+  );
+
+  const renderColumn = useCallback(
+    ({ item }: ListRenderItemInfo<KanbanColumn>) => (
+      <Column
+        column={item}
+        styles={styles}
+        colors={colors}
+        isDark={isDark}
+        readOnly={readOnly}
+        onOpenCard={openCard}
+        onToggleComplete={toggleCardComplete}
+        onAdd={openAddCard}
+      />
+    ),
+    [styles, colors, isDark, readOnly, openCard, toggleCardComplete, openAddCard],
+  );
 
   const addCard = async () => {
     const title = newTitle.trim();
@@ -585,11 +607,18 @@ export default function KanbanBoardScreen() {
           style={styles.boardArea}
           onLayout={(e) => setBoardAreaH(e.nativeEvent.layout.height)}
         >
-          <ScrollView
+          <FlatList
             horizontal
+            data={board?.columns ?? []}
+            keyExtractor={columnKeyExtractor}
+            renderItem={renderColumn}
             style={styles.boardScroll}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.boardPad}
+            initialNumToRender={COLUMNS_INITIAL_RENDER}
+            maxToRenderPerBatch={COLUMNS_INITIAL_RENDER}
+            updateCellsBatchingPeriod={60}
+            windowSize={3}
             refreshControl={
               <RefreshControl
                 refreshing={boardQuery.isRefetching}
@@ -597,43 +626,27 @@ export default function KanbanBoardScreen() {
                 tintColor={colors.primary}
               />
             }
-          >
-            {(board?.columns ?? []).map((col) => (
-              <Column
-                key={col.id}
-                column={col}
-                styles={styles}
-                colors={colors}
-                isDark={isDark}
-                readOnly={readOnly}
-                onOpenCard={openCard}
-                onToggleComplete={toggleCardComplete}
-                onAdd={() => {
-                  setNewTitle('');
-                  setAddColId(col.id);
-                }}
-              />
-            ))}
-
-            {!readOnly ? (
-              <TouchableOpacity
-                style={styles.newColumnBtn}
-                onPress={() => {
-                  setNewColumnTitle('');
-                  setNewColumnColor(
-                    COLUMN_COLORS[(board?.columns?.length ?? 0) % COLUMN_COLORS.length],
-                  );
-                  setAddColumnOpen(true);
-                }}
-                activeOpacity={0.75}
-              >
-                <View style={styles.newColumnInner}>
-                  <Plus size={22} color={colors.textSecondary} strokeWidth={2.4} />
-                  <Text style={styles.newColumnText}>Nova coluna</Text>
-                </View>
-              </TouchableOpacity>
-            ) : null}
-          </ScrollView>
+            ListFooterComponent={
+              readOnly ? null : (
+                <TouchableOpacity
+                  style={styles.newColumnBtn}
+                  onPress={() => {
+                    setNewColumnTitle('');
+                    setNewColumnColor(
+                      COLUMN_COLORS[(board?.columns?.length ?? 0) % COLUMN_COLORS.length],
+                    );
+                    setAddColumnOpen(true);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <View style={styles.newColumnInner}>
+                    <Plus size={22} color={colors.textSecondary} strokeWidth={2.4} />
+                    <Text style={styles.newColumnText}>Nova coluna</Text>
+                  </View>
+                </TouchableOpacity>
+              )
+            }
+          />
         </View>
       )}
 
@@ -730,7 +743,7 @@ export default function KanbanBoardScreen() {
   );
 }
 
-function Column({
+function ColumnBase({
   column,
   styles,
   colors,
@@ -747,7 +760,7 @@ function Column({
   readOnly: boolean;
   onOpenCard: (c: KanbanCard) => void;
   onToggleComplete: (c: KanbanCard) => void;
-  onAdd: () => void;
+  onAdd: (columnId: string) => void;
 }) {
   const columnBg = getKanbanColumnBg(column.color, isDark);
   const cards = Array.isArray(column.cards) ? column.cards : [];
@@ -766,6 +779,21 @@ function Column({
     updateBottomFade();
   }, [cards.length, updateBottomFade]);
 
+  const renderCard = useCallback(
+    ({ item }: ListRenderItemInfo<KanbanCard>) => (
+      <BoardCard
+        card={item}
+        styles={styles}
+        colors={colors}
+        isDark={isDark}
+        readOnly={readOnly}
+        onPress={onOpenCard}
+        onToggleComplete={onToggleComplete}
+      />
+    ),
+    [styles, colors, isDark, readOnly, onOpenCard, onToggleComplete],
+  );
+
   return (
     <View style={[styles.column, { backgroundColor: columnBg }]}>
       <View style={styles.colHeader}>
@@ -777,11 +805,18 @@ function Column({
       </View>
 
       <View style={styles.colScrollWrap}>
-        <ScrollView
+        <FlatList
+          data={cards}
+          keyExtractor={cardKeyExtractor}
+          renderItem={renderCard}
           style={styles.colScroll}
           nestedScrollEnabled
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.colScrollContent}
+          initialNumToRender={CARDS_INITIAL_RENDER}
+          maxToRenderPerBatch={CARDS_INITIAL_RENDER}
+          updateCellsBatchingPeriod={60}
+          windowSize={5}
           onLayout={(e) => {
             scrollH.current = e.nativeEvent.layout.height;
             updateBottomFade();
@@ -795,27 +830,18 @@ function Column({
             updateBottomFade();
           }}
           scrollEventThrottle={16}
-        >
-          {cards.map((card) => (
-            <BoardCard
-              key={card.id}
-              card={card}
-              styles={styles}
-              colors={colors}
-              isDark={isDark}
-              readOnly={readOnly}
-              onPress={() => onOpenCard(card)}
-              onToggleComplete={() => onToggleComplete(card)}
-            />
-          ))}
-        </ScrollView>
+        />
         {showBottomFade ? (
           <ColumnBottomFade color={columnBg} fadeId={`kanban-fade-${column.id}`} />
         ) : null}
       </View>
 
       {!readOnly ? (
-        <TouchableOpacity style={styles.addCardBtn} onPress={onAdd} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.addCardBtn}
+          onPress={() => onAdd(column.id)}
+          activeOpacity={0.7}
+        >
           <Plus size={16} color={colors.textSecondary} strokeWidth={2.4} />
           <Text style={styles.addCardText}>Adicionar card</Text>
         </TouchableOpacity>
@@ -823,6 +849,8 @@ function Column({
     </View>
   );
 }
+
+const Column = React.memo(ColumnBase);
 
 const stylesLocal = StyleSheet.create({
   priorityBars: {

@@ -858,7 +858,7 @@ export default function SolicitarCombustivelPage() {
               Abastecimento
             </h1>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
-              Frota vai direto ao Suprimentos; particular passa pelo gestor antes.
+              Solicite e acompanhe seus abastecimentos.
             </p>
           </div>
 

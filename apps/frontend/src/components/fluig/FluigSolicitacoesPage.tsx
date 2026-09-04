@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
 import {
@@ -602,6 +602,23 @@ function FluigHistoricoExpandable({ text }: { text: string }) {
   );
 }
 
+type FluigFilterCategory =
+  | 'filial'
+  | 'cc'
+  | 'setorSolicitante'
+  | 'urgencia'
+  | 'fornecedor'
+  | 'naturezaOrcamentaria';
+
+const NO_TOUCHED_FILTERS: Record<FluigFilterCategory, boolean> = {
+  filial: false,
+  cc: false,
+  setorSolicitante: false,
+  urgencia: false,
+  fornecedor: false,
+  naturezaOrcamentaria: false,
+};
+
 export function FluigSolicitacoesPage({
   config,
 }: {
@@ -619,11 +636,13 @@ export function FluigSolicitacoesPage({
   const [searchText, setSearchText] = useState('');
   const [periodFrom, setPeriodFrom] = useState('');
   const [periodTo, setPeriodTo] = useState('');
-  // Quando o usuário mexe em um filtro (Filial/CC/Fornecedor/…), ele vira o "ativo".
-  // Os outros ficam temporariamente ignorados no resultado para evitar influência cruzada.
-  const [activeFilterCategory, setActiveFilterCategory] = useState<
-    'filial' | 'cc' | 'setorSolicitante' | 'urgencia' | 'fornecedor' | 'naturezaOrcamentaria' | null
-  >(null);
+  // Marca quais categorias o usuário já ajustou. Enquanto uma categoria não é
+  // tocada, a seleção é mantida sincronizada com todas as opções disponíveis.
+  const [touchedFilters, setTouchedFilters] =
+    useState<Record<FluigFilterCategory, boolean>>(NO_TOUCHED_FILTERS);
+  const markFilterTouched = useCallback((category: FluigFilterCategory) => {
+    setTouchedFilters((prev) => (prev[category] ? prev : { ...prev, [category]: true }));
+  }, []);
   const [selectedEtapaIndex, setSelectedEtapaIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [detail, setDetail] = useState<{
@@ -866,7 +885,7 @@ export function FluigSolicitacoesPage({
     setSelectedEtapaIndex(0);
     setCurrentPage(1);
     setSearchText('');
-    setActiveFilterCategory(null);
+    setTouchedFilters(NO_TOUCHED_FILTERS);
   };
 
   function buildStatusList(values: Record<string, unknown>[], columns: string[]) {
@@ -1273,69 +1292,106 @@ export function FluigSolicitacoesPage({
   // Resetar todos os filtros APENAS quando o dataset mudar (troca de aba/dataset),
   // nunca quando o usuário alterar seleções (evita loop infinito por referência de array)
   useEffect(() => {
-    setSelectedFiliais(filiais);
-    setSelectedCCs(centrosCusto);
-    setSelectedSetoresSolicitantes(setoresSolicitantes);
-    setSelectedUrgencias(urgencias);
-    setSelectedFornecedores(fornecedores);
-    setSelectedNaturezasOrcamentarias(naturezasOrcamentarias);
+    setTouchedFilters(NO_TOUCHED_FILTERS);
     setPeriodFrom('');
     setPeriodTo('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasetId]);
 
+  // Categorias ainda não tocadas acompanham a lista completa de opções, para que
+  // "todas selecionadas" continue equivalente a "sem filtro" quando os dados chegam.
+  useEffect(() => {
+    if (!touchedFilters.filial) setSelectedFiliais(filiais);
+  }, [filiais, touchedFilters.filial]);
+
+  useEffect(() => {
+    if (!touchedFilters.cc) setSelectedCCs(centrosCusto);
+  }, [centrosCusto, touchedFilters.cc]);
+
+  useEffect(() => {
+    if (!touchedFilters.setorSolicitante) setSelectedSetoresSolicitantes(setoresSolicitantes);
+  }, [setoresSolicitantes, touchedFilters.setorSolicitante]);
+
+  useEffect(() => {
+    if (!touchedFilters.urgencia) setSelectedUrgencias(urgencias);
+  }, [urgencias, touchedFilters.urgencia]);
+
+  useEffect(() => {
+    if (!touchedFilters.fornecedor) setSelectedFornecedores(fornecedores);
+  }, [fornecedores, touchedFilters.fornecedor]);
+
+  useEffect(() => {
+    if (!touchedFilters.naturezaOrcamentaria) setSelectedNaturezasOrcamentarias(naturezasOrcamentarias);
+  }, [naturezasOrcamentarias, touchedFilters.naturezaOrcamentaria]);
+
   const hasPeriodFilter = Boolean(periodFrom || periodTo);
+  const isCategoryFiltered = (
+    touched: boolean,
+    col: string | null | undefined,
+    options: string[],
+    selected: string[]
+  ) => !!col && options.length > 0 && (touched || selected.length > 0) && selected.length < options.length;
   const hasActiveFilters =
     searchText.trim() !== '' ||
     hasPeriodFilter ||
-    (filialCol && filiais.length > 0 && (selectedFiliais.length === 0 || selectedFiliais.length < filiais.length)) ||
-    (ccColResolved && centrosCusto.length > 0 && (selectedCCs.length === 0 || selectedCCs.length < centrosCusto.length)) ||
-    (setorSolicitanteCol && setoresSolicitantes.length > 0 && (selectedSetoresSolicitantes.length === 0 || selectedSetoresSolicitantes.length < setoresSolicitantes.length)) ||
-    (urgenciaCol && urgencias.length > 0 && (selectedUrgencias.length === 0 || selectedUrgencias.length < urgencias.length)) ||
-    (fornecedorCol && fornecedores.length > 0 && (selectedFornecedores.length === 0 || selectedFornecedores.length < fornecedores.length)) ||
-    (naturezaOrcamentariaCol &&
-      naturezasOrcamentarias.length > 0 &&
-      (selectedNaturezasOrcamentarias.length === 0 || selectedNaturezasOrcamentarias.length < naturezasOrcamentarias.length));
+    isCategoryFiltered(touchedFilters.filial, filialCol, filiais, selectedFiliais) ||
+    isCategoryFiltered(touchedFilters.cc, ccColResolved, centrosCusto, selectedCCs) ||
+    isCategoryFiltered(
+      touchedFilters.setorSolicitante,
+      setorSolicitanteCol,
+      setoresSolicitantes,
+      selectedSetoresSolicitantes
+    ) ||
+    isCategoryFiltered(touchedFilters.urgencia, urgenciaCol, urgencias, selectedUrgencias) ||
+    isCategoryFiltered(touchedFilters.fornecedor, fornecedorCol, fornecedores, selectedFornecedores) ||
+    isCategoryFiltered(
+      touchedFilters.naturezaOrcamentaria,
+      naturezaOrcamentariaCol,
+      naturezasOrcamentarias,
+      selectedNaturezasOrcamentarias
+    );
 
   const filteredStatusList = useMemo(() => {
     const search = searchText.trim().toLowerCase();
-    const applyFilial = activeFilterCategory === 'filial';
-    const applyCC = activeFilterCategory === 'cc';
-    const applySetorSolicitante = activeFilterCategory === 'setorSolicitante';
-    const applyUrgencia = activeFilterCategory === 'urgencia';
-    const applyFornecedor = activeFilterCategory === 'fornecedor';
-    const applyNaturezaOrcamentaria = activeFilterCategory === 'naturezaOrcamentaria';
+    // Todos os filtros escolhidos são combinados (E lógico). Uma categoria só é
+    // ignorada quando não existe coluna/opção para ela ou quando o usuário nunca
+    // mexeu nela e a seleção inicial ainda não foi preenchida com os dados.
+    const applyFilial =
+      !!filialCol && filiais.length > 0 && (touchedFilters.filial || selectedFiliais.length > 0);
+    const applyCC =
+      !!ccColResolved && centrosCusto.length > 0 && (touchedFilters.cc || selectedCCs.length > 0);
+    const applySetorSolicitante =
+      !!setorSolicitanteCol
+      && setoresSolicitantes.length > 0
+      && (touchedFilters.setorSolicitante || selectedSetoresSolicitantes.length > 0);
+    const applyUrgencia =
+      !!urgenciaCol && urgencias.length > 0 && (touchedFilters.urgencia || selectedUrgencias.length > 0);
+    const applyFornecedor =
+      !!fornecedorCol
+      && fornecedores.length > 0
+      && (touchedFilters.fornecedor || selectedFornecedores.length > 0);
+    const applyNaturezaOrcamentaria =
+      !!naturezaOrcamentariaCol
+      && naturezasOrcamentarias.length > 0
+      && (touchedFilters.naturezaOrcamentaria || selectedNaturezasOrcamentarias.length > 0);
 
-    const byFiliais = applyFilial && selectedFiliais.length > 0 ? new Set(selectedFiliais) : null;
-    const byCCs = applyCC && selectedCCs.length > 0 ? new Set(selectedCCs) : null;
-    const bySetoresSolicitantes = applySetorSolicitante && selectedSetoresSolicitantes.length > 0 ? new Set(selectedSetoresSolicitantes) : null;
-    const byUrgencias = applyUrgencia && selectedUrgencias.length > 0 ? new Set(selectedUrgencias) : null;
-    const byFornecedores = applyFornecedor && selectedFornecedores.length > 0 ? new Set(selectedFornecedores) : null;
-    const byNaturezasOrcamentarias =
-      applyNaturezaOrcamentaria && selectedNaturezasOrcamentarias.length > 0 ? new Set(selectedNaturezasOrcamentarias) : null;
+    const byFiliais = applyFilial ? new Set(selectedFiliais) : null;
+    const byCCs = applyCC ? new Set(selectedCCs) : null;
+    const bySetoresSolicitantes = applySetorSolicitante ? new Set(selectedSetoresSolicitantes) : null;
+    const byUrgencias = applyUrgencia ? new Set(selectedUrgencias) : null;
+    const byFornecedores = applyFornecedor ? new Set(selectedFornecedores) : null;
+    const byNaturezasOrcamentarias = applyNaturezaOrcamentaria
+      ? new Set(selectedNaturezasOrcamentarias)
+      : null;
 
     const matchRow = (row: Record<string, unknown>) => {
-      // Aplica SOMENTE a categoria de filtro ativa; as outras não "interferem" no resultado.
-      if (applyFilial && filialCol && filiais.length > 0 && selectedFiliais.length === 0) return false;
-      if (applyCC && ccColResolved && centrosCusto.length > 0 && selectedCCs.length === 0) return false;
-      if (applySetorSolicitante && setorSolicitanteCol && setoresSolicitantes.length > 0 && selectedSetoresSolicitantes.length === 0) return false;
-      if (applyUrgencia && urgenciaCol && urgencias.length > 0 && selectedUrgencias.length === 0) return false;
-      if (applyFornecedor && fornecedorCol && fornecedores.length > 0 && selectedFornecedores.length === 0) return false;
-      if (
-        applyNaturezaOrcamentaria &&
-        naturezaOrcamentariaCol &&
-        naturezasOrcamentarias.length > 0 &&
-        selectedNaturezasOrcamentarias.length === 0
-      )
-        return false;
-
-      if (byFiliais && filialCol && !byFiliais.has(getFilialValue(row))) return false;
-      if (byCCs && ccColResolved && !byCCs.has(getCCValue(row))) return false;
-      if (bySetoresSolicitantes && setorSolicitanteCol && !bySetoresSolicitantes.has(getSetorSolicitanteValue(row))) return false;
-      if (byUrgencias && urgenciaCol && !byUrgencias.has(getUrgenciaValue(row))) return false;
+      if (byFiliais && !byFiliais.has(getFilialValue(row))) return false;
+      if (byCCs && !byCCs.has(getCCValue(row))) return false;
+      if (bySetoresSolicitantes && !bySetoresSolicitantes.has(getSetorSolicitanteValue(row))) return false;
+      if (byUrgencias && !byUrgencias.has(getUrgenciaValue(row))) return false;
       if (byFornecedores && fornecedorCol && !byFornecedores.has(String(row[fornecedorCol] ?? '').trim()))
         return false;
-      if (byNaturezasOrcamentarias && naturezaOrcamentariaCol && !byNaturezasOrcamentarias.has(getNaturezaOrcamentariaValue(row)))
+      if (byNaturezasOrcamentarias && !byNaturezasOrcamentarias.has(getNaturezaOrcamentariaValue(row)))
         return false;
       if (hasPeriodFilter) {
         const createdAt = movimentoDataHoraCol ? parseCellDate(row[movimentoDataHoraCol]) : null;
@@ -1382,7 +1438,7 @@ export function FluigSolicitacoesPage({
     urgencias.length,
     fornecedores.length,
     naturezasOrcamentarias.length,
-    activeFilterCategory,
+    touchedFilters,
     hasPeriodFilter,
     periodFrom,
     periodTo,
@@ -1417,7 +1473,7 @@ export function FluigSolicitacoesPage({
     setPeriodFrom('');
     setPeriodTo('');
     setSearchText('');
-    setActiveFilterCategory(null);
+    setTouchedFilters(NO_TOUCHED_FILTERS);
   };
 
   const exportRowsToXlsx = (rows: Record<string, unknown>[], etapaLabel: string) => {
@@ -1503,7 +1559,7 @@ export function FluigSolicitacoesPage({
                     options={filiais.map((f) => ({ value: f, label: f }))}
                     selected={selectedFiliais}
                     onChange={(next) => {
-                      setActiveFilterCategory('filial');
+                      markFilterTouched('filial');
                       setSelectedFiliais(next);
                     }}
                     placeholder="Todas"
@@ -1525,7 +1581,7 @@ export function FluigSolicitacoesPage({
                     })}
                     selected={selectedCCs}
                     onChange={(next) => {
-                      setActiveFilterCategory('cc');
+                      markFilterTouched('cc');
                       setSelectedCCs(next);
                     }}
                     placeholder="Todos"
@@ -1540,7 +1596,7 @@ export function FluigSolicitacoesPage({
                     options={setoresSolicitantes.map((s) => ({ value: s, label: s }))}
                     selected={selectedSetoresSolicitantes}
                     onChange={(next) => {
-                      setActiveFilterCategory('setorSolicitante');
+                      markFilterTouched('setorSolicitante');
                       setSelectedSetoresSolicitantes(next);
                     }}
                     placeholder="Todos"
@@ -1555,7 +1611,7 @@ export function FluigSolicitacoesPage({
                     options={urgencias.map((u) => ({ value: u, label: u }))}
                     selected={selectedUrgencias}
                     onChange={(next) => {
-                      setActiveFilterCategory('urgencia');
+                      markFilterTouched('urgencia');
                       setSelectedUrgencias(next);
                     }}
                     placeholder="Todas"
@@ -1570,7 +1626,7 @@ export function FluigSolicitacoesPage({
                     options={fornecedores.map((f) => ({ value: f, label: f }))}
                     selected={selectedFornecedores}
                     onChange={(next) => {
-                      setActiveFilterCategory('fornecedor');
+                      markFilterTouched('fornecedor');
                       setSelectedFornecedores(next);
                     }}
                     placeholder="Todos"
@@ -1585,7 +1641,7 @@ export function FluigSolicitacoesPage({
                     options={naturezaOrcamentariaFilterOptions}
                     selected={selectedNaturezasOrcamentarias}
                     onChange={(next) => {
-                      setActiveFilterCategory('naturezaOrcamentaria');
+                      markFilterTouched('naturezaOrcamentaria');
                       setSelectedNaturezasOrcamentarias(next);
                     }}
                     placeholder="Todas"

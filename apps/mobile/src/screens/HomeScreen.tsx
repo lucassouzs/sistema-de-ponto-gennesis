@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,7 +32,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { canSeeCombustivel, canSeeReservas } = usePermissions();
   const { items: liveItems } = useLiveActivities();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const firstName = user?.name?.trim().split(/\s+/)[0] || 'colaborador';
 

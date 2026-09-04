@@ -71,7 +71,7 @@ function buildTodayEvents(events: PlannerEvent[], nowMs: number): TodayItem[] {
 export default function HomeAgendaCard() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {

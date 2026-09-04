@@ -365,7 +365,7 @@ export default function FuelRequestsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const [rows, setRows] = useState<FuelRequestRow[]>([]);
   const [loading, setLoading] = useState(true);

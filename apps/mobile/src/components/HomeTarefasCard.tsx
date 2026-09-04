@@ -86,7 +86,7 @@ export default function HomeTarefasCard() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const queryClient = useQueryClient();
   const { colors, isDark } = useTheme();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const now = useMemo(() => new Date(), []);
 

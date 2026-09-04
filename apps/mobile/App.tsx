@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Platform, Animated, Easing } from 'react-native';
+import { View, Platform, Animated, Easing, InteractionManager } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { NavigationContainer } from '@react-navigation/native';
@@ -173,9 +173,13 @@ function StatusBarComponent() {
   const barStyle = onAuthSurface || isDark ? 'light' : 'dark';
 
   React.useEffect(() => {
-    if (Platform.OS === 'android') {
-      NavigationBar.setButtonStyleAsync(barStyle === 'light' ? 'light' : 'dark');
-    }
+    if (Platform.OS !== 'android') return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void NavigationBar.setButtonStyleAsync(barStyle === 'light' ? 'light' : 'dark').catch(
+        () => undefined,
+      );
+    });
+    return () => task.cancel();
   }, [barStyle]);
 
   return <StatusBar style={barStyle} />;

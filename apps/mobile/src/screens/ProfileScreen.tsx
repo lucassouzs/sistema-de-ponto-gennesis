@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -39,7 +39,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const { colors, isDark } = useTheme();
   const { unreadCount, openSheet } = useNotifications();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const handleLogout = () => {
     Alert.alert('Sair', 'Tem certeza que deseja sair?', [
