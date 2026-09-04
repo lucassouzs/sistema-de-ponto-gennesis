@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gennesis Conecta",
     "slug": "sistema-ponto-engenharia",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
     "userInterfaceStyle": "automatic",
@@ -28,7 +28,7 @@
       }
     },
     "android": {
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/favicon.png",
         "backgroundColor": "#111827"

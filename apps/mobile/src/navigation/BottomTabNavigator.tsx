@@ -29,7 +29,7 @@ export default function BottomTabNavigator() {
       }}
       screenOptions={{
         headerShown: false,
-        lazy: false,
+        lazy: true,
         tabBarStyle: {
           position: 'absolute',
           left: 0,

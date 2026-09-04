@@ -1,9 +1,21 @@
-import React from 'react';
-import { ImageBackground, StyleSheet, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { Image, ImageBackground, StyleSheet, View } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
 const BG_LIGHT = require('../../assets/backgrounds/padrao-engenharia-claro.png');
 const BG_DARK = require('../../assets/backgrounds/padrao-engenharia-escuro.png');
+
+/** Mantém os dois padrões em memória para a troca de tema não decodificar PNG do zero. */
+let themeBackgroundsPrefetched = false;
+
+function prefetchThemeBackgrounds() {
+  if (themeBackgroundsPrefetched) return;
+  themeBackgroundsPrefetched = true;
+  const light = Image.resolveAssetSource(BG_LIGHT)?.uri;
+  const dark = Image.resolveAssetSource(BG_DARK)?.uri;
+  if (light) void Image.prefetch(light);
+  if (dark) void Image.prefetch(dark);
+}
 
 type Props = {
   children: React.ReactNode;
@@ -11,16 +23,26 @@ type Props = {
 
 export default function ThemeBackground({ children }: Props) {
   const { isDark, colors } = useTheme();
-  const source = isDark ? BG_DARK : BG_LIGHT;
-  const patternOpacity = isDark ? 0.55 : 1;
+
+  useEffect(() => {
+    prefetchThemeBackgrounds();
+  }, []);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.appShell }]}>
       <ImageBackground
-        source={source}
+        source={BG_LIGHT}
         style={styles.pattern}
-        imageStyle={{ opacity: patternOpacity }}
+        imageStyle={{ opacity: isDark ? 0 : 1 }}
         resizeMode="repeat"
+        pointerEvents="none"
+      />
+      <ImageBackground
+        source={BG_DARK}
+        style={styles.pattern}
+        imageStyle={{ opacity: isDark ? 0.55 : 0 }}
+        resizeMode="repeat"
+        pointerEvents="none"
       />
       <View style={styles.content}>{children}</View>
     </View>

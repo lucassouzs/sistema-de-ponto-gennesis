@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ export default function NotificationsSheet() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { notifications, sheetVisible, closeSheet } = useNotifications();
-  const styles = getStyles(colors, isDark);
+  const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
   const canDismissRef = useRef(false);
 
   useEffect(() => {
