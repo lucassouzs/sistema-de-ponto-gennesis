@@ -1459,6 +1459,29 @@ body::-webkit-scrollbar:vertical {
   opacity: 0.45 !important;
 }
 
+.kanban-column-collapse-shell {
+  transition:
+    width 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+  will-change: width;
+}
+
+.kanban-column-collapse-body {
+  animation: kanban-column-content-in 0.22s ease both;
+}
+
+@keyframes kanban-column-content-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .kanban-column-settle {
   animation: kanban-column-settle 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1691,6 +1714,12 @@ body::-webkit-scrollbar:vertical {
   .kanban-column-drop-gutter-line,
   .kanban-card-reordering,
   .kanban-column-reordering {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .kanban-column-collapse-shell,
+  .kanban-column-collapse-body {
     animation: none !important;
     transition: none !important;
   }

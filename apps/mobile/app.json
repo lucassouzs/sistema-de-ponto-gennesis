@@ -82,8 +82,7 @@
     "extra": {
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
-      },
-      "EXPO_PUBLIC_API_URL": "https://sistema-pontobackend-production.up.railway.app"
+      }
     },
     "owner": "lucassouzss"
   }

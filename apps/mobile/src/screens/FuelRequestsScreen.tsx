@@ -425,7 +425,7 @@ export default function FuelRequestsScreen() {
       const [driversRes, vehiclesRes, contractsRes] = await Promise.all([
         api.get('/api/fuel-refuel-requests/driver-options'),
         api.get('/api/vehicles?isActive=true&limit=100&page=1'),
-        api.get('/api/contracts?limit=500&page=1'),
+        api.get('/api/fuel-refuel-requests/contracts'),
       ]);
       const driversJson = await driversRes.json();
       const vehiclesJson = await vehiclesRes.json();

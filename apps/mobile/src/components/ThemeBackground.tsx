@@ -18,7 +18,7 @@ export default function ThemeBackground({ children }: Props) {
     <View style={[styles.root, { backgroundColor: colors.appShell }]}>
       <ImageBackground
         source={source}
-        style={StyleSheet.absoluteFillObject}
+        style={styles.pattern}
         imageStyle={{ opacity: patternOpacity }}
         resizeMode="repeat"
       />
@@ -30,6 +30,13 @@ export default function ThemeBackground({ children }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  pattern: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   content: {
     flex: 1,

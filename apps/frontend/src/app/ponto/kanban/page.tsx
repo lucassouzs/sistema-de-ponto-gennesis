@@ -1516,6 +1516,7 @@ function KanbanColumnComponent({
     return (
       <div
         data-kanban-column
+        ref={columnRootRef}
         draggable={!!onColumnDragStart}
         onDragStart={
           onColumnDragStart
@@ -1530,12 +1531,12 @@ function KanbanColumnComponent({
         }
         onDragEnd={onColumnDragEnd}
         className={clsx(
-          'group/collapsed relative flex flex-col items-center w-[52px] flex-shrink-0 self-start h-auto',
-          'rounded-2xl',
+          'group/collapsed relative flex h-auto w-full flex-shrink-0 flex-col items-center self-start',
+          'rounded-2xl overflow-hidden',
           '[background-color:color-mix(in_srgb,var(--kanban-column-accent)_22%,#FFFFFF)]',
           'dark:[background-color:color-mix(in_srgb,var(--kanban-column-accent)_28%,rgb(31_41_55))]',
           'hover:brightness-[1.03] dark:hover:brightness-110',
-          'transition-[opacity,filter,background-color] duration-200 ease-out motion-reduce:transition-none',
+          'transition-[filter,background-color,opacity] duration-200 ease-out motion-reduce:transition-none',
           onColumnDragStart && 'cursor-grab active:cursor-grabbing',
           isColumnDragging && 'kanban-column-dragging',
           isCollapsedDropTarget &&
@@ -1553,6 +1554,7 @@ function KanbanColumnComponent({
             : (e) => onDrop(e, column.id, 0)
         }
       >
+        <div className="kanban-column-collapse-body mx-auto flex w-full max-w-[52px] flex-col items-center">
         <div className="flex flex-col items-center w-full pt-3 pb-2 select-none">
           <button
             type="button"
@@ -1591,6 +1593,7 @@ function KanbanColumnComponent({
             style={{ backgroundColor: column.color }}
           />
         </button>
+        </div>
       </div>
     );
   }
@@ -1612,11 +1615,11 @@ function KanbanColumnComponent({
       }
       onDragEnd={onColumnDragEnd}
       className={clsx(
-        'relative flex w-[340px] flex-shrink-0 flex-col rounded-2xl',
-        isChecklistView && 'h-full max-h-full min-h-0 overflow-hidden',
+        'relative flex w-full flex-shrink-0 flex-col rounded-2xl overflow-hidden',
+        isChecklistView && 'h-full max-h-full min-h-0',
         '[background-color:color-mix(in_srgb,var(--kanban-column-accent)_22%,#FFFFFF)]',
         'dark:[background-color:color-mix(in_srgb,var(--kanban-column-accent)_28%,rgb(31_41_55))]',
-        'transition-[opacity,box-shadow,background-color] duration-200 ease-out motion-reduce:transition-none',
+        'transition-[opacity,box-shadow,background-color,filter] duration-200 ease-out motion-reduce:transition-none',
         onColumnDragStart && 'cursor-grab active:cursor-grabbing [&_[data-kanban-card]]:cursor-pointer',
         isColumnDragging && 'kanban-column-dragging',
       )}
@@ -1645,6 +1648,12 @@ function KanbanColumnComponent({
             }
       }
     >
+      <div
+        className={clsx(
+          'kanban-column-collapse-body flex min-h-0 w-full min-w-[340px] flex-col',
+          isChecklistView && 'h-full',
+        )}
+      >
       <div
         className={clsx(
           'flex items-center justify-between px-4 pt-4 pb-2 select-none',
@@ -1938,7 +1947,7 @@ function KanbanColumnComponent({
               )}
           </div>
         )}
-        {!readOnly && !hasMoreCards && !isChecklistView && (
+        {!readOnly && !isChecklistView && (
           <button
             type="button"
             onClick={() => onAddCard(column.id, 'bottom')}
@@ -1955,7 +1964,7 @@ function KanbanColumnComponent({
         )}
         </div>
       </div>
-      {!readOnly && !hasMoreCards && isChecklistView && (
+      {!readOnly && isChecklistView && (
         <div className="shrink-0 px-3 pb-3 pt-1">
           <button
             type="button"
@@ -1971,6 +1980,7 @@ function KanbanColumnComponent({
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 }
@@ -4300,9 +4310,14 @@ function KanbanPage() {
                 <div
                   data-kanban-column-id={column.id}
                   className={clsx(
-                    'kanban-column-slot flex shrink-0',
-                    isChecklistBoard && 'h-full min-h-0',
+                    'kanban-column-slot kanban-column-collapse-shell flex shrink-0 overflow-hidden',
+                    isChecklistBoard &&
+                      !collapsedColumnIds.has(column.id) &&
+                      'h-full min-h-0',
                   )}
+                  style={{
+                    width: collapsedColumnIds.has(column.id) ? 52 : 340,
+                  }}
                   onDragOver={
                     boardReadOnly || !columnDrag.draggingColumnId
                       ? undefined

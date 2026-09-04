@@ -534,7 +534,7 @@ export default function SolicitacoesCombustivelPage() {
   const { data: contractsRes } = useQuery({
     queryKey: ['contracts-for-fuel-admin-edit'],
     queryFn: async () =>
-      (await api.get('/contracts', { params: { limit: 500, page: 1 } })).data,
+      (await api.get('/fuel-refuel-requests/contracts')).data,
     enabled: adminEditing && canAdminEditSelected,
     staleTime: 10 * 60 * 1000,
   });

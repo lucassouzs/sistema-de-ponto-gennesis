@@ -10,6 +10,9 @@ router.use(authenticate);
 router.get('/satellite-cities', (req, res, next) =>
   fuelRefuelRequestController.listSatelliteCitiesForRequester(req, res, next),
 );
+router.get('/contracts', (req, res, next) =>
+  fuelRefuelRequestController.listContractsForRequester(req, res, next),
+);
 router.get('/driver-lookup', (req, res, next) =>
   fuelRefuelRequestController.lookupDriver(req, res, next),
 );

@@ -4,11 +4,15 @@ import { Platform } from 'react-native';
 /** Backend de produção (Play Store / builds release). */
 const PRODUCTION_API = 'https://sistema-pontobackend-production.up.railway.app';
 
-/** IP do PC na Wi-Fi — só para desenvolvimento com `__DEV__`. */
+/** IP do PC na Wi-Fi — só para desenvolvimento com `__DEV__` (Expo Go no celular). */
 const LOCAL_LAN_API = 'http://192.168.15.93:5000';
 
 function normalizeBaseUrl(url: string) {
   return url.replace(/\/$/, '');
+}
+
+function isRemoteProductionUrl(url: string) {
+  return /railway\.app|gennesisconecta\.com/i.test(url);
 }
 
 const getApiBaseUrl = () => {
@@ -20,12 +24,19 @@ const getApiBaseUrl = () => {
   const fromExtra = (Constants.expoConfig?.extra?.EXPO_PUBLIC_API_URL as string | undefined)?.trim();
   const configured = fromEnv || fromExtra;
 
+  // Expo Go / metro: sempre backend local. Ignore Railway vindo do app.json/eas.
+  if (__DEV__) {
+    if (configured && !isRemoteProductionUrl(configured)) {
+      return normalizeBaseUrl(configured);
+    }
+    return normalizeBaseUrl(LOCAL_LAN_API);
+  }
+
   if (configured) {
     return normalizeBaseUrl(configured);
   }
 
-  // Fallback: em dev usa LAN; em release usa Railway.
-  return normalizeBaseUrl(__DEV__ ? LOCAL_LAN_API : PRODUCTION_API);
+  return normalizeBaseUrl(PRODUCTION_API);
 };
 
 export const API_CONFIG = {
