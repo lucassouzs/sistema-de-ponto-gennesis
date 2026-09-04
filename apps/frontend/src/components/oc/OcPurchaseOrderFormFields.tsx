@@ -462,7 +462,13 @@ export type OcFormOrderSource = {
   notes?: string | null;
   items?: Array<{
     materialId?: string;
-    material?: { id?: string; name?: string | null; description?: string | null; sinapiCode?: string | null };
+    material?: {
+      id?: string;
+      name?: string | null;
+      description?: string | null;
+      sinapiCode?: string | null;
+      code?: string | null;
+    };
     materialRequestItem?: { quantity?: number | string | null } | null;
     quantity: number | string;
     unit?: string | null;

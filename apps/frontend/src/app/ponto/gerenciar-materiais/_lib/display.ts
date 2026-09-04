@@ -120,12 +120,12 @@ export function rmContractDisplay(r: MaterialRequest): string {
 
 /** Item com material (SC / OC) — aceita variações de API (null em códigos). */
 export type MaterialLineItem = {
-  material: {
+  material?: {
     name?: string | null;
     description?: string | null;
     sinapiCode?: string | null;
     code?: string | null;
-  };
+  } | null;
 };
 
 function sanitizeMaterialDisplayText(value?: string | null): string {
