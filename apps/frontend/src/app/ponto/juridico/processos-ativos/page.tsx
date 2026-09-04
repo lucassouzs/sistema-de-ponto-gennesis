@@ -4,25 +4,17 @@ import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Archive,
   Briefcase,
-  FileCheck2,
   Filter,
-  Gavel,
-  LayoutGrid,
   Paperclip,
-  PauseCircle,
   Plus,
-  Scale,
   Search,
   X,
-  type LucideIcon,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { FilterStatCard } from '@/components/ui/FilterStatCard';
 import { Modal } from '@/components/ui/Modal';
 import {
   CadastroListEmpty,
@@ -64,7 +56,6 @@ import {
   statusBadgeClass,
   statusCardLabel,
   statusListTitle,
-  statusStatIconClasses,
   type JuridicoProcesso,
 } from '@/data/juridico-processos-ativos';
 import { parseBrDate } from '@/data/juridico-processos-dashboard';
@@ -124,8 +115,8 @@ type ListColumn = {
 const COLUMNS: ListColumn[] = [
   { key: 'reclamante', label: 'Reclamante' },
   { key: 'numeroProcesso', label: 'Nº Processo' },
-  { key: 'tribunal', label: 'Tribunal', align: 'center' },
-  { key: 'dataAudiencia', label: 'Data Audiência', align: 'center' },
+  { key: 'dataAbertura', label: 'Data Abertura', align: 'center' },
+  { key: 'dataAcordo', label: 'Data Acordo', align: 'center' },
   { key: 'status', label: 'Status', badge: true, align: 'center' },
   { key: 'contrato', label: 'Contrato', align: 'center' },
   { key: 'empresa', label: 'Empresa', align: 'center' },
@@ -171,17 +162,6 @@ function arquivosPendentesCount(row: JuridicoProcesso): number {
   return (row.anexosPendentes ?? 0) + (row.comprovantesPendentes ?? 0);
 }
 
-function statusStatIcon(status?: string | null): LucideIcon {
-  const s = (status || '').toUpperCase();
-  if (!status || status === 'all') return LayoutGrid;
-  if (s.includes('ARQUIV')) return Archive;
-  if (s.includes('ANDAMENTO')) return Scale;
-  if (s.includes('SUSPENS')) return PauseCircle;
-  if (s.includes('ACORDO')) return FileCheck2;
-  if (s.includes('INSTRU') || s.includes('AUDIEN')) return Gavel;
-  return Briefcase;
-}
-
 function FilterField({
   label,
   children,
@@ -197,6 +177,61 @@ function FilterField({
       {children}
     </div>
   );
+}
+
+function rowStatusKey(row: JuridicoProcesso): string {
+  return String(row.status || row.statusProcesso || 'INDEFINIDO').trim() || 'INDEFINIDO';
+}
+
+function matchesStatusFilter(row: JuridicoProcesso, status: string): boolean {
+  if (!status || status === 'all') return true;
+  const target = status.trim().toLowerCase();
+  if (!target) return true;
+  const statusValue = String(row.status || '').trim().toLowerCase();
+  const statusProcesso = String(row.statusProcesso || '').trim().toLowerCase();
+  return statusValue === target || statusProcesso === target;
+}
+
+function applyListAndSearchFilters(
+  rows: JuridicoProcesso[],
+  listFilters: ListFilters,
+  searchTerm: string,
+): JuridicoProcesso[] {
+  let next = rows;
+  if (listFilters.empresa) {
+    next = next.filter((row) => (row.empresa || '').trim() === listFilters.empresa);
+  }
+  if (listFilters.contrato) {
+    next = next.filter((row) => (row.contrato || '').trim() === listFilters.contrato);
+  }
+  if (listFilters.polo) {
+    next = next.filter((row) => (row.polo || '').trim() === listFilters.polo);
+  }
+  if (listFilters.arquivos === 'pendentes') {
+    next = next.filter((row) => arquivosPendentesCount(row) > 0);
+  } else if (listFilters.arquivos === 'vinculados') {
+    next = next.filter((row) => {
+      const total = arquivosCount(row);
+      return total > 0 && arquivosPendentesCount(row) === 0;
+    });
+  }
+  if (listFilters.dataAberturaDe || listFilters.dataAberturaAte) {
+    next = next.filter((row) =>
+      matchesDateRange(
+        row.dataAbertura,
+        listFilters.dataAberturaDe,
+        listFilters.dataAberturaAte,
+      ),
+    );
+  }
+  if (listFilters.dataAcordoDe || listFilters.dataAcordoAte) {
+    next = next.filter((row) =>
+      matchesDateRange(row.dataAcordo, listFilters.dataAcordoDe, listFilters.dataAcordoAte),
+    );
+  }
+  const term = normalizeSearchText(searchTerm.trim());
+  if (term) next = next.filter((row) => matchesSearch(row, term));
+  return next;
 }
 
 export default function ProcessosAtivosPage() {
@@ -227,27 +262,23 @@ export default function ProcessosAtivosPage() {
   });
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['juridico-processos', statusFilter],
+    queryKey: ['juridico-processos'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      const qs = params.toString();
-      const res = await api.get(`/juridico-processos${qs ? `?${qs}` : ''}`);
+      const res = await api.get('/juridico-processos');
       return {
         rows: (res.data?.data || []) as JuridicoProcesso[],
-        statusCount: (res.data?.meta?.statusCount || {}) as Record<string, number>,
         total: Number(res.data?.meta?.total || 0),
       };
     },
+    staleTime: 60_000,
   });
 
-  const statusCount = data?.statusCount || {};
+  const allRows = data?.rows || [];
   const filterOptions = useMemo(() => {
-    const all = data?.rows || [];
     const empresas = new Set<string>();
     const polos = new Set<string>();
     const contratos = new Map<string, string>();
-    for (const row of all) {
+    for (const row of allRows) {
       const empresa = (row.empresa || '').trim();
       if (empresa) empresas.add(empresa);
       const polo = (row.polo || '').trim();
@@ -264,7 +295,22 @@ export default function ProcessosAtivosPage() {
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR')),
     };
-  }, [data?.rows]);
+  }, [allRows]);
+
+  // Filtros da modal + busca entram nos cards; o card de status só afeta a tabela.
+  const filteredWithoutStatus = useMemo(
+    () => applyListAndSearchFilters(allRows, listFilters, searchTerm),
+    [allRows, listFilters, searchTerm],
+  );
+
+  const statusCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of filteredWithoutStatus) {
+      const key = rowStatusKey(row);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [filteredWithoutStatus]);
 
   const statusOptions = useMemo(
     () =>
@@ -275,47 +321,10 @@ export default function ProcessosAtivosPage() {
     [statusCount],
   );
 
-  const rows = useMemo(() => {
-    let next = data?.rows || [];
-    if (listFilters.empresa) {
-      next = next.filter((row) => (row.empresa || '').trim() === listFilters.empresa);
-    }
-    if (listFilters.contrato) {
-      next = next.filter((row) => (row.contrato || '').trim() === listFilters.contrato);
-    }
-    if (listFilters.polo) {
-      next = next.filter((row) => (row.polo || '').trim() === listFilters.polo);
-    }
-    if (listFilters.arquivos === 'pendentes') {
-      next = next.filter((row) => arquivosPendentesCount(row) > 0);
-    } else if (listFilters.arquivos === 'vinculados') {
-      next = next.filter((row) => {
-        const total = arquivosCount(row);
-        return total > 0 && arquivosPendentesCount(row) === 0;
-      });
-    }
-    if (listFilters.dataAberturaDe || listFilters.dataAberturaAte) {
-      next = next.filter((row) =>
-        matchesDateRange(
-          row.dataAbertura,
-          listFilters.dataAberturaDe,
-          listFilters.dataAberturaAte,
-        ),
-      );
-    }
-    if (listFilters.dataAcordoDe || listFilters.dataAcordoAte) {
-      next = next.filter((row) =>
-        matchesDateRange(
-          row.dataAcordo,
-          listFilters.dataAcordoDe,
-          listFilters.dataAcordoAte,
-        ),
-      );
-    }
-    const term = normalizeSearchText(searchTerm.trim());
-    if (term) next = next.filter((row) => matchesSearch(row, term));
-    return next;
-  }, [data?.rows, listFilters, searchTerm]);
+  const rows = useMemo(
+    () => filteredWithoutStatus.filter((row) => matchesStatusFilter(row, statusFilter)),
+    [filteredWithoutStatus, statusFilter],
+  );
 
   const filtersActive =
     statusFilter !== 'all' || Object.values(listFilters).some((value) => value !== '');
@@ -339,39 +348,7 @@ export default function ProcessosAtivosPage() {
     setCurrentPage(1);
   };
 
-  const statusCards = useMemo(() => {
-    const entries = Object.entries(statusCount).sort((a, b) => b[1] - a[1]);
-    return [
-      {
-        key: 'all',
-        label: 'Todos',
-        count: Object.values(statusCount).reduce((a, b) => a + b, 0),
-        icon: statusStatIcon('all'),
-        ...statusStatIconClasses('all'),
-      },
-      ...entries.map(([key, count]) => ({
-        key,
-        label: statusCardLabel(key),
-        count,
-        icon: statusStatIcon(key),
-        ...statusStatIconClasses(key),
-      })),
-    ];
-  }, [statusCount]);
-
-  const activeStatusVisual = useMemo(() => {
-    const card = statusCards.find((item) => item.key === statusFilter);
-    if (card) {
-      return { icon: card.icon, iconBg: card.iconBg, iconColor: card.iconColor };
-    }
-    return {
-      icon: statusStatIcon(statusFilter),
-      ...statusStatIconClasses(statusFilter),
-    };
-  }, [statusCards, statusFilter]);
-
   const listTitle = statusListTitle(statusFilter);
-  const ListHeaderIcon = activeStatusVisual.icon;
 
   const linkPendingKind: JuridicoLinkPendingKind | null =
     importAction === 'link-anexos'
@@ -404,36 +381,13 @@ export default function ProcessosAtivosPage() {
             </p>
           </div>
 
-          {statusCards.length > 1 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 2xl:grid-cols-5">
-              {statusCards.slice(0, 5).map((card) => (
-                <FilterStatCard
-                  key={card.key}
-                  label={card.label}
-                  count={card.count}
-                  icon={card.icon}
-                  iconBg={card.iconBg}
-                  iconColor={card.iconColor}
-                  isActive={statusFilter === card.key}
-                  loading={isLoading}
-                  onClick={() => {
-                    setStatusFilter((prev) => (prev === card.key ? 'all' : card.key));
-                    setCurrentPage(1);
-                  }}
-                />
-              ))}
-            </div>
-          ) : null}
-
           <Card className={cadastroListClasses.card}>
             <CardHeader className={cadastroListClasses.cardHeader}>
               <div className={cadastroListClasses.cardHeaderRow}>
                 <div className={cadastroListClasses.cardHeaderIconRow}>
-                  <div
-                    className={`shrink-0 rounded-lg p-2 sm:p-3 ${activeStatusVisual.iconBg}`}
-                  >
-                    <ListHeaderIcon
-                      className={`h-5 w-5 sm:h-6 sm:w-6 ${activeStatusVisual.iconColor}`}
+                  <div className="shrink-0 rounded-lg bg-red-50 p-2 sm:p-3 dark:bg-red-950/30">
+                    <Briefcase
+                      className="h-5 w-5 text-red-600 sm:h-6 sm:w-6 dark:text-red-400"
                       aria-hidden
                     />
                   </div>
@@ -510,7 +464,7 @@ export default function ProcessosAtivosPage() {
                 <div className="px-6 py-10 text-center text-sm text-gray-700 dark:text-gray-300">
                   {loadError}
                 </div>
-              ) : isLoading ? (
+              ) : isLoading && allRows.length === 0 ? (
                 <CadastroListLoading message="Carregando processos..." />
               ) : totalFiltered === 0 ? (
                 <CadastroListEmpty

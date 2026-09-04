@@ -671,6 +671,15 @@ export function FluigSolicitacoesPage({
       return acc;
     }, {});
   }, [datasets, config?.datasetTabLabels]);
+  const processCardOptions = useMemo(
+    () =>
+      datasets.map((ds) => ({
+        value: ds,
+        label: datasetTabLabels[ds],
+        title: DEFAULT_DATASET_TAB_TITLES[ds] ?? datasetTabLabels[ds],
+      })),
+    [datasets, datasetTabLabels]
+  );
   const g5TitleDatasets = useMemo(
     () => new Set(config?.g5TitleDatasets ?? [G5_RELATORIO_DATASET_ID]),
     [config?.g5TitleDatasets]
@@ -1523,11 +1532,7 @@ export function FluigSolicitacoesPage({
               pillClassName="bg-white shadow-sm dark:bg-gray-900"
               value={datasetId}
               onChange={(next) => handleDatasetTabClick(datasets.indexOf(next))}
-              options={datasets.map((ds) => ({
-                value: ds,
-                label: datasetTabLabels[ds],
-                title: DEFAULT_DATASET_TAB_TITLES[ds] ?? datasetTabLabels[ds],
-              }))}
+              options={processCardOptions}
             />
           </div>
         )}

@@ -18,6 +18,12 @@ type SegmentedControlProps<T extends string> = {
   'aria-label'?: string;
 };
 
+type PillState = { left: number; width: number; ready: boolean };
+
+function pillsEqual(a: PillState, b: PillState) {
+  return a.ready === b.ready && a.left === b.left && a.width === b.width;
+}
+
 export function SegmentedControl<T extends string>({
   value,
   onChange,
@@ -28,25 +34,31 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [pill, setPill] = useState({ left: 0, width: 0, ready: false });
+  const [pill, setPill] = useState<PillState>({ left: 0, width: 0, ready: false });
+  const valueRef = useRef(value);
+  const optionsRef = useRef(options);
+  valueRef.current = value;
+  optionsRef.current = options;
 
   const measure = useCallback(() => {
     const root = rootRef.current;
-    const idx = options.findIndex((o) => o.value === value);
+    const idx = optionsRef.current.findIndex((o) => o.value === valueRef.current);
     const btn = btnRefs.current[idx];
     if (!root || !btn) return;
     const rootRect = root.getBoundingClientRect();
     const btnRect = btn.getBoundingClientRect();
-    setPill({
-      left: btnRect.left - rootRect.left,
-      width: btnRect.width,
+    // Inteiros evitam jitter de subpixel reentrando no ResizeObserver.
+    const next: PillState = {
+      left: Math.round(btnRect.left - rootRect.left),
+      width: Math.round(btnRect.width),
       ready: true,
-    });
-  }, [options, value]);
+    };
+    setPill((prev) => (pillsEqual(prev, next) ? prev : next));
+  }, []);
 
   useLayoutEffect(() => {
     measure();
-  }, [measure]);
+  }, [measure, value, options]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;

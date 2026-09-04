@@ -12,11 +12,13 @@ import {
   Pencil,
   Plus,
   Receipt,
+  type LucideIcon,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
 import { JuridicoFileCard } from '@/components/juridico/JuridicoFileCard';
 import { JuridicoProcessoEditModal } from '@/components/juridico/JuridicoProcessoEditModal';
 import { useBreadcrumbEntity } from '@/hooks/useBreadcrumbEntity';
@@ -38,15 +40,47 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
         {label}
       </p>
-      <p className="mt-1 break-words text-sm font-medium text-gray-900 dark:text-gray-100">
+      <div className="mt-1 break-words text-sm font-medium text-gray-900 dark:text-gray-100">
         {value}
-      </p>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  actions,
+}: {
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className={cadastroListClasses.cardHeaderRow}>
+      <div className={cadastroListClasses.cardHeaderIconRow}>
+        <div className="shrink-0 rounded-lg bg-red-50 p-2 sm:p-3 dark:bg-red-950/30">
+          <Icon
+            className="h-5 w-5 text-red-600 sm:h-6 sm:w-6 dark:text-red-400"
+            aria-hidden
+          />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 sm:text-lg">
+            {title}
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
+        </div>
+      </div>
+      {actions ? <div className={cadastroListClasses.cardToolbar}>{actions}</div> : null}
     </div>
   );
 }
 
 const addBtnCls =
-  'inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700';
+  'inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700';
 
 export default function ProcessoAtivoDetailPage() {
   const router = useRouter();
@@ -152,20 +186,8 @@ export default function ProcessoAtivoDetailPage() {
             </Card>
           ) : (
             <>
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(status)}`}
-                    >
-                      {formatProcessoStatus(processo.status, processo.statusProcesso)}
-                    </span>
-                    {processo.acordo ? (
-                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 dark:bg-gray-800 dark:text-gray-200">
-                        Acordo: {processo.acordo}
-                      </span>
-                    ) : null}
-                  </div>
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                     {processo.reclamante}
                   </h1>
@@ -173,38 +195,39 @@ export default function ProcessoAtivoDetailPage() {
                     {processo.numeroProcesso}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <button
-                    type="button"
-                    onClick={() => setShowEdit(true)}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
-                  >
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                  </button>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 dark:border-gray-700">
-                    <Paperclip className="h-4 w-4" />
-                    {processo.anexos?.length || 0} anexos
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 dark:border-gray-700">
-                    <Receipt className="h-4 w-4" />
-                    {processo.comprovantes?.length || 0} comprovantes
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(true)}
+                  aria-label="Editar processo"
+                  title="Editar"
+                  className="inline-flex shrink-0 items-center justify-center rounded-md p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                >
+                  <Pencil className="h-5 w-5" />
+                </button>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Briefcase className="h-5 w-5 text-red-600" />
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Dados do processo
-                      </h2>
-                    </div>
+              <div className="grid gap-6 lg:grid-cols-3">
+                <Card className={`lg:col-span-2 ${cadastroListClasses.card}`}>
+                  <CardHeader className={cadastroListClasses.cardHeader}>
+                    <SectionHeader
+                      icon={Briefcase}
+                      title="Dados do processo"
+                      subtitle="Informações cadastrais e andamento processual"
+                    />
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <CardContent className={cadastroListClasses.cardContent}>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                      <Field
+                        label="Status"
+                        value={
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeClass(status)}`}
+                          >
+                            {formatProcessoStatus(processo.status, processo.statusProcesso)}
+                          </span>
+                        }
+                      />
+                      <Field label="Acordo" value={cellText(processo.acordo)} />
                       <Field label="Tribunal" value={cellText(processo.tribunal)} />
                       <Field label="Vara" value={cellText(processo.vara)} />
                       <Field label="Polo" value={cellText(processo.polo)} />
@@ -232,11 +255,11 @@ export default function ProcessoAtivoDetailPage() {
                       <Field label="Período" value={cellText(processo.periodo)} />
                       <Field label="Início trabalhado" value={cellText(processo.periodoInicio)} />
                       <Field label="Fim trabalhado" value={cellText(processo.periodoFim)} />
-                      <div className="sm:col-span-2 lg:col-span-3">
+                      <div className="sm:col-span-2 xl:col-span-3">
                         <Field label="Objeto" value={cellText(processo.objeto)} />
                       </div>
                       {processo.objeto2 ? (
-                        <div className="sm:col-span-2 lg:col-span-3">
+                        <div className="sm:col-span-2 xl:col-span-3">
                           <Field label="Objetos vinculados" value={cellText(processo.objeto2)} />
                         </div>
                       ) : null}
@@ -244,17 +267,16 @@ export default function ProcessoAtivoDetailPage() {
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5 text-red-600" />
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Datas e valores
-                      </h2>
-                    </div>
+                <Card className={cadastroListClasses.card}>
+                  <CardHeader className={cadastroListClasses.cardHeader}>
+                    <SectionHeader
+                      icon={Calendar}
+                      title="Datas e valores"
+                      subtitle="Prazos, acordos e valores do processo"
+                    />
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-4">
+                  <CardContent className={cadastroListClasses.cardContent}>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
                       <Field label="Data da abertura" value={cellText(processo.dataAbertura)} />
                       <Field label="Data da audiência" value={cellText(processo.dataAudiencia)} />
                       <Field label="Horário" value={cellText(processo.horario)} />
@@ -277,41 +299,44 @@ export default function ProcessoAtivoDetailPage() {
                 </Card>
               </div>
 
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Paperclip className="h-5 w-5 text-red-600" />
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Anexos / atas ({processo.anexos?.length || 0})
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className={addBtnCls}
-                      disabled={!!uploading}
-                      onClick={() => anexosInputRef.current?.click()}
-                    >
-                      {uploading === 'anexos' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      Adicionar
-                    </button>
-                    <input
-                      ref={anexosInputRef}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx,.zip,image/*,application/pdf"
-                      onChange={(e) => void handleUpload('anexos', e.target.files)}
-                    />
-                  </div>
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <SectionHeader
+                    icon={Paperclip}
+                    title={`Anexos / atas (${processo.anexos?.length || 0})`}
+                    subtitle="Documentos e atas vinculados ao processo"
+                    actions={
+                      <>
+                        <button
+                          type="button"
+                          className={addBtnCls}
+                          disabled={!!uploading}
+                          onClick={() => anexosInputRef.current?.click()}
+                        >
+                          {uploading === 'anexos' ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                          Adicionar
+                        </button>
+                        <input
+                          ref={anexosInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx,.zip,image/*,application/pdf"
+                          onChange={(e) => void handleUpload('anexos', e.target.files)}
+                        />
+                      </>
+                    }
+                  />
                 </CardHeader>
-                <CardContent>
+                <CardContent className={cadastroListClasses.cardContent}>
                   {!processo.anexos?.length ? (
-                    <p className="text-sm text-gray-500">Nenhum anexo vinculado a este processo.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Nenhum anexo vinculado a este processo.
+                    </p>
                   ) : (
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                       {processo.anexos.map((file) => (
@@ -329,41 +354,42 @@ export default function ProcessoAtivoDetailPage() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Receipt className="h-5 w-5 text-red-600" />
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Comprovantes de pagamento ({processo.comprovantes?.length || 0})
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      className={addBtnCls}
-                      disabled={!!uploading}
-                      onClick={() => comprovantesInputRef.current?.click()}
-                    >
-                      {uploading === 'comprovantes' ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      Adicionar
-                    </button>
-                    <input
-                      ref={comprovantesInputRef}
-                      type="file"
-                      multiple
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx,.zip,image/*,application/pdf"
-                      onChange={(e) => void handleUpload('comprovantes', e.target.files)}
-                    />
-                  </div>
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <SectionHeader
+                    icon={Receipt}
+                    title={`Comprovantes de pagamento (${processo.comprovantes?.length || 0})`}
+                    subtitle="Comprovantes financeiros vinculados ao processo"
+                    actions={
+                      <>
+                        <button
+                          type="button"
+                          className={addBtnCls}
+                          disabled={!!uploading}
+                          onClick={() => comprovantesInputRef.current?.click()}
+                        >
+                          {uploading === 'comprovantes' ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                          Adicionar
+                        </button>
+                        <input
+                          ref={comprovantesInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.doc,.docx,.xls,.xlsx,.zip,image/*,application/pdf"
+                          onChange={(e) => void handleUpload('comprovantes', e.target.files)}
+                        />
+                      </>
+                    }
+                  />
                 </CardHeader>
-                <CardContent>
+                <CardContent className={cadastroListClasses.cardContent}>
                   {!processo.comprovantes?.length ? (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       Nenhum comprovante vinculado a este processo.
                     </p>
                   ) : (
