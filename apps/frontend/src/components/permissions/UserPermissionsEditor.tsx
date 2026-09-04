@@ -72,6 +72,7 @@ type UserPermissionPayload = {
   allowedContractIds: string[];
   dpApprovalContractIds?: string[];
   restrictedDpApprovalCostCenterIds?: string[];
+  dpRequestViewCostCenterIds?: string[];
   contractModuleFlags?: Record<string, ContractModuleFlags>;
 };
 type PermissionUserListItem = {
@@ -110,6 +111,7 @@ const DEPRECATED_DP_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/apro
 const DEPRECATED_RM_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-requisicoes-materiais');
 const DEPRECATED_OC_GESTOR_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-oc-gestor');
 const RESTRICTED_DP_APPROVE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-restritas-dp');
+const DP_REQUEST_VIEW_CC_KEY = pathToModuleKey('/ponto/controle/ver-solicitacoes-internas-cc');
 
 const DEPRECATED_CONTROLE_KEYS = new Set([
   DEPRECATED_DP_APPROVE_CONTROLE_KEY,
@@ -144,9 +146,10 @@ function serializeFullBaseline(
   employeeActions: Set<ContractAction>,
   dpApprovalContractIds: Set<string>,
   moduleFlags: Record<string, ContractModuleFlags>,
-  restrictedDpApprovalCostCenterIds: Set<string> = new Set()
+  restrictedDpApprovalCostCenterIds: Set<string> = new Set(),
+  dpRequestViewCostCenterIds: Set<string> = new Set()
 ): string {
-  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}|rdp:${serializeContractIds(restrictedDpApprovalCostCenterIds)}`;
+  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}|rdp:${serializeContractIds(restrictedDpApprovalCostCenterIds)}|vcc:${serializeContractIds(dpRequestViewCostCenterIds)}`;
 }
 
 const EMPTY_PERMISSION_BASELINE = serializeFullBaseline(
@@ -565,6 +568,8 @@ export function UserPermissionsEditor({
   const [selectedDpApprovalContractIds, setSelectedDpApprovalContractIds] = useState<Set<string>>(new Set());
   const [selectedRestrictedDpApprovalCostCenterIds, setSelectedRestrictedDpApprovalCostCenterIds] =
     useState<Set<string>>(new Set());
+  const [selectedDpRequestViewCostCenterIds, setSelectedDpRequestViewCostCenterIds] =
+    useState<Set<string>>(new Set());
   const [contractModuleFlags, setContractModuleFlags] = useState<Record<string, ContractModuleFlags>>({});
   const [permissionActionModal, setPermissionActionModal] = useState<'menu' | 'copy' | 'restore' | null>(
     null
@@ -588,6 +593,8 @@ export function UserPermissionsEditor({
   selectedDpApprovalContractIdsRef.current = selectedDpApprovalContractIds;
   const selectedRestrictedDpApprovalCostCenterIdsRef = useRef(selectedRestrictedDpApprovalCostCenterIds);
   selectedRestrictedDpApprovalCostCenterIdsRef.current = selectedRestrictedDpApprovalCostCenterIds;
+  const selectedDpRequestViewCostCenterIdsRef = useRef(selectedDpRequestViewCostCenterIds);
+  selectedDpRequestViewCostCenterIdsRef.current = selectedDpRequestViewCostCenterIds;
   const contractModuleFlagsRef = useRef(contractModuleFlags);
   contractModuleFlagsRef.current = contractModuleFlags;
 
@@ -614,6 +621,7 @@ export function UserPermissionsEditor({
           allowedContractIds: string[];
           dpApprovalContractIds?: string[];
           restrictedDpApprovalCostCenterIds?: string[];
+          dpRequestViewCostCenterIds?: string[];
           contractModuleFlags?: Record<string, ContractModuleFlags>;
         };
         return {
@@ -628,6 +636,7 @@ export function UserPermissionsEditor({
           allowedContractIds: d.allowedContractIds ?? [],
           dpApprovalContractIds: d.dpApprovalContractIds ?? [],
           restrictedDpApprovalCostCenterIds: d.restrictedDpApprovalCostCenterIds ?? [],
+          dpRequestViewCostCenterIds: d.dpRequestViewCostCenterIds ?? [],
           contractModuleFlags: d.contractModuleFlags ?? {},
         } as UserPermissionPayload;
       }
@@ -732,6 +741,7 @@ export function UserPermissionsEditor({
     const rawDp = new Set(userPermissionData.dpApprovalContractIds ?? []);
     const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
     const nextRestrictedCc = new Set(userPermissionData.restrictedDpApprovalCostCenterIds ?? []);
+    const nextViewCc = new Set(userPermissionData.dpRequestViewCostCenterIds ?? []);
     const rawFlags = userPermissionData.contractModuleFlags ?? {};
     const emptyFlags = (): ContractModuleFlags => ({
       orcamento: false,
@@ -749,6 +759,7 @@ export function UserPermissionsEditor({
     setSelectedContractIds(nextContractIds);
     setSelectedDpApprovalContractIds(nextDpApproval);
     setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
+    setSelectedDpRequestViewCostCenterIds(nextViewCc);
     setContractModuleFlags(nextFlags);
     baselineSerializedRef.current = serializeFullBaseline(
       next,
@@ -757,7 +768,8 @@ export function UserPermissionsEditor({
       nextEmployee,
       nextDpApproval,
       nextFlags,
-      nextRestrictedCc
+      nextRestrictedCc,
+      nextViewCc
     );
     hydratedRef.current = true;
   }, [userPermissionData]);
@@ -815,6 +827,9 @@ export function UserPermissionsEditor({
       const restrictedDpApprovalCostCenterIds = currentSelected.has(RESTRICTED_DP_APPROVE_KEY)
         ? Array.from(selectedRestrictedDpApprovalCostCenterIdsRef.current)
         : [];
+      const dpRequestViewCostCenterIds = currentSelected.has(DP_REQUEST_VIEW_CC_KEY)
+        ? Array.from(selectedDpRequestViewCostCenterIdsRef.current)
+        : [];
       const contractModuleFlagsPayload = contractModuleFlagsRef.current;
       if (isPositionMode) {
         await api.put('/permissions/position-template', {
@@ -823,6 +838,7 @@ export function UserPermissionsEditor({
           allowedContractIds,
           dpApprovalContractIds,
           restrictedDpApprovalCostCenterIds,
+          dpRequestViewCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       } else {
@@ -831,6 +847,7 @@ export function UserPermissionsEditor({
           allowedContractIds,
           dpApprovalContractIds,
           restrictedDpApprovalCostCenterIds,
+          dpRequestViewCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       }
@@ -844,7 +861,8 @@ export function UserPermissionsEditor({
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
         contractModuleFlagsRef.current,
-        selectedRestrictedDpApprovalCostCenterIdsRef.current
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       await queryClient.invalidateQueries({ queryKey: ['permission-users'] });
       await queryClient.invalidateQueries({ queryKey: ['me-permissions'] });
@@ -872,6 +890,7 @@ export function UserPermissionsEditor({
             restrictedDpApprovalCostCenterIds: Array.from(
               selectedRestrictedDpApprovalCostCenterIdsRef.current
             ),
+            dpRequestViewCostCenterIds: Array.from(selectedDpRequestViewCostCenterIdsRef.current),
             contractModuleFlags: updatedFlags,
           };
         });
@@ -949,7 +968,8 @@ export function UserPermissionsEditor({
       employeeActionsSet,
       selectedDpApprovalContractIds,
       contractModuleFlags,
-      selectedRestrictedDpApprovalCostCenterIds
+      selectedRestrictedDpApprovalCostCenterIds,
+      selectedDpRequestViewCostCenterIds
     );
     if (serialized === baselineSerializedRef.current) return;
 
@@ -961,7 +981,8 @@ export function UserPermissionsEditor({
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
         contractModuleFlagsRef.current,
-        selectedRestrictedDpApprovalCostCenterIdsRef.current
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
       enqueuePersistPermissions();
@@ -975,6 +996,7 @@ export function UserPermissionsEditor({
     selectedContractIds,
     selectedDpApprovalContractIds,
     selectedRestrictedDpApprovalCostCenterIds,
+    selectedDpRequestViewCostCenterIds,
     contractModuleFlags,
     loadingPermissions,
     permissionError,
@@ -994,7 +1016,8 @@ export function UserPermissionsEditor({
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
         contractModuleFlagsRef.current,
-        selectedRestrictedDpApprovalCostCenterIdsRef.current
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
       enqueuePersistPermissions();
@@ -1208,6 +1231,7 @@ export function UserPermissionsEditor({
     allowedContractIds?: string[];
     dpApprovalContractIds?: string[];
     restrictedDpApprovalCostCenterIds?: string[];
+    dpRequestViewCostCenterIds?: string[];
     contractModuleFlags?: Record<string, ContractModuleFlags>;
   }) => {
     const perms = source.permissions ?? [];
@@ -1231,6 +1255,7 @@ export function UserPermissionsEditor({
     const rawDp = new Set(source.dpApprovalContractIds ?? []);
     const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
     const nextRestrictedCc = new Set(source.restrictedDpApprovalCostCenterIds ?? []);
+    const nextViewCc = new Set(source.dpRequestViewCostCenterIds ?? []);
     const rawFlags = source.contractModuleFlags ?? {};
     const emptyFlags = (): ContractModuleFlags => ({
       orcamento: false,
@@ -1248,6 +1273,7 @@ export function UserPermissionsEditor({
     setSelectedContractIds(nextContractIds);
     setSelectedDpApprovalContractIds(nextDpApproval);
     setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
+    setSelectedDpRequestViewCostCenterIds(nextViewCc);
     setContractModuleFlags(nextFlags);
   };
 
@@ -1294,6 +1320,7 @@ export function UserPermissionsEditor({
     setSelectedRestrictedDpApprovalCostCenterIds(
       new Set(source.restrictedDpApprovalCostCenterIds ?? [])
     );
+    setSelectedDpRequestViewCostCenterIds(new Set(source.dpRequestViewCostCenterIds ?? []));
     toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
   };
 
@@ -1381,6 +1408,7 @@ export function UserPermissionsEditor({
         allowedContractIds?: string[];
         dpApprovalContractIds?: string[];
         restrictedDpApprovalCostCenterIds?: string[];
+        dpRequestViewCostCenterIds?: string[];
         contractModuleFlags?: Record<string, ContractModuleFlags>;
       };
       applyPermissionsPayload({
@@ -1388,6 +1416,7 @@ export function UserPermissionsEditor({
         allowedContractIds: data?.allowedContractIds ?? [],
         dpApprovalContractIds: data?.dpApprovalContractIds ?? [],
         restrictedDpApprovalCostCenterIds: data?.restrictedDpApprovalCostCenterIds ?? [],
+        dpRequestViewCostCenterIds: data?.dpRequestViewCostCenterIds ?? [],
         contractModuleFlags: data?.contractModuleFlags ?? {},
       });
       toast.success('Padrões do cargo restaurados. Salvamento automático em andamento.');
@@ -1412,7 +1441,8 @@ export function UserPermissionsEditor({
       employeeActionsSet,
       selectedDpApprovalContractIds,
       contractModuleFlags,
-      selectedRestrictedDpApprovalCostCenterIds
+      selectedRestrictedDpApprovalCostCenterIds,
+      selectedDpRequestViewCostCenterIds
     ) !== baselineSerializedRef.current;
 
   const handleBackWithSave = async () => {
@@ -1635,6 +1665,7 @@ export function UserPermissionsEditor({
                             const lbl = labelFor(mod);
                             const liberado = selectedSet.has(mod.key);
                             const isRestrictedApprove = mod.key === RESTRICTED_DP_APPROVE_KEY;
+                            const isViewByCostCenter = mod.key === DP_REQUEST_VIEW_CC_KEY;
                             return (
                               <tr
                                 key={mod.key}
@@ -1661,6 +1692,25 @@ export function UserPermissionsEditor({
                                             )}
                                             onChange={(ids) =>
                                               setSelectedRestrictedDpApprovalCostCenterIds(new Set(ids))
+                                            }
+                                            options={restrictedCostCenterOptions}
+                                            placeholder="Selecionar centros de custo..."
+                                            searchPlaceholder="Pesquisar centro de custo..."
+                                            emptyOptionsMessage="Nenhum centro de custo ativo"
+                                            noFocusRing
+                                          />
+                                        </div>
+                                      ) : null}
+                                      {isViewByCostCenter && liberado ? (
+                                        <div className="mt-2 max-w-xl">
+                                          <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Centros de custo cujas solicitações internas esta
+                                            pessoa pode ver, além das que ela mesma criou
+                                          </p>
+                                          <MultiSelectSearchDropdown
+                                            selected={Array.from(selectedDpRequestViewCostCenterIds)}
+                                            onChange={(ids) =>
+                                              setSelectedDpRequestViewCostCenterIds(new Set(ids))
                                             }
                                             options={restrictedCostCenterOptions}
                                             placeholder="Selecionar centros de custo..."

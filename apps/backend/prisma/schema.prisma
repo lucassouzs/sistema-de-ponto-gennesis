@@ -73,6 +73,8 @@ model User {
   updatedDpApprovalContracts                UserDpApprovalContract[]             @relation("UserDpApprovalContractUpdatedBy")
   userRestrictedDpApprovalCostCenters       UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUser")
   updatedRestrictedDpApprovalCostCenters    UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUpdatedBy")
+  userDpRequestViewCostCenters              UserDpRequestViewCostCenter[]        @relation("UserDpRequestViewCostCenterUser")
+  updatedDpRequestViewCostCenters           UserDpRequestViewCostCenter[]        @relation("UserDpRequestViewCostCenterUpdatedBy")
   stockMovements                            StockMovement[]
   stockShortfallsResolved                   StockShortfall[]                     @relation("StockShortfallResolver")
   driveFolders                              DriveFolder[]                        @relation("DriveFolderOwner")
@@ -1085,6 +1087,7 @@ model CostCenter {
   espelhoNfMirrors          EspelhoNfMirror[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
   restrictedDpApprovalUsers UserRestrictedDpApprovalCostCenter[]
+  dpRequestViewUsers        UserDpRequestViewCostCenter[]
 
   @@index([code])
   @@index([isActive])
@@ -2460,6 +2463,25 @@ model UserRestrictedDpApprovalCostCenter {
   @@map("user_restricted_dp_approval_cost_centers")
 }
 
+/// Centros de custo cujas solicitações internas o usuário pode ver (além das próprias).
+model UserDpRequestViewCostCenter {
+  id           String   @id @default(cuid())
+  userId       String
+  costCenterId String
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation("UserDpRequestViewCostCenterUser", fields: [userId], references: [id], onDelete: Cascade)
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  updater    User?      @relation("UserDpRequestViewCostCenterUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([userId, costCenterId])
+  @@index([userId])
+  @@index([costCenterId])
+  @@map("user_dp_request_view_cost_centers")
+}
+
 /// UsuÃ¡rios autorizados a ver a pÃ¡gina de um aprovador especÃ­fico no Fluig (fluxos G3/G5).
 model FluigWorkflowApproverViewer {
   id              String   @id @default(cuid())
@@ -2487,6 +2509,7 @@ model PositionPermissionTemplate {
   allowedContractIds                Json     @default("[]")
   dpApprovalContractIds             Json     @default("[]")
   restrictedDpApprovalCostCenterIds Json     @default("[]")
+  dpRequestViewCostCenterIds        Json     @default("[]")
   /// Map contractId -> { orcamento, relatorios, ordemServico, producaoSemanal, recebimentoEntregas }
   contractModuleFlags               Json     @default("{}")
   updatedAt                         DateTime @updatedAt

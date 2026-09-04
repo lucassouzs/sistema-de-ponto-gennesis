@@ -14,6 +14,9 @@ export const ADM_TST_MANAGE_MODULE_KEY = pathToModuleKey('/ponto/gerenciar-solic
 export const DP_SOLICITACOES_MODULE_KEY = pathToModuleKey('/ponto/solicitacoes-dp');
 /** Controle: rescisão e alteração de função/salário (além de admin, gerenciar DP ou Gestor DP no contrato). */
 export const DP_SENSITIVE_CREATE_MODULE_KEY = pathToModuleKey('/ponto/controle/criar-tipos-restritos-dp');
+export const DP_REQUEST_VIEW_CC_MODULE_KEY = pathToModuleKey(
+  '/ponto/controle/ver-solicitacoes-internas-cc'
+);
 
 export const SENSITIVE_DP_REQUEST_TYPES = ['RESCISAO', 'ALTERACAO_FUNCAO_SALARIO'] as const;
 
@@ -47,6 +50,29 @@ export async function userHasRestrictedDpApprovePermission(userId: string): Prom
     },
   });
   return !!row;
+}
+
+export async function userHasDpRequestViewCostCenterPermission(userId: string): Promise<boolean> {
+  const row = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: DP_REQUEST_VIEW_CC_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
+      allowed: true,
+    },
+  });
+  return !!row;
+}
+
+/** Centros de custo cujas solicitações internas o usuário pode ver além das próprias. */
+export async function getDpRequestViewCostCenterIds(userId: string): Promise<string[]> {
+  const hasPerm = await userHasDpRequestViewCostCenterPermission(userId);
+  if (!hasPerm) return [];
+  const rows = await prisma.userDpRequestViewCostCenter.findMany({
+    where: { userId },
+    select: { costCenterId: true },
+  });
+  return rows.map((r) => r.costCenterId);
 }
 
 export async function getRestrictedDpApprovalCostCenterIds(

@@ -9,6 +9,7 @@ import {
   assertCanAttachContractToDpRequest,
   assertManagerCanApproveDpRequest,
   getDpManagerApprovalVisibilityWhere,
+  getDpRequestViewCostCenterIds,
   isSensitiveDpRequestType,
   userMayCreateSensitiveDpRequest,
 } from '../lib/dpApprovalAccess';
@@ -386,10 +387,18 @@ export class DpRequestController {
       if (!employee) throw createError('Funcionário não encontrado', 404);
 
       const { status } = req.query;
+      const viewCostCenterIds = await getDpRequestViewCostCenterIds(req.user.id);
 
-      const where: any = { employeeId: employee.id };
+      const where: Prisma.DpRequestWhereInput = {
+        OR: [
+          { employeeId: employee.id },
+          ...(viewCostCenterIds.length > 0
+            ? [{ costCenterId: { in: viewCostCenterIds } }]
+            : []),
+        ],
+      };
       if (status && typeof status === 'string' && status !== 'all') {
-        where.status = status;
+        where.status = status as Prisma.DpRequestWhereInput['status'];
       }
 
       const requests = await prisma.dpRequest.findMany({

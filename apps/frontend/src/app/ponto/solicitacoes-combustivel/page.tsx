@@ -11,6 +11,7 @@ import {
   CheckCircle,
   Clock,
   Eye,
+  FileText,
   Filter,
   Fuel,
   MoreVertical,
@@ -47,6 +48,11 @@ import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDr
 import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
 import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { usePermissions } from '@/hooks/usePermissions';
+import {
+  VehicleReturnPhotoField,
+  isBlankVehiclePhoto,
+} from '@/components/ui/VehicleReturnPhotoField';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
 
 type FuelVehicleType = 'PRIVATE' | 'COMPANY';
 type FuelTankLevelAfter = 'RESERVE' | 'QUARTER' | 'HALF' | 'THREE_QUARTERS' | 'FULL';
@@ -66,9 +72,9 @@ type DetailStatusFilter = 'ALL' | 'SUPPLIES_QUEUE' | FuelRefuelStatus;
 
 const DETAIL_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
   { value: 'ALL', label: 'Todos do card selecionado' },
-  { value: 'SUPPLIES_QUEUE', label: 'Pendentes e Abastecimento Liberado' },
+  { value: 'SUPPLIES_QUEUE', label: 'Pendentes e Liberado' },
   { value: 'PENDING_SUPPLIES', label: 'Pendente' },
-  { value: 'AWAITING_REFUEL', label: 'Abastecimento Liberado' },
+  { value: 'AWAITING_REFUEL', label: 'Liberado' },
   { value: 'PENDING_MANAGER', label: 'Aguardando aprovação' },
   { value: 'COMPLETED', label: 'Concluídas' },
   { value: 'REJECTED', label: 'Rejeitadas' },
@@ -280,13 +286,48 @@ type FuelRefuelRequest = {
   suppliesApprover?: { id: string; name: string } | null;
 };
 
-const TANK_LEVEL_LABELS: Record<FuelTankLevelAfter, string> = {
-  RESERVE: 'Reserva',
-  QUARTER: '1/4 do tanque',
-  HALF: '1/2 do tanque',
-  THREE_QUARTERS: '3/4 do tanque',
-  FULL: 'Tanque cheio',
+const TANK_LEVEL_OPTIONS: Array<{ value: FuelTankLevelAfter; label: string }> = [
+  { value: 'RESERVE', label: 'Reserva' },
+  { value: 'QUARTER', label: '1/4 do tanque' },
+  { value: 'HALF', label: '1/2 do tanque' },
+  { value: 'THREE_QUARTERS', label: '3/4 do tanque' },
+  { value: 'FULL', label: 'Tanque cheio' },
+];
+
+const TANK_LEVEL_LABELS: Record<FuelTankLevelAfter, string> = Object.fromEntries(
+  TANK_LEVEL_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<FuelTankLevelAfter, string>;
+
+type ReportFormState = {
+  odometerKm: string;
+  tankLevelAfter: FuelTankLevelAfter | '';
+  litersRefueled: string;
+  pricePerLiter: string;
+  receiptPhoto: string;
+  observations: string;
 };
+
+function EMPTY_REPORT_FORM(): ReportFormState {
+  return {
+    odometerKm: '',
+    tankLevelAfter: '',
+    litersRefueled: '',
+    pricePerLiter: '',
+    receiptPhoto: '',
+    observations: '',
+  };
+}
+
+function parseBrDecimal(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, '');
+  if (!cleaned) return null;
+  if (cleaned.includes(',')) {
+    const n = Number(cleaned.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
 
 const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
   PRIVATE: 'Particular',
@@ -296,7 +337,7 @@ const VEHICLE_TYPE_LABELS: Record<FuelVehicleType, string> = {
 const STATUS_LABELS: Record<FuelRefuelStatus, string> = {
   PENDING_MANAGER: 'Aguardando aprovação',
   PENDING_SUPPLIES: 'Pendente',
-  AWAITING_REFUEL: 'Abastecimento Liberado',
+  AWAITING_REFUEL: 'Liberado',
   COMPLETED: 'Concluída',
   APPROVED: 'Pendente',
   REJECTED: 'Rejeitada',
@@ -392,6 +433,9 @@ export default function SolicitacoesCombustivelPage() {
   const [refuelDeadlineUnit, setRefuelDeadlineUnit] = useState<FuelRefuelDeadlineUnit>('HOURS');
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [reportTarget, setReportTarget] = useState<FuelRefuelRequest | null>(null);
+  const [reportForm, setReportForm] = useState<ReportFormState>(EMPTY_REPORT_FORM);
   const [actionMenu, setActionMenu] = useState<{
     requestId: string;
     top: number;
@@ -524,6 +568,51 @@ export default function SolicitacoesCombustivelPage() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post(`/fuel-refuel-requests/${id}/cancel`);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success('Solicitação cancelada');
+      setSelected(null);
+      setShowCancelConfirm(false);
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests-supplies'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-supplies-pending-count'] });
+    },
+    onError: (err: { response?: { data?: { error?: string; message?: string } } }) => {
+      toast.error(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Erro ao cancelar solicitação',
+      );
+    },
+  });
+
+  const reportMutation = useMutation({
+    mutationFn: async (payload: { id: string; body: Record<string, unknown> }) => {
+      const res = await api.post(`/fuel-refuel-requests/${payload.id}/report`, payload.body);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Abastecimento informado');
+      setReportTarget(null);
+      setReportForm(EMPTY_REPORT_FORM());
+      setSelected(null);
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-refuel-requests-supplies'] });
+      void queryClient.invalidateQueries({ queryKey: ['fuel-supplies-pending-count'] });
+    },
+    onError: (err: { response?: { data?: { error?: string; message?: string } } }) => {
+      toast.error(
+        err.response?.data?.message ||
+          err.response?.data?.error ||
+          'Erro ao informar abastecimento',
+      );
+    },
+  });
+
   const contractId = selected?.contract?.id;
   const costCenterLabel = selected?.costCenter || selected?.contract?.name || '';
 
@@ -619,13 +708,61 @@ export default function SolicitacoesCombustivelPage() {
     return records.find((r) => r.id === actionMenu.requestId) ?? null;
   }, [actionMenu, records]);
 
-  const openRequestDetail = (row: FuelRefuelRequest, opts?: { reject?: boolean }) => {
+  const openRequestDetail = (row: FuelRefuelRequest, opts?: { reject?: boolean; cancel?: boolean }) => {
     setActionMenu(null);
     setSelected(row);
     setShowRejectForm(!!opts?.reject);
+    setShowCancelConfirm(!!opts?.cancel);
     if (!opts?.reject) setRejectReason('');
     setAdminEditing(false);
     setEditContractId(row.contract?.id || '');
+  };
+
+  const openReportForm = (row: FuelRefuelRequest) => {
+    setActionMenu(null);
+    setSelected(null);
+    setShowCancelConfirm(false);
+    setReportForm(EMPTY_REPORT_FORM());
+    setReportTarget(row);
+  };
+
+  const submitReportForm = () => {
+    if (!reportTarget) return;
+    const odometerKm = Number(reportForm.odometerKm.replace(/\D/g, ''));
+    if (!Number.isFinite(odometerKm) || odometerKm <= 0) {
+      toast.error('Informe o hodômetro em km');
+      return;
+    }
+    if (!reportForm.tankLevelAfter) {
+      toast.error('Selecione o nível do tanque');
+      return;
+    }
+    const litersRefueled = parseBrDecimal(reportForm.litersRefueled);
+    if (litersRefueled == null || litersRefueled <= 0) {
+      toast.error('Informe os litros abastecidos');
+      return;
+    }
+    const pricePerLiter = parseBrDecimal(reportForm.pricePerLiter);
+    if (pricePerLiter == null || pricePerLiter <= 0) {
+      toast.error('Informe o valor por litro');
+      return;
+    }
+    if (isBlankVehiclePhoto(reportForm.receiptPhoto)) {
+      toast.error('Envie a foto do cupom fiscal');
+      return;
+    }
+
+    reportMutation.mutate({
+      id: reportTarget.id,
+      body: {
+        odometerKm,
+        tankLevelAfter: reportForm.tankLevelAfter,
+        litersRefueled,
+        pricePerLiter,
+        receiptPhotoBase64: reportForm.receiptPhoto,
+        observations: reportForm.observations.trim() || undefined,
+      },
+    });
   };
 
   useEffect(() => {
@@ -947,6 +1084,28 @@ export default function SolicitacoesCombustivelPage() {
                   </button>
                 </>
               ) : null}
+              {requestForMenu.status === 'AWAITING_REFUEL' ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openReportForm(requestForMenu)}
+                    className={MENU_ITEM_BORDER_CLASS}
+                  >
+                    <FileText className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>Informar abastecimento</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => openRequestDetail(requestForMenu, { cancel: true })}
+                    className={MENU_ITEM_BORDER_CLASS}
+                  >
+                    <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>Cancelar</span>
+                  </button>
+                </>
+              ) : null}
             </>
           ) : null}
         </ActionMenuOverlay>
@@ -959,6 +1118,7 @@ export default function SolicitacoesCombustivelPage() {
             setApproveGasStationId('');
             setRejectReason('');
             setShowRejectForm(false);
+            setShowCancelConfirm(false);
             setAdminEditing(false);
             setEditContractId('');
           }}
@@ -1254,6 +1414,55 @@ export default function SolicitacoesCombustivelPage() {
                 </div>
               ) : null}
 
+              {selected.status === 'AWAITING_REFUEL' ? (
+                <div className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                  {!showCancelConfirm ? (
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowCancelConfirm(true)}
+                        disabled={cancelMutation.isPending || reportMutation.isPending}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => openReportForm(selected)}
+                        disabled={cancelMutation.isPending || reportMutation.isPending}
+                      >
+                        Informar abastecimento
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Cancelar esta solicitação liberada? O colaborador não poderá mais
+                        abastecer neste posto.
+                      </p>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowCancelConfirm(false)}
+                          disabled={cancelMutation.isPending}
+                        >
+                          Voltar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="error"
+                          onClick={() => cancelMutation.mutate(selected.id)}
+                          disabled={cancelMutation.isPending}
+                        >
+                          {cancelMutation.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
               {selected.status === 'PENDING_SUPPLIES' ? (
                 <div className="space-y-3 border-t border-gray-200 pt-4 dark:border-gray-700">
                   {!showRejectForm ? (
@@ -1393,6 +1602,183 @@ export default function SolicitacoesCombustivelPage() {
               ) : null}
             </div>
           )}
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(reportTarget)}
+          onClose={() => {
+            if (reportMutation.isPending) return;
+            setReportTarget(null);
+          }}
+          title={
+            reportTarget
+              ? `Informar abastecimento — #${reportTarget.displayNumber}`
+              : 'Informar abastecimento'
+          }
+          size="lg"
+        >
+          {reportTarget ? (
+            <div className="space-y-5">
+              <section className="space-y-2 text-sm">
+                <p className="text-gray-600 dark:text-gray-400">
+                  Informando em nome de{' '}
+                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                    {reportTarget.requester.name}
+                  </span>
+                  .
+                </p>
+                {reportTarget.gasStation ? (
+                  <p className="text-gray-900 dark:text-gray-100">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Posto:</span>{' '}
+                    {reportTarget.gasStation.name}
+                    {reportTarget.gasStation.address
+                      ? ` — ${reportTarget.gasStation.address}`
+                      : ''}
+                  </p>
+                ) : null}
+                {reportTarget.refuelDeadlineAmount ? (
+                  <p className="text-gray-900 dark:text-gray-100">
+                    <span className="font-medium text-gray-700 dark:text-gray-300">Prazo:</span>{' '}
+                    {formatRefuelDeadline(
+                      reportTarget.refuelDeadlineAmount,
+                      reportTarget.refuelDeadlineUnit,
+                      reportTarget.refuelDeadlineAt,
+                    )}
+                  </p>
+                ) : null}
+                <p className="text-gray-600 dark:text-gray-400">
+                  {reportTarget.vehiclePlate} · {reportTarget.route}
+                </p>
+              </section>
+
+              <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                <h4 className="mb-4 border-b border-gray-200 pb-3 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-50">
+                  Dados do abastecimento
+                </h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Hodômetro (km) *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={reportForm.odometerKm}
+                      onChange={(e) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          odometerKm: e.target.value.replace(/\D/g, ''),
+                        }))
+                      }
+                      className={FORM_FIELD_INPUT_CLS}
+                      placeholder="Ex.: 45230"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Tanque após abastecimento *
+                    </label>
+                    <SingleSelectSearchDropdown
+                      value={reportForm.tankLevelAfter}
+                      onChange={(tankLevelAfter) =>
+                        setReportForm((f) => ({
+                          ...f,
+                          tankLevelAfter: tankLevelAfter as FuelTankLevelAfter | '',
+                        }))
+                      }
+                      options={TANK_LEVEL_OPTIONS.map((opt) => ({
+                        value: opt.value,
+                        label: opt.label,
+                      }))}
+                      placeholder="Selecione…"
+                      allowEmpty={false}
+                      disableSearch
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Litros abastecidos *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={reportForm.litersRefueled}
+                      onChange={(e) =>
+                        setReportForm((f) => ({ ...f, litersRefueled: e.target.value }))
+                      }
+                      className={FORM_FIELD_INPUT_CLS}
+                      placeholder="Ex.: 45,500"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Valor por litro (R$) *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={reportForm.pricePerLiter}
+                      onChange={(e) =>
+                        setReportForm((f) => ({ ...f, pricePerLiter: e.target.value }))
+                      }
+                      className={FORM_FIELD_INPUT_CLS}
+                      placeholder="Ex.: 5,89"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                <h4 className="mb-4 border-b border-gray-200 pb-3 text-sm font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-50">
+                  Cupom e observações
+                </h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Foto do cupom fiscal *
+                    </label>
+                    <VehicleReturnPhotoField
+                      value={reportForm.receiptPhoto}
+                      onChange={(receiptPhoto) => setReportForm((f) => ({ ...f, receiptPhoto }))}
+                      emptyLabel="Clique para enviar o cupom fiscal"
+                      photoAlt="Cupom fiscal"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Observações
+                    </label>
+                    <textarea
+                      value={reportForm.observations}
+                      onChange={(e) =>
+                        setReportForm((f) => ({ ...f, observations: e.target.value }))
+                      }
+                      className={FORM_FIELD_TEXTAREA_CLS}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={reportMutation.isPending}
+                  onClick={() => setReportTarget(null)}
+                >
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  disabled={reportMutation.isPending}
+                  onClick={submitReportForm}
+                >
+                  {reportMutation.isPending ? 'Enviando…' : 'Confirmar abastecimento'}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Modal>
 
         <Modal

@@ -323,6 +323,13 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     group: 'Geral',
   },
   {
+    key: pathToModuleKey('/ponto/controle/ver-solicitacoes-internas-cc'),
+    name: 'Ver solicitações internas por centro de custo',
+    href: '/ponto/controle/ver-solicitacoes-internas-cc',
+    category: 'Controle',
+    group: 'Geral',
+  },
+  {
     key: pathToModuleKey('/ponto/controle/alterar-senha-funcionarios'),
     name: 'Alterar senha de funcionários',
     href: '/ponto/controle/alterar-senha-funcionarios',

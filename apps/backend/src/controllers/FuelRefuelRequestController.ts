@@ -601,10 +601,16 @@ export class FuelRefuelRequestController {
 
   async cancel(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const userId = req.user?.id;
-      if (!userId) throw createError('Usuário não autenticado', 401);
+      const user = req.user;
+      if (!user?.id) throw createError('Usuário não autenticado', 401);
 
-      const row = await fuelRefuelRequestService.cancel(req.params.id, userId);
+      const existing = await fuelRefuelRequestService.getById(req.params.id);
+      const asSupplies = existing.status === FuelRefuelRequestStatus.AWAITING_REFUEL;
+      if (asSupplies) {
+        await assertUserHasFuelSuppliesAccess(user.id, user.isAdmin);
+      }
+
+      const row = await fuelRefuelRequestService.cancel(req.params.id, user.id, { asSupplies });
       res.json({ success: true, data: row, message: 'Solicitação cancelada' });
     } catch (error) {
       next(error);
@@ -615,6 +621,12 @@ export class FuelRefuelRequestController {
     try {
       const user = req.user;
       if (!user) throw createError('Usuário não autenticado', 401);
+
+      const existing = await fuelRefuelRequestService.getById(req.params.id);
+      const isOwner = existing.requesterId === user.id;
+      if (!isOwner) {
+        await assertUserHasFuelSuppliesAccess(user.id, user.isAdmin);
+      }
 
       const body = reportSchema.parse(req.body);
       if (!body.receiptPhotoBase64.includes('base64,')) {
@@ -629,6 +641,7 @@ export class FuelRefuelRequestController {
 
       const row = await fuelRefuelRequestService.submitRefuelReport({
         requesterId: user.id,
+        allowNonRequester: !isOwner,
         requestId: req.params.id,
         odometerKm: body.odometerKm,
         tankLevelAfter: body.tankLevelAfter as FuelTankLevelAfter,

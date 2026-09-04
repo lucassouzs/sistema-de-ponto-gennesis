@@ -224,7 +224,7 @@ const DESTINATION_LIST_CONFIG: Record<
 > = {
   all: {
     title: 'Minhas Solicitações',
-    subtitle: 'Suas solicitações para Departamento Pessoal e ADM/TST.',
+    subtitle: 'Suas solicitações e as dos centros de custo liberados para você.',
     Icon: MailPlus,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
@@ -1179,6 +1179,9 @@ export function SolicitacoesGeraisPage() {
                               <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 ID
                               </th>
+                              <th className="px-3 py-4 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Solicitante
+                              </th>
                               <th className="px-3 py-4 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                                 Contrato
                               </th>
@@ -1216,6 +1219,9 @@ export function SolicitacoesGeraisPage() {
                                     <ListRowNavigableLabel className="font-medium tabular-nums">
                                       {r.displayNumber ?? '—'}
                                     </ListRowNavigableLabel>
+                                  </td>
+                                  <td className="max-w-[180px] truncate px-3 py-3 align-middle text-sm text-gray-700 dark:text-gray-300">
+                                    {r.solicitanteNome || '—'}
                                   </td>
                                   <td className="max-w-[200px] px-3 py-3 align-middle text-center text-sm text-gray-700 dark:text-gray-300">
                                     {getRequestContratoLabel(r)}

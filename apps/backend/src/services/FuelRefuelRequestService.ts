@@ -67,6 +67,8 @@ const fuelRefuelInclude = {
 
 export type SubmitFuelRefuelReportInput = {
   requesterId: string;
+  /** Quando true, Suprimentos pode informar o abastecimento em nome do solicitante. */
+  allowNonRequester?: boolean;
   requestId: string;
   odometerKm: number;
   tankLevelAfter: FuelTankLevelAfter;
@@ -320,13 +322,19 @@ export class FuelRefuelRequestService {
     });
   }
 
-  async cancel(id: string, requesterId: string) {
+  async cancel(id: string, actorId: string, opts?: { asSupplies?: boolean }) {
     const row = await this.getById(id);
-    if (row.requesterId !== requesterId) {
-      throw createError('Você não pode cancelar esta solicitação', 403);
-    }
-    if (row.status !== FuelRefuelRequestStatus.PENDING_MANAGER) {
-      throw createError('Só é possível cancelar solicitações pendentes de aprovação do gestor', 400);
+    if (opts?.asSupplies) {
+      if (row.status !== FuelRefuelRequestStatus.AWAITING_REFUEL) {
+        throw createError('Só é possível cancelar solicitações com status Liberado', 400);
+      }
+    } else {
+      if (row.requesterId !== actorId) {
+        throw createError('Você não pode cancelar esta solicitação', 403);
+      }
+      if (row.status !== FuelRefuelRequestStatus.PENDING_MANAGER) {
+        throw createError('Só é possível cancelar solicitações pendentes de aprovação do gestor', 400);
+      }
     }
 
     return prisma.fuelRefuelRequest.update({
@@ -477,7 +485,7 @@ export class FuelRefuelRequestService {
 
   async submitRefuelReport(input: SubmitFuelRefuelReportInput) {
     const row = await this.getById(input.requestId);
-    if (row.requesterId !== input.requesterId) {
+    if (row.requesterId !== input.requesterId && !input.allowNonRequester) {
       throw createError('Você não pode informar abastecimento desta solicitação', 403);
     }
     if (row.status !== FuelRefuelRequestStatus.AWAITING_REFUEL) {
