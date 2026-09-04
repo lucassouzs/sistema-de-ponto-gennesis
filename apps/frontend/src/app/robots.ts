@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/ponto/', '/dashboard/', '/api/'],
     },
-    sitemap: 'https://gennesisconecta.com.br/sitemap.xml',
+    sitemap: 'https://www.gennesisconecta.com.br/sitemap.xml',
   };
 }
