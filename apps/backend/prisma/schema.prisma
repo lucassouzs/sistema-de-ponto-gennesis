@@ -12,129 +12,132 @@ datasource db {
 
 // Modelo de UsuÃ¡rio
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  password     String
-  name         String
-  cpf          String   @unique
-  role         UserRole @default(EMPLOYEE)
-  isActive     Boolean  @default(true)
-  isFirstLogin Boolean  @default(true)
+  id                String    @id @default(cuid())
+  email             String    @unique
+  password          String
+  name              String
+  cpf               String    @unique
+  role              UserRole  @default(EMPLOYEE)
+  isActive          Boolean   @default(true)
+  isFirstLogin      Boolean   @default(true)
   /// URL pÃºblica ou relativa (/uploads/...) da foto de perfil
-  profilePhotoUrl  String?
+  profilePhotoUrl   String?
   /// Chave no S3 (quando usar armazenamento em nuvem)
-  profilePhotoKey  String?
+  profilePhotoKey   String?
   /// Ãltimo login bem-sucedido
   lastLoginAt       DateTime?
   /// Ãltima atividade observada (page view / heartbeat)
   lastSeenAt        DateTime?
   lastActivityPath  String?
   lastActivityLabel String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   // Relacionamentos
-  employee     Employee?
-  loginEvents  UserLoginEvent[]
-  pageVisits   UserPageVisit[]
-  timeRecords  TimeRecord[]
-  vacations    Vacation[]
-  overtime     Overtime[]
-  reports      Report[]
-  medicalCertificates MedicalCertificate[]
-  approvedCertificates MedicalCertificate[] @relation("CertificateApprover")
-  salaryAdjustments SalaryAdjustment[]
-  salaryDiscounts   SalaryDiscount[]
-  pointCorrectionRequests PointCorrectionRequest[] @relation("PointCorrectionApprover")
-  pointCorrectionComments PointCorrectionComment[]
-  sentMessages      Message[]                       @relation("MessageSender")
-  initiatedChats    Chat[]                          @relation("ChatInitiator")
-  acceptedChats     Chat[]                          @relation("ChatAccepter")
-  closedChats       Chat[]                          @relation("ChatCloser")
-  receivedChats     Chat[]                          @relation("ChatRecipient")
-  chatParticipants  ChatParticipant[]
-  chatTopicsCreated ChatTopic[]                     @relation("ChatTopicCreator")
-  finalizedPayrolls PayrollStatus[]                 @relation("PayrollFinalizer")
-  materialRequestsRequested MaterialRequest[]       @relation("MaterialRequestRequester")
-  materialRequestsApproved  MaterialRequest[]       @relation("MaterialRequestApprover")
-  materialRequestsRejected   MaterialRequest[]      @relation("MaterialRequestRejecter")
-  chatGPTConversations      ChatGPTConversation[]
-  passwordResetTokens PasswordResetToken[]
-  purchaseOrdersCreated          PurchaseOrder[] @relation("PurchaseOrderCreator")
-  purchaseOrdersApproved         PurchaseOrder[] @relation("PurchaseOrderApprover")
-  purchaseOrdersComprasApproved  PurchaseOrder[] @relation("PurchaseOrderComprasApprover")
-  purchaseOrdersGestorApproved   PurchaseOrder[] @relation("PurchaseOrderGestorApprover")
-  quoteMapsCreated          QuoteMap[]             @relation("QuoteMapCreator")
-  userPermissions           UserPermission[]       @relation("UserPermissionUser")
-  updatedPermissions        UserPermission[]       @relation("UserPermissionUpdatedBy")
-  userContractPermissions   UserContractPermission[] @relation("UserContractPermissionUser")
-  updatedContractPermissions UserContractPermission[] @relation("UserContractPermissionUpdatedBy")
-  userDpApprovalContracts    UserDpApprovalContract[] @relation("UserDpApprovalContractUser")
-  updatedDpApprovalContracts UserDpApprovalContract[] @relation("UserDpApprovalContractUpdatedBy")
-  userRestrictedDpApprovalCostCenters    UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUser")
-  updatedRestrictedDpApprovalCostCenters UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUpdatedBy")
-  stockMovements            StockMovement[]
-  stockShortfallsResolved   StockShortfall[] @relation("StockShortfallResolver")
-  driveFolders              DriveFolder[]            @relation("DriveFolderOwner")
-  driveFiles                DriveFile[]              @relation("DriveFileOwner")
-  driveFolderShares         DriveFolderShare[]       @relation("DriveFolderShareUser")
-  driveFolderSharesCreated  DriveFolderShare[]       @relation("DriveFolderShareCreatedBy")
-  messageFavorites         MessageFavorite[]
-  chatUserPrivacy          ChatUserPrivacy[]
-  messageHiddenForUser     MessageHiddenForUser[]
-  extratoCaixaFiltrosSalvos ExtratoCaixaFiltroSalvo[]
-  kanbanBoardsCreated      KanbanBoard[]          @relation("KanbanBoardCreator")
-  kanbanBoardShares        KanbanBoardShare[]     @relation("KanbanBoardShareUser")
-  kanbanBoardSharesCreated KanbanBoardShare[]     @relation("KanbanBoardShareCreatedBy")
-  kanbanCardsAssigned      KanbanCard[]           @relation("KanbanCardAssignee")
-  kanbanCardMemberships    KanbanCardMember[]     @relation("KanbanCardMemberUser")
-  kanbanCardComments       KanbanCardComment[]    @relation("KanbanCardCommentAuthor")
-  kanbanCardAttachments    KanbanCardAttachment[] @relation("KanbanCardAttachmentUploader")
-  kanbanChecklistAssigned  KanbanChecklistItem[]  @relation("KanbanChecklistAssignee")
-  plannerEvents            PlannerEvent[]         @relation("PlannerEventOwner")
-  plannerEventAttendances  PlannerEventAttendee[] @relation("PlannerEventAttendeeUser")
-  plannerTasks             PlannerTask[]          @relation("PlannerTaskOwner")
-  plannerTaskLists         PlannerTaskList[]      @relation("PlannerTaskListOwner")
-  plannerAgendaSharesOwned     PlannerAgendaShare[] @relation("PlannerAgendaShareOwner")
-  plannerAgendaSharesReceived  PlannerAgendaShare[] @relation("PlannerAgendaShareSharedWith")
-  plannerAgendaSharesCreated   PlannerAgendaShare[] @relation("PlannerAgendaShareCreatedBy")
-  googleCalendarConnection GoogleCalendarConnection? @relation("GoogleCalendarConnectionUser")
-  demandSheetApprovalsCreated       DemandSheetApproval[] @relation("DemandSheetApprovalCreator")
-  demandSheetApprovalsAsSolicitante DemandSheetApproval[] @relation("DemandSheetApprovalSolicitante")
-  demandSheetApprovalsManagerApproved DemandSheetApproval[] @relation("DemandSheetApprovalManager")
-  demandSheetApprovalsPurchaseStatusUpdated DemandSheetApproval[] @relation("DemandSheetApprovalPurchaseStatusUpdater")
-  materialDeliveriesCreated               MaterialDelivery[] @relation("MaterialDeliveryCreator")
-  materialDeliveriesReceived              MaterialDelivery[] @relation("MaterialDeliveryReceiver")
-  fuelRefuelRequestsRequested             FuelRefuelRequest[] @relation("FuelRefuelRequester")
-  fuelRefuelRequestsManagerApproved       FuelRefuelRequest[] @relation("FuelRefuelManager")
-  fuelRefuelRequestsSuppliesApproved      FuelRefuelRequest[] @relation("FuelRefuelSupplies")
-  vehicleReservationsCreated              VehicleReservation[] @relation("VehicleReservationCreator")
-  vehicleReservationsSuppliesApproved     VehicleReservation[] @relation("VehicleReservationSuppliesApprover")
-  logisticsDeliveryRequestsCreated        LogisticsDeliveryRequest[] @relation("LogisticsDeliveryCreator")
-  logisticsDeliveryCompletionsReported    LogisticsDeliveryCompletion[] @relation("LogisticsDeliveryCompleter")
-  vehicleReservationsBaixaReported        VehicleReservation[] @relation("VehicleReservationBaixaReporter")
-  vehicleReservationsVistoriaReported     VehicleReservation[] @relation("VehicleReservationVistoriaReporter")
-  fluigWorkflowApproverViewers            FluigWorkflowApproverViewer[] @relation("FluigApproverViewerUser")
-  updatedFluigWorkflowApproverViewers     FluigWorkflowApproverViewer[] @relation("FluigApproverViewerUpdatedBy")
-  flowDiagrams                            FlowDiagram[]        @relation("FlowDiagramOwner")
-  licitacoesCreated                       Licitacao[]          @relation("LicitacaoCreator")
-  asoRegistrosCreated                     AsoRegistro[]        @relation("AsoRegistroCreator")
-  toolRentalRequestsCreated               ToolRentalRequest[]  @relation("ToolRentalRequestCreator")
-  toolRentalRequestsAssigned              ToolRentalRequest[]  @relation("ToolRentalRequestAssignedUser")
-  toolRentalRequestsSuppliesApproved      ToolRentalRequest[]  @relation("ToolRentalRequestSuppliesApprover")
-  toolRentalRequestEvents                 ToolRentalRequestEvent[] @relation("ToolRentalRequestEventActor")
-  materialRequestComments                 MaterialRequestComment[] @relation("MaterialRequestCommentAuthor")
-  purchaseOrderComments                   PurchaseOrderComment[] @relation("PurchaseOrderCommentAuthor")
-  gestaoOsWorkOrdersRequested             GestaoOsWorkOrder[]  @relation("GestaoOsRequester")
-  gestaoOsWorkOrdersAssigned              GestaoOsWorkOrder[]  @relation("GestaoOsAssignee")
-  gestaoOsWorkOrderEvents                 GestaoOsWorkOrderEvent[] @relation("GestaoOsEventActor")
-  gestaoOsWorkOrderComments               GestaoOsWorkOrderComment[] @relation("GestaoOsCommentAuthor")
-  gestaoOsMemberships                     GestaoOsMembership[] @relation("GestaoOsMembershipUser")
-  gestaoOsPlansAssigned                   GestaoOsMaintenancePlan[] @relation("GestaoOsPlanAssignee")
-  gestaoOsDocumentsUploaded               GestaoOsDocument[] @relation("GestaoOsDocumentUploader")
-  helpTutorialsCreated                    HelpTutorial[]     @relation("HelpTutorialCreator")
-  supportTicketsRequested                 SupportTicket[]    @relation("SupportTicketRequester")
-  supportTicketsAssigned                  SupportTicket[]    @relation("SupportTicketAssignee")
+  employee                                  Employee?
+  loginEvents                               UserLoginEvent[]
+  pageVisits                                UserPageVisit[]
+  timeRecords                               TimeRecord[]
+  vacations                                 Vacation[]
+  overtime                                  Overtime[]
+  reports                                   Report[]
+  medicalCertificates                       MedicalCertificate[]
+  approvedCertificates                      MedicalCertificate[]                 @relation("CertificateApprover")
+  salaryAdjustments                         SalaryAdjustment[]
+  salaryDiscounts                           SalaryDiscount[]
+  pointCorrectionRequests                   PointCorrectionRequest[]             @relation("PointCorrectionApprover")
+  pointCorrectionComments                   PointCorrectionComment[]
+  sentMessages                              Message[]                            @relation("MessageSender")
+  initiatedChats                            Chat[]                               @relation("ChatInitiator")
+  acceptedChats                             Chat[]                               @relation("ChatAccepter")
+  closedChats                               Chat[]                               @relation("ChatCloser")
+  receivedChats                             Chat[]                               @relation("ChatRecipient")
+  chatParticipants                          ChatParticipant[]
+  chatTopicsCreated                         ChatTopic[]                          @relation("ChatTopicCreator")
+  finalizedPayrolls                         PayrollStatus[]                      @relation("PayrollFinalizer")
+  materialRequestsRequested                 MaterialRequest[]                    @relation("MaterialRequestRequester")
+  materialRequestsApproved                  MaterialRequest[]                    @relation("MaterialRequestApprover")
+  materialRequestsRejected                  MaterialRequest[]                    @relation("MaterialRequestRejecter")
+  chatGPTConversations                      ChatGPTConversation[]
+  passwordResetTokens                       PasswordResetToken[]
+  purchaseOrdersCreated                     PurchaseOrder[]                      @relation("PurchaseOrderCreator")
+  purchaseOrdersApproved                    PurchaseOrder[]                      @relation("PurchaseOrderApprover")
+  purchaseOrdersComprasApproved             PurchaseOrder[]                      @relation("PurchaseOrderComprasApprover")
+  purchaseOrdersGestorApproved              PurchaseOrder[]                      @relation("PurchaseOrderGestorApprover")
+  quoteMapsCreated                          QuoteMap[]                           @relation("QuoteMapCreator")
+  userPermissions                           UserPermission[]                     @relation("UserPermissionUser")
+  updatedPermissions                        UserPermission[]                     @relation("UserPermissionUpdatedBy")
+  userContractPermissions                   UserContractPermission[]             @relation("UserContractPermissionUser")
+  updatedContractPermissions                UserContractPermission[]             @relation("UserContractPermissionUpdatedBy")
+  userDpApprovalContracts                   UserDpApprovalContract[]             @relation("UserDpApprovalContractUser")
+  updatedDpApprovalContracts                UserDpApprovalContract[]             @relation("UserDpApprovalContractUpdatedBy")
+  userRestrictedDpApprovalCostCenters       UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUser")
+  updatedRestrictedDpApprovalCostCenters    UserRestrictedDpApprovalCostCenter[] @relation("UserRestrictedDpApprovalCostCenterUpdatedBy")
+  stockMovements                            StockMovement[]
+  stockShortfallsResolved                   StockShortfall[]                     @relation("StockShortfallResolver")
+  driveFolders                              DriveFolder[]                        @relation("DriveFolderOwner")
+  driveFiles                                DriveFile[]                          @relation("DriveFileOwner")
+  driveFolderShares                         DriveFolderShare[]                   @relation("DriveFolderShareUser")
+  driveFolderSharesCreated                  DriveFolderShare[]                   @relation("DriveFolderShareCreatedBy")
+  messageFavorites                          MessageFavorite[]
+  chatUserPrivacy                           ChatUserPrivacy[]
+  messageHiddenForUser                      MessageHiddenForUser[]
+  extratoCaixaFiltrosSalvos                 ExtratoCaixaFiltroSalvo[]
+  kanbanBoardsCreated                       KanbanBoard[]                        @relation("KanbanBoardCreator")
+  kanbanBoardShares                         KanbanBoardShare[]                   @relation("KanbanBoardShareUser")
+  kanbanBoardSharesCreated                  KanbanBoardShare[]                   @relation("KanbanBoardShareCreatedBy")
+  kanbanCardsAssigned                       KanbanCard[]                         @relation("KanbanCardAssignee")
+  kanbanCardMemberships                     KanbanCardMember[]                   @relation("KanbanCardMemberUser")
+  kanbanCardComments                        KanbanCardComment[]                  @relation("KanbanCardCommentAuthor")
+  kanbanCardAttachments                     KanbanCardAttachment[]               @relation("KanbanCardAttachmentUploader")
+  kanbanChecklistAssigned                   KanbanChecklistItem[]                @relation("KanbanChecklistAssignee")
+  plannerEvents                             PlannerEvent[]                       @relation("PlannerEventOwner")
+  plannerEventAttendances                   PlannerEventAttendee[]               @relation("PlannerEventAttendeeUser")
+  plannerTasks                              PlannerTask[]                        @relation("PlannerTaskOwner")
+  plannerTaskLists                          PlannerTaskList[]                    @relation("PlannerTaskListOwner")
+  plannerAgendaSharesOwned                  PlannerAgendaShare[]                 @relation("PlannerAgendaShareOwner")
+  plannerAgendaSharesReceived               PlannerAgendaShare[]                 @relation("PlannerAgendaShareSharedWith")
+  plannerAgendaSharesCreated                PlannerAgendaShare[]                 @relation("PlannerAgendaShareCreatedBy")
+  googleCalendarConnection                  GoogleCalendarConnection?            @relation("GoogleCalendarConnectionUser")
+  demandSheetApprovalsCreated               DemandSheetApproval[]                @relation("DemandSheetApprovalCreator")
+  demandSheetApprovalsAsSolicitante         DemandSheetApproval[]                @relation("DemandSheetApprovalSolicitante")
+  demandSheetApprovalsManagerApproved       DemandSheetApproval[]                @relation("DemandSheetApprovalManager")
+  demandSheetApprovalsPurchaseStatusUpdated DemandSheetApproval[]                @relation("DemandSheetApprovalPurchaseStatusUpdater")
+  materialDeliveriesCreated                 MaterialDelivery[]                   @relation("MaterialDeliveryCreator")
+  materialDeliveriesReceived                MaterialDelivery[]                   @relation("MaterialDeliveryReceiver")
+  fuelRefuelRequestsRequested               FuelRefuelRequest[]                  @relation("FuelRefuelRequester")
+  fuelRefuelRequestsManagerApproved         FuelRefuelRequest[]                  @relation("FuelRefuelManager")
+  fuelRefuelRequestsSuppliesApproved        FuelRefuelRequest[]                  @relation("FuelRefuelSupplies")
+  vehicleReservationsCreated                VehicleReservation[]                 @relation("VehicleReservationCreator")
+  vehicleReservationsSuppliesApproved       VehicleReservation[]                 @relation("VehicleReservationSuppliesApprover")
+  logisticsDeliveryRequestsCreated          LogisticsDeliveryRequest[]           @relation("LogisticsDeliveryCreator")
+  logisticsDeliveryCompletionsReported      LogisticsDeliveryCompletion[]        @relation("LogisticsDeliveryCompleter")
+  vehicleReservationsBaixaReported          VehicleReservation[]                 @relation("VehicleReservationBaixaReporter")
+  vehicleReservationsVistoriaReported       VehicleReservation[]                 @relation("VehicleReservationVistoriaReporter")
+  fluigWorkflowApproverViewers              FluigWorkflowApproverViewer[]        @relation("FluigApproverViewerUser")
+  updatedFluigWorkflowApproverViewers       FluigWorkflowApproverViewer[]        @relation("FluigApproverViewerUpdatedBy")
+  flowDiagrams                              FlowDiagram[]                        @relation("FlowDiagramOwner")
+  licitacoesCreated                         Licitacao[]                          @relation("LicitacaoCreator")
+  asoRegistrosCreated                       AsoRegistro[]                        @relation("AsoRegistroCreator")
+  toolRentalRequestsCreated                 ToolRentalRequest[]                  @relation("ToolRentalRequestCreator")
+  toolRentalRequestsAssigned                ToolRentalRequest[]                  @relation("ToolRentalRequestAssignedUser")
+  toolRentalRequestsSuppliesApproved        ToolRentalRequest[]                  @relation("ToolRentalRequestSuppliesApprover")
+  toolRentalRequestEvents                   ToolRentalRequestEvent[]             @relation("ToolRentalRequestEventActor")
+  materialRequestComments                   MaterialRequestComment[]             @relation("MaterialRequestCommentAuthor")
+  purchaseOrderComments                     PurchaseOrderComment[]               @relation("PurchaseOrderCommentAuthor")
+  gestaoOsWorkOrdersRequested               GestaoOsWorkOrder[]                  @relation("GestaoOsRequester")
+  gestaoOsWorkOrdersAssigned                GestaoOsWorkOrder[]                  @relation("GestaoOsAssignee")
+  gestaoOsWorkOrderEvents                   GestaoOsWorkOrderEvent[]             @relation("GestaoOsEventActor")
+  gestaoOsWorkOrderComments                 GestaoOsWorkOrderComment[]           @relation("GestaoOsCommentAuthor")
+  gestaoOsMemberships                       GestaoOsMembership[]                 @relation("GestaoOsMembershipUser")
+  gestaoOsPlansAssigned                     GestaoOsMaintenancePlan[]            @relation("GestaoOsPlanAssignee")
+  gestaoOsDocumentsUploaded                 GestaoOsDocument[]                   @relation("GestaoOsDocumentUploader")
+  helpTutorialsCreated                      HelpTutorial[]                       @relation("HelpTutorialCreator")
+  scheduledNewsCreated                      ScheduledNews[]                      @relation("ScheduledNewsCreator")
+  scheduledNewsUpdated                      ScheduledNews[]                      @relation("ScheduledNewsUpdater")
+  scheduledNewsViews                        ScheduledNewsView[]                  @relation("ScheduledNewsViewer")
+  supportTicketsRequested                   SupportTicket[]                      @relation("SupportTicketRequester")
+  supportTicketsAssigned                    SupportTicket[]                      @relation("SupportTicketAssignee")
 
   @@map("users")
 }
@@ -319,26 +322,26 @@ model Report {
 
 // Modelo de ConfiguraÃ§Ãµes da Empresa
 model CompanySettings {
-  id                  String   @id @default(cuid())
-  name                String
-  cnpj                String   @unique
-  address             String
-  phone               String?
-  email               String?
-  workStartTime       String   @default("07:00")
-  workEndTime         String   @default("17:00")
-  lunchStartTime      String   @default("12:00")
-  lunchEndTime        String   @default("13:00")
-  toleranceMinutes    Int      @default(10)
-  maxOvertimeHours    Int      @default(2)
-  maxDistanceMeters   Int      @default(1000)
-  defaultLatitude     Float    @default(-23.5505)
-  defaultLongitude    Float    @default(-46.6333)
-  vacationDaysPerYear Int      @default(30)
+  id                   String   @id @default(cuid())
+  name                 String
+  cnpj                 String   @unique
+  address              String
+  phone                String?
+  email                String?
+  workStartTime        String   @default("07:00")
+  workEndTime          String   @default("17:00")
+  lunchStartTime       String   @default("12:00")
+  lunchEndTime         String   @default("13:00")
+  toleranceMinutes     Int      @default(10)
+  maxOvertimeHours     Int      @default(2)
+  maxDistanceMeters    Int      @default(1000)
+  defaultLatitude      Float    @default(-23.5505)
+  defaultLongitude     Float    @default(-46.6333)
+  vacationDaysPerYear  Int      @default(30)
   /// Prazo informado ao solicitante de combustÃ­vel (horas Ãºteis atÃ© atendimento do Suprimentos)
-  fuelSuppliesSlaHours Int     @default(24)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  fuelSuppliesSlaHours Int      @default(24)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@map("company_settings")
 }
@@ -369,7 +372,7 @@ model UserLoginEvent {
   /// login | logout
   type      String   @default("login")
   success   Boolean  @default(true)
-  source    String?  // web | mobile
+  source    String? // web | mobile
   ipAddress String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -820,41 +823,41 @@ enum HolidayType {
 
 // Modelo de Chat/Conversa entre Setores
 model Chat {
-  id                  String          @id @default(cuid())
-  chatType            ChatType        @default(DEPARTMENT)
-  initiatorId         String          // Quem iniciou a conversa
-  groupName           String?         // Nome do grupo (para tipo GROUP)
-  groupDescription    String?         // DescriÃ§Ã£o do grupo (opcional)
-  groupAvatarUrl      String?         // Avatar do grupo (opcional)
-  recipientDepartment String?         // Setor destinatÃ¡rio (para tipo DEPARTMENT)
-  recipientId         String?         // UsuÃ¡rio destinatÃ¡rio (para tipo DIRECT)
-  status              ChatStatus      @default(PENDING) // PENDING, ACCEPTED, CLOSED
-  acceptedBy          String?         // Quem aceitou a conversa
-  acceptedAt          DateTime?       // Quando foi aceita
-  closedBy            String?         // Quem encerrou
-  closedAt            DateTime?       // Quando foi encerrada
-  lastMessageAt       DateTime?       // Ãltima mensagem enviada
-  pinnedMessageId     String?         // Mensagem fixada no topo
+  id                  String     @id @default(cuid())
+  chatType            ChatType   @default(DEPARTMENT)
+  initiatorId         String // Quem iniciou a conversa
+  groupName           String? // Nome do grupo (para tipo GROUP)
+  groupDescription    String? // DescriÃ§Ã£o do grupo (opcional)
+  groupAvatarUrl      String? // Avatar do grupo (opcional)
+  recipientDepartment String? // Setor destinatÃ¡rio (para tipo DEPARTMENT)
+  recipientId         String? // UsuÃ¡rio destinatÃ¡rio (para tipo DIRECT)
+  status              ChatStatus @default(PENDING) // PENDING, ACCEPTED, CLOSED
+  acceptedBy          String? // Quem aceitou a conversa
+  acceptedAt          DateTime? // Quando foi aceita
+  closedBy            String? // Quem encerrou
+  closedAt            DateTime? // Quando foi encerrada
+  lastMessageAt       DateTime? // Ãltima mensagem enviada
+  pinnedMessageId     String? // Mensagem fixada no topo
   /// Quando `chatType` = GROUP_CALL: conversa âsalaâ da chamada nativa (histÃ³rico fora do grupo).
   parentGroupChatId   String?
   /// ID da sessÃ£o WebRTC (mesmo valor de `callId`) para correlacionar.
   groupCallSessionId  String?
-  
+
   // Mensagens da conversa
-  messages            Message[]
-  participants        ChatParticipant[]
-  
+  messages     Message[]
+  participants ChatParticipant[]
+
   // Relacionamentos
-  initiator           User            @relation("ChatInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
-  accepter            User?           @relation("ChatAccepter", fields: [acceptedBy], references: [id], onDelete: SetNull)
-  closer              User?           @relation("ChatCloser", fields: [closedBy], references: [id], onDelete: SetNull)
-  recipient           User?           @relation("ChatRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
-  pinnedMessage       Message?        @relation("ChatPinnedMessage", fields: [pinnedMessageId], references: [id], onDelete: SetNull)
+  initiator           User              @relation("ChatInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  accepter            User?             @relation("ChatAccepter", fields: [acceptedBy], references: [id], onDelete: SetNull)
+  closer              User?             @relation("ChatCloser", fields: [closedBy], references: [id], onDelete: SetNull)
+  recipient           User?             @relation("ChatRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  pinnedMessage       Message?          @relation("ChatPinnedMessage", fields: [pinnedMessageId], references: [id], onDelete: SetNull)
   userPrivacySettings ChatUserPrivacy[]
-  parentGroupChat     Chat?           @relation("GroupCallSideChat", fields: [parentGroupChatId], references: [id], onDelete: SetNull)
-  groupCallSideChats  Chat[]          @relation("GroupCallSideChat")
+  parentGroupChat     Chat?             @relation("GroupCallSideChat", fields: [parentGroupChatId], references: [id], onDelete: SetNull)
+  groupCallSideChats  Chat[]            @relation("GroupCallSideChat")
   topics              ChatTopic[]
-  
+
   @@index([initiatorId])
   @@index([recipientDepartment])
   @@index([recipientId])
@@ -868,14 +871,14 @@ model Chat {
 }
 
 model ChatParticipant {
-  id        String   @id @default(cuid())
-  chatId    String
-  userId    String
-  isAdmin   Boolean  @default(false)
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(cuid())
+  chatId   String
+  userId   String
+  isAdmin  Boolean  @default(false)
+  joinedAt DateTime @default(now())
 
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatId, userId])
   @@index([chatId])
@@ -895,9 +898,9 @@ model ChatTopic {
   isPinned      Boolean   @default(false)
   sortOrder     Int       @default(0)
 
-  chat          Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  createdBy     User      @relation("ChatTopicCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  messages      Message[]
+  chat      Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("ChatTopicCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  messages  Message[]
 
   @@index([chatId])
   @@index([chatId, lastMessageAt])
@@ -908,39 +911,39 @@ model ChatTopic {
 
 // Modelo de Mensagens dentro de um Chat
 model Message {
-  id              String            @id @default(cuid())
-  chatId          String            // Chat ao qual pertence
-  senderId        String            // Quem enviou (ou quem realizou a aÃ§Ã£o, nas mensagens de sistema)
-  content         String            // ConteÃºdo da mensagem
-  isSystem        Boolean           @default(false) // Eventos de grupo/fixar/etc. â exibidos como texto centralizado
-  isRead          Boolean           @default(false)
-  readAt          DateTime?         // Quando foi lida
-  editedAt        DateTime?         // Ãltima ediÃ§Ã£o (texto)
-  deletedAt       DateTime?         // Soft delete: mensagem apagada pelo remetente
-  
+  id        String    @id @default(cuid())
+  chatId    String // Chat ao qual pertence
+  senderId  String // Quem enviou (ou quem realizou a aÃ§Ã£o, nas mensagens de sistema)
+  content   String // ConteÃºdo da mensagem
+  isSystem  Boolean   @default(false) // Eventos de grupo/fixar/etc. â exibidos como texto centralizado
+  isRead    Boolean   @default(false)
+  readAt    DateTime? // Quando foi lida
+  editedAt  DateTime? // Ãltima ediÃ§Ã£o (texto)
+  deletedAt DateTime? // Soft delete: mensagem apagada pelo remetente
+
   // Anexos
   attachments MessageAttachment[]
 
   // Auditoria
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   /// Mensagem citada (resposta estilo WhatsApp)
-  replyToId       String?
-  replyTo         Message?          @relation("MessageReplyThread", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies         Message[]         @relation("MessageReplyThread")
+  replyToId String?
+  replyTo   Message?  @relation("MessageReplyThread", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[] @relation("MessageReplyThread")
 
   /// TÃ³pico da conversa (null = mensagem geral, legado)
-  topicId         String?
-  topic           ChatTopic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicId String?
+  topic   ChatTopic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
   // Relacionamentos
-  chat            Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender          User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
-  favorites       MessageFavorite[]
-  pinnedInChats   Chat[]            @relation("ChatPinnedMessage")
-  hiddenForUsers  MessageHiddenForUser[]
-  
+  chat           Chat                   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender         User                   @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  favorites      MessageFavorite[]
+  pinnedInChats  Chat[]                 @relation("ChatPinnedMessage")
+  hiddenForUsers MessageHiddenForUser[]
+
   @@index([chatId])
   @@index([senderId])
   @@index([isRead])
@@ -953,13 +956,13 @@ model Message {
 
 // Favoritar mensagem (por usuÃ¡rio; cada um tem seus favoritos)
 model MessageFavorite {
-  id         String   @id @default(cuid())
-  userId     String
-  messageId  String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  message    Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([userId, messageId])
   @@index([userId])
@@ -1026,10 +1029,10 @@ enum ChatStatus {
 }
 
 enum ChatType {
-  DEPARTMENT  // Chat com setor (modelo antigo)
-  DIRECT      // Chat direto entre usuÃ¡rios (estilo WhatsApp)
-  GROUP       // Chat em grupo
-  GROUP_CALL  // Sala temporÃ¡ria da chamada nativa em grupo (mensagens de chamada + chat paralelo)
+  DEPARTMENT // Chat com setor (modelo antigo)
+  DIRECT // Chat direto entre usuÃ¡rios (estilo WhatsApp)
+  GROUP // Chat em grupo
+  GROUP_CALL // Sala temporÃ¡ria da chamada nativa em grupo (mensagens de chamada + chat paralelo)
 }
 
 // Modelo de Status da Folha de Pagamento
@@ -1057,29 +1060,29 @@ model PayrollStatus {
 model CostCenter {
   id          String   @id @default(cuid())
   code        String   @unique // CÃ³digo do centro de custo
-  name        String   // Nome do centro de custo
-  description String?  // DescriÃ§Ã£o adicional
-  state       String?  // Estado (DF, GO, etc.)
-  polo        String?  // Polo (BRASÃLIA, GOIÃS, etc.)
-  company     String?  // Empresa (ABRASIL, GÃNNESIS, MÃTRICA, etc.)
+  name        String // Nome do centro de custo
+  description String? // DescriÃ§Ã£o adicional
+  state       String? // Estado (DF, GO, etc.)
+  polo        String? // Polo (BRASÃLIA, GOIÃS, etc.)
+  company     String? // Empresa (ABRASIL, GÃNNESIS, MÃTRICA, etc.)
   isActive    Boolean  @default(true) // Se estÃ¡ ativo
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   // Relacionamentos
-  engineeringMaterials   EngineeringMaterial[]
-  projects               Project[]
-  materialRequests       MaterialRequest[]
-  contracts              Contract[]
-  dpRequests             DpRequest[]
-  cacambas               cacambas[]
-  contract_additives     contract_additives[]
-  monthly_goals          monthly_goals[]
-  service_orders         service_orders[]
-  stockMovements         StockMovement[]
-  stockShortfalls        StockShortfall[]
-  espelhoNfServiceTakers EspelhoNfServiceTaker[]
-  espelhoNfMirrors       EspelhoNfMirror[]
+  engineeringMaterials      EngineeringMaterial[]
+  projects                  Project[]
+  materialRequests          MaterialRequest[]
+  contracts                 Contract[]
+  dpRequests                DpRequest[]
+  cacambas                  cacambas[]
+  contract_additives        contract_additives[]
+  monthly_goals             monthly_goals[]
+  service_orders            service_orders[]
+  stockMovements            StockMovement[]
+  stockShortfalls           StockShortfall[]
+  espelhoNfServiceTakers    EspelhoNfServiceTaker[]
+  espelhoNfMirrors          EspelhoNfMirror[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
   restrictedDpApprovalUsers UserRestrictedDpApprovalCostCenter[]
 
@@ -1112,30 +1115,30 @@ model EspelhoNfServiceProvider {
 
 // Espelho NF â CÃ³digo TributÃ¡rio
 model EspelhoNfTaxCode {
-  id                   String   @id @default(cuid())
-  name                 String // Nome exibido no frontend (antes "cityName")
-  abatesMaterial       Boolean  @default(false)
+  id                       String   @id @default(cuid())
+  name                     String // Nome exibido no frontend (antes "cityName")
+  abatesMaterial           Boolean  @default(false)
   /// Possui garantia complementar (contrato)
-  hasComplementaryWarranty Boolean @default(false)
+  hasComplementaryWarranty Boolean  @default(false)
   /// Se possui garantia: a garantia Ã© retida na nota? (null = nÃ£o se aplica)
-  garantiaRetidaNaNota Boolean?
+  garantiaRetidaNaNota     Boolean?
   /// AlÃ­quota da garantia (%), texto pt-BR; vazio se nÃ£o houver garantia complementar
-  garantiaAliquota     String   @default("")
-  issRate              String
-  cofinsCollectionType String   @default("RETIDO")
-  csllCollectionType   String   @default("RETIDO")
-  inssCollectionType   String   @default("RETIDO")
-  irpjCollectionType   String   @default("RETIDO")
-  pisCollectionType    String   @default("RETIDO")
-  issCollectionType    String   @default("RETIDO")
-  inssMaterialLimit    String
-  issMaterialLimit     String
+  garantiaAliquota         String   @default("")
+  issRate                  String
+  cofinsCollectionType     String   @default("RETIDO")
+  csllCollectionType       String   @default("RETIDO")
+  inssCollectionType       String   @default("RETIDO")
+  irpjCollectionType       String   @default("RETIDO")
+  pisCollectionType        String   @default("RETIDO")
+  issCollectionType        String   @default("RETIDO")
+  inssMaterialLimit        String
+  issMaterialLimit         String
   /// AlÃ­quotas federais (COFINS, CSLL, etc.) por tipo de contrato â espelhado na UI de cadastro.
   federalRatesByContext    Json?
   /// Qual linha de contrato federal estÃ¡ ativa na UI (checkboxes por contexto).
   federalTaxContextEnabled Json?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   takers  EspelhoNfServiceTaker[]
   mirrors EspelhoNfMirror[]
@@ -1164,10 +1167,10 @@ model EspelhoNfServiceTaker {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  costCenter CostCenter        @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
-  taxCode    EspelhoNfTaxCode  @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
+  costCenter  CostCenter           @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  taxCode     EspelhoNfTaxCode     @relation(fields: [taxCodeId], references: [id], onDelete: Restrict)
   bankAccount EspelhoNfBankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  mirrors    EspelhoNfMirror[]
+  mirrors     EspelhoNfMirror[]
 
   @@index([costCenterId])
   @@index([taxCodeId])
@@ -1196,46 +1199,46 @@ model EspelhoNfBankAccount {
 
 // Espelho NF â Espelho salvo
 model EspelhoNfMirror {
-  id                    String    @id @default(cuid())
-  measurementRef        String
-  costCenterId          String
-  dueDate               DateTime?
-  municipality          String?
-  cnae                  String?
-  serviceIssqn          String?
-  empenhoNumber         String?
-  processNumber         String?
-  serviceOrder          String?
-  measurementStartDate  String?
-  measurementEndDate    String?
-  buildingUnit          String?
+  id                          String    @id @default(cuid())
+  measurementRef              String
+  costCenterId                String
+  dueDate                     DateTime?
+  municipality                String?
+  cnae                        String?
+  serviceIssqn                String?
+  empenhoNumber               String?
+  processNumber               String?
+  serviceOrder                String?
+  measurementStartDate        String?
+  measurementEndDate          String?
+  buildingUnit                String?
   /// NÂº inscriÃ§Ã£o Obra / CNO (formato xx.xxx.xxxxx/xx)
-  obraCno               String?
+  obraCno                     String?
   /// Garantia complementar (texto livre)
-  garantiaComplementar  String?
-  observations          String?
-  notes                 String?
-  measurementAmount     String
-  laborAmount           String
-  materialAmount        String
-  providerId            String
-  takerId               String
-  bankAccountId         String
-  taxCodeId             String
-  nfAttachmentName      String?
-  nfAttachmentMimeType  String?
-  nfAttachmentSize      Int?
-  nfAttachmentDataUrl   String?
-  xmlAttachmentName     String?
-  xmlAttachmentMimeType String?
-  xmlAttachmentSize     Int?
-  xmlAttachmentDataUrl  String?
+  garantiaComplementar        String?
+  observations                String?
+  notes                       String?
+  measurementAmount           String
+  laborAmount                 String
+  materialAmount              String
+  providerId                  String
+  takerId                     String
+  bankAccountId               String
+  taxCodeId                   String
+  nfAttachmentName            String?
+  nfAttachmentMimeType        String?
+  nfAttachmentSize            Int?
+  nfAttachmentDataUrl         String?
+  xmlAttachmentName           String?
+  xmlAttachmentMimeType       String?
+  xmlAttachmentSize           Int?
+  xmlAttachmentDataUrl        String?
   /// Quais campos opcionais da NF o usuÃ¡rio escolheu exibir/preencher (JSON: processNumber, empenhoNumber, â¦)
-  nfConstarNaNota       Json?
+  nfConstarNaNota             Json?
   /// ConfirmaÃ§Ã£o obrigatÃ³ria de que o usuÃ¡rio revisou âconstar na nota fiscalâ
-  nfConstarNaNotaAcknowledged Boolean @default(false)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  nfConstarNaNotaAcknowledged Boolean   @default(false)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   costCenter  CostCenter               @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
   provider    EspelhoNfServiceProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
@@ -1265,19 +1268,19 @@ model Contract {
   updatedAt        DateTime @updatedAt
 
   // Relacionamentos
-  costCenter        CostCenter                 @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
-  billings          ContractBilling[]
-  annualValues      ContractAnnualValue[]
-  addenda           ContractAddendum[]
-  pleitos           Pleito[]
-  weeklyProductions ContractWeeklyProduction[]
-  userPermissions   UserContractPermission[]
-  dpApprovalUsers   UserDpApprovalContract[]
-  demandSheetApprovals DemandSheetApproval[]
-  materialDeliveries   MaterialDelivery[]
-  fuelRefuelRequests   FuelRefuelRequest[]
+  costCenter                CostCenter                 @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  billings                  ContractBilling[]
+  annualValues              ContractAnnualValue[]
+  addenda                   ContractAddendum[]
+  pleitos                   Pleito[]
+  weeklyProductions         ContractWeeklyProduction[]
+  userPermissions           UserContractPermission[]
+  dpApprovalUsers           UserDpApprovalContract[]
+  demandSheetApprovals      DemandSheetApproval[]
+  materialDeliveries        MaterialDelivery[]
+  fuelRefuelRequests        FuelRefuelRequest[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
-  fuelGasStations      FuelGasStationContract[]
+  fuelGasStations           FuelGasStationContract[]
 
   @@index([costCenterId])
   @@index([number])
@@ -1304,7 +1307,7 @@ enum DemandSheetPurchaseStatus {
 
 /// Ficha de demanda (FD) â fluxo de aprovaÃ§Ã£o pelo gestor do contrato (mesmo escopo das solicitaÃ§Ãµes DP).
 model DemandSheetApproval {
-  id                      String                      @id @default(cuid())
+  id                      String                     @id @default(cuid())
   numMovRm                String
   idMovRm                 String
   codigoPedido            String
@@ -1312,13 +1315,13 @@ model DemandSheetApproval {
   contratoId              String
   obra                    String
   codFichaDemanda         String
-  faturamentoEstimado     Decimal                     @db.Decimal(15, 2)
-  custoEstimado           Decimal                     @db.Decimal(15, 2)
+  faturamentoEstimado     Decimal                    @db.Decimal(15, 2)
+  custoEstimado           Decimal                    @db.Decimal(15, 2)
   observacao              String
   dataHora                DateTime
   polo                    String
-  anexos                  Json                        @default("[]")
-  status                  DemandSheetApprovalStatus   @default(WAITING_MANAGER)
+  anexos                  Json                       @default("[]")
+  status                  DemandSheetApprovalStatus  @default(WAITING_MANAGER)
   createdBy               String
   managerApprovedBy       String?
   managerApprovedAt       DateTime?
@@ -1328,14 +1331,14 @@ model DemandSheetApproval {
   purchaseStatus          DemandSheetPurchaseStatus?
   purchaseStatusUpdatedBy String?
   purchaseStatusUpdatedAt DateTime?
-  createdAt               DateTime                    @default(now())
-  updatedAt               DateTime                    @updatedAt
+  createdAt               DateTime                   @default(now())
+  updatedAt               DateTime                   @updatedAt
 
-  solicitante            User     @relation("DemandSheetApprovalSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
-  contrato               Contract @relation(fields: [contratoId], references: [id], onDelete: Restrict)
-  creator                User     @relation("DemandSheetApprovalCreator", fields: [createdBy], references: [id], onDelete: Restrict)
-  managerApprover        User?    @relation("DemandSheetApprovalManager", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
-  purchaseStatusUpdater  User?    @relation("DemandSheetApprovalPurchaseStatusUpdater", fields: [purchaseStatusUpdatedBy], references: [id], onDelete: SetNull)
+  solicitante           User     @relation("DemandSheetApprovalSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  contrato              Contract @relation(fields: [contratoId], references: [id], onDelete: Restrict)
+  creator               User     @relation("DemandSheetApprovalCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  managerApprover       User?    @relation("DemandSheetApprovalManager", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  purchaseStatusUpdater User?    @relation("DemandSheetApprovalPurchaseStatusUpdater", fields: [purchaseStatusUpdatedBy], references: [id], onDelete: SetNull)
 
   @@index([contratoId])
   @@index([solicitanteId])
@@ -1486,8 +1489,8 @@ model Pleito {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  service_orders  service_orders @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
-  updatedContract Contract?      @relation(fields: [updatedContractId], references: [id], onDelete: SetNull)
+  service_orders  service_orders    @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  updatedContract Contract?         @relation(fields: [updatedContractId], references: [id], onDelete: SetNull)
   billings        ContractBilling[]
 
   @@unique([serviceOrderId, mes, ano])
@@ -1533,43 +1536,43 @@ enum ProjectStatus {
 
 // Modelo de RequisiÃ§Ã£o de Material
 model MaterialRequest {
-  id              String                  @id @default(cuid())
-  requestNumber   String                  @unique // NÃºmero da requisiÃ§Ã£o (ex: REQ-2025-001)
-  requestedBy     String // ID do usuÃ¡rio que solicitou
-  costCenterId    String // Centro de custo
-  projectId       String? // Obra/Projeto (opcional)
-  serviceOrderId  String?
-  serviceOrder    String? // Ordem de serviÃ§o (texto livre)
-  obra            String? // Obra (texto livre)
-  description     String? // DescriÃ§Ã£o/observaÃ§Ãµes da requisiÃ§Ã£o
-  demandSheet     String? // NÃºmero ou referÃªncia da ficha de demanda
+  id                        String                       @id @default(cuid())
+  requestNumber             String                       @unique // NÃºmero da requisiÃ§Ã£o (ex: REQ-2025-001)
+  requestedBy               String // ID do usuÃ¡rio que solicitou
+  costCenterId              String // Centro de custo
+  projectId                 String? // Obra/Projeto (opcional)
+  serviceOrderId            String?
+  serviceOrder              String? // Ordem de serviÃ§o (texto livre)
+  obra                      String? // Obra (texto livre)
+  description               String? // DescriÃ§Ã£o/observaÃ§Ãµes da requisiÃ§Ã£o
+  demandSheet               String? // NÃºmero ou referÃªncia da ficha de demanda
   demandSheetAttachmentUrl  String? // URL do anexo da FD (primeiro arquivo; compat)
   demandSheetAttachmentName String? // Nome original do anexo da FD (primeiro arquivo; compat)
   demandSheetAttachments    Json? // [{ url, name }] â vÃ¡rios anexos da FD
-  status          MaterialRequestStatus   @default(PENDING) // Status da requisiÃ§Ã£o
+  status                    MaterialRequestStatus        @default(PENDING) // Status da requisiÃ§Ã£o
   /// Ãltimo tipo de entrada de estoque vinculada a OC desta RM (Total ou Parcial).
-  lastStockReceiptType MaterialDeliveryReceiptType?
-  priority        MaterialRequestPriority @default(MEDIUM) // Prioridade
-  requestedAt     DateTime                @default(now()) // Data da requisiÃ§Ã£o
-  approvedBy      String? // ID do aprovador (compras)
-  approvedAt      DateTime? // Data de aprovaÃ§Ã£o
-  rejectedBy      String? // ID de quem rejeitou
-  rejectedAt      DateTime? // Data de rejeiÃ§Ã£o
-  rejectionReason String? // Motivo da rejeiÃ§Ã£o
-  completedAt     DateTime? // Data de conclusÃ£o (quando todos os itens foram atendidos)
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  lastStockReceiptType      MaterialDeliveryReceiptType?
+  priority                  MaterialRequestPriority      @default(MEDIUM) // Prioridade
+  requestedAt               DateTime                     @default(now()) // Data da requisiÃ§Ã£o
+  approvedBy                String? // ID do aprovador (compras)
+  approvedAt                DateTime? // Data de aprovaÃ§Ã£o
+  rejectedBy                String? // ID de quem rejeitou
+  rejectedAt                DateTime? // Data de rejeiÃ§Ã£o
+  rejectionReason           String? // Motivo da rejeiÃ§Ã£o
+  completedAt               DateTime? // Data de conclusÃ£o (quando todos os itens foram atendidos)
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
 
   // Relacionamentos
-  requester      User                  @relation("MaterialRequestRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
-  approver       User?                 @relation("MaterialRequestApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
-  rejecter       User?                 @relation("MaterialRequestRejecter", fields: [rejectedBy], references: [id], onDelete: SetNull)
-  costCenter     CostCenter            @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
-  project        Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  service_orders service_orders?       @relation(fields: [serviceOrderId], references: [id])
+  requester      User                     @relation("MaterialRequestRequester", fields: [requestedBy], references: [id], onDelete: Restrict)
+  approver       User?                    @relation("MaterialRequestApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  rejecter       User?                    @relation("MaterialRequestRejecter", fields: [rejectedBy], references: [id], onDelete: SetNull)
+  costCenter     CostCenter               @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  project        Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  service_orders service_orders?          @relation(fields: [serviceOrderId], references: [id])
   items          MaterialRequestItem[]
   purchaseOrders PurchaseOrder[]
-  quoteMaps      QuoteMap[]            @relation("QuoteMapMaterialRequest")
+  quoteMaps      QuoteMap[]               @relation("QuoteMapMaterialRequest")
   comments       MaterialRequestComment[]
 
   @@index([requestNumber])
@@ -1762,16 +1765,16 @@ model Supplier {
   pixKey                String? // Chave PIX
   notes                 String?
   isActive              Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  purchaseOrders        PurchaseOrder[]
-  quoteMapSuppliers     QuoteMapSupplier[]     @relation("QuoteMapSupplierSupplier")
-  quoteMapSupplierItems QuoteMapSupplierItem[] @relation("QuoteMapSupplierItemSupplier")
-  quoteMapWinnerItems   QuoteMapWinnerItem[]   @relation("QuoteMapWinnerSupplier")
-  materialDeliveries    MaterialDelivery[]
+  purchaseOrders            PurchaseOrder[]
+  quoteMapSuppliers         QuoteMapSupplier[]         @relation("QuoteMapSupplierSupplier")
+  quoteMapSupplierItems     QuoteMapSupplierItem[]     @relation("QuoteMapSupplierItemSupplier")
+  quoteMapWinnerItems       QuoteMapWinnerItem[]       @relation("QuoteMapWinnerSupplier")
+  materialDeliveries        MaterialDelivery[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
-  toolRentalRequests    ToolRentalRequest[]
+  toolRentalRequests        ToolRentalRequest[]
 
   @@index([code])
   @@index([isActive])
@@ -1785,18 +1788,18 @@ enum VehicleUsageType {
 
 /// Cadastro de veÃ­culos da frota
 model Vehicle {
-  id          String             @id @default(cuid())
-  code        String             @unique
-  marcaVeic   String?
-  modeloVeic  String
-  placaVeic   String             @unique
-  polo        String?
-  contrato    String?
-  responsavel String?
-  frotaPartic VehicleUsageType?
-  isActive    Boolean            @default(true)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id           String               @id @default(cuid())
+  code         String               @unique
+  marcaVeic    String?
+  modeloVeic   String
+  placaVeic    String               @unique
+  polo         String?
+  contrato     String?
+  responsavel  String?
+  frotaPartic  VehicleUsageType?
+  isActive     Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   reservations VehicleReservation[]
 
   @@index([code])
@@ -1816,49 +1819,49 @@ enum VehicleReservationStatus {
 
 /// Reservas de veÃ­culos da frota
 model VehicleReservation {
-  id                      String                   @id @default(cuid())
-  code                    String                   @unique
-  solicitante             String
-  motorista               String
-  vehicleId               String?
+  id                          String                   @id @default(cuid())
+  code                        String                   @unique
+  solicitante                 String
+  motorista                   String
+  vehicleId                   String?
   /// ObservaÃ§Ãµes do solicitante sobre capacidade necessÃ¡ria do veÃ­culo
   observacaoCapacidadeVeiculo String?
-  atividade               String
-  localDestino            String
-  dataUsoInicio           DateTime
-  dataUsoFim              DateTime
+  atividade                   String
+  localDestino                String
+  dataUsoInicio               DateTime
+  dataUsoFim                  DateTime
   /// Ex.: ["INTEGRAL","MATUTINO"]
-  periodoUso              Json                     @default("[]")
-  polo                    String?
-  contrato                String?
-  assinatura              String
-  status                  VehicleReservationStatus @default(PENDING_SUPPLIES)
-  suppliesApprovedById    String?
-  suppliesApprovedAt      DateTime?
-  suppliesApprovalComment String?
-  suppliesRejectionReason String?
-  devolucaoAt             DateTime?
-  baixaObservacao         String?
-  baixaFotoUrl            String?
-  baixaFotoKey            String?
-  baixaAssinatura         String?
-  baixaReportedAt         DateTime?
-  baixaReportedById       String?
-  vistoriaAt              DateTime?
-  vistoriaLaudoUrl        String?
-  vistoriaLaudoKey        String?
-  vistoriaLaudoFileName   String?
-  vistoriaReportedAt      DateTime?
-  vistoriaReportedById    String?
-  createdById             String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
+  periodoUso                  Json                     @default("[]")
+  polo                        String?
+  contrato                    String?
+  assinatura                  String
+  status                      VehicleReservationStatus @default(PENDING_SUPPLIES)
+  suppliesApprovedById        String?
+  suppliesApprovedAt          DateTime?
+  suppliesApprovalComment     String?
+  suppliesRejectionReason     String?
+  devolucaoAt                 DateTime?
+  baixaObservacao             String?
+  baixaFotoUrl                String?
+  baixaFotoKey                String?
+  baixaAssinatura             String?
+  baixaReportedAt             DateTime?
+  baixaReportedById           String?
+  vistoriaAt                  DateTime?
+  vistoriaLaudoUrl            String?
+  vistoriaLaudoKey            String?
+  vistoriaLaudoFileName       String?
+  vistoriaReportedAt          DateTime?
+  vistoriaReportedById        String?
+  createdById                 String?
+  createdAt                   DateTime                 @default(now())
+  updatedAt                   DateTime                 @updatedAt
 
   vehicle            Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  createdBy          User?   @relation("VehicleReservationCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  suppliesApprovedBy User?   @relation("VehicleReservationSuppliesApprover", fields: [suppliesApprovedById], references: [id], onDelete: SetNull)
-  baixaReportedBy    User?   @relation("VehicleReservationBaixaReporter", fields: [baixaReportedById], references: [id], onDelete: SetNull)
-  vistoriaReportedBy User?   @relation("VehicleReservationVistoriaReporter", fields: [vistoriaReportedById], references: [id], onDelete: SetNull)
+  createdBy          User?    @relation("VehicleReservationCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  suppliesApprovedBy User?    @relation("VehicleReservationSuppliesApprover", fields: [suppliesApprovedById], references: [id], onDelete: SetNull)
+  baixaReportedBy    User?    @relation("VehicleReservationBaixaReporter", fields: [baixaReportedById], references: [id], onDelete: SetNull)
+  vistoriaReportedBy User?    @relation("VehicleReservationVistoriaReporter", fields: [vistoriaReportedById], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
   @@index([dataUsoInicio])
@@ -1935,19 +1938,19 @@ model PurchaseOrder {
   createdAt                  DateTime            @default(now())
   updatedAt                  DateTime            @updatedAt
 
-  materialRequest MaterialRequest?    @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
-  quoteMap        QuoteMap?           @relation(fields: [quoteMapId], references: [id], onDelete: SetNull)
-  supplier        Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  creator         User                @relation("PurchaseOrderCreator", fields: [createdBy], references: [id], onDelete: Restrict)
-  approver        User?               @relation("PurchaseOrderApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
-  comprasApprover User?               @relation("PurchaseOrderComprasApprover", fields: [comprasApprovedBy], references: [id], onDelete: SetNull)
-  gestorApprover  User?               @relation("PurchaseOrderGestorApprover", fields: [gestorApprovedBy], references: [id], onDelete: SetNull)
-  items             PurchaseOrderItem[]
-  stockShortfalls   StockShortfall[]
-  materialDeliveries MaterialDelivery[]
+  materialRequest           MaterialRequest?             @relation(fields: [materialRequestId], references: [id], onDelete: SetNull)
+  quoteMap                  QuoteMap?                    @relation(fields: [quoteMapId], references: [id], onDelete: SetNull)
+  supplier                  Supplier                     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  creator                   User                         @relation("PurchaseOrderCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  approver                  User?                        @relation("PurchaseOrderApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  comprasApprover           User?                        @relation("PurchaseOrderComprasApprover", fields: [comprasApprovedBy], references: [id], onDelete: SetNull)
+  gestorApprover            User?                        @relation("PurchaseOrderGestorApprover", fields: [gestorApprovedBy], references: [id], onDelete: SetNull)
+  items                     PurchaseOrderItem[]
+  stockShortfalls           StockShortfall[]
+  materialDeliveries        MaterialDelivery[]
   logisticsDeliveryRequests LogisticsDeliveryRequest[]
-  invoiceNumbers    PurchaseOrderInvoiceNumber[]
-  comments          PurchaseOrderComment[]
+  invoiceNumbers            PurchaseOrderInvoiceNumber[]
+  comments                  PurchaseOrderComment[]
 
   @@index([orderNumber])
   @@index([materialRequestId])
@@ -2243,7 +2246,7 @@ model PriceHistory {
 
 // Modelo de Material de ConstruÃ§Ã£o Civil
 model ConstructionMaterial {
-  id               String   @id @default(cuid())
+  id               String        @id @default(cuid())
   code             String? // CÃ³digo do produto
   name             String // Nome do produto
   productType      String? // Tipo do produto
@@ -2255,9 +2258,9 @@ model ConstructionMaterial {
   unit             String // Unidade de medida (kg, m, mÂ², un, etc.)
   budgetNatureId   String?
   budgetNature     BudgetNature? @relation(fields: [budgetNatureId], references: [id], onDelete: SetNull)
-  isActive         Boolean  @default(true) // Se estÃ¡ ativo
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  isActive         Boolean       @default(true) // Se estÃ¡ ativo
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   stockMovements  StockMovement[]
   stockShortfalls StockShortfall[]
@@ -2305,17 +2308,17 @@ model StockShortfall {
 
 // Modelo de MovimentaÃ§Ã£o de Estoque
 model StockMovement {
-  id           String               @id @default(cuid())
-  materialId   String
-  material     ConstructionMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  costCenterId String?
-  costCenter   CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
-  type         String // 'IN' (entrada) ou 'OUT' (saÃ­da)
-  quantity     Float
-  notes        String? // ObservaÃ§Ãµes sobre a movimentaÃ§Ã£o
-  userId       String // UsuÃ¡rio que realizou a movimentaÃ§Ã£o
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt    DateTime             @default(now())
+  id               String               @id @default(cuid())
+  materialId       String
+  material         ConstructionMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  costCenterId     String?
+  costCenter       CostCenter?          @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  type             String // 'IN' (entrada) ou 'OUT' (saÃ­da)
+  quantity         Float
+  notes            String? // ObservaÃ§Ãµes sobre a movimentaÃ§Ã£o
+  userId           String // UsuÃ¡rio que realizou a movimentaÃ§Ã£o
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt        DateTime             @default(now())
   materialDelivery MaterialDelivery?
 
   @@index([materialId])
@@ -2396,18 +2399,18 @@ model UserPermission {
 
 /// Contratos que um usuÃ¡rio nÃ£o-admin pode acessar (alÃ©m da permissÃ£o de mÃ³dulo "Contratos").
 model UserContractPermission {
-  id         String   @id @default(cuid())
-  userId     String
-  contractId String
+  id                        String   @id @default(cuid())
+  userId                    String
+  contractId                String
   /// Recursos por contrato (aba PermissÃµes). Se false, o usuÃ¡rio nÃ£o acessa esse bloco dentro do contrato.
-  accessOrcamento       Boolean  @default(true)
-  accessRelatorios      Boolean  @default(true)
-  accessOrdemServico    Boolean  @default(true)
-  accessProducaoSemanal Boolean  @default(true)
-  accessRecebimentoEntregas Boolean @default(false)
-  updatedBy  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  accessOrcamento           Boolean  @default(true)
+  accessRelatorios          Boolean  @default(true)
+  accessOrdemServico        Boolean  @default(true)
+  accessProducaoSemanal     Boolean  @default(true)
+  accessRecebimentoEntregas Boolean  @default(false)
+  updatedBy                 String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   user     User     @relation("UserContractPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
@@ -2478,15 +2481,15 @@ model FluigWorkflowApproverViewer {
 
 /// Template de permissÃµes por cargo (nome do campo `Employee.position`). Usado como padrÃ£o na tela PermissÃµes.
 model PositionPermissionTemplate {
-  id                    String   @id @default(cuid())
-  position              String   @unique
-  permissions           Json
-  allowedContractIds    Json     @default("[]")
-  dpApprovalContractIds Json     @default("[]")
-  restrictedDpApprovalCostCenterIds Json @default("[]")
+  id                                String   @id @default(cuid())
+  position                          String   @unique
+  permissions                       Json
+  allowedContractIds                Json     @default("[]")
+  dpApprovalContractIds             Json     @default("[]")
+  restrictedDpApprovalCostCenterIds Json     @default("[]")
   /// Map contractId -> { orcamento, relatorios, ordemServico, producaoSemanal, recebimentoEntregas }
-  contractModuleFlags   Json     @default("{}")
-  updatedAt             DateTime @updatedAt
+  contractModuleFlags               Json     @default("{}")
+  updatedAt                         DateTime @updatedAt
 
   @@map("position_permission_templates")
 }
@@ -2502,11 +2505,11 @@ model DriveFolder {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  parent   DriveFolder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children DriveFolder[] @relation("FolderChildren")
+  parent   DriveFolder?       @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children DriveFolder[]      @relation("FolderChildren")
   files    DriveFile[]
   shares   DriveFolderShare[]
-  owner    User                 @relation("DriveFolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner    User               @relation("DriveFolderOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([parentId])
   @@index([ownerId])
@@ -2525,7 +2528,7 @@ model DriveFolderShare {
   id         String                     @id @default(cuid())
   folderId   String
   userId     String
-  permission DriveFolderSharePermission   @default(READ)
+  permission DriveFolderSharePermission @default(READ)
   createdAt  DateTime                   @default(now())
   updatedAt  DateTime                   @updatedAt
   createdBy  String?
@@ -2639,19 +2642,19 @@ model WhatsAppSubmission {
 /// Status da OS no Controle Financeiro (planilha "CONTROLE FINANCEIRO - MATERIAL/SERVIÃO APLICADO")
 enum FinancialControlStatus {
   PROCESSO_COMPLETO // amarelo
-  PAGO              // verde
-  AGUARDAR_NOTA     // verde (pago, aguardar nota)
+  PAGO // verde
+  AGUARDAR_NOTA // verde (pago, aguardar nota)
   AGUARDAR_PAGAMENTO // azul claro (agendado, aguardar pagamento)
-  LANCADO           // cinza/azul â lanÃ§amento criado a partir da OC (ainda nao pago)
-  CANCELADO         // vermelho
+  LANCADO // cinza/azul â lanÃ§amento criado a partir da OC (ainda nao pago)
+  CANCELADO // vermelho
 }
 
 /// LanÃ§amentos da pÃ¡gina "Controle Financeiro" (Material/ServiÃ§o Aplicado).
 /// Cada linha representa uma OS e suas informaÃ§Ãµes de pagamento.
 model FinancialControlEntry {
-  id              String                  @id @default(cuid())
+  id              String                 @id @default(cuid())
   /// ConsÃ³rcio Predial: brasilia | hub
-  consorcio       String                  @default("brasilia")
+  consorcio       String                 @default("brasilia")
   /// MÃªs e ano de referÃªncia do pagamento (para agrupamento na UI: JANEIRO/2025, FEVEREIRO/2025...).
   paymentMonth    Int // 1-12
   paymentYear     Int
@@ -2689,10 +2692,10 @@ model FinancialControlEntry {
   /// [{ url, name }] â anexos do lanÃ§amento
   attachments     Json?
 
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  createdBy       String?
-  updatedBy       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String?
+  updatedBy String?
 
   @@index([consorcio])
   @@index([consorcio, paymentYear, paymentMonth])
@@ -2705,19 +2708,19 @@ model FinancialControlEntry {
 
 /// Ajustes manuais permanentes no extrato de caixa (correÃ§Ãµes fora do TOTVS RM).
 model ExtratoCaixaAjuste {
-  id               String    @id @default(cuid())
-  dataCompensacao  DateTime  @db.Date
-  codCCusto        String    @default("")
-  ccusto           String    @default("")
-  codNatFinanceira String    @default("")
-  natureza         String    @default("")
+  id               String   @id @default(cuid())
+  dataCompensacao  DateTime @db.Date
+  codCCusto        String   @default("")
+  ccusto           String   @default("")
+  codNatFinanceira String   @default("")
+  natureza         String   @default("")
   codFilial        Int?
-  fornecedor       String    @default("")
-  valor            Decimal   @db.Decimal(18, 2)
+  fornecedor       String   @default("")
+  valor            Decimal  @db.Decimal(18, 2)
   observacao       String?
   createdById      String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([dataCompensacao])
   @@index([codFilial])
@@ -2770,7 +2773,7 @@ model KanbanBoard {
 
   columns KanbanColumn[]
   shares  KanbanBoardShare[]
-  creator User? @relation("KanbanBoardCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  creator User?              @relation("KanbanBoardCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([isCustom])
   @@index([createdById])
@@ -2807,7 +2810,7 @@ model KanbanColumn {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  board KanbanBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  board KanbanBoard  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards KanbanCard[]
 
   @@index([boardId])
@@ -2815,29 +2818,29 @@ model KanbanColumn {
 }
 
 model KanbanCard {
-  id             String       @id @default(cuid())
-  columnId       String
-  title          String
-  description    String       @default("")
-  priority       TaskPriority @default(MEDIUM)
-  startDate      DateTime?
-  endDate        DateTime?    @map("dueDate")
-  assigneeUserId String?
-  assigneeName   String?
-  totalTasks        Int          @default(0)
-  completedTasks    Int          @default(0)
-  checklistEnabled    Boolean      @default(false)
-  attachmentsEnabled  Boolean      @default(false)
-  labels              Json         @default("[]")
-  position       Int          @default(0)
-  completedAt    DateTime?
-  archivedAt     DateTime?
-  workHours      Decimal?     @db.Decimal(8, 2)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                 String       @id @default(cuid())
+  columnId           String
+  title              String
+  description        String       @default("")
+  priority           TaskPriority @default(MEDIUM)
+  startDate          DateTime?
+  endDate            DateTime?    @map("dueDate")
+  assigneeUserId     String?
+  assigneeName       String?
+  totalTasks         Int          @default(0)
+  completedTasks     Int          @default(0)
+  checklistEnabled   Boolean      @default(false)
+  attachmentsEnabled Boolean      @default(false)
+  labels             Json         @default("[]")
+  position           Int          @default(0)
+  completedAt        DateTime?
+  archivedAt         DateTime?
+  workHours          Decimal?     @db.Decimal(8, 2)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  column         KanbanColumn          @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  assignee       User?                 @relation("KanbanCardAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  column         KanbanColumn           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  assignee       User?                  @relation("KanbanCardAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   members        KanbanCardMember[]
   checklistItems KanbanChecklistItem[]
   comments       KanbanCardComment[]
@@ -2910,9 +2913,9 @@ model PlannerAgendaShare {
   createdAt        DateTime                     @default(now())
   updatedAt        DateTime                     @updatedAt
 
-  owner       User  @relation("PlannerAgendaShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  sharedWith  User  @relation("PlannerAgendaShareSharedWith", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
-  creator     User? @relation("PlannerAgendaShareCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  owner      User  @relation("PlannerAgendaShareOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sharedWith User  @relation("PlannerAgendaShareSharedWith", fields: [sharedWithUserId], references: [id], onDelete: Cascade)
+  creator    User? @relation("PlannerAgendaShareCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@unique([ownerId, sharedWithUserId])
   @@index([sharedWithUserId])
@@ -3052,41 +3055,41 @@ enum MaterialDeliveryReceiptType {
 }
 
 model MaterialDelivery {
-  id                  String                          @id @default(cuid())
-  deliveryNumber      String                          @unique
-  polo                MaterialDeliveryPolo
-  stockMovementId     String?                         @unique
-  receiptType         MaterialDeliveryReceiptType?
-  movementId          String?
-  movementNumber      String?
-  contractId          String?
-  currentStatus       MaterialDeliveryCurrentStatus   @default(APROVADO_SUPRIMENTOS)
-  paymentStatus       MaterialDeliveryPaymentStatus   @default(AGUARDANDO_PAGAMENTO)
-  supplierId          String?
-  supplierName        String?
-  purchaseOrderId     String?
-  orderValue          Decimal?                        @db.Decimal(15, 2)
-  expectedDelivery    DateTime?
-  actualDelivery      DateTime?
-  totalPaid           Decimal?                        @db.Decimal(15, 2)
-  stockShortfallType  MaterialDeliveryStockShortfallType?
-  rmNumber            String?
-  deliveryType        String?
-  observations        String?                         @db.Text
-  finalStatus         MaterialDeliveryFinalStatus     @default(PENDENTE)
-  receivedByEngineering Boolean                       @default(false)
-  receivedByUserId    String?
-  receivedAt          DateTime?
-  createdBy           String
-  createdAt           DateTime                        @default(now())
-  updatedAt           DateTime                        @updatedAt
+  id                    String                              @id @default(cuid())
+  deliveryNumber        String                              @unique
+  polo                  MaterialDeliveryPolo
+  stockMovementId       String?                             @unique
+  receiptType           MaterialDeliveryReceiptType?
+  movementId            String?
+  movementNumber        String?
+  contractId            String?
+  currentStatus         MaterialDeliveryCurrentStatus       @default(APROVADO_SUPRIMENTOS)
+  paymentStatus         MaterialDeliveryPaymentStatus       @default(AGUARDANDO_PAGAMENTO)
+  supplierId            String?
+  supplierName          String?
+  purchaseOrderId       String?
+  orderValue            Decimal?                            @db.Decimal(15, 2)
+  expectedDelivery      DateTime?
+  actualDelivery        DateTime?
+  totalPaid             Decimal?                            @db.Decimal(15, 2)
+  stockShortfallType    MaterialDeliveryStockShortfallType?
+  rmNumber              String?
+  deliveryType          String?
+  observations          String?                             @db.Text
+  finalStatus           MaterialDeliveryFinalStatus         @default(PENDENTE)
+  receivedByEngineering Boolean                             @default(false)
+  receivedByUserId      String?
+  receivedAt            DateTime?
+  createdBy             String
+  createdAt             DateTime                            @default(now())
+  updatedAt             DateTime                            @updatedAt
 
-  supplier      Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  contractRecord Contract?     @relation(fields: [contractId], references: [id], onDelete: SetNull)
-  creator       User           @relation("MaterialDeliveryCreator", fields: [createdBy], references: [id], onDelete: Restrict)
-  receivedByUser User?         @relation("MaterialDeliveryReceiver", fields: [receivedByUserId], references: [id], onDelete: SetNull)
-  stockMovement StockMovement?  @relation(fields: [stockMovementId], references: [id], onDelete: SetNull)
+  supplier       Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseOrder  PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  contractRecord Contract?      @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  creator        User           @relation("MaterialDeliveryCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  receivedByUser User?          @relation("MaterialDeliveryReceiver", fields: [receivedByUserId], references: [id], onDelete: SetNull)
+  stockMovement  StockMovement? @relation(fields: [stockMovementId], references: [id], onDelete: SetNull)
 
   @@index([polo])
   @@index([stockMovementId])
@@ -3138,11 +3141,11 @@ enum MaterialDeliveryFinalStatus {
 
 /// Espelho da aba GERAL (coluna E â L): ID Mov â Normal/CorreÃ§Ã£o para pagamento boleto
 model MaterialDeliveryGeralLookup {
-  id             String                          @id @default(cuid())
-  lookupKey      String                          @unique
-  shortfallType  MaterialDeliveryStockShortfallType
-  createdAt      DateTime                        @default(now())
-  updatedAt      DateTime                        @updatedAt
+  id            String                             @id @default(cuid())
+  lookupKey     String                             @unique
+  shortfallType MaterialDeliveryStockShortfallType
+  createdAt     DateTime                           @default(now())
+  updatedAt     DateTime                           @updatedAt
 
   @@index([lookupKey])
   @@map("material_delivery_geral_lookups")
@@ -3262,18 +3265,18 @@ model FuelRefuelRequest {
   requesterId String
   requester   User   @relation("FuelRefuelRequester", fields: [requesterId], references: [id], onDelete: Restrict)
 
-  requestedAt DateTime @default(now())
-  refuelDate  DateTime
-  route       String
+  requestedAt            DateTime                  @default(now())
+  refuelDate             DateTime
+  route                  String
   /// CÃ³digo da cidade satÃ©lite (lista fixa em fuelSatelliteCities).
   satelliteCityCode      String?
   administrativeRegionId String?
   administrativeRegion   FuelAdministrativeRegion? @relation(fields: [administrativeRegionId], references: [id], onDelete: SetNull)
   gasStationId           String?
-  gasStation             FuelGasStation? @relation(fields: [gasStationId], references: [id], onDelete: SetNull)
-  costCenter  String?
-  contractId  String?
-  contract    Contract? @relation(fields: [contractId], references: [id], onDelete: Restrict)
+  gasStation             FuelGasStation?           @relation(fields: [gasStationId], references: [id], onDelete: SetNull)
+  costCenter             String?
+  contractId             String?
+  contract               Contract?                 @relation(fields: [contractId], references: [id], onDelete: Restrict)
 
   driverName         String
   vehiclePlate       String
@@ -3285,9 +3288,9 @@ model FuelRefuelRequest {
   dashboardPhotoKey  String?
   dashboardPhotoName String?
 
-  observations String?
-  status       FuelRefuelRequestStatus @default(PENDING_MANAGER)
-  sourceChatId String?
+  observations        String?
+  status              FuelRefuelRequestStatus @default(PENDING_MANAGER)
+  sourceChatId        String?
   sourceWhatsAppPhone String?
 
   managerApprovedBy      String?
@@ -3304,17 +3307,17 @@ model FuelRefuelRequest {
   refuelDeadlineAmount    Int?
   refuelDeadlineUnit      FuelRefuelDeadlineUnit?
 
-  refuelReportedAt        DateTime?
-  odometerKm              Int?
-  tankLevelAfter          FuelTankLevelAfter?
+  refuelReportedAt         DateTime?
+  odometerKm               Int?
+  tankLevelAfter           FuelTankLevelAfter?
   refuelReportObservations String?
-  receiptPhotoUrl         String?
-  receiptPhotoKey         String?
-  receiptPhotoName        String?
-  litersRefueled          Decimal? @db.Decimal(10, 3)
-  pricePerLiter           Decimal? @db.Decimal(10, 2)
+  receiptPhotoUrl          String?
+  receiptPhotoKey          String?
+  receiptPhotoName         String?
+  litersRefueled           Decimal?            @db.Decimal(10, 3)
+  pricePerLiter            Decimal?            @db.Decimal(10, 2)
 
-  managerApprover User? @relation("FuelRefuelManager", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
+  managerApprover  User? @relation("FuelRefuelManager", fields: [managerApprovedBy], references: [id], onDelete: SetNull)
   suppliesApprover User? @relation("FuelRefuelSupplies", fields: [suppliesApprovedBy], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -3382,9 +3385,9 @@ model LogisticsDeliveryRequest {
   materialAttachmentUrl  String?
   materialAttachmentName String?
 
-  value            Decimal  @db.Decimal(15, 2)
-  history          String?  @db.Text
-  observations     String?  @db.Text
+  value            Decimal   @db.Decimal(15, 2)
+  history          String?   @db.Text
+  observations     String?   @db.Text
   expectedDelivery DateTime?
 
   createdBy String
@@ -3407,8 +3410,8 @@ model LogisticsDeliveryRequest {
 
 /// Feedback de entrega logÃ­stica (tb feedback entrega fornecedor log).
 model LogisticsDeliveryCompletion {
-  id                String @id @default(cuid())
-  deliveryRequestId String @unique
+  id                String                   @id @default(cuid())
+  deliveryRequestId String                   @unique
   deliveryRequest   LogisticsDeliveryRequest @relation(fields: [deliveryRequestId], references: [id], onDelete: Cascade)
 
   receivingLocation    String
@@ -3435,7 +3438,7 @@ model LogisticsDeliveryCompletion {
 
 /// Notas fiscais anexadas na finalizaÃ§Ã£o (tb nf feedback log).
 model LogisticsDeliveryInvoiceAttachment {
-  id             String @id @default(cuid())
+  id             String                      @id @default(cuid())
   completionId   String
   completion     LogisticsDeliveryCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
   attachmentUrl  String
@@ -3462,6 +3465,65 @@ model FlowDiagram {
 
   @@index([userId])
   @@map("flow_diagrams")
+}
+
+enum ScheduledNewsStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  CANCELLED
+}
+
+enum ScheduledNewsAudienceType {
+  ALL
+  DEPARTMENTS
+  POSITIONS
+  USERS
+}
+
+model ScheduledNews {
+  id                  String                    @id @default(cuid())
+  title               String
+  summary             String                    @db.Text
+  content             String                    @db.Text
+  imageUrl            String?                   @map("image_url")
+  imageKey            String?                   @map("image_key")
+  status              ScheduledNewsStatus       @default(DRAFT)
+  audienceType        ScheduledNewsAudienceType @default(ALL) @map("audience_type")
+  audienceDepartments String[]                  @default([]) @map("audience_departments")
+  audiencePositions   String[]                  @default([]) @map("audience_positions")
+  audienceUserIds     String[]                  @default([]) @map("audience_user_ids")
+  priority            Int                       @default(0)
+  publishAt           DateTime                  @map("publish_at")
+  expiresAt           DateTime?                 @map("expires_at")
+  createdById         String?                   @map("created_by_id")
+  updatedById         String?                   @map("updated_by_id")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  createdBy User?               @relation("ScheduledNewsCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User?               @relation("ScheduledNewsUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  views     ScheduledNewsView[]
+
+  @@index([status, publishAt])
+  @@index([audienceType])
+  @@index([createdAt])
+  @@map("scheduled_news")
+}
+
+model ScheduledNewsView {
+  id        String   @id @default(cuid())
+  newsId    String   @map("news_id")
+  userId    String   @map("user_id")
+  seenAt    DateTime @default(now()) @map("seen_at")
+  createdAt DateTime @default(now())
+
+  news ScheduledNews @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user User          @relation("ScheduledNewsViewer", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, userId])
+  @@index([userId, seenAt])
+  @@map("scheduled_news_views")
 }
 
 /// Tutorial da Central de Ajuda (passos, markdown, rich text ou Google Docs).
@@ -3497,25 +3559,25 @@ model HelpTutorial {
 
 /// Processo de licitaÃ§Ã£o com documentos e anÃ¡lise por IA.
 model Licitacao {
-  id              String   @id @default(cuid())
-  titulo          String
-  numeroProcesso  String?
-  orgao           String?
-  modalidade      String?
-  status          String   @default("RASCUNHO")
+  id               String               @id @default(cuid())
+  titulo           String
+  numeroProcesso   String?
+  orgao            String?
+  modalidade       String?
+  status           String               @default("RASCUNHO")
   /// Objeto da licitaÃ§Ã£o (extraÃ­do ou informado manualmente)
-  objeto          String?  @db.Text
+  objeto           String?              @db.Text
   /// Valor estimado em texto (ex.: "R$ 1.500.000,00")
-  valorEstimado   String?
+  valorEstimado    String?
   /// VigÃªncia do contrato em texto
-  vigenciaContrato String? @db.Text
+  vigenciaContrato String?              @db.Text
   /// Resultado estruturado da extraÃ§Ã£o IA (JSON)
-  analiseJson     Json?
-  createdBy       String
-  creator         User     @relation("LicitacaoCreator", fields: [createdBy], references: [id], onDelete: Restrict)
-  documentos      LicitacaoDocumento[]
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  analiseJson      Json?
+  createdBy        String
+  creator          User                 @relation("LicitacaoCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  documentos       LicitacaoDocumento[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@index([createdBy])
   @@index([status])
@@ -3581,21 +3643,21 @@ model ResponsavelTecnico {
 
 /// Controle de anuidade CREA para o mÃ³dulo de LicitaÃ§Ãµes.
 model ControleAnuidade {
-  id                 String    @id @default(cuid())
-  pagosPelo          String?
-  empresa            String?
-  profissional       String
-  porqueDesconto     String?
-  crea               String?
-  cpfCnpj            String?
-  valor              Decimal?  @db.Decimal(14, 2)
-  dataVencimento     DateTime?
-  dataParaPagamento  DateTime?
-  dataPagamento      DateTime?
-  status             String    @default("EM_ABERTA")
-  fluig              String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  pagosPelo         String?
+  empresa           String?
+  profissional      String
+  porqueDesconto    String?
+  crea              String?
+  cpfCnpj           String?
+  valor             Decimal?  @db.Decimal(14, 2)
+  dataVencimento    DateTime?
+  dataParaPagamento DateTime?
+  dataPagamento     DateTime?
+  status            String    @default("EM_ABERTA")
+  fluig             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([profissional])
   @@index([empresa])
@@ -3607,27 +3669,27 @@ model ControleAnuidade {
 
 /// Controle de pagamentos de ART's / Protocolos (mÃ³dulo LicitaÃ§Ãµes).
 model ControlePagamentoArt {
-  id               String    @id @default(cuid())
-  uf               String?
-  empresa          String?
-  contratante      String?
-  cnpjCpf          String?
-  contrato         String?
-  observacoes      String?
-  vigenciaInicio   DateTime?
-  vigenciaTermino  DateTime?
-  renovacao        DateTime?
-  art              String?
-  valor            Decimal?  @db.Decimal(14, 2)
-  profissional     String
-  vencDoBoleto     DateTime?
-  status           String    @default("EM_ABERTA")
-  pago             String?
-  solicitaEm       DateTime?
-  pagoEm           DateTime?
-  fluig            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  uf              String?
+  empresa         String?
+  contratante     String?
+  cnpjCpf         String?
+  contrato        String?
+  observacoes     String?
+  vigenciaInicio  DateTime?
+  vigenciaTermino DateTime?
+  renovacao       DateTime?
+  art             String?
+  valor           Decimal?  @db.Decimal(14, 2)
+  profissional    String
+  vencDoBoleto    DateTime?
+  status          String    @default("EM_ABERTA")
+  pago            String?
+  solicitaEm      DateTime?
+  pagoEm          DateTime?
+  fluig           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([uf])
   @@index([empresa])
@@ -3790,13 +3852,13 @@ model AsoTipo {
 
 /// Periodicidade do ASO periÃ³dico por cargo + setor (Employee.position + department)
 model CargoRisco {
-  id                  String       @id @default(cuid())
-  cargo               String
-  setor               String
-  grauRisco           AsoGrauRisco @default(MEDIO)
-  periodicidadeMeses  Int
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                 String       @id @default(cuid())
+  cargo              String
+  setor              String
+  grauRisco          AsoGrauRisco @default(MEDIO)
+  periodicidadeMeses Int
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   @@unique([cargo, setor])
   @@index([cargo])
@@ -3806,25 +3868,25 @@ model CargoRisco {
 
 /// Registro de ASO vinculado a um funcionÃ¡rio
 model AsoRegistro {
-  id                String       @id @default(cuid())
-  funcionarioId     String
-  tipoAsoId         String
-  dataExame         DateTime     @db.Date
-  dataValidade      DateTime     @db.Date
-  resultado         AsoResultado
-  medicoResponsavel String
-  crmMedico         String
-  clinica           String
+  id                 String       @id @default(cuid())
+  funcionarioId      String
+  tipoAsoId          String
+  dataExame          DateTime     @db.Date
+  dataValidade       DateTime     @db.Date
+  resultado          AsoResultado
+  medicoResponsavel  String
+  crmMedico          String
+  clinica            String
   /// Valor cobrado / pago pelo exame (R$)
-  valor             Decimal?     @db.Decimal(12, 2)
-  anexoUrl          String?
-  observacoes       String?      @db.Text
+  valor              Decimal?     @db.Decimal(12, 2)
+  anexoUrl           String?
+  observacoes        String?      @db.Text
   /// true quando a validade usou 12 meses padrÃ£o (cargo sem cargos_risco)
-  validadePadrao    Boolean      @default(false)
+  validadePadrao     Boolean      @default(false)
   periodicidadeUsada Int
-  criadoPorId       String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  criadoPorId        String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   funcionario Employee @relation(fields: [funcionarioId], references: [id], onDelete: Cascade)
   tipoAso     AsoTipo  @relation(fields: [tipoAsoId], references: [id], onDelete: Restrict)
@@ -3868,8 +3930,8 @@ enum ToolRentalRequestStatus {
 
 /// SolicitaÃ§Ãµes de ferramentas (Engenharia â fluxo Suprimentos atÃ© pagamento)
 model ToolRentalRequest {
-  id                      String                    @id @default(cuid())
-  code                    String                    @unique
+  id                      String                  @id @default(cuid())
+  code                    String                  @unique
   polo                    String
   contrato                String
   obra                    String
@@ -3877,14 +3939,14 @@ model ToolRentalRequest {
   assignedUserId          String
   supplierId              String?
   supplierName            String?
-  priority                ToolRentalPriority        @default(NORMAL)
+  priority                ToolRentalPriority      @default(NORMAL)
   logisticsMode           ToolRentalLogisticsMode
   demandType              ToolRentalDemandType
   equipamento             String
-  periodoInicio           DateTime                  @db.Date
-  periodoFim              DateTime                  @db.Date
+  periodoInicio           DateTime                @db.Date
+  periodoFim              DateTime                @db.Date
   linkSugestao            String?
-  status                  ToolRentalRequestStatus   @default(OPEN)
+  status                  ToolRentalRequestStatus @default(OPEN)
   ocMirrorUrl             String?
   ocMirrorName            String?
   paymentProofUrl         String?
@@ -3894,13 +3956,13 @@ model ToolRentalRequest {
   suppliesApprovalComment String?
   suppliesRejectionReason String?
   createdById             String?
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
 
-  assignedUser       User      @relation("ToolRentalRequestAssignedUser", fields: [assignedUserId], references: [id], onDelete: Restrict)
-  createdBy          User?     @relation("ToolRentalRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  suppliesApprovedBy User?     @relation("ToolRentalRequestSuppliesApprover", fields: [suppliesApprovedById], references: [id], onDelete: SetNull)
-  supplier           Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  assignedUser       User                     @relation("ToolRentalRequestAssignedUser", fields: [assignedUserId], references: [id], onDelete: Restrict)
+  createdBy          User?                    @relation("ToolRentalRequestCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  suppliesApprovedBy User?                    @relation("ToolRentalRequestSuppliesApprover", fields: [suppliesApprovedById], references: [id], onDelete: SetNull)
+  supplier           Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   events             ToolRentalRequestEvent[]
 
   @@index([status])
@@ -3967,12 +4029,12 @@ enum GestaoOsProfile {
 
 /// ConfiguraÃ§Ãµes gerais do mÃ³dulo GestÃ£o de OS (ex.: numeraÃ§Ã£o).
 model GestaoOsSettings {
-  id           String   @id @default("default")
+  id                  String   @id @default("default")
   /// PrÃ³ximo nÃºmero mÃ­nimo a usar na numeraÃ§Ã£o das OS (nÃ£o afeta nÃºmero do chamado).
-  nextOsNumber Int      @default(1)
+  nextOsNumber        Int      @default(1)
   /// true apÃ³s migraÃ§Ã£o que separou sequÃªncia de chamado da de OS.
-  chamadoSeqSeparated Boolean @default(false)
-  updatedAt    DateTime @updatedAt
+  chamadoSeqSeparated Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
 
   @@map("gestao_os_settings")
 }
@@ -4014,7 +4076,7 @@ model GestaoOsBranch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company   GestaoOsCompany  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   GestaoOsCompany    @relation(fields: [companyId], references: [id], onDelete: Cascade)
   buildings GestaoOsBuilding[]
 
   @@index([companyId])
@@ -4037,7 +4099,7 @@ model GestaoOsProvider {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company    GestaoOsCompany?   @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  company    GestaoOsCompany?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
   workOrders GestaoOsWorkOrder[]
 
   @@index([companyId])
@@ -4061,21 +4123,21 @@ model GestaoOsServiceCategory {
 
   company GestaoOsCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
+  @@unique([companyId, name])
   @@index([companyId])
   @@index([name])
-  @@unique([companyId, name])
   @@map("gestao_os_service_categories")
 }
 
 /// VÃ­nculo usuÃ¡rio â empresa + perfil no Gestao OS.
 model GestaoOsMembership {
-  id        String         @id @default(cuid())
+  id        String          @id @default(cuid())
   companyId String
   userId    String
   profile   GestaoOsProfile @default(REQUESTER)
-  isActive  Boolean        @default(true)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  isActive  Boolean         @default(true)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
 
   company GestaoOsCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User            @relation("GestaoOsMembershipUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -4088,25 +4150,25 @@ model GestaoOsMembership {
 
 /// PrÃ©dio / edifÃ­cio da hierarquia de locais.
 model GestaoOsBuilding {
-  id        String   @id @default(cuid())
-  companyId String?
-  branchId  String?
-  name      String
-  code      String?
-  address   String?
-  latitude  Float?
-  longitude Float?
+  id                String   @id @default(cuid())
+  companyId         String?
+  branchId          String?
+  name              String
+  code              String?
+  address           String?
+  latitude          Float?
+  longitude         Float?
   responsibleUserId String?
   prepostoUserId    String?
   managerUserId     String?
   fiscalUserId      String?
-  qrToken   String?  @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  qrToken           String?  @unique
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  company    GestaoOsCompany? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  branch     GestaoOsBranch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  company    GestaoOsCompany?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  branch     GestaoOsBranch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
   sectors    GestaoOsSector[]
   workOrders GestaoOsWorkOrder[]
   plans      GestaoOsMaintenancePlan[]
@@ -4128,7 +4190,7 @@ model GestaoOsSector {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  building   GestaoOsBuilding @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  building   GestaoOsBuilding    @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   places     GestaoOsPlace[]
   workOrders GestaoOsWorkOrder[]
 
@@ -4147,7 +4209,7 @@ model GestaoOsPlace {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sector     GestaoOsSector @relation(fields: [sectorId], references: [id], onDelete: Cascade)
+  sector     GestaoOsSector      @relation(fields: [sectorId], references: [id], onDelete: Cascade)
   assets     GestaoOsAsset[]
   workOrders GestaoOsWorkOrder[]
 
@@ -4158,21 +4220,21 @@ model GestaoOsPlace {
 
 /// Ativo / equipamento vinculado a um local (com QR Code).
 model GestaoOsAsset {
-  id        String   @id @default(cuid())
-  placeId   String
-  name      String
-  code      String?
-  category  String?
-  serialNumber String?
+  id             String    @id @default(cuid())
+  placeId        String
+  name           String
+  code           String?
+  category       String?
+  serialNumber   String?
   /// Token estÃ¡vel usado no QR Code do ativo.
-  qrToken   String   @unique
+  qrToken        String    @unique
   /// Fim da garantia do ativo (alerta no sino antes de vencer).
   warrantyEndsAt DateTime?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  place      GestaoOsPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  place      GestaoOsPlace             @relation(fields: [placeId], references: [id], onDelete: Cascade)
   workOrders GestaoOsWorkOrder[]
   plans      GestaoOsMaintenancePlan[]
   documents  GestaoOsDocument[]
@@ -4240,18 +4302,18 @@ model GestaoOsEquipment {
 
 /// Ordem de serviÃ§o / chamado de manutenÃ§Ã£o predial.
 model GestaoOsWorkOrder {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   /// NÃºmero do chamado (sempre gerado na abertura).
-  displayNumber Int    @unique
+  displayNumber Int     @unique
   /// NÃºmero da OS â gerado na primeira anÃ¡lise (Em AnÃ¡lise). Null = ainda sÃ³ chamado.
-  osNumber      Int?   @unique
+  osNumber      Int?    @unique
   companyId     String?
 
-  status           GestaoOsStatus          @default(OPEN)
-  priority         GestaoOsPriority        @default(MEDIUM)
-  maintenanceType  GestaoOsMaintenanceType?
-  category         String
-  description      String                  @db.Text
+  status          GestaoOsStatus           @default(OPEN)
+  priority        GestaoOsPriority         @default(MEDIUM)
+  maintenanceType GestaoOsMaintenanceType?
+  category        String
+  description     String                   @db.Text
 
   buildingId String?
   sectorId   String?
@@ -4281,56 +4343,56 @@ model GestaoOsWorkOrder {
   /// Anexos: [{ url, name, mimeType? }]
   attachments Json?
 
-  cancelReason   String? @db.Text
-  completionNote String? @db.Text
-  rating         Int?
-  ratingComment  String? @db.Text
+  cancelReason        String?   @db.Text
+  completionNote      String?   @db.Text
+  rating              Int?
+  ratingComment       String?   @db.Text
   /// REQUEST | SAC | UNPLANNED | PLANTAO
-  origin         String  @default("REQUEST")
+  origin              String    @default("REQUEST")
   /// CHAMADO | DUVIDA | RECLAMACAO (quando origin = SAC)
-  sacKind        String?
-  teamUserIds    Json?
+  sacKind             String?
+  teamUserIds         Json?
   fiscalRating        Int?
-  fiscalRatingComment String? @db.Text
+  fiscalRatingComment String?   @db.Text
   fiscalUserId        String?
   attestedAt          DateTime?
   closeQrVerifiedAt   DateTime?
 
   /// Prazo / SLA da OS.
-  dueAt DateTime?
+  dueAt                    DateTime?
   /// Horas de SLA aplicadas na abertura/aprovaÃ§Ã£o (auditoria).
-  slaHoursApplied Int?
+  slaHoursApplied          Int?
   /// Quando o alerta prÃ©-estouro de SLA foi enviado.
-  slaWarnedAt DateTime?
+  slaWarnedAt              DateTime?
   /// PeÃ§as/custos: [{ id, name, supplier, quantity, unitCost, expectedAt, notes }]
-  parts Json?
+  parts                    Json?
   /// Chamado/OS relacionado (reincidÃªncia).
-  relatedWorkOrderId String?
-  relatedWorkOrder   GestaoOsWorkOrder?  @relation("GestaoOsRelated", fields: [relatedWorkOrderId], references: [id], onDelete: SetNull)
-  relatedFrom        GestaoOsWorkOrder[] @relation("GestaoOsRelated")
+  relatedWorkOrderId       String?
+  relatedWorkOrder         GestaoOsWorkOrder?  @relation("GestaoOsRelated", fields: [relatedWorkOrderId], references: [id], onDelete: SetNull)
+  relatedFrom              GestaoOsWorkOrder[] @relation("GestaoOsRelated")
   /// Foto no inÃ­cio da execuÃ§Ã£o (campo).
-  startPhotoUrl String?
+  startPhotoUrl            String?
   /// Foto no fim da execuÃ§Ã£o (campo).
-  endPhotoUrl   String?
+  endPhotoUrl              String?
   /// Respostas de checklist preenchidas na execuÃ§Ã£o [{ id, label, checked, note? }].
-  checklistResponses Json?
+  checklistResponses       Json?
   /// Checklist de seguranÃ§a do trabalho (EPIs) antes da execuÃ§Ã£o.
   safetyChecklistResponses Json?
   /// Foto da pessoa usando os EPIs, exigida na etapa SeguranÃ§a do Trabalho.
-  safetyPhotoUrl String?
-  signatureRequesterUrl  String?
-  signatureTechnicianUrl String?
+  safetyPhotoUrl           String?
+  signatureRequesterUrl    String?
+  signatureTechnicianUrl   String?
 
-  openedAt     DateTime  @default(now())
-  approvedAt   DateTime?
-  startedAt    DateTime?
-  completedAt  DateTime?
+  openedAt              DateTime  @default(now())
+  approvedAt            DateTime?
+  startedAt             DateTime?
+  completedAt           DateTime?
   /// Tempo efetivo de execuÃ§Ã£o em milissegundos (pausa em Aguardando peÃ§a).
-  executionMs  Int       @default(0)
+  executionMs           Int       @default(0)
   /// Quando o relÃ³gio de execuÃ§Ã£o foi retomado (status Em ExecuÃ§Ã£o).
   lastExecutionResumeAt DateTime?
-  closedAt     DateTime?
-  cancelledAt  DateTime?
+  closedAt              DateTime?
+  cancelledAt           DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -4354,13 +4416,13 @@ model GestaoOsWorkOrder {
 }
 
 model GestaoOsWorkOrderEvent {
-  id          String         @id @default(cuid())
+  id          String          @id @default(cuid())
   workOrderId String
   fromStatus  GestaoOsStatus?
   toStatus    GestaoOsStatus
-  note        String?        @db.Text
+  note        String?         @db.Text
   actorId     String?
-  createdAt   DateTime       @default(now())
+  createdAt   DateTime        @default(now())
 
   workOrder GestaoOsWorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   actor     User?             @relation("GestaoOsEventActor", fields: [actorId], references: [id], onDelete: SetNull)
@@ -4393,18 +4455,18 @@ enum GestaoOsPlanType {
 
 /// Template de checklist reutilizÃ¡vel (preventiva / PMOC / SST).
 model GestaoOsChecklistTemplate {
-  id          String          @id @default(cuid())
-  companyId   String?
-  name        String
-  planType    GestaoOsPlanType @default(PREVENTIVE)
-  category    String?
+  id        String           @id @default(cuid())
+  companyId String?
+  name      String
+  planType  GestaoOsPlanType @default(PREVENTIVE)
+  category  String?
   /// Itens: [{ id, label, required? }]
-  items       Json
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  items     Json
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
-  company GestaoOsCompany?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  company GestaoOsCompany?          @relation(fields: [companyId], references: [id], onDelete: SetNull)
   plans   GestaoOsMaintenancePlan[]
 
   @@index([companyId])
@@ -4414,29 +4476,29 @@ model GestaoOsChecklistTemplate {
 
 /// Plano de manutenÃ§Ã£o preventiva / PMOC / seguranÃ§a.
 model GestaoOsMaintenancePlan {
-  id              String          @id @default(cuid())
-  companyId       String
-  name            String
-  planType        GestaoOsPlanType @default(PREVENTIVE)
-  description     String?         @db.Text
-  category        String?
-  buildingId      String?
-  assetId         String?
-  checklistId     String?
+  id                String           @id @default(cuid())
+  companyId         String
+  name              String
+  planType          GestaoOsPlanType @default(PREVENTIVE)
+  description       String?          @db.Text
+  category          String?
+  buildingId        String?
+  assetId           String?
+  checklistId       String?
   /// Intervalo em dias entre geraÃ§Ãµes (ex.: 30, 90, 180).
-  intervalDays    Int             @default(30)
-  nextDueAt       DateTime
-  lastGeneratedAt DateTime?
-  assigneeId      String?
+  intervalDays      Int              @default(30)
+  nextDueAt         DateTime
+  lastGeneratedAt   DateTime?
+  assigneeId        String?
   /// HorÃ¡rio previsto da OS (HH:mm).
-  scheduledTime   String?
+  scheduledTime     String?
   /// IDs dos tÃ©cnicos na ordem do rodÃ­zio.
-  technicianIds   Json            @default("[]")
-  rotateTechnicians Boolean       @default(false)
-  rotationIndex   Int             @default(0)
-  isActive        Boolean         @default(true)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  technicianIds     Json             @default("[]")
+  rotateTechnicians Boolean          @default(false)
+  rotationIndex     Int              @default(0)
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   company   GestaoOsCompany            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   building  GestaoOsBuilding?          @relation(fields: [buildingId], references: [id], onDelete: SetNull)
@@ -4479,21 +4541,21 @@ enum GestaoOsDocumentKind {
 
 /// RepositÃ³rio de documentos por empresa / prÃ©dio / ativo.
 model GestaoOsDocument {
-  id          String              @id @default(cuid())
-  companyId   String
-  buildingId  String?
-  assetId     String?
-  kind        GestaoOsDocumentKind @default(OTHER)
-  title       String
-  fileUrl     String
-  fileName    String?
-  mimeType    String?
-  notes       String?             @db.Text
+  id           String               @id @default(cuid())
+  companyId    String
+  buildingId   String?
+  assetId      String?
+  kind         GestaoOsDocumentKind @default(OTHER)
+  title        String
+  fileUrl      String
+  fileName     String?
+  mimeType     String?
+  notes        String?              @db.Text
   uploadedById String?
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
-  company    GestaoOsCompany  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company    GestaoOsCompany   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   building   GestaoOsBuilding? @relation(fields: [buildingId], references: [id], onDelete: SetNull)
   asset      GestaoOsAsset?    @relation(fields: [assetId], references: [id], onDelete: SetNull)
   uploadedBy User?             @relation("GestaoOsDocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
@@ -4531,11 +4593,11 @@ model NfeRecebida {
 }
 
 model NfeDistribuicaoState {
-  id         String    @id @default("default")
-  ultimoNsu  String    @default("000000000000000") @map("ultimo_nsu")
+  id          String    @id @default("default")
+  ultimoNsu   String    @default("000000000000000") @map("ultimo_nsu")
   lastFetchAt DateTime? @map("last_fetch_at")
-  lastMessage String?  @map("last_message") @db.Text
-  updatedAt  DateTime  @updatedAt
+  lastMessage String?   @map("last_message") @db.Text
+  updatedAt   DateTime  @updatedAt
 
   @@map("nfe_distribuicao_state")
 }
@@ -4658,29 +4720,29 @@ enum SupportTicketChannel {
 
 /// Chamado de suporte ao usuário do sistema (senha, erro, permissão).
 model SupportTicket {
-  id                     String                 @id @default(cuid())
-  displayNumber          Int                    @unique
+  id                     String                @id @default(cuid())
+  displayNumber          Int                   @unique
   category               SupportTicketCategory
-  status                 SupportTicketStatus    @default(OPEN)
+  status                 SupportTicketStatus   @default(OPEN)
   channel                SupportTicketChannel
   subject                String
-  description            String                 @db.Text
+  description            String                @db.Text
   moduleHint             String?
   requesterId            String?
-  requester              User?                  @relation("SupportTicketRequester", fields: [requesterId], references: [id], onDelete: SetNull)
+  requester              User?                 @relation("SupportTicketRequester", fields: [requesterId], references: [id], onDelete: SetNull)
   requesterName          String?
   requesterPhone         String?
   requesterCpf           String?
   assigneeId             String?
-  assignee               User?                  @relation("SupportTicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee               User?                 @relation("SupportTicketAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   whatsAppConversationId String?
   sourceChatId           String?
   attachmentUrl          String?
-  resolutionNote         String?                @db.Text
+  resolutionNote         String?               @db.Text
   resolvedAt             DateTime?
   closedAt               DateTime?
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   @@index([status])
   @@index([category])

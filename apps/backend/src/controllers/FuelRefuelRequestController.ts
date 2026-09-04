@@ -264,6 +264,44 @@ export class FuelRefuelRequestController {
     }
   }
 
+  /**
+   * Lista todos os contratos cadastrados para o formulário de solicitação.
+   * Não filtra por permissão do módulo Contratos — qualquer autenticado que
+   * possa abrir o fluxo de abastecimento precisa ver a lista completa.
+   */
+  async listContractsForRequester(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+
+      const search = String(req.query.search ?? '').trim();
+      const where = search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { number: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : undefined;
+
+      const rows = await prisma.contract.findMany({
+        where,
+        orderBy: [{ name: 'asc' }, { number: 'asc' }],
+        select: { id: true, name: true, number: true },
+      });
+
+      res.json({
+        success: true,
+        data: rows.map((row) => ({
+          id: row.id,
+          name: row.name.trim() || row.number,
+          number: row.number,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async listDriverOptions(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);

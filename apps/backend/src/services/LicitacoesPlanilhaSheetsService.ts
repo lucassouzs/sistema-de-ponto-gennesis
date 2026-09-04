@@ -700,8 +700,11 @@ function isEmptyRow(row: string[]): boolean {
 }
 
 function isSkippableRow(row: string[]): boolean {
+  // Só descarta linhas de cabeçalho repetidas. ITEM vazio não invalida a linha
+  // (ex.: Hospital das Forças Armadas na planilha Centro-Oeste).
+  // Linhas totalmente vazias são filtradas depois por isEmptyRow.
   const first = row[0]?.trim() ?? '';
-  if (!first) return true;
+  if (!first) return false;
   const key = normalizeHeaderKey(first);
   return key === 'item' || key === 'uf' || key === 'estado';
 }

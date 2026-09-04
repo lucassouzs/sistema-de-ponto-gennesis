@@ -419,6 +419,15 @@ router.put('/users/:userId', requirePermissionManagerOrAdministrator, async (req
       new Map(rawPayload.map((p) => [`${p.module}:${p.action}`, p])).values()
     );
 
+    const existingCount = await prisma.userPermission.count({ where: { userId } });
+    const confirmClear = req.body?.confirmClear === true;
+    if (existingCount > 0 && normalized.length === 0 && !confirmClear) {
+      throw createError(
+        'Recusado: isso apagaria todas as permissões deste usuário. Confirme se for intencional.',
+        400
+      );
+    }
+
     let contractIdsToSave: string[] = [];
     if (shouldSyncContracts) {
       contractIdsToSave = rawContractIds.filter((id: unknown) => typeof id === 'string' && id.length > 0);

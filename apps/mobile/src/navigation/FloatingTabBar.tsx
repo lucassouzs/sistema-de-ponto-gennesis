@@ -85,7 +85,11 @@ function SquircleButton({
       style={[
         styles.shadowWrap,
         {
-          shadowOpacity: isDark ? 0.38 : 0.14,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: isDark ? 0.32 : 0.12,
+          shadowRadius: 18,
+          elevation: 8,
           transform: [{ scale: pressScale }],
         },
       ]}
@@ -297,7 +301,17 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
                   useNativeDriver: true,
                 }).start();
               }}
-              style={[styles.fab, { backgroundColor: colors.primary }]}
+              style={[
+                styles.fab,
+                {
+                  backgroundColor: colors.primary,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: isDark ? 0.36 : 0.14,
+                  shadowRadius: 18,
+                  elevation: 8,
+                },
+              ]}
             >
               <Plus size={24} color="#FFFFFF" strokeWidth={2.6} />
             </Pressable>
@@ -326,20 +340,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: BUTTON,
+    overflow: 'visible',
   },
   cluster: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: GAP,
+    overflow: 'visible',
   },
   shadowWrap: {
     width: BUTTON,
     height: BUTTON,
     borderRadius: RADIUS,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 18,
-    elevation: 10,
   },
   squircle: {
     width: BUTTON,
@@ -361,10 +373,5 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 10,
   },
 });

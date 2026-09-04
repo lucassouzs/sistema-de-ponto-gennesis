@@ -248,6 +248,7 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
   { key: pathToModuleKey('/ponto/condicoes-pagamento'), name: 'Condições de Pagamento', href: '/ponto/condicoes-pagamento', category: 'Cadastros' },
   { key: pathToModuleKey('/ponto/natureza-orcamentaria'), name: 'Natureza Orçamentária', href: '/ponto/natureza-orcamentaria', category: 'Cadastros' },
   { key: pathToModuleKey('/ponto/formularios'), name: 'Formulários', href: '/ponto/formularios', category: 'Cadastros' },
+  { key: pathToModuleKey('/ponto/noticias'), name: 'Notícias', href: '/ponto/noticias', category: 'Cadastros' },
   {
     /** Chave mantida (path antigo) para não invalidar permissões já gravadas no banco. */
     key: pathToModuleKey('/ponto/espelho-nf/prestadores-servico'),

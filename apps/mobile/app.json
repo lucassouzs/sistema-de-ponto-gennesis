@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gennesis Conecta",
     "slug": "sistema-ponto-engenharia",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
     "userInterfaceStyle": "automatic",
@@ -28,7 +28,7 @@
       }
     },
     "android": {
-      "versionCode": 5,
+      "versionCode": 6,
       "adaptiveIcon": {
         "foregroundImage": "./assets/favicon.png",
         "backgroundColor": "#111827"
@@ -82,8 +82,7 @@
     "extra": {
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
-      },
-      "EXPO_PUBLIC_API_URL": "http://192.168.15.93:5000"
+      }
     },
     "owner": "lucassouzss"
   }

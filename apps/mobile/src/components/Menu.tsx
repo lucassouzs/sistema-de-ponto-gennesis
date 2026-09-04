@@ -8,7 +8,7 @@ import {
   ScrollView,
   Animated,
   Easing,
-  TouchableWithoutFeedback,
+  Pressable,
   Alert,
   Dimensions,
 } from 'react-native';
@@ -98,6 +98,22 @@ export default function Menu({ visible, onClose }: MenuProps) {
   const go = useCallback(
     (name: keyof RootStackParamList | 'Home') => {
       closeThen(() => {
+        let nav: any = navigation;
+        for (let i = 0; i < 6; i++) {
+          const names: string[] | undefined = nav?.getState?.()?.routeNames;
+          if (name === 'Home') {
+            if (names?.includes('Main')) {
+              nav.navigate('Main', { screen: 'Home' });
+              return;
+            }
+          } else if (names?.includes(name)) {
+            nav.navigate(name);
+            return;
+          }
+          const parent = nav?.getParent?.();
+          if (!parent) break;
+          nav = parent;
+        }
         if (name === 'Home') {
           (navigation as any).navigate('Main', { screen: 'Home' });
           return;
@@ -214,9 +230,12 @@ export default function Menu({ visible, onClose }: MenuProps) {
       onRequestClose={onClose}
     >
       <View style={styles.root}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
-        </TouchableWithoutFeedback>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.overlay, { opacity: overlayOpacity }]}
+          />
+        </Pressable>
 
         <Animated.View
           style={[
@@ -300,6 +319,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   panel: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
     height: '100%',
     maxWidth: 320,
     paddingHorizontal: 20,

@@ -34,6 +34,7 @@ import { isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAcces
 import { PageEnter } from './PageEnter';
 import { bootAuthenticatedPageReveal } from '@/lib/pageReveal';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { ScheduledNewsGate } from './ScheduledNewsGate';
 
 export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
 
@@ -271,6 +272,7 @@ function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutP
               queryClient.invalidateQueries({ queryKey: ['user'] });
             }}
           />
+          <ScheduledNewsGate userId={user?.id} />
         </div>
       </NativeCallProvider>
     </MainLayoutShellContext.Provider>

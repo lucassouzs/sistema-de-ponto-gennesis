@@ -232,6 +232,65 @@ export default function KanbanCardScreen() {
     }
   };
 
+  const toggleCardComplete = async () => {
+    if (!card || readOnly) return;
+    const nextCompletedAt = card.completedAt ? null : new Date().toISOString();
+    const previousCompletedAt = card.completedAt ?? null;
+
+    queryClient.setQueryData(['kanban-card', cardId], (old: any) =>
+      old ? { ...old, completedAt: nextCompletedAt } : old,
+    );
+    queryClient.setQueryData(['kanban-board', departmentKey ?? 'own'], (old: any) => {
+      if (!old) return old;
+      return {
+        ...old,
+        columns: old.columns.map((col: any) => ({
+          ...col,
+          cards: col.cards.map((c: any) =>
+            c.id === card.id ? { ...c, completedAt: nextCompletedAt } : c,
+          ),
+        })),
+      };
+    });
+
+    try {
+      const updated = await updateKanbanCard(card.id, { completedAt: nextCompletedAt });
+      const resolved = updated.completedAt ?? nextCompletedAt;
+      queryClient.setQueryData(['kanban-card', cardId], (old: any) =>
+        old ? { ...old, completedAt: resolved } : old,
+      );
+      queryClient.setQueryData(['kanban-board', departmentKey ?? 'own'], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          columns: old.columns.map((col: any) => ({
+            ...col,
+            cards: col.cards.map((c: any) =>
+              c.id === card.id ? { ...c, completedAt: resolved } : c,
+            ),
+          })),
+        };
+      });
+    } catch {
+      queryClient.setQueryData(['kanban-card', cardId], (old: any) =>
+        old ? { ...old, completedAt: previousCompletedAt } : old,
+      );
+      queryClient.setQueryData(['kanban-board', departmentKey ?? 'own'], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          columns: old.columns.map((col: any) => ({
+            ...col,
+            cards: col.cards.map((c: any) =>
+              c.id === card.id ? { ...c, completedAt: previousCompletedAt } : c,
+            ),
+          })),
+        };
+      });
+      Toast.show({ type: 'error', text1: 'Não foi possível atualizar o status do card' });
+    }
+  };
+
   const toggleChecklist = async () => {
     if (readOnly) return;
     const next = !checklistEnabled;
@@ -517,6 +576,7 @@ export default function KanbanCardScreen() {
   const checklistItems = card.checklistItems || [];
   const comments = card.commentsList || [];
   const doneTasks = checklistItems.filter((i) => i.isDone).length;
+  const isCardCompleted = Boolean(card.completedAt);
   const pickerValue = datePicker
     ? parseLocalDateTime(
         datePicker.field === 'start' ? card.startDate : card.endDate,
@@ -568,19 +628,42 @@ export default function KanbanCardScreen() {
           </ScrollView>
         </View>
 
-        <TextInput
-          value={title}
-          onChangeText={(t) => {
-            setTitle(t);
-            setDirty(true);
-          }}
-          onBlur={() => void saveMeta({ silent: true })}
-          editable={!readOnly}
-          style={styles.titleInput}
-          multiline
-          placeholder="Título do card"
-          placeholderTextColor={colors.textSecondary}
-        />
+        <View style={styles.titleRow}>
+          <TouchableOpacity
+            style={[
+              styles.completeBall,
+              isCardCompleted
+                ? styles.completeBallDone
+                : { borderColor: isDark ? '#6b7280' : '#9ca3af' },
+            ]}
+            onPress={() => void toggleCardComplete()}
+            disabled={readOnly}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isCardCompleted ? 'Marcar como pendente' : 'Marcar como concluído'
+            }
+            activeOpacity={readOnly ? 1 : 0.7}
+          >
+            {isCardCompleted ? <Check size={12} color="#fff" strokeWidth={3.5} /> : null}
+          </TouchableOpacity>
+          <TextInput
+            value={title}
+            onChangeText={(t) => {
+              setTitle(t);
+              setDirty(true);
+            }}
+            onBlur={() => void saveMeta({ silent: true })}
+            editable={!readOnly}
+            style={[
+              styles.titleInput,
+              isCardCompleted && styles.titleInputCompleted,
+            ]}
+            multiline
+            placeholder="Título do card"
+            placeholderTextColor={colors.textSecondary}
+          />
+        </View>
 
         {saving ? (
           <Text style={styles.savingHint}>Salvando…</Text>
@@ -1180,13 +1263,37 @@ function getStyles(colors: any, _isDark: boolean) {
     },
     prioText: { fontSize: 11, fontWeight: '700', color: colors.textSecondary },
     prioTextActive: { color: '#fff' },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      marginBottom: 4,
+    },
+    completeBall: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 5,
+      flexShrink: 0,
+      backgroundColor: 'transparent',
+    },
+    completeBallDone: {
+      borderColor: '#61BD4F',
+      backgroundColor: '#61BD4F',
+    },
     titleInput: {
+      flex: 1,
       fontSize: 24,
       fontWeight: '800',
       color: colors.text,
-      marginBottom: 4,
       padding: 0,
       lineHeight: 30,
+    },
+    titleInputCompleted: {
+      color: colors.textSecondary,
     },
     savingHint: {
       fontSize: 11,

@@ -560,7 +560,7 @@ export default function SolicitarCombustivelPage() {
   const { data: contractsRes } = useQuery({
     queryKey: ['contracts-for-fuel-request'],
     queryFn: async () =>
-      (await api.get('/contracts', { params: { limit: 500, page: 1 } })).data,
+      (await api.get('/fuel-refuel-requests/contracts')).data,
     enabled: showForm,
     staleTime: 10 * 60 * 1000,
   });

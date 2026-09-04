@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -26,7 +27,6 @@ import {
   X,
   ChevronDown,
   ChevronRight,
-  ArrowLeft,
   Filter,
   Paperclip,
   Search,
@@ -39,6 +39,7 @@ import { formatCpfDisplay } from '../lib/cpf';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { onFabBarPress } from '../navigation/fabBarEvents';
+import { formatDpRequestDetails } from '../lib/formatDpRequestDetails';
 import {
   ADM_SIMPLE_TYPES,
   createDpRequest,
@@ -386,6 +387,7 @@ export default function DpRequestsScreen() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => getStyles(colors, isDark), [colors, isDark]);
 
   const myEmployeeId = user?.employee?.id || '';
@@ -420,6 +422,25 @@ export default function DpRequestsScreen() {
     onSelect: (value: string) => void;
   } | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
+  const canDismissOverlayRef = useRef(false);
+
+  useEffect(() => {
+    if (!picker && !filterOpen) {
+      canDismissOverlayRef.current = false;
+      return;
+    }
+    canDismissOverlayRef.current = false;
+    const t = setTimeout(() => {
+      canDismissOverlayRef.current = true;
+    }, 350);
+    return () => clearTimeout(t);
+  }, [picker, filterOpen]);
+
+  const dismissOverlay = () => {
+    if (!canDismissOverlayRef.current) return;
+    setPicker(null);
+    setFilterOpen(false);
+  };
 
   const listQuery = useQuery({
     queryKey: ['dp-my-requests'],
@@ -435,12 +456,29 @@ export default function DpRequestsScreen() {
   const employeesQuery = useQuery({
     queryKey: ['payroll-employees-dp'],
     queryFn: fetchPayrollEmployees,
-    enabled: createOpen,
+    enabled: createOpen || !!detail,
   });
 
   const list = listQuery.data ?? [];
   const costCenters = costCentersQuery.data ?? [];
   const employees = employeesQuery.data ?? [];
+
+  const employeeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of employees) {
+      if (e.id) map.set(e.id, e.name);
+    }
+    return map;
+  }, [employees]);
+
+  const detailPreview = useMemo(() => {
+    if (!detail) return null;
+    return formatDpRequestDetails(
+      detail.requestType,
+      detail.details ?? null,
+      employeeNameById,
+    );
+  }, [detail, employeeNameById]);
 
   const stats = useMemo(() => {
     const dp = list.filter((r) => !isAdmTstRequestType(r.requestType)).length;
@@ -1052,79 +1090,198 @@ export default function DpRequestsScreen() {
       </ScrollView>
 
       {/* Detail */}
-      <Modal visible={!!detail} animationType="slide" onRequestClose={() => setDetail(null)}>
-        <View style={[styles.safeArea, { paddingTop: 12 }]}>
-          <View style={styles.modalHeaderBar}>
-            <Text style={styles.modalTitle}>
-              Solicitação #{detail?.displayNumber ?? detail?.id.slice(0, 8)}
-            </Text>
-            <TouchableOpacity onPress={() => setDetail(null)}>
-              <X size={22} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-          {detail ? (
-            <ScrollView contentContainerStyle={styles.pad}>
-              <Info label="Status" value={STATUS_LABELS[detail.status]} styles={styles} />
-              <Info
-                label="Tipo"
-                value={DP_TYPE_LABELS[detail.requestType] || detail.requestType}
-                styles={styles}
-              />
-              <Info label="Destino" value={destinationLabel(detail.requestType)} styles={styles} />
-              <Info
-                label="Urgência"
-                value={URGENCY_LABELS[detail.urgency] || detail.urgency}
-                styles={styles}
-              />
-              <Info
-                label="Contrato"
-                value={detail.costCenter?.name || detail.contract?.name || '—'}
-                styles={styles}
-              />
-              <Info label="Empresa" value={detail.company || '—'} styles={styles} />
-              <Info label="Polo" value={detail.polo || '—'} styles={styles} />
-              {detail.dpFeedback ? (
-                <Info label="Feedback" value={detail.dpFeedback} styles={styles} />
-              ) : null}
+      <Modal
+        visible={!!detail}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setDetail(null)}
+      >
+        <View style={styles.detailOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setDetail(null)}
+          />
+          <View style={[styles.detailSheet, { backgroundColor: colors.card }]}>
+            <View style={styles.detailSheetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.detailSheetTitle, { color: colors.text }]}>
+                  Solicitação #{detail?.displayNumber ?? detail?.id.slice(0, 8) ?? ''}
+                </Text>
+                <Text style={[styles.detailSheetSubtitle, { color: colors.textSecondary }]}>
+                  {detail ? STATUS_LABELS[detail.status] : ''}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setDetail(null)}
+                style={styles.formCloseBtn}
+                hitSlop={6}
+                accessibilityLabel="Fechar"
+              >
+                <X size={18} color={colors.text} strokeWidth={2.2} />
+              </TouchableOpacity>
+            </View>
 
-              {detail.status === 'WAITING_RETURN' ? (
-                <View style={styles.returnBox}>
-                  <Text style={styles.returnTitle}>Sua pendência — responda ao DP</Text>
-                  <TextInput
-                    value={returnComment}
-                    onChangeText={setReturnComment}
-                    placeholder="Escreva sua resposta..."
-                    placeholderTextColor={colors.textSecondary}
-                    style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
-                    multiline
-                  />
-                  <TouchableOpacity
-                    style={styles.primaryBtn}
-                    onPress={() => void sendReturn()}
-                    disabled={returning}
-                  >
-                    {returning ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.primaryBtnText}>Responder ao DP</Text>
-                    )}
-                  </TouchableOpacity>
+            {detail ? (
+              <ScrollView
+                style={{ maxHeight: 520 }}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <View style={styles.detailGrid}>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Status
+                    </Text>
+                    <Text
+                      style={[
+                        styles.detailValue,
+                        { color: statusColor(detail.status, colors) },
+                      ]}
+                    >
+                      {STATUS_LABELS[detail.status]}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Tipo
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {DP_TYPE_LABELS[detail.requestType] || detail.requestType}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Destino
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {destinationLabel(detail.requestType)}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Urgência
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {URGENCY_LABELS[detail.urgency] || detail.urgency}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Contrato
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detail.costCenter?.name || detail.contract?.name || '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Empresa
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detail.company || '—'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailField}>
+                    <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                      Polo
+                    </Text>
+                    <Text style={[styles.detailValue, { color: colors.text }]}>
+                      {detail.polo || '—'}
+                    </Text>
+                  </View>
+                  {detail.dpFeedback ? (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Feedback
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detail.dpFeedback}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {detail.requesterReturnComment ? (
+                    <View style={styles.detailField}>
+                      <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>
+                        Sua resposta
+                      </Text>
+                      <Text style={[styles.detailValue, { color: colors.text }]}>
+                        {detail.requesterReturnComment}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
-            </ScrollView>
-          ) : null}
+
+                {detailPreview && detailPreview.items.length > 0 ? (
+                  <View style={styles.detailsSection}>
+                    <Text style={[styles.detailsSectionTitle, { color: colors.text }]}>
+                      {detailPreview.sectionTitle}
+                    </Text>
+                    {detailPreview.items.map((item, index) => (
+                      <View
+                        key={`${item.title}-${index}`}
+                        style={[
+                          styles.detailsItem,
+                          {
+                            borderLeftColor: isDark
+                              ? 'rgba(255,255,255,0.18)'
+                              : 'rgba(15,23,42,0.12)',
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.detailsItemTitle, { color: colors.text }]}>
+                          {item.title}
+                        </Text>
+                        <Text
+                          style={[styles.detailsItemSubtitle, { color: colors.textSecondary }]}
+                        >
+                          {item.subtitle}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {detail.status === 'WAITING_RETURN' ? (
+                  <View style={styles.returnBox}>
+                    <Text style={styles.returnTitle}>Sua pendência — responda ao DP</Text>
+                    <TextInput
+                      value={returnComment}
+                      onChangeText={setReturnComment}
+                      placeholder="Escreva sua resposta..."
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
+                      multiline
+                    />
+                    <TouchableOpacity
+                      style={styles.primaryBtn}
+                      onPress={() => void sendReturn()}
+                      disabled={returning}
+                    >
+                      {returning ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.primaryBtnText}>Responder ao DP</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+              </ScrollView>
+            ) : null}
+          </View>
         </View>
       </Modal>
 
       {/* Filter */}
-      <Modal visible={filterOpen} transparent animationType="slide" onRequestClose={() => setFilterOpen(false)}>
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
         <View style={styles.pickerOverlay}>
           <TouchableOpacity
-            style={StyleSheet.absoluteFill}
+            style={styles.pickerBackdrop}
             activeOpacity={1}
-            onPress={() => setFilterOpen(false)}
+            onPress={dismissOverlay}
           />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
+          <View style={[styles.pickerSheet, { backgroundColor: colors.card }]}>
             <View style={styles.pickerHandle} />
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>Filtro de status</Text>
@@ -1182,14 +1339,14 @@ export default function DpRequestsScreen() {
         onRequestClose={() => setCreateOpen(false)}
       >
         <View
-          style={[
-            styles.safeArea,
-            {
-              backgroundColor: colors.background,
-              paddingTop: insets.top,
-              paddingBottom: insets.bottom,
-            },
-          ]}
+          style={{
+            flex: 1,
+            width: windowWidth,
+            height: windowHeight,
+            backgroundColor: colors.background,
+            paddingTop: insets.top,
+            position: 'relative',
+          }}
         >
           <KeyboardAvoidingView
             style={{ flex: 1 }}
@@ -1197,20 +1354,6 @@ export default function DpRequestsScreen() {
           >
             <View style={styles.formHeader}>
               <View style={styles.formHeaderText}>
-                {createTarget ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setCreateTarget(null);
-                      setRequestType('');
-                      setRows([emptyFormRow(myEmployeeId)]);
-                    }}
-                    style={styles.formBackRow}
-                    hitSlop={6}
-                  >
-                    <ArrowLeft size={18} color={colors.primary} strokeWidth={2.2} />
-                    <Text style={styles.formBackText}>Trocar destino</Text>
-                  </TouchableOpacity>
-                ) : null}
                 <Text style={styles.formTitle}>Nova solicitação</Text>
                 <Text style={styles.formSubtitle}>
                   {!createTarget
@@ -1221,7 +1364,10 @@ export default function DpRequestsScreen() {
                 </Text>
               </View>
               <TouchableOpacity
-                onPress={() => setCreateOpen(false)}
+                onPress={() => {
+                  setPicker(null);
+                  setCreateOpen(false);
+                }}
                 style={styles.formCloseBtn}
                 hitSlop={6}
                 accessibilityLabel="Fechar"
@@ -2127,106 +2273,106 @@ export default function DpRequestsScreen() {
               </>
             )}
           </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Generic option picker */}
-      <Modal
-        visible={!!picker}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setPicker(null)}
-      >
-        <View style={styles.pickerOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setPicker(null)}
-          />
-          <View style={[styles.pickerSheet, { backgroundColor: colors.background }]}>
-            <View style={styles.pickerHandle} />
-            <View style={styles.pickerHeader}>
-              <Text style={styles.pickerTitle}>{picker?.title}</Text>
+          {picker ? (
+            <View
+              collapsable={false}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+                justifyContent: 'flex-end',
+                padding: 16,
+                paddingBottom: Math.max(insets.bottom, 20),
+                zIndex: 99999,
+                elevation: 99999,
+              }}
+            >
               <TouchableOpacity
-                onPress={() => setPicker(null)}
-                style={[styles.formCloseBtn, { width: 36, height: 36 }]}
-                accessibilityLabel="Fechar"
-              >
-                <X size={18} color={colors.text} strokeWidth={2.2} />
-              </TouchableOpacity>
-            </View>
-            <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
-              <Search size={16} color={colors.textSecondary} />
-              <TextInput
-                style={styles.pickerSearchInput}
-                placeholder="Buscar..."
-                placeholderTextColor={colors.textSecondary}
-                value={pickerSearch}
-                onChangeText={setPickerSearch}
+                style={StyleSheet.absoluteFill}
+                activeOpacity={1}
+                onPress={dismissOverlay}
               />
-            </View>
-            <FlatList
-              data={pickerFiltered}
-              keyExtractor={(item) => item.value}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              renderItem={({ item }) =>
-                'avatarUri' in item ? (
-                  <PersonPickerListRow
-                    label={item.label}
-                    subtitle={item.subtitle}
-                    avatarUri={item.avatarUri}
-                    colors={colors}
-                    isDark={isDark}
-                    onPress={() => {
-                      picker?.onSelect(item.value);
-                      setPicker(null);
-                    }}
+              <View
+                style={[
+                  styles.pickerSheet,
+                  {
+                    backgroundColor: colors.card,
+                    height: Math.round(windowHeight * 0.58),
+                  },
+                ]}
+              >
+                  <View style={styles.pickerHandle} />
+                  <View style={styles.pickerHeader}>
+                    <Text style={styles.pickerTitle}>{picker.title}</Text>
+                    <TouchableOpacity
+                      onPress={() => setPicker(null)}
+                      style={[styles.formCloseBtn, { width: 36, height: 36 }]}
+                      accessibilityLabel="Fechar"
+                    >
+                      <X size={18} color={colors.text} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={[styles.pickerSearchBox, { marginBottom: 10 }]}>
+                    <Search size={16} color={colors.textSecondary} />
+                    <TextInput
+                      style={styles.pickerSearchInput}
+                      placeholder="Buscar..."
+                      placeholderTextColor={colors.textSecondary}
+                      value={pickerSearch}
+                      onChangeText={setPickerSearch}
+                    />
+                  </View>
+                  <FlatList
+                    style={{ flex: 1 }}
+                    data={pickerFiltered}
+                    keyExtractor={(item) => item.value}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) =>
+                      'avatarUri' in item ? (
+                        <PersonPickerListRow
+                          label={item.label}
+                          subtitle={item.subtitle}
+                          avatarUri={item.avatarUri}
+                          colors={colors}
+                          isDark={isDark}
+                          onPress={() => {
+                            picker.onSelect(item.value);
+                            setPicker(null);
+                          }}
+                        />
+                      ) : (
+                        <TouchableOpacity
+                          style={[
+                            styles.pickerItem,
+                            { backgroundColor: isDark ? colors.surface : colors.background },
+                          ]}
+                          onPress={() => {
+                            picker.onSelect(item.value);
+                            setPicker(null);
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={styles.pickerItemLabel}>{item.label}</Text>
+                          {item.subtitle ? (
+                            <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
+                          ) : null}
+                        </TouchableOpacity>
+                      )
+                    }
+                    ListEmptyComponent={
+                      <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
+                    }
+                    contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
                   />
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.pickerItem,
-                      { backgroundColor: isDark ? colors.card : colors.surface },
-                    ]}
-                    onPress={() => {
-                      picker?.onSelect(item.value);
-                      setPicker(null);
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Text style={styles.pickerItemLabel}>{item.label}</Text>
-                    {item.subtitle ? (
-                      <Text style={styles.pickerItemSub}>{item.subtitle}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                )
-              }
-              ListEmptyComponent={
-                <Text style={styles.pickerEmpty}>Nenhum resultado</Text>
-              }
-              contentContainerStyle={{ paddingBottom: 24, gap: 8 }}
-            />
-          </View>
+                </View>
+            </View>
+          ) : null}
         </View>
       </Modal>
-    </View>
-  );
-}
-
-function Info({
-  label,
-  value,
-  styles,
-}: {
-  label: string;
-  value: string;
-  styles: ReturnType<typeof getStyles>;
-}) {
-  return (
-    <View style={styles.infoBlock}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
@@ -2497,26 +2643,83 @@ function getStyles(colors: any, isDark: boolean) {
       marginTop: 10,
       letterSpacing: -0.1,
     },
-    modalHeaderBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+    detailOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'flex-end',
+      padding: 16,
+      paddingBottom: 28,
     },
-    modalTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
-    infoBlock: { marginBottom: 12 },
-    infoLabel: { fontSize: 11, fontWeight: '700', color: colors.textSecondary, marginBottom: 2 },
-    infoValue: { fontSize: 15, color: colors.text, fontWeight: '500' },
+    detailSheet: {
+      borderRadius: 20,
+      padding: 18,
+      gap: 12,
+      maxHeight: '88%',
+    },
+    detailSheetHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+      marginBottom: 4,
+    },
+    detailSheetTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      letterSpacing: -0.3,
+    },
+    detailSheetSubtitle: {
+      fontSize: 13,
+      fontWeight: '500',
+      marginTop: 2,
+    },
+    detailGrid: { gap: 12 },
+    detailField: { gap: 2 },
+    detailLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    detailValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      lineHeight: 20,
+    },
+    detailsSection: {
+      marginTop: 14,
+      borderRadius: 14,
+      padding: 12,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.03)',
+      gap: 10,
+    },
+    detailsSectionTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
+    detailsItem: {
+      borderLeftWidth: 2,
+      paddingLeft: 10,
+      paddingVertical: 2,
+      gap: 2,
+    },
+    detailsItemTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: -0.2,
+    },
+    detailsItemSubtitle: {
+      fontSize: 13,
+      fontWeight: '500',
+      lineHeight: 18,
+    },
     returnBox: {
       marginTop: 12,
       padding: 14,
-      borderRadius: 12,
-      backgroundColor: colors.surface,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)',
     },
-    returnTitle: { fontWeight: '700', color: colors.warning, marginBottom: 10 },
+    returnTitle: { fontWeight: '700', color: colors.warning, marginBottom: 10, fontSize: 13 },
     input: {
       borderRadius: 14,
       paddingHorizontal: 14,
@@ -2562,17 +2765,6 @@ function getStyles(colors: any, isDark: boolean) {
       fontSize: 14,
       fontWeight: '500',
       marginTop: 2,
-    },
-    formBackRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      marginBottom: 8,
-    },
-    formBackText: {
-      color: colors.primary,
-      fontSize: 13,
-      fontWeight: '600',
     },
     formCloseBtn: {
       width: 40,
@@ -2746,13 +2938,16 @@ function getStyles(colors: any, isDark: boolean) {
     },
     pickerOverlay: {
       flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
       justifyContent: 'flex-end',
-      backgroundColor: 'rgba(0,0,0,0.4)',
+      padding: 16,
+      paddingBottom: 28,
+    },
+    pickerBackdrop: {
+      ...StyleSheet.absoluteFillObject,
     },
     pickerSheet: {
-      maxHeight: '78%',
-      borderTopLeftRadius: 22,
-      borderTopRightRadius: 22,
+      borderRadius: 20,
       paddingHorizontal: 16,
       paddingBottom: 12,
     },

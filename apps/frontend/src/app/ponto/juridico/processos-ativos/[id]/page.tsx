@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft,
   Briefcase,
   Calendar,
   Loader2,
@@ -144,15 +143,6 @@ export default function ProcessoAtivoDetailPage() {
     <ProtectedRoute route="/ponto/juridico/processos-ativos">
       <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
         <div className="space-y-6">
-          <button
-            type="button"
-            onClick={() => router.push('/ponto/juridico/processos-ativos')}
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar para processos ativos
-          </button>
-
           {isError || !processo ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-gray-600 dark:text-gray-300">
