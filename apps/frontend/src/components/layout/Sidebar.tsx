@@ -72,6 +72,7 @@ import {
   Workflow,
   ChevronDown,
   HelpCircle,
+  Newspaper,
   type LucideIcon,
 } from 'lucide-react';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
@@ -1343,6 +1344,14 @@ export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
             icon: ClipboardList,
             description: 'Criar e editar estrutura de formulários',
             permission: isAdministrator || can(pk('/ponto/formularios')),
+            section: 'Geral'
+          },
+          {
+            name: 'Notícias',
+            href: '/ponto/noticias',
+            icon: Newspaper,
+            description: 'Comunicados agendados exibidos no primeiro acesso',
+            permission: isAdministrator || can(pk('/ponto/noticias')),
             section: 'Geral'
           }
         ]

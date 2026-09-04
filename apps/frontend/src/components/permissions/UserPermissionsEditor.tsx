@@ -149,6 +149,30 @@ function serializeFullBaseline(
   return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}|rdp:${serializeContractIds(restrictedDpApprovalCostCenterIds)}`;
 }
 
+const EMPTY_PERMISSION_BASELINE = serializeFullBaseline(
+  new Set(),
+  new Set(),
+  new Set(),
+  new Set(),
+  new Set(),
+  {},
+  new Set()
+);
+
+function isEmptyPermissionBaseline(
+  selected: Set<string>,
+  contractActions: Set<ContractAction>,
+  contractIds: Set<string>,
+  employeeActions: Set<ContractAction>
+): boolean {
+  return (
+    selected.size === 0 &&
+    contractActions.size === 0 &&
+    contractIds.size === 0 &&
+    employeeActions.size === 0
+  );
+}
+
 /** Mesmo formato retornado por GET /permissions/users/:id (alinha cache do React Query ao PUT). */
 function buildPermissionsSnapshotForCache(
   selected: Set<string>,
@@ -569,9 +593,11 @@ export function UserPermissionsEditor({
 
   /** Serialização estável para comparar com o último estado vindo do servidor (evita PUT na hidratação). */
   const baselineSerializedRef = useRef<string | null>(null);
+  const hydratedRef = useRef(false);
   /** Evita PUTs concorrentes (causa 409 na unique userId+module+action). */
   const saveInFlightRef = useRef(false);
   const saveQueuedRef = useRef(false);
+  const emptyWipeToastAtRef = useRef(0);
 
   const {
     data: userPermissionData,
@@ -679,26 +705,13 @@ export function UserPermissionsEditor({
   );
 
   useEffect(() => {
-    if (!userPermissionData?.permissions) {
-      setSelectedSet(new Set());
-      setContractActionsSet(new Set());
-      setEmployeeActionsSet(new Set());
-      setSelectedContractIds(new Set());
-      setSelectedDpApprovalContractIds(new Set());
-      setSelectedRestrictedDpApprovalCostCenterIds(new Set());
-      setContractModuleFlags({});
-      baselineSerializedRef.current = serializeFullBaseline(
-        new Set(),
-        new Set(),
-        new Set(),
-        new Set(),
-        new Set(),
-        {},
-        new Set()
-      );
-      return;
-    }
-    const perms = userPermissionData.permissions;
+    hydratedRef.current = false;
+    baselineSerializedRef.current = null;
+  }, [userId, positionTemplate]);
+
+  useEffect(() => {
+    if (!userPermissionData) return;
+    const perms = userPermissionData.permissions ?? [];
     const next = new Set<string>(
       perms.filter((p) => p.action === PERMISSION_ACCESS_ACTION).map((p) => p.module)
     );
@@ -746,10 +759,16 @@ export function UserPermissionsEditor({
       nextFlags,
       nextRestrictedCc
     );
+    hydratedRef.current = true;
   }, [userPermissionData]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!hydratedRef.current) {
+        const err = new Error('blocked-unhydrated');
+        err.name = 'BlockedUnhydratedPermissions';
+        throw err;
+      }
       const currentSelected = new Set(selectedSetRef.current);
       const currentContractActions = Array.from(contractActionsRef.current);
       const currentEmployeeActions = Array.from(employeeActionsRef.current);
@@ -781,6 +800,16 @@ export function UserPermissionsEditor({
         action,
       }));
       const permissions = [...basePermissions, ...contractActionPermissions, ...employeeActionPermissions];
+      const wouldClearAll =
+        permissions.length === 0 &&
+        currentContractIds.length === 0 &&
+        baselineSerializedRef.current !== null &&
+        baselineSerializedRef.current !== EMPTY_PERMISSION_BASELINE;
+      if (wouldClearAll && !isPositionMode) {
+        const err = new Error('blocked-empty-wipe');
+        err.name = 'BlockedEmptyPermissionWipe';
+        throw err;
+      }
       const allowedContractIds = currentContractIds;
       const dpApprovalContractIds = Array.from(selectedDpApprovalContractIdsRef.current);
       const restrictedDpApprovalCostCenterIds = currentSelected.has(RESTRICTED_DP_APPROVE_KEY)
@@ -849,6 +878,14 @@ export function UserPermissionsEditor({
       }
     },
     onError: (error: unknown) => {
+      if (error instanceof Error && error.name === 'BlockedUnhydratedPermissions') return;
+      if (error instanceof Error && error.name === 'BlockedEmptyPermissionWipe') {
+        const now = Date.now();
+        if (now - emptyWipeToastAtRef.current < 4000) return;
+        emptyWipeToastAtRef.current = now;
+        toast.error('As permissões não foram apagadas: lista vazia não é salva automaticamente.');
+        return;
+      }
       const msg =
         error && typeof error === 'object' && 'response' in error
           ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
@@ -861,6 +898,25 @@ export function UserPermissionsEditor({
     saveMutation;
 
   const enqueuePersistPermissions = useCallback(() => {
+    if (!hydratedRef.current) return;
+    if (
+      isEmptyPermissionBaseline(
+        selectedSetRef.current,
+        contractActionsRef.current,
+        selectedContractIdsRef.current,
+        employeeActionsRef.current
+      ) &&
+      baselineSerializedRef.current !== null &&
+      baselineSerializedRef.current !== EMPTY_PERMISSION_BASELINE &&
+      !isPositionMode
+    ) {
+      const now = Date.now();
+      if (now - emptyWipeToastAtRef.current >= 4000) {
+        emptyWipeToastAtRef.current = now;
+        toast.error('As permissões não foram apagadas: lista vazia não é salva automaticamente.');
+      }
+      return;
+    }
     if (saveInFlightRef.current) {
       saveQueuedRef.current = true;
       return;
@@ -878,11 +934,12 @@ export function UserPermissionsEditor({
         saveInFlightRef.current = false;
       }
     })();
-  }, [persistPermissionsAsync]);
+  }, [isPositionMode, persistPermissionsAsync]);
 
   /** Salva automaticamente após alterações (debounce), sem disparar na sincronização inicial com o servidor. */
   useEffect(() => {
     if (loadingPermissions || permissionError) return;
+    if (!hydratedRef.current) return;
     if (baselineSerializedRef.current === null) return;
 
     const serialized = serializeFullBaseline(
@@ -928,6 +985,7 @@ export function UserPermissionsEditor({
   // mesmo que o debounce ainda não tenha disparado.
   useEffect(() => {
     return () => {
+      if (!hydratedRef.current) return;
       if (baselineSerializedRef.current === null) return;
       const latest = serializeFullBaseline(
         selectedSetRef.current,

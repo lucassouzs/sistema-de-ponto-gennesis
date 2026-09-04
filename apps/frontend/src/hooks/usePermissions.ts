@@ -728,6 +728,7 @@ export function useRoutePermission(route: string) {
     '/ponto/condicoes-pagamento': isAdministrator || can(pk('/ponto/condicoes-pagamento')),
     '/ponto/natureza-orcamentaria': isAdministrator || can(pk('/ponto/natureza-orcamentaria')),
     '/ponto/formularios': isAdministrator || can(pk('/ponto/formularios')),
+    '/ponto/noticias': isAdministrator || can(pk('/ponto/noticias')),
     '/ponto/juridico/processos-ativos': isAdministrator || can(pk('/ponto/juridico/processos-ativos')),
     '/ponto/juridico/processos-ativos/dashboard':
       isAdministrator || can(pk('/ponto/juridico/processos-ativos/dashboard')),
