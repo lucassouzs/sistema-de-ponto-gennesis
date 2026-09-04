@@ -528,6 +528,7 @@ export class MaterialRequestService {
       description: string | null;
       unit: string;
       isActive: boolean;
+      code?: string | null;
       productType?: string | null;
       category?: string | null;
     }>
