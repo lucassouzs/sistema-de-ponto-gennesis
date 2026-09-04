@@ -25,8 +25,10 @@ export function likePattern(normalizedQuery: string): string {
 }
 
 function assertSafeSqlIdentifier(expr: string): string {
-  // Permite colunas simples, qualificadores e aspas duplas: name, bn.name, "productType", cm."productType"
-  if (!/^[a-zA-Z_][a-zA-Z0-9_."]*$/.test(expr)) {
+  // Colunas simples, qualificadores e aspas duplas (camelCase no Postgres):
+  // name | bn.name | "tradeName" | cm."productType"
+  const part = '(?:[a-zA-Z_][a-zA-Z0-9_]*|"[a-zA-Z_][a-zA-Z0-9_]*")';
+  if (!new RegExp(`^${part}(?:\\.${part})*$`).test(expr)) {
     throw new Error(`Identificador SQL inválido para busca: ${expr}`);
   }
   return expr;
