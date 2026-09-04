@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { listFipeBrands, listFipeModels } from '../services/FipeService';
+import { listFipeBrands, listFipeFleetBrands, listFipeModels } from '../services/FipeService';
 import {
   isValidBrazilianPlate,
   normalizePlacaForStorage,
@@ -109,7 +109,11 @@ async function generateVehicleCode(): Promise<string> {
 export class VehicleController {
   async getFipeBrands(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const brands = await listFipeBrands(req.query.type);
+      const type = String(req.query.type ?? 'cars').trim().toLowerCase();
+      const brands =
+        type === 'fleet' || type === 'all' || type === 'cars+motos'
+          ? await listFipeFleetBrands()
+          : await listFipeBrands(req.query.type);
       res.json({ success: true, data: brands });
     } catch (error) {
       next(error);

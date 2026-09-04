@@ -1,13 +1,14 @@
 import {
   extractBaseModelName,
-  listFipeBrands,
-  listFipeModels,
+  listFipeFleetBrands,
+  listFipeFleetModels,
+  type FipeFleetBrand,
   type FipeOption
 } from '../services/FipeService';
 import { prisma } from './prisma';
 
 export type VehicleImportNormalizeContext = {
-  brands: FipeOption[];
+  brands: FipeFleetBrand[];
   modelsByBrandCode: Map<string, FipeOption[]>;
   contractCandidates: Array<{ label: string; canonical: string }>;
 };
@@ -50,6 +51,19 @@ const BRAND_ALIASES: Record<string, string> = {
   dodge: 'dodge',
   suzuki: 'suzuki',
   yamaha: 'yamaha',
+  kawasaki: 'kawasaki',
+  harley: 'harley-davidson',
+  'harley davidson': 'harley-davidson',
+  hd: 'harley-davidson',
+  triumph: 'triumph',
+  dafra: 'dafra',
+  sundown: 'sundown',
+  haojue: 'haojue',
+  bajaj: 'bajaj',
+  ktm: 'ktm',
+  ducati: 'ducati',
+  'royal enfield': 'royal enfield',
+  royalenfield: 'royal enfield',
   honda_moto: 'honda',
   agrale: 'agrale',
   troller: 'troller',
@@ -161,7 +175,7 @@ function resolveBrandAlias(raw: string): string {
   return BRAND_ALIASES[norm] || BRAND_ALIASES[norm.replace(/\s+/g, '')] || norm;
 }
 
-function findBrandInText(text: string, brands: FipeOption[]): FipeOption | null {
+function findBrandInText(text: string, brands: FipeFleetBrand[]): FipeFleetBrand | null {
   const normText = ` ${normalizeText(text)} `;
   const sorted = [...brands].sort((a, b) => b.name.length - a.name.length);
 
@@ -199,23 +213,23 @@ function stripBrandFromModel(modelText: string, brandName: string): string {
 
 async function getModelsForBrand(
   ctx: VehicleImportNormalizeContext,
-  brandCode: string
+  brand: FipeFleetBrand
 ): Promise<FipeOption[]> {
-  const cached = ctx.modelsByBrandCode.get(brandCode);
+  const cached = ctx.modelsByBrandCode.get(brand.code);
   if (cached) return cached;
   try {
-    const models = await listFipeModels('cars', brandCode);
-    ctx.modelsByBrandCode.set(brandCode, models);
+    const models = await listFipeFleetModels(brand.sources);
+    ctx.modelsByBrandCode.set(brand.code, models);
     return models;
   } catch {
-    ctx.modelsByBrandCode.set(brandCode, []);
+    ctx.modelsByBrandCode.set(brand.code, []);
     return [];
   }
 }
 
 export async function createVehicleImportNormalizeContext(): Promise<VehicleImportNormalizeContext> {
   const [brands, costCenters, contracts, existingContratos] = await Promise.all([
-    listFipeBrands('cars').catch(() => [] as FipeOption[]),
+    listFipeFleetBrands().catch(() => [] as FipeFleetBrand[]),
     prisma.costCenter.findMany({
       where: { isActive: true },
       select: { code: true, name: true },
@@ -332,7 +346,7 @@ export async function normalizeVehicleImportFields(
   let matchedFipeModel = false;
 
   if (ctx.brands.length > 0) {
-    let brand: FipeOption | null = null;
+    let brand: FipeFleetBrand | null = null;
 
     if (marcaRaw) {
       const alias = resolveBrandAlias(marcaRaw);
@@ -359,7 +373,7 @@ export async function normalizeVehicleImportFields(
       marcaVeic = brand.name;
 
       const cleanedModel = stripBrandFromModel(modeloVeic || modeloRaw, brand.name);
-      const models = await getModelsForBrand(ctx, brand.code);
+      const models = await getModelsForBrand(ctx, brand);
       if (models.length > 0 && cleanedModel) {
         const base = extractBaseModelName(cleanedModel);
         const modelMatch =

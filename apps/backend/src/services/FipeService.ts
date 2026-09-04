@@ -10,6 +10,15 @@ export type FipeOption = {
   name: string;
 };
 
+export type FipeBrandSource = {
+  type: FipeVehicleType;
+  code: string;
+};
+
+export type FipeFleetBrand = FipeOption & {
+  sources: FipeBrandSource[];
+};
+
 type CacheEntry<T> = {
   expiresAt: number;
   data: T;
@@ -115,4 +124,49 @@ export async function listFipeModels(
 
   const data = await fetchFipeJson<unknown>(`/${vehicleType}/brands/${encodeURIComponent(brandCode)}/models`);
   return collapseFipeModelsToBaseNames(normalizeFipeOptions(data));
+}
+
+/** Marcas de carro e moto juntas (Honda aparece uma vez, com as duas fontes). */
+export async function listFipeFleetBrands(): Promise<FipeFleetBrand[]> {
+  const [cars, motorcycles] = await Promise.all([
+    listFipeBrands('cars'),
+    listFipeBrands('motorcycles'),
+  ]);
+
+  const byName = new Map<string, FipeFleetBrand>();
+  const add = (type: FipeVehicleType, brand: FipeOption) => {
+    const key = brand.name.toLocaleLowerCase('pt-BR');
+    const existing = byName.get(key);
+    const source: FipeBrandSource = { type, code: brand.code };
+    if (existing) {
+      if (!existing.sources.some((item) => item.type === type && item.code === brand.code)) {
+        existing.sources.push(source);
+      }
+      return;
+    }
+    byName.set(key, {
+      code: `${type}:${brand.code}`,
+      name: brand.name,
+      sources: [source],
+    });
+  };
+
+  for (const brand of cars) add('cars', brand);
+  for (const brand of motorcycles) add('motorcycles', brand);
+
+  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export async function listFipeFleetModels(sources: FipeBrandSource[]): Promise<FipeOption[]> {
+  const lists = await Promise.all(
+    sources.map((source) => listFipeModels(source.type, source.code).catch(() => [] as FipeOption[]))
+  );
+  const byName = new Map<string, FipeOption>();
+  for (const model of lists.flat()) {
+    const key = model.name.toLocaleLowerCase('pt-BR');
+    if (!byName.has(key)) byName.set(key, model);
+  }
+  return Array.from(byName.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+  );
 }

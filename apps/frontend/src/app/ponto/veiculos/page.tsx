@@ -51,6 +51,10 @@ type FipeOption = {
   name: string;
 };
 
+type FipeBrandOption = FipeOption & {
+  sources?: Array<{ type: 'cars' | 'motorcycles' | 'trucks'; code: string }>;
+};
+
 type EmployeeOption = {
   id: string;
   name: string;
@@ -193,20 +197,49 @@ export default function VeiculosPage() {
   const { data: fipeBrands = [], isLoading: loadingBrands } = useQuery({
     queryKey: ['vehicles-fipe-brands'],
     queryFn: async () => {
-      const res = await api.get('/vehicles/fipe/brands', { params: { type: 'cars' } });
-      return (res.data?.data || []) as FipeOption[];
+      const res = await api.get('/vehicles/fipe/brands', { params: { type: 'fleet' } });
+      return (res.data?.data || []) as FipeBrandOption[];
     },
     enabled: showForm,
     staleTime: 24 * 60 * 60 * 1000
   });
 
+  const selectedBrand = useMemo(
+    () => fipeBrands.find((item) => item.code === formData.marcaCode) || null,
+    [fipeBrands, formData.marcaCode]
+  );
+
   const { data: fipeModels = [], isLoading: loadingModels } = useQuery({
-    queryKey: ['vehicles-fipe-models', formData.marcaCode],
+    queryKey: ['vehicles-fipe-models', formData.marcaCode, selectedBrand?.sources],
     queryFn: async () => {
-      const res = await api.get(`/vehicles/fipe/brands/${formData.marcaCode}/models`, {
-        params: { type: 'cars' }
-      });
-      return (res.data?.data || []) as FipeOption[];
+      const sources = selectedBrand?.sources?.length
+        ? selectedBrand.sources
+        : formData.marcaCode.includes(':')
+          ? [
+              {
+                type: formData.marcaCode.split(':')[0] as 'cars' | 'motorcycles',
+                code: formData.marcaCode.split(':').slice(1).join(':'),
+              },
+            ]
+          : [{ type: 'cars' as const, code: formData.marcaCode }];
+
+      const lists = await Promise.all(
+        sources.map(async (source) => {
+          const res = await api.get(`/vehicles/fipe/brands/${source.code}/models`, {
+            params: { type: source.type },
+          });
+          return (res.data?.data || []) as FipeOption[];
+        })
+      );
+
+      const byName = new Map<string, FipeOption>();
+      for (const model of lists.flat()) {
+        const key = model.name.toLocaleLowerCase('pt-BR');
+        if (!byName.has(key)) byName.set(key, model);
+      }
+      return Array.from(byName.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      );
     },
     enabled: showForm && Boolean(formData.marcaCode),
     staleTime: 24 * 60 * 60 * 1000
