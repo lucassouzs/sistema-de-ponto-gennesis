@@ -96,31 +96,61 @@ function normalizeSteps(steps: HelpStepInput[]): HelpStepInput[] {
 export class HelpTutorialService {
   /**
    * Garante tutoriais padrão por slug.
-   * Não sobrescreve tutoriais já existentes (criados/editados na UI).
+   * Em geral não sobrescreve tutoriais já existentes (criados/editados na UI).
+   * Exceção: slugs em SEED_FORCE_REFRESH_SLUGS — republica o conteúdo oficial se estiver desatualizado.
    */
   async ensureSeed() {
+    /** Seeds oficiais que podem ser republicados quando o conteúdo do seed mudar. */
+    const SEED_FORCE_REFRESH_SLUGS = new Set(['usar-estoque', 'usar-furo-de-estoque']);
+
     const existing = await prisma.helpTutorial.findMany({
-      select: { slug: true },
+      select: { slug: true, summary: true, title: true, steps: true, href: true, keywords: true },
     });
-    const existingSlugs = new Set(existing.map((row) => row.slug));
+    const existingBySlug = new Map(existing.map((row) => [row.slug, row]));
 
     for (const item of HELP_TUTORIAL_SEEDS) {
       const slug = item.slug || slugify(item.title);
-      if (existingSlugs.has(slug)) continue;
+      const seedData = {
+        title: item.title,
+        summary: item.summary,
+        setor: item.setor,
+        keywords: item.keywords || [],
+        href: item.href || null,
+        contentType: 'STEPS' as const,
+        steps: (item.steps || []) as unknown as Prisma.InputJsonValue,
+      };
+
+      const current = existingBySlug.get(slug);
+      if (current) {
+        if (!SEED_FORCE_REFRESH_SLUGS.has(slug)) continue;
+        const same =
+          current.title === seedData.title &&
+          current.summary === seedData.summary &&
+          (current.href || null) === seedData.href &&
+          JSON.stringify(current.keywords || []) === JSON.stringify(seedData.keywords) &&
+          JSON.stringify(current.steps ?? []) === JSON.stringify(item.steps || []);
+        if (same) continue;
+        await prisma.helpTutorial.update({
+          where: { slug },
+          data: seedData,
+        });
+        continue;
+      }
 
       await prisma.helpTutorial.create({
         data: {
           slug,
-          title: item.title,
-          summary: item.summary,
-          setor: item.setor,
-          keywords: item.keywords || [],
-          href: item.href || null,
-          contentType: 'STEPS',
-          steps: (item.steps || []) as unknown as Prisma.InputJsonValue,
+          ...seedData,
         },
       });
-      existingSlugs.add(slug);
+      existingBySlug.set(slug, {
+        slug,
+        title: seedData.title,
+        summary: seedData.summary,
+        steps: seedData.steps,
+        href: seedData.href,
+        keywords: seedData.keywords,
+      });
     }
   }
 

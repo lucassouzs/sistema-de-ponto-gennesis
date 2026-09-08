@@ -862,22 +862,38 @@ export const HELP_TUTORIAL_SEEDS: HelpTutorialCreateInput[] = [
   {
     slug: 'usar-estoque',
     title: 'Usar Estoque',
-    summary: 'Como consultar saldos e movimentações de estoque.',
+    summary:
+      'Como registrar entradas e saídas vinculadas à OC, e quando usar o Ajuste de Estoque avulso.',
     setor: 'Suprimentos',
-    keywords: ['estoque', 'saldo', 'entrada', 'saída'],
+    keywords: [
+      'estoque',
+      'saldo',
+      'entrada',
+      'saída',
+      'OC',
+      'NF',
+      'ficha de retirada',
+      'ajuste',
+    ],
     href: '/ponto/estoque',
     steps: [
       {
         title: 'Abra Estoque',
-        body: 'No menu Suprimentos, acesse Estoque.',
+        body: 'No menu Suprimentos, acesse Estoque. Lá você consulta saldos e lança movimentações vinculadas a uma Ordem de Compra (OC).',
       },
       {
-        title: 'Busque o material',
-        body: 'Filtre por código, descrição ou depósito/local.',
+        title: 'Entrada (material chegou)',
+        body: 'Clique em Nova Movimentação, escolha o contrato e a OC. Marque Entrada (total ou parcial) e informe as quantidades. Anexe a NF (obrigatória) e, se for o caso, os boletos. Ao confirmar, o saldo sobe e os documentos aparecem na OC.',
+        hint: 'Se a entrada for parcial, o sistema gera ou atualiza um furo de estoque com o que ainda falta receber.',
       },
       {
-        title: 'Consulte saldo e histórico',
-        body: 'Abra o item para ver quantidade disponível e movimentações. Ajustes manuais ficam em Ajuste de Estoque, se você tiver permissão.',
+        title: 'Saída (vai para a obra)',
+        body: 'Na mesma OC, escolha Saída (total ou parcial), apenas do que já entrou e ainda não saiu. Gere a Ficha de Retirada, imprima e assine. Anexe a ficha assinada e confirme: o saldo diminui e a OC passa a mostrar que o material está na obra.',
+      },
+      {
+        title: 'Ajuste de Estoque (avulso — sem OC)',
+        body: 'Quando o material já está no saldo, mas a movimentação não é por aquela OC, use Ajuste de Estoque → Novo Ajuste. Escolha Entrada (sobe o saldo) ou Saída (baixa, se houver quantidade disponível), selecione o material e a quantidade, informe o centro de custo se precisar, adicione observações e clique em Registrar Ajuste.',
+        hint: 'Estoque = entrada/saída pela OC. Ajuste de Estoque = correção ou retirada avulsa, sem vincular OC, NF ou ficha.',
       },
     ],
   },
@@ -906,22 +922,35 @@ export const HELP_TUTORIAL_SEEDS: HelpTutorialCreateInput[] = [
   {
     slug: 'usar-furo-de-estoque',
     title: 'Usar Furo de Estoque',
-    summary: 'Como tratar pendências de entrega após recebimento parcial.',
+    summary:
+      'Como acompanhar o que faltou receber após entrada parcial na OC e encerrar a pendência.',
     setor: 'Suprimentos',
-    keywords: ['furo de estoque', 'parcial', 'pendência'],
+    keywords: [
+      'furo de estoque',
+      'parcial',
+      'pendência',
+      'entrada parcial',
+      'OC',
+      'recebimento',
+    ],
     href: '/ponto/furo-estoque',
     steps: [
       {
+        title: 'Quando nasce um furo',
+        body: 'Ao registrar Entrada parcial no Estoque (recebeu menos do que a OC pediu), o sistema gera ou atualiza um furo com o material e a quantidade ainda em aberto.',
+      },
+      {
         title: 'Abra Furo de Estoque',
-        body: 'No menu Suprimentos, acesse Furo de Estoque.',
+        body: 'No menu Suprimentos, acesse Furo de Estoque. Use os filtros (Aberto / Resolvido) e a busca para achar a OC, o material ou o contrato.',
       },
       {
         title: 'Identifique a pendência',
-        body: 'Veja itens com quantidade ainda em aberto após recebimento parcial.',
+        body: 'Abra o registro para ver o que foi pedido, o que já entrou e o que ainda falta. Essa tela é o painel de acompanhamento do que faltou receber.',
       },
       {
-        title: 'Trate o saldo',
-        body: 'Acione a reposição ou ajuste conforme o processo interno e acompanhe até zerar a pendência.',
+        title: 'Trate e encerre',
+        body: 'Quando o restante chegar, registre a Entrada da mesma OC em Estoque (o furo tende a zerar com o recebimento). Se a pendência foi tratada de outro jeito (acordo com fornecedor, ajuste manual etc.), abra o furo e use Encerrar como Resolvido.',
+        hint: 'Entrada/saída pela OC ficam em Estoque. Correção avulsa sem OC fica em Ajuste de Estoque. O Furo serve para acompanhar e encerrar a pendência.',
       },
     ],
   },

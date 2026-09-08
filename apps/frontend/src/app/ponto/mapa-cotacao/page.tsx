@@ -1529,7 +1529,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                                   <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Frete
@@ -1562,7 +1562,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
                                   <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Valor total
@@ -1596,7 +1596,7 @@ export default function MapaCotacaoPage() {
                               {selectedSupplierIds.size > 0 ? (
                                 <tr className="border-t border-gray-200 dark:border-gray-700">
                                   <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
                                   >
                                     Ordem de compra
