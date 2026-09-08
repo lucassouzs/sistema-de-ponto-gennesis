@@ -1310,11 +1310,11 @@ export default function SolicitacoesCombustivelPage() {
                     <p className="text-gray-900 dark:text-gray-100">—</p>
                   )}
                 </div>
-                {selected.suppliesApprover ? (
-                  <div>
-                    <span className="font-medium text-gray-500 dark:text-gray-400">
-                      Liberado pelo Suprimentos
-                    </span>
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">
+                    Liberação do posto
+                  </span>
+                  {selected.suppliesApprover ? (
                     <p className="text-gray-900 dark:text-gray-100">
                       {selected.suppliesApprover.name}
                       {selected.suppliesApprovedAt
@@ -1323,8 +1323,18 @@ export default function SolicitacoesCombustivelPage() {
                           })}`
                         : ''}
                     </p>
-                  </div>
-                ) : null}
+                  ) : selected.status === 'PENDING_SUPPLIES' || selected.status === 'APPROVED' ? (
+                    <p className="text-gray-900 dark:text-gray-100">
+                      Aguardando liberação do Suprimentos
+                    </p>
+                  ) : selected.status === 'PENDING_MANAGER' ? (
+                    <p className="text-gray-900 dark:text-gray-100">
+                      Aguardando aprovação do gestor
+                    </p>
+                  ) : (
+                    <p className="text-gray-900 dark:text-gray-100">—</p>
+                  )}
+                </div>
                 {selected.observations ? (
                   <div className="sm:col-span-2">
                     <span className="font-medium text-gray-500 dark:text-gray-400">Observações</span>
