@@ -260,8 +260,10 @@ type FuelRefuelRequest = {
   dashboardPhotoKey?: string | null;
   dashboardPhotoViewUrl?: string | null;
   dashboardPhotoName?: string | null;
+  managerApprovedAt?: string | null;
   managerApprovalComment?: string | null;
   managerRejectionReason?: string | null;
+  suppliesApprovedAt?: string | null;
   suppliesApprovalComment?: string | null;
   suppliesRejectionReason?: string | null;
   odometerKm?: number | null;
@@ -1285,6 +1287,44 @@ export default function SolicitacoesCombustivelPage() {
                     </p>
                   </div>
                 ) : null}
+                <div>
+                  <span className="font-medium text-gray-500 dark:text-gray-400">
+                    Aprovação do gestor
+                  </span>
+                  {selected.vehicleType === 'COMPANY' ? (
+                    <p className="text-gray-900 dark:text-gray-100">
+                      Não se aplica (frota — vai direto ao Suprimentos)
+                    </p>
+                  ) : selected.status === 'PENDING_MANAGER' ? (
+                    <p className="text-gray-900 dark:text-gray-100">Aguardando aprovação</p>
+                  ) : selected.managerApprover ? (
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {selected.managerApprover.name}
+                      {selected.managerApprovedAt
+                        ? ` — ${format(new Date(selected.managerApprovedAt), 'dd/MM/yyyy HH:mm', {
+                            locale: ptBR,
+                          })}`
+                        : ''}
+                    </p>
+                  ) : (
+                    <p className="text-gray-900 dark:text-gray-100">—</p>
+                  )}
+                </div>
+                {selected.suppliesApprover ? (
+                  <div>
+                    <span className="font-medium text-gray-500 dark:text-gray-400">
+                      Liberado pelo Suprimentos
+                    </span>
+                    <p className="text-gray-900 dark:text-gray-100">
+                      {selected.suppliesApprover.name}
+                      {selected.suppliesApprovedAt
+                        ? ` — ${format(new Date(selected.suppliesApprovedAt), 'dd/MM/yyyy HH:mm', {
+                            locale: ptBR,
+                          })}`
+                        : ''}
+                    </p>
+                  </div>
+                ) : null}
                 {selected.observations ? (
                   <div className="sm:col-span-2">
                     <span className="font-medium text-gray-500 dark:text-gray-400">Observações</span>
@@ -1317,9 +1357,6 @@ export default function SolicitacoesCombustivelPage() {
                   <p className="mt-1 text-gray-900 dark:text-gray-100">
                     {selected.managerApprovalComment || selected.managerRejectionReason}
                   </p>
-                  {selected.managerApprover ? (
-                    <p className="mt-1 text-xs text-gray-500">— {selected.managerApprover.name}</p>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -1331,9 +1368,6 @@ export default function SolicitacoesCombustivelPage() {
                   <p className="mt-1 text-gray-900 dark:text-gray-100">
                     {selected.suppliesApprovalComment || selected.suppliesRejectionReason}
                   </p>
-                  {selected.suppliesApprover ? (
-                    <p className="mt-1 text-xs text-gray-500">— {selected.suppliesApprover.name}</p>
-                  ) : null}
                 </div>
               ) : null}
 
