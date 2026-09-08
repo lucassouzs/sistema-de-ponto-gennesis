@@ -1,10 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Building2, Plus, Edit, Trash2, Search, X, Check, AlertCircle, Upload, Download, CheckCircle, FileSpreadsheet, Loader2, Filter, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { Building2, Plus, Search, X, Check, AlertCircle, Upload, Download, CheckCircle, FileSpreadsheet, Loader2, Filter } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import {
+  CadastroListEmpty,
+  CadastroListLoading,
+  CadastroListSummary,
+  formatCadastroListId,
+  getCadastroListRange
+} from '@/components/ui/CadastroListSummary';
+import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
+import { useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
@@ -13,6 +24,21 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { normalizeCostCentersResponse } from '@/lib/costCenters';
 import { POLOS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { filterOptionsWithAll, labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { ListPagination } from '@/components/ui/ListPagination';
+
+const ACTIVE_STATUS_FILTER_OPTIONS = labeledToSelectOptions([
+  { value: 'all', label: 'Todos' },
+  { value: 'true', label: 'Ativo' },
+  { value: 'false', label: 'Inativo' },
+]);
+
+const IMPORT_ACTIVE_OPTIONS = labeledToSelectOptions([
+  { value: 'Ativo', label: 'Ativo' },
+  { value: 'Inativo', label: 'Inativo' },
+]);
 
 interface CostCenter {
   id: string;
@@ -35,6 +61,10 @@ export default function CentrosCustoPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isActiveFilter, setIsActiveFilter] = useState<string>('all'); // 'all', 'true', 'false'
   const [stateFilter, setStateFilter] = useState<string>('all'); // 'all', 'DF', 'GO'
+  const stateFilterSelectOptions = useMemo(
+    () => filterOptionsWithAll(ESTADOS_LIST, 'Todos'),
+    []
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   const [showForm, setShowForm] = useState(false);
@@ -47,7 +77,10 @@ export default function CentrosCustoPage() {
   });
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isFiltersMinimized, setIsFiltersMinimized] = useState(true);
+  const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
+
+  const hasActiveCostCenterFilters =
+    isActiveFilter !== 'all' || stateFilter !== 'all';
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -213,13 +246,27 @@ export default function CentrosCustoPage() {
     });
   }, [costCenters, stateFilter]);
 
+  const {
+    rowActionMenu,
+    rowForActionMenu,
+    toggleRowActionMenu,
+    closeRowActionMenu,
+    isRowMenuOpen
+  } = useRowActionMenu(filteredCostCenters);
+
+  const listRange = getCadastroListRange(
+    currentPage,
+    pagination.limit,
+    pagination.total
+  );
+
   if (loadingUser) {
     return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
+      <ProtectedRoute route="/ponto/centros-custo">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 
@@ -237,101 +284,6 @@ export default function CentrosCustoPage() {
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">Cadastre e gerencie os centros de custo da empresa</p>
           </div>
 
-          {/* Filtros */}
-          <Card>
-            <CardHeader className="border-b-0">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Filter className="w-5 h-5 text-gray-900 dark:text-gray-100" />
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Filtros</h3>
-                </div>
-                <div className="flex items-center space-x-4">
-                  {!isFiltersMinimized && (
-                    <button
-                      onClick={() => {
-                        setSearchTerm('');
-                        setIsActiveFilter('all');
-                        setStateFilter('all');
-                      }}
-                      className="flex items-center justify-center w-8 h-8 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                      title="Limpar todos os filtros"
-                    >
-                      <RotateCcw className="w-5 h-5" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setIsFiltersMinimized(!isFiltersMinimized)}
-                    className="flex items-center justify-center w-8 h-8 text-gray-900 dark:text-gray-100 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                    title={isFiltersMinimized ? 'Expandir filtros' : 'Minimizar filtros'}
-                  >
-                    {isFiltersMinimized ? (
-                      <ChevronDown className="w-5 h-5" />
-                    ) : (
-                      <ChevronUp className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </CardHeader>
-            {!isFiltersMinimized && (
-              <CardContent className="p-4 sm:p-6">
-                <div className="space-y-4">
-                  {/* Busca */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Buscar
-                    </label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      <input
-                        type="text"
-                        placeholder="Buscar por código ou nome..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* Filtros */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Status
-                      </label>
-                      <select
-                        value={isActiveFilter}
-                        onChange={(e) => setIsActiveFilter(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      >
-                        <option value="all">Todos</option>
-                        <option value="true">Ativo</option>
-                        <option value="false">Inativo</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Estado
-                      </label>
-                      <select
-                        value={stateFilter}
-                        onChange={(e) => setStateFilter(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      >
-                        <option value="all">Todos</option>
-                        {ESTADOS_LIST.map((estado) => (
-                          <option key={estado} value={estado}>
-                            {estado}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            )}
-          </Card>
-
           {/* Modal de Criar/Editar Centro de Custo */}
           <CostCenterFormModal
             isOpen={showForm}
@@ -347,88 +299,192 @@ export default function CentrosCustoPage() {
             updateMutation={updateMutation}
           />
 
+          <Modal
+            isOpen={isFiltersModalOpen}
+            onClose={() => setIsFiltersModalOpen(false)}
+            title="Filtros"
+            size="md"
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status
+                </label>
+                <StringSingleSelectDropdown
+                  value={isActiveFilter}
+                  onChange={setIsActiveFilter}
+                  options={ACTIVE_STATUS_FILTER_OPTIONS}
+                  allowEmpty={false}
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Estado
+                </label>
+                <StringSingleSelectDropdown
+                  value={stateFilter}
+                  onChange={setStateFilter}
+                  options={stateFilterSelectOptions}
+                  allowEmpty={false}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsActiveFilter('all');
+                    setStateFilter('all');
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Limpar filtros
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFiltersModalOpen(false)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          </Modal>
+
           {/* Lista de centros de custo */}
-          <Card>
-            <CardHeader className="border-b-0">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center">
-                  <div className="p-2 sm:p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                    <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <Card className={cadastroListClasses.card}>
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className={cadastroListClasses.cardHeaderRow}>
+                <div className={cadastroListClasses.cardHeaderIconRow}>
+                  <div className="rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-900/30">
+                    <Building2 className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                   </div>
-                  <div className="ml-3 sm:ml-4 min-w-0">
+                  <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                       Centros de Custo
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {pagination.total} {pagination.total === 1 ? 'centro de custo' : 'centros de custo'} cadastrado(s)
+                      {pagination.total}{' '}
+                      {pagination.total === 1 ? 'centro de custo' : 'centros de custo'} cadastrado(s)
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Pesquisar centro de custo..."
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    {searchTerm ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTerm('')}
+                        aria-label="Limpar busca"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
                   <button
-                    onClick={() => setIsImportModalOpen(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+                    type="button"
+                    onClick={() => setIsFiltersModalOpen(true)}
+                    className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      hasActiveCostCenterFilters
+                        ? 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    aria-label="Abrir filtro"
+                    title={hasActiveCostCenterFilters ? 'Filtro (status ativo)' : 'Filtro'}
                   >
-                    <Upload className="w-4 h-4" />
-                    Importar
+                    <Filter className="h-4 w-4" />
+                    {hasActiveCostCenterFilters ? (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-gray-900" />
+                    ) : null}
                   </button>
                   <button
+                    type="button"
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <Upload className="h-4 w-4 shrink-0" />
+                    <span>Importar</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       resetForm();
                       setShowForm(true);
                     }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+                    className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <Plus className="w-4 h-4" />
-                    Cadastrar Centro de Custo
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Novo Centro de Custo</span>
                   </button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="w-full">
+            <CardContent className={cadastroListClasses.cardContent}>
+              {loadingCostCenters ? (
+                <CadastroListLoading message="Carregando centros de custo..." />
+              ) : pagination.total === 0 ? (
+                <CadastroListEmpty
+                  icon={Building2}
+                  title="Nenhum centro de custo encontrado"
+                  hint={
+                    searchTerm.trim() || hasActiveCostCenterFilters
+                      ? 'Tente ajustar a busca ou os filtros'
+                      : 'Cadastre um novo centro de custo para começar'
+                  }
+                />
+              ) : (
+              <>
+                <CadastroListSummary
+                  startItem={listRange.startItem}
+                  endItem={listRange.endItem}
+                  total={pagination.total}
+                  itemLabel="centro de custo"
+                  itemLabelPlural="centros de custo"
+                  currentPage={currentPage}
+                  totalPages={listRange.totalPages}
+                />
+              <div className="table-scroll">
+                <table className={cadastroListClasses.table}>
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Código</th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Nome</th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Polo</th>
-                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                      <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                      <th scope="col" className={cadastroListClasses.th}>
+                        ID
+                      </th>
+                      <th scope="col" className={cadastroListClasses.th}>
+                        Nome
+                      </th>
+                      <th scope="col" className={cadastroListClasses.th}>
+                        Polo
+                      </th>
+                      <th scope="col" className={cadastroListClasses.thCenter}>
+                        Status
+                      </th>
+                      <th scope="col" className={cadastroListClasses.thRight}>
+                        Ação
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                    {loadingCostCenters ? (
-                      <tr>
-                        <td colSpan={8} className="px-6 py-8 text-center">
-                          <div className="flex items-center justify-center">
-                            <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando centros de custo...</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredCostCenters.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center">
-                          <div className="text-gray-500 dark:text-gray-400">
-                            <p>Nenhum centro de custo encontrado.</p>
-                            <p className="text-sm mt-1">Tente ajustar os filtros de busca.</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCostCenters.map((cc: CostCenter) => (
-                        <tr key={cc.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-gray-900 dark:text-gray-100 font-mono">{cc.code}</span>
+                  <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                      {filteredCostCenters.map((cc: CostCenter, index) => (
+                        <tr key={cc.id} className={listTableRowClasses.tr}>
+                          <td className={cadastroListClasses.tdMono}>
+                            {formatCadastroListId(cc.code, listRange.startItem + index)}
                           </td>
-                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-gray-900 dark:text-gray-100">{cc.name}</span>
+                          <td className="min-w-0 px-3 py-4 sm:px-6">
+                            <span className="text-sm text-gray-900 dark:text-gray-100 block truncate">{cc.name}</span>
                           </td>
                           <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                             <span className="text-sm text-gray-700 dark:text-gray-400">{cc.polo || '-'}</span>
                           </td>
-                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
+                          <td className={cadastroListClasses.tdCenter}>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               cc.isActive
                                 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
@@ -437,89 +493,33 @@ export default function CentrosCustoPage() {
                               {cc.isActive ? 'Ativo' : 'Inativo'}
                             </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleEdit(cc)}
-                                className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                                title="Editar"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => setShowDeleteModal(cc.id)}
-                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
+                          <RowActionMenuCell
+                            isOpen={isRowMenuOpen(cc.id)}
+                            onToggle={(e) =>
+                              toggleRowActionMenu(cc.id, e.currentTarget as HTMLButtonElement)
+                            }
+                          />
                         </tr>
-                      ))
-                    )}
+                      ))}
                   </tbody>
                 </table>
               </div>
+
+              {rowActionMenu && rowForActionMenu && (
+                <RowActionMenuPortal
+                  menu={rowActionMenu}
+                  onClose={closeRowActionMenu}
+                  onEdit={() => handleEdit(rowForActionMenu)}
+                  onDelete={() => setShowDeleteModal(rowForActionMenu.id)}
+                />
+              )}
               
-              {/* Paginação */}
-              {pagination.totalPages > 1 && (
-                <div className="px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                      <span>
-                        Mostrando {((pagination.page - 1) * pagination.limit) + 1} a {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total} centros de custo
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Anterior
-                      </button>
-                      
-                      {/* Números das páginas */}
-                      {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
-                        let pageNumber: number;
-                        if (pagination.totalPages <= 5) {
-                          pageNumber = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNumber = i + 1;
-                        } else if (currentPage >= pagination.totalPages - 2) {
-                          pageNumber = pagination.totalPages - 4 + i;
-                        } else {
-                          pageNumber = currentPage - 2 + i;
-                        }
-                        
-                        const isActive = pageNumber === currentPage;
-                        
-                        return (
-                          <button
-                            key={pageNumber}
-                            onClick={() => setCurrentPage(pageNumber)}
-                            className={`px-3 py-2 text-sm font-medium rounded-md ${
-                              isActive
-                                ? 'bg-red-600 text-white'
-                                : 'text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
-                            } transition-colors`}
-                          >
-                            {pageNumber}
-                          </button>
-                        );
-                      })}
-                      
-                      <button
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, pagination.totalPages))}
-                        disabled={currentPage === pagination.totalPages}
-                        className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <ListPagination
+                currentPage={currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={setCurrentPage}
+              />
+              </>
               )}
             </CardContent>
           </Card>
@@ -527,7 +527,7 @@ export default function CentrosCustoPage() {
 
         {/* Modal de confirmação de exclusão */}
         {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteModal(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full">
@@ -575,7 +575,7 @@ export default function CentrosCustoPage() {
                 </div>
               )}
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de Importação */}
@@ -623,18 +623,25 @@ function CostCenterFormModal({
   createMutation: any;
   updateMutation: any;
 }) {
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={onClose} />
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+      <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {editingCostCenter ? 'Editar Centro de Custo' : 'Cadastrar Centro de Custo'}
           </h3>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
             aria-label="Fechar"
           >
@@ -647,7 +654,7 @@ function CostCenterFormModal({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Código *
+                  ID *
                 </label>
                 <input
                   type="text"
@@ -675,14 +682,13 @@ function CostCenterFormModal({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Polo
               </label>
-              <select
+              <StringSingleSelectDropdown
                 value={formData.polo}
-                onChange={(e) => setFormData({ ...formData, polo: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                <option value="">Selecione</option>
-                {POLOS_LIST.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+                onChange={(polo) => setFormData({ ...formData, polo })}
+                options={POLOS_LIST}
+                placeholder="Selecione"
+                emptyOptionLabel="Selecione"
+              />
             </div>
             </div>
             <div className="flex items-center">
@@ -731,7 +737,7 @@ function CostCenterFormModal({
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
               >
                 Cancelar
@@ -751,7 +757,9 @@ function CostCenterFormModal({
           </form>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>
   );
 }
 
@@ -774,14 +782,15 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
   const [result, setResult] = useState<any>(null);
   const [isDragging, setIsDragging] = useState(false);
   
-  const handleClose = () => {
-    // limpar estado interno antes de fechar
+  const closeForm = useCallback(() => {
     setFile(null);
     setParsedRows([]);
     setResult(null);
     setIsDragging(false);
     onClose();
-  };
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
  
   // Garantir que ao fechar a modal (quando isOpen virar false) o estado interno seja limpo
   React.useEffect(() => {
@@ -1087,13 +1096,14 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={handleClose} />
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+      <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Importar Centros de Custo</h3>
           <button
-            onClick={handleClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
             aria-label="Fechar"
           >
@@ -1258,7 +1268,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
                     </p>
                   </div>
                 </div>
-                <div className="overflow-x-auto max-h-[400px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg">
+                <div className="table-scroll max-h-[400px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                       <tr>
@@ -1302,14 +1312,12 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
                             />
                           </td>
                           <td className="px-4 py-2">
-                            <select
+                            <StringSingleSelectDropdown
                               value={row.dados.Ativo || 'Ativo'}
-                              onChange={(e) => updateRow(index, 'Ativo', e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                            >
-                              <option value="Ativo">Ativo</option>
-                              <option value="Inativo">Inativo</option>
-                            </select>
+                              onChange={(v) => updateRow(index, 'Ativo', v)}
+                              options={IMPORT_ACTIVE_OPTIONS}
+                              allowEmpty={false}
+                            />
                           </td>
                           <td className="px-4 py-2">
                             <button
@@ -1341,7 +1349,7 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
               {/* Botão Importar */}
               <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={onClose}
+                  onClick={requestClose}
                   className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancelar
@@ -1421,6 +1429,8 @@ function ImportCostCentersModal({ isOpen, onClose, onSuccess }: { isOpen: boolea
           )}
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>
   );
 }

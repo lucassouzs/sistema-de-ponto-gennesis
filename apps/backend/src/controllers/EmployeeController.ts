@@ -1,6 +1,12 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
+import { hashPassword } from '../lib/passwordHash';
+import {
+  cpfMatchVariants,
+  releaseInactiveUsersHoldingIdentity,
+} from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
+import { findEmployeeIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 export const getAllEmployees = async (req: Request, res: Response) => {
   try {
@@ -120,23 +126,33 @@ export const createEmployee = async (req: Request, res: Response) => {
       requiresTimeClock = true // Padrão: precisa bater ponto
     } = req.body;
 
-    // Verificar se email já existe
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
+    // Verificar se email já existe (só ativos)
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        isActive: true,
+        email: { equals: email, mode: 'insensitive' },
+      },
     });
 
     if (existingUser) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
 
-    // Verificar se CPF já existe
-    const existingCpf = await prisma.user.findUnique({
-      where: { cpf }
+    // Verificar se CPF já existe (só ativos)
+    const cpfDigits = String(cpf || '').replace(/\D/g, '');
+    const existingCpf = await prisma.user.findFirst({
+      where: {
+        isActive: true,
+        OR: cpfMatchVariants(cpf).map((c) => ({ cpf: c })),
+      },
     });
 
     if (existingCpf) {
       return res.status(400).json({ error: 'CPF já cadastrado' });
     }
+
+    // Libera CPF/e-mail se ainda estiverem em usuários desligados
+    await releaseInactiveUsersHoldingIdentity(cpfDigits || cpf, email);
 
     // Verificar se matrícula já existe
     const existingEmployeeId = await prisma.employee.findUnique({
@@ -148,7 +164,7 @@ export const createEmployee = async (req: Request, res: Response) => {
     }
 
     // Hash da senha
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await hashPassword(password, 10);
 
     // Criar usuário e funcionário em uma transação
     const result = await prisma.$transaction(async (tx: any) => {
@@ -222,6 +238,8 @@ export const createEmployee = async (req: Request, res: Response) => {
 
       return employee;
     });
+
+    await ensureDefaultEmployeeAccessPermissions([result.userId]);
 
     return res.status(201).json(result);
   } catch (error) {
@@ -419,28 +437,10 @@ export const getBirthdayEmployees = async (req: Request, res: Response) => {
       whereClause.department = department as string;
     }
     
-    // Filtro por nome ou departamento (busca)
+    // Filtro por nome ou departamento (busca) — sem acento
     if (search && search !== '') {
-      whereClause.AND = [
-        {
-          OR: [
-            {
-              user: {
-                name: {
-                  contains: search as string,
-                  mode: 'insensitive'
-                }
-              }
-            },
-            {
-              department: {
-                contains: search as string,
-                mode: 'insensitive'
-              }
-            }
-          ]
-        }
-      ];
+      const matchedIds = await findEmployeeIdsMatchingSearch(String(search));
+      whereClause.id = { in: matchedIds };
     }
     
     // Buscar funcionários com aniversário

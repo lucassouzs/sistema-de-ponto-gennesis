@@ -1,27 +1,26 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
-import { toast } from 'react-hot-toast';
 import api from '@/lib/api';
-import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
-import { CircularPhotoCropModal } from '@/components/conversas/CircularPhotoCropModal';
-import { 
-  Home, 
-  Users, 
-  Clock, 
-  LogOut, 
-  Menu, 
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
+import { buildFluigApproversNavHref } from '@/lib/fluigWorkflowApproval';
+import {
+  fetchGastosOperacionaisTotvs,
+  GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
+  GASTOS_OPERACIONAIS_TOTVS_STALE_TIME,
+} from '@/app/ponto/contratos/controle-geral/fetchGastosOperacionaisTotvs';
+import { readGastosOperacionaisTotvsPersisted } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisTotvsPersist';
+import {
+  Home,
+  Users,
+  Clock,
   X,
   User,
-  PanelRightOpen,
-  PanelLeftOpen,
-  ChevronDown,
-  ChevronUp,
-  Lock,
+  ArrowLeftToLine,
   FolderClock,
   ImagePlus,
   CalendarDays,
@@ -33,170 +32,602 @@ import {
   FileText,
   Search,
   LayoutDashboard,
+  Wallet,
   CalendarX2,
   MailPlus,
-  Moon,
-  Sun,
-  AlertCircle,
+  MessageCircle,
   MessageSquare,
   FileCheck,
   DollarSign,
+  CircleDollarSign,
   Package,
+  PackageCheck,
+  PackageX,
+  Warehouse,
   ShoppingCart,
   Building2,
   Cake,
-  Calculator,
+  Shield,
+  DraftingCompass,
+  Database,
   ClipboardList,
+  ClipboardCheck,
+  BadgeCheck,
   CreditCard,
   HardDrive,
-  Image as ImageIcon,
-  Camera,
-  PencilLine,
-  Trash2,
-  Loader2
+  SquareKanban,
+  Truck,
+  Landmark,
+  Percent,
+  Contact,
+  Scale,
+  Briefcase,
+  ScrollText,
+  Fuel,
+  Car,
+  CalendarRange,
+  MapPin,
+  Wrench,
+  Boxes,
+  Workflow,
+  ChevronDown,
+  HelpCircle,
+  Newspaper,
+  type LucideIcon,
 } from 'lucide-react';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import { usePermissions } from '@/hooks/usePermissions';
+import { visibleTabRefetchInterval } from '@/hooks/useVisibleTabRefetchInterval';
+import { useFdNotificationCounts } from '@/hooks/useFdNotificationCounts';
+import { useApprovalNotificationCounts } from '@/hooks/useApprovalNotificationCounts';
+import { NotificationCountBadge } from '@/components/ui/NotificationCountBadge';
+import {
+  readSelectedModuleId,
+  readSidebarCollapsed,
+  SIDEBAR_TRANSITION_CLASS,
+  SIDEBAR_TRANSITION_MS,
+  writeSelectedModuleId,
+  writeSidebarCollapsed,
+  isHomeRoute,
+  isRailFooterRoute,
+  shouldForceSidebarCollapsed,
+} from '@/lib/sidebarStorage';
+import {
+  LAYOUT_CHROME,
+  dispatchReplayPageEnter,
+  type MenuSearchDetail,
+} from '@/lib/layoutChrome';
+import { useBrandingLogo } from '@/hooks/useBrandingLogo';
+
+const FLUIG_APPROVAL_DATASET_IDS = [
+  'Processos_Workflow_Aprovacao_G3',
+  'Processos_Workflow_Aprovacao_G5',
+];
+const FLUIG_PREFETCH_HREFS = new Set([
+  '/ponto/fluig/aprovacoes-workflow',
+  '/ponto/fluig/aprovadores',
+]);
+const GASTOS_OPERACIONAIS_HREF = '/ponto/contratos/gastos-operacionais';
+const GASTOS_OPERACIONAIS_MODULE_KEY = pathToModuleKey(GASTOS_OPERACIONAIS_HREF);
 
 const pk = pathToModuleKey;
-import { useTheme } from '@/context/ThemeContext';
 
 interface SidebarProps {
   userRole: 'EMPLOYEE';
   userName: string;
   onLogout: () => void;
   onMenuToggle?: (collapsed: boolean) => void;
+  onOpenChangePassword?: () => void;
 }
 
-export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarProps) {
+function SidebarRailTooltip({
+  label,
+  children,
+  enterIndex,
+}: {
+  label: string;
+  children: React.ReactNode;
+  enterIndex?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<number | null>(null);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimerRef.current == null) return;
+    window.clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = null;
+  }, []);
+
+  const showTooltip = useCallback(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const el = triggerRef.current;
+    if (!el) return;
+    clearHideTimer();
+    const rect = el.getBoundingClientRect();
+    setCoords({
+      top: rect.top + rect.height / 2,
+      left: rect.right + 8,
+    });
+    setVisible(true);
+  }, [clearHideTimer]);
+
+  const hideTooltip = useCallback(() => {
+    clearHideTimer();
+    setVisible(false);
+  }, [clearHideTimer]);
+
+  const hideIfNotHovering = useCallback(() => {
+    clearHideTimer();
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = null;
+      const el = triggerRef.current;
+      if (el?.matches(':hover')) return;
+      setVisible(false);
+    }, 80);
+  }, [clearHideTimer]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) hideTooltip();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', hideTooltip);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', hideTooltip);
+      clearHideTimer();
+    };
+  }, [hideTooltip, clearHideTimer]);
+
+  return (
+    <>
+      <div
+        ref={triggerRef}
+        className="sidebar-rail-enter-item relative flex justify-center"
+        style={
+          enterIndex != null
+            ? ({ ['--rail-i' as string]: enterIndex } as React.CSSProperties)
+            : undefined
+        }
+        onPointerEnter={showTooltip}
+        onPointerLeave={hideIfNotHovering}
+        onFocusCapture={(event) => {
+          const target = event.target;
+          if (target instanceof HTMLElement && target.matches(':focus-visible')) {
+            showTooltip();
+          }
+        }}
+        onBlurCapture={hideIfNotHovering}
+      >
+        {children}
+      </div>
+      {visible &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: 'fixed',
+              top: coords.top,
+              left: coords.left,
+              transform: 'translateY(-50%)',
+              zIndex: 9999,
+            }}
+            className="pointer-events-none max-w-[14rem] whitespace-nowrap rounded-md bg-slate-800/90 px-2.5 py-1.5 text-xs font-medium text-white shadow-md backdrop-blur-sm"
+          >
+            {label}
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
+export function Sidebar({ userRole, onMenuToggle }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    // Carregar estado do localStorage no carregamento inicial
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebar-collapsed');
-      return saved ? JSON.parse(saved) : false;
-    }
-    return false;
-  });
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+  const [isCollapsed, setIsCollapsedState] = useState(false);
+  const [sidebarHydrated, setSidebarHydrated] = useState(false);
+
+  const setCollapsed = useCallback(
+    (collapsed: boolean) => {
+      setIsCollapsedState(collapsed);
+      onMenuToggle?.(collapsed);
+    },
+    [onMenuToggle]
+  );
+  const [selectedModuleId, setSelectedModuleId] = useState('main');
   const [searchTerm, setSearchTerm] = useState('');
-  const [showButtonText, setShowButtonText] = useState(!isCollapsed);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [expandedNavGroups, setExpandedNavGroups] = useState<Record<string, boolean>>({});
   const pathname = usePathname();
+  /** true quando o usuário clicou num módulo no rail sem mudar de rota */
+  const userPickedModuleRef = useRef(false);
+  const prevPathnameRef = useRef(pathname);
   const router = useRouter();
   const {
     permissions,
     isLoading,
     userPosition,
     user,
-    isDepartmentPessoal,
-    isDepartmentProjetos,
-    userDepartment,
     can,
     canAccessDpApproverPages,
+    canApproveEspelhoNf,
+    canApproveOc,
+    canApproveFuel,
+    canApproveMaterialRequests,
     canAccessOsRoutePage,
+    canAccessRecebimentoEntregasRoutePage,
+    fluigApproverNameKeys,
+    fluigApproverFullAccess,
+    canAccessFluigApproversRoute,
+    canAccessCollaborationTools,
   } = usePermissions();
-  const { theme, toggleTheme, isDark } = useTheme();
-  const menuRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const profileAvatarInputRef = useRef<HTMLInputElement>(null);
-  const profileAvatarSectionRef = useRef<HTMLDivElement>(null);
+  const { logoSrc, logoAlt } = useBrandingLogo();
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-  const [profileAvatarMenu, setProfileAvatarMenu] = useState(false);
-  const [profilePhotoViewer, setProfilePhotoViewer] = useState(false);
-  const [profileCropSrc, setProfileCropSrc] = useState<string | null>(null);
-  
+
+  // Em dev, o Next compila cada rota ao fazer prefetch dos <Link> visíveis. Com um menu
+  // grande, isso satura o compilador (single-thread) e o clique de navegação fica preso
+  // na fila de compilações, dando a sensação de "página travada". Desativamos o prefetch
+  // apenas em desenvolvimento; em produção ele continua ativo (rotas já pré-compiladas).
+  const navLinkPrefetch = process.env.NODE_ENV === 'production' ? undefined : false;
+
+  const prefetchFluigDatasets = useCallback(() => {
+    router.prefetch('/ponto/fluig/aprovacoes-workflow');
+    router.prefetch(
+      buildFluigApproversNavHref({
+        fullAccess: fluigApproverFullAccess,
+        nameKeys: fluigApproverNameKeys,
+      })
+    );
+    for (const id of FLUIG_APPROVAL_DATASET_IDS) {
+      void queryClient.prefetchQuery({
+        queryKey: ['fluig-workflow-approval', id],
+        queryFn: async () => {
+          const res = await api.post(
+            `/fluig/datasets/${encodeURIComponent(id)}/data`,
+            {},
+            { timeout: 130000 }
+          );
+          return res.data;
+        },
+        staleTime: 7 * 60 * 1000,
+      });
+    }
+  }, [queryClient, router, fluigApproverFullAccess, fluigApproverNameKeys]);
+
+  const prefetchGastosOperacionais = useCallback(() => {
+    router.prefetch(GASTOS_OPERACIONAIS_HREF);
+
+    void (async () => {
+      const persisted = await readGastosOperacionaisTotvsPersisted();
+      if (persisted) {
+        queryClient.setQueryData(GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY, persisted.data);
+        const cached = queryClient.getQueryCache().find({
+          queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY
+        });
+        if (cached) {
+          cached.setState({ dataUpdatedAt: persisted.updatedAt });
+        }
+        if (Date.now() - persisted.updatedAt < GASTOS_OPERACIONAIS_TOTVS_STALE_TIME) {
+          return;
+        }
+      }
+
+      void queryClient.prefetchQuery({
+        queryKey: GASTOS_OPERACIONAIS_TOTVS_QUERY_KEY,
+        queryFn: fetchGastosOperacionaisTotvs,
+        staleTime: GASTOS_OPERACIONAIS_TOTVS_STALE_TIME,
+      });
+    })();
+  }, [queryClient, router]);
+
+  const navDataPrefetchForHref = useCallback(
+    (href: string) => {
+      if (FLUIG_PREFETCH_HREFS.has(href)) return prefetchFluigDatasets;
+      if (href === GASTOS_OPERACIONAIS_HREF) return prefetchGastosOperacionais;
+      return undefined;
+    },
+    [prefetchFluigDatasets, prefetchGastosOperacionais]
+  );
+
+  // Prefetch automático: pré-carrega rotas e dados Fluig assim que o usuário faz login.
+  useEffect(() => {
+    if (!user || isLoading) return;
+
+    const fluigApproversHref = buildFluigApproversNavHref({
+      fullAccess: fluigApproverFullAccess,
+      nameKeys: fluigApproverNameKeys,
+    });
+    const canPrefetchGastos =
+      userPosition === 'Administrador' || can(GASTOS_OPERACIONAIS_MODULE_KEY);
+
+    const timer = setTimeout(() => {
+      router.prefetch('/ponto/fluig/aprovacoes-workflow');
+      router.prefetch(fluigApproversHref);
+
+      if (canAccessFluigApproversRoute) {
+        for (const id of FLUIG_APPROVAL_DATASET_IDS) {
+          void queryClient.prefetchQuery({
+            queryKey: ['fluig-workflow-approval', id],
+            queryFn: async () => {
+              const res = await api.post(
+                `/fluig/datasets/${encodeURIComponent(id)}/data`,
+                {},
+                { timeout: 130000 }
+              );
+              return res.data;
+            },
+            staleTime: 7 * 60 * 1000,
+          });
+        }
+      }
+
+      if (canPrefetchGastos) {
+        prefetchGastosOperacionais();
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [
+    user,
+    isLoading,
+    router,
+    queryClient,
+    fluigApproverFullAccess,
+    fluigApproverNameKeys,
+    canAccessFluigApproversRoute,
+    userPosition,
+    can,
+    prefetchGastosOperacionais,
+  ]);
+
   // Verificar se é administrador
   const isAdministrator = userPosition === 'Administrador';
-  
+  const canSeeFuroEstoque =
+    isAdministrator || can(pk('/ponto/furo-estoque'));
+  const canSeeFuelSupplies =
+    isAdministrator || can(pk('/ponto/solicitacoes-combustivel'));
+  const canSeeVehicleReservationSupplies =
+    isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos'));
+  const canSeeToolRentalSupplies =
+    isAdministrator || can(pk('/ponto/solicitacoes-ferramentas'));
+  const canSeeEntregaLogistica =
+    isAdministrator || can(pk('/ponto/entrega-logistica'));
+
+  const { data: chatUnreadCount = 0 } = useQuery({
+    queryKey: ['chat-unread-count', user?.id],
+    queryFn: async () => {
+      const res = await api.get('/chats/direct/unread/count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canAccessCollaborationTools && !!user?.id,
+    staleTime: 15_000,
+    refetchInterval: () => visibleTabRefetchInterval(30_000),
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: pendingFuroCount = 0 } = useQuery({
+    queryKey: ['stock-shortfalls-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/stock/shortfalls/pending-count');
+      const n = Number(res.data?.count ?? res.data?.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeFuroEstoque && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000
+  });
+
+  const { data: recebimentoPendingCount = 0 } = useQuery({
+    queryKey: ['material-deliveries-recebimento-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/material-deliveries/summary', {
+        params: { forRecebimento: 'true' },
+      });
+      const n = Number(res.data?.data?.awaitingEngineering ?? 0);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canAccessRecebimentoEntregasRoutePage && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
+  const { data: fuelSuppliesPendingCount = 0 } = useQuery({
+    queryKey: ['fuel-supplies-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/fuel-refuel-requests/supplies-pending-count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeFuelSupplies && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
+  const { data: vehicleReservationSuppliesPendingCount = 0 } = useQuery({
+    queryKey: ['vehicle-reservation-supplies-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/vehicle-reservations/supplies-pending-count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeVehicleReservationSupplies && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
+  const { data: toolRentalSuppliesPendingCount = 0 } = useQuery({
+    queryKey: ['tool-rental-supplies-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/tool-rental-requests/supplies-pending-count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeToolRentalSupplies && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
+  const { data: entregaLogisticaPendingCount = 0 } = useQuery({
+    queryKey: ['logistics-delivery-pending-count'],
+    queryFn: async () => {
+      const res = await api.get('/logistics-delivery-requests/pending-count');
+      const n = Number(res.data?.data?.count ?? res.data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: canSeeEntregaLogistica && !isLoading,
+    refetchInterval: () => visibleTabRefetchInterval(60_000),
+    refetchOnWindowFocus: true,
+    staleTime: 20_000,
+  });
+
+  const { counts: fdNotificationCounts } = useFdNotificationCounts();
+  const { counts: approvalCounts } = useApprovalNotificationCounts();
+
+  const navBadgeCountForHref = (href: string): number => {
+    if (href === '/ponto/aprovacoes') return approvalCounts.total;
+    // RM já entra no badge de Aprovações — não somar de novo em Suprimentos
+    if (href === '/ponto/gerenciar-materiais' && canApproveMaterialRequests) {
+      const aprovacoesVisible =
+        canAccessDpApproverPages ||
+        canApproveEspelhoNf ||
+        canApproveOc ||
+        canApproveFuel ||
+        canApproveMaterialRequests;
+      if (aprovacoesVisible) return 0;
+      return approvalCounts.rm;
+    }
+    if (href === '/ponto/fds-aprovadas') return fdNotificationCounts.pendingPurchase;
+    if (href === '/ponto/furo-estoque') return pendingFuroCount;
+    if (href === '/ponto/recebimento-entregas') return recebimentoPendingCount;
+    if (href === '/ponto/solicitacoes-combustivel') return fuelSuppliesPendingCount;
+    if (href === '/ponto/solicitacoes-reserva-veiculos') return vehicleReservationSuppliesPendingCount;
+    if (href === '/ponto/solicitacoes-ferramentas') return toolRentalSuppliesPendingCount;
+    if (href === '/ponto/entrega-logistica') return entregaLogisticaPendingCount;
+    return 0;
+  };
+
+  type SidebarNavLeaf = {
+    name: string;
+    href: string;
+    icon?: LucideIcon;
+    description?: string;
+    permission: boolean;
+  };
+
+  type SidebarNavItem = Omit<SidebarNavLeaf, 'icon'> & {
+    icon: LucideIcon;
+    /** Subpáginas (ex.: Controle CREA). */
+    children?: SidebarNavLeaf[];
+    /** Título de agrupamento na lista do módulo (ex.: Central de Chamados). */
+    section?: string;
+  };
+
+  const byNavName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+
+  const sortNavItemsByName = <
+    T extends { name: string; children?: SidebarNavLeaf[]; section?: string }
+  >(
+    items: T[]
+  ): T[] => {
+    const prepared = [...items].map((item) =>
+      item.children?.length
+        ? { ...item, children: sortNavItemsByName(item.children) }
+        : item
+    );
+    const hasSections = prepared.some((item) => item.section);
+    if (!hasSections) {
+      return prepared.sort(byNavName);
+    }
+
+    const unsectioned: T[] = [];
+    const sectionOrder: string[] = [];
+    const buckets = new Map<string, T[]>();
+    for (const item of prepared) {
+      const section = item.section?.trim();
+      if (!section) {
+        unsectioned.push(item);
+        continue;
+      }
+      if (!buckets.has(section)) {
+        sectionOrder.push(section);
+        buckets.set(section, []);
+      }
+      buckets.get(section)!.push(item);
+    }
+
+    return [
+      ...unsectioned.sort(byNavName),
+      ...sectionOrder.flatMap((section) => (buckets.get(section) ?? []).sort(byNavName))
+    ];
+  };
+
+  const groupNavItemsBySection = (items: SidebarNavItem[]) => {
+    const groups: Array<{ title: string | null; items: SidebarNavItem[] }> = [];
+    for (const item of items) {
+      const title = item.section?.trim() || null;
+      const last = groups[groups.length - 1];
+      if (last && last.title === title) {
+        last.items.push(item);
+      } else {
+        groups.push({ title, items: [item] });
+      }
+    }
+    return groups;
+  };
+
+  const navItemIsVisible = (item: SidebarNavItem): boolean => {
+    if (item.children?.length) {
+      return item.children.some((child) => child.permission);
+    }
+    return item.permission;
+  };
+
+  const navItemHasActiveChild = (item: SidebarNavItem): boolean =>
+    Boolean(item.children?.some((child) => child.permission && isActive(child.href)));
+
+  const navItemMatchesSearch = (item: SidebarNavItem, searchQuery: string): boolean => {
+    const selfMatch =
+      textMatchesSearch(item.name, searchQuery) ||
+      textMatchesSearch(item.description, searchQuery);
+    if (selfMatch) return true;
+    return Boolean(
+      item.children?.some(
+        (child) =>
+          child.permission &&
+          (textMatchesSearch(child.name, searchQuery) ||
+            textMatchesSearch(child.description, searchQuery)),
+      ),
+    );
+  };
+
+  /** Soma só badges das páginas que a pessoa realmente vê nesse módulo. */
+  const moduleBadgeCountForVisibleItems = (items: SidebarNavItem[]): number =>
+    items.filter(navItemIsVisible).reduce((sum, item) => {
+      if (item.children?.length) {
+        return (
+          sum +
+          item.children
+            .filter((child) => child.permission)
+            .reduce((childSum, child) => childSum + navBadgeCountForHref(child.href), 0)
+        );
+      }
+      return sum + navBadgeCountForHref(item.href);
+    }, 0);
+
   // Verificar se o funcionário precisa bater ponto
   const requiresTimeClock = user?.employee?.requiresTimeClock !== false;
   
-  // Verificar se é do departamento Compras
-  const isDepartmentCompras = userDepartment?.toLowerCase().includes('compras');
-  
-  // Verificar se é do departamento Financeiro
-  const isDepartmentFinanceiro = userDepartment?.toLowerCase().includes('financeiro');
-
-  const handleLogout = () => {
-    setShowUserMenu(false);
-    setShowLogoutConfirm(true);
-  };
-
-  const handleConfirmLogout = () => {
-    setShowLogoutConfirm(false);
-    onLogout();
-  };
-
-  const handleCancelLogout = () => {
-    setShowLogoutConfirm(false);
-  };
-
-  const uploadProfilePhotoMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const fd = new FormData();
-      fd.append('profileAvatar', file);
-      await api.patch('/auth/me/photo', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      toast.success('Foto de perfil atualizada');
-      setProfileCropSrc((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-    },
-    onError: () => toast.error('Não foi possível atualizar a foto'),
-  });
-
-  const removeProfilePhotoMutation = useMutation({
-    mutationFn: async () => {
-      await api.delete('/auth/me/photo');
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      toast.success('Foto removida');
-      setProfilePhotoViewer(false);
-      setProfileAvatarMenu(false);
-    },
-    onError: () => toast.error('Não foi possível remover a foto'),
-  });
-
-  const profilePhotoHref = resolveApiMediaUrl(user?.profilePhotoUrl ?? null);
-
-  // Fechar menu quando clicar fora dele
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const t = event.target as Node;
-      if (profileAvatarSectionRef.current?.contains(t)) return;
-      if (menuRef.current?.contains(t)) return;
-      setShowUserMenu(false);
-      setProfileAvatarMenu(false);
-    };
-
-    if (showUserMenu || profileAvatarMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showUserMenu, profileAvatarMenu]);
-
   const isEmployee = userRole === 'EMPLOYEE';
-
-  // Função para extrair iniciais do nome do usuário (primeiro e segundo nome)
-  const getInitials = (name: string | undefined | null) => {
-    if (!name) return 'U';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
 
   // Menu items agrupados por categoria
   const getMenuItems = () => {
@@ -207,40 +638,95 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
         icon: Home,
         items: [
           {
-            name: 'Dashboard',
-            href: '/ponto/dashboard',
+            name: 'Painel do Sistema',
+            href: '/ponto/painel-do-sistema',
             icon: LayoutDashboard,
             description: 'Visão geral do sistema',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canViewDashboard
+            permission: isAdministrator || permissions.canViewDashboard
           },
           {
-            name: 'Painel de solicitações',
+            name: 'Fluig - Processos',
             href: '/ponto/financeiro/gestao-solicitacoes',
             icon: BarChart3,
             description: 'Solicitações do Fluig na visão financeira',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/gestao-solicitacoes'))
+            permission: isAdministrator || can(pk('/ponto/financeiro/gestao-solicitacoes'))
           },
           {
-            name: 'Meu Drive',
-            href: '/ponto/drive',
-            icon: HardDrive,
-            description: 'Armazenamento de arquivos na nuvem',
-            permission: true
+            name: 'Fluig - Aprovações',
+            href: '/ponto/fluig/aprovacoes-workflow',
+            icon: FileCheck,
+            description: 'Status de aprovação Compras, Gestor e Diretoria (G3/G5)',
+            permission:
+              isAdministrator || can(pk('/ponto/fluig/aprovacoes-workflow'))
           },
           {
-            name: 'Central de Atendimentos',
-            href: '/ponto/conversas-whatsapp',
-            icon: MessageSquare,
-            description: 'Conversas do chatbot WhatsApp para o pessoal ver',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/conversas-whatsapp'))
+            name: 'Aprovadores',
+            href: '/ponto/fluig/aprovadores',
+            icon: Users,
+            description: 'Aprovações e pendências por pessoa (G3/G5)',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/controle/gerenciar-aprovadores-fluig')) ||
+              fluigApproverNameKeys.length > 0
           },
           {
             name: 'Aprovações',
             href: '/ponto/aprovacoes',
             icon: FileCheck,
             description: 'Caixa de entrada de aprovações',
-            permission: can(pk('/ponto/aprovacoes')) || canAccessDpApproverPages,
-          }
+            // Aparece automaticamente para quem é gestor (decide Solicitações Gerais)
+            // ou tem a permissão «Aprovar Espelho da Nota Fiscal» (Controle).
+            permission:
+              canAccessDpApproverPages ||
+              canApproveEspelhoNf ||
+              canApproveOc ||
+              canApproveFuel ||
+              canApproveMaterialRequests,
+          },
+          {
+            name: 'Solicitações Internas',
+            href: '/ponto/solicitacoes-gerais',
+            icon: MailPlus,
+            description: 'Minhas solicitações ao DP',
+            permission: isAdministrator || can(pk('/ponto/solicitacoes-dp'))
+          },
+          {
+            name: 'Frota',
+            href: '/ponto/reserva-veiculos',
+            icon: Car,
+            description: 'Solicitar reserva de veículos da frota',
+            permission:
+              isAdministrator || can(pk('/ponto/reserva-veiculos'))
+          },
+          {
+            name: 'Abastecimento',
+            href: '/ponto/solicitar-combustivel',
+            icon: Fuel,
+            description: 'Solicitar abastecimento de veículos',
+            permission:
+              isAdministrator || can(pk('/ponto/solicitar-combustivel'))
+          },
+          {
+            name: 'Meus Chamados',
+            href: '/ponto/meus-chamados',
+            icon: Wrench,
+            description: 'Abrir e acompanhar seus chamados de manutenção',
+            permission: isAdministrator || can(pk('/ponto/meus-chamados'))
+          },
+          {
+            name: 'Entrega da Logística',
+            href: '/ponto/entrega-logistica',
+            icon: Truck,
+            description: 'Finalizar solicitações de entrega logística',
+            permission: isAdministrator || can(pk('/ponto/entrega-logistica'))
+          },
+          {
+            name: 'Central de Ajuda',
+            href: '/ponto/central-de-ajuda',
+            icon: HelpCircle,
+            description: 'Guias e tutoriais passo a passo do sistema',
+            permission: true,
+          },
         ]
       },
       {
@@ -249,18 +735,18 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
         icon: Users,
         items: [
           {
-            name: 'Funcionários',
+            name: 'Funcionários e Externos',
             href: '/ponto/funcionarios',
             icon: Users,
-            description: 'Cadastrar e gerenciar funcionários',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageEmployees
+            description: 'Cadastrar e gerenciar funcionários e externos',
+            permission: isAdministrator || permissions.canManageEmployees
           },
           {
             name: 'Folha de Pagamento',
             href: '/ponto/folha-pagamento',
             icon: FileSpreadsheet,
             description: 'Gestão de folha de pagamento',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canAccessPayroll
+            permission: isAdministrator || permissions.canAccessPayroll
           },
           {
             name: 'Ausências',
@@ -274,36 +760,36 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
             href: '/ponto/gerenciar-atestados',
             icon: BookText,
             description: 'Gerenciar todas as ausências',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-atestados'))
+            permission: isAdministrator || can(pk('/ponto/gerenciar-atestados'))
           },
           {
-            name: 'Alterações de ponto',
+            name: 'Alterações de Ponto',
             href: '/ponto/solicitacoes',
             icon: MailPlus,
             description: 'Solicitar e acompanhar alterações de marcação do ponto',
             permission: isAdministrator || can(pk('/ponto/solicitacoes'))
           },
           {
-            name: 'Gerenciar alterações de ponto',
+            name: 'Gerenciar Alterações de Ponto',
             href: '/ponto/gerenciar-solicitacoes',
             icon: FileText,
             description: 'Analisar e aprovar alterações de marcação dos colaboradores',
             permission: isAdministrator || can(pk('/ponto/gerenciar-solicitacoes'))
           },
           {
-            name: 'Solicitações Gerais',
-            href: '/ponto/solicitacoes-gerais',
-            icon: MailPlus,
-            description: 'Minhas solicitações ao DP',
-            permission: isAdministrator || can(pk('/ponto/solicitacoes-gerais'))
-          },
-          {
-            name: 'Gerenciar Solicitações Gerais',
+            name: 'Gerenciar Solicitações',
             href: '/ponto/gerenciar-solicitacoes-gerais',
             icon: FileText,
-            description: 'Aprovar solicitações do DP',
+            description: 'Tramitar solicitações do Departamento Pessoal',
             permission:
-              isAdministrator || isDepartmentPessoal || can(pk('/ponto/gerenciar-solicitacoes-gerais')),
+              isAdministrator || can(pk('/ponto/gerenciar-solicitacoes-dp')),
+          },
+          {
+            name: 'Central de Atendimentos',
+            href: '/ponto/conversas-whatsapp',
+            icon: MessageSquare,
+            description: 'Conversas do chatbot WhatsApp para o pessoal ver',
+            permission: isAdministrator || can(pk('/ponto/conversas-whatsapp'))
           },
           {
             name: 'Férias',
@@ -317,21 +803,21 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
             href: '/ponto/gerenciar-ferias',
             icon: BookImage,
             description: 'Gerenciar férias dos funcionários',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageVacations
+            permission: isAdministrator || permissions.canManageVacations
           },
           {
             name: 'Gerenciar Feriados',
             href: '/ponto/gerenciar-feriados',
             icon: CalendarDays,
             description: 'Gerenciar calendário de feriados',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageVacations
+            permission: isAdministrator || permissions.canManageVacations
           },
           {
             name: 'Banco de Horas',
             href: '/ponto/banco-horas',
             icon: FolderClock,
             description: 'Controle de banco de horas',
-            permission: isAdministrator || isDepartmentPessoal || permissions.canManageBankHours
+            permission: isAdministrator || permissions.canManageBankHours
           },
           {
             name: 'Alocação',
@@ -346,49 +832,86 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
             icon: Cake,
             description: 'Ver aniversariantes do mês',
             permission: isAdministrator || can(pk('/ponto/aniversariantes'))
-          }
+          },
+          {
+            name: 'Segurança do Trabalho',
+            href: '/ponto/seguranca-do-trabalho',
+            icon: Shield,
+            description: 'Controle de ASO dos funcionários',
+            permission:
+              isAdministrator || can(pk('/ponto/seguranca-do-trabalho')),
+          },
         ]
+      },
+      {
+        id: 'adm-tst',
+        name: 'ADM/TST',
+        icon: ClipboardList,
+        items: [
+          {
+            name: 'Gerenciar Solicitações',
+            href: '/ponto/gerenciar-solicitacoes-adm-tst',
+            icon: FileText,
+            description: 'Tramitar solicitações administrativas',
+            permission: isAdministrator || can(pk('/ponto/gerenciar-solicitacoes-adm-tst')),
+          },
+        ],
       },
       {
         id: 'financeiro',
         name: 'Financeiro',
-        icon: DollarSign,
+        icon: Landmark,
         items: [
           {
-            name: 'Financeiro',
-            href: '/ponto/financeiro',
-            icon: DollarSign,
-            description: 'Gerar borderô e CNAB400 para pagamentos',
-            permission: isAdministrator || can(pk('/ponto/financeiro'))
+            name: 'Controle Financeiro',
+            href: '/ponto/financeiro/controle-financeiro',
+            icon: ClipboardList,
+            description: 'Controle de Material/Serviço Aplicado por mês e ano',
+            permission: isAdministrator || can(pk('/ponto/financeiro/controle-financeiro'))
           },
           {
-            name: 'Análise Financeira',
-            href: '/ponto/financeiro/analise',
-            icon: BarChart3,
-            description: 'Importar planilha e gerar relatórios de análise financeira',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/analise'))
-          }
-          ,
+            name: 'Receitas',
+            href: '/ponto/financeiro/receitas',
+            icon: CircleDollarSign,
+            description: 'Receitas e repasses dos consórcios BSB e HUB',
+            permission: isAdministrator || can(pk('/ponto/financeiro/receitas'))
+          },
           {
-            name: 'Análise de Extrato',
-            href: '/ponto/financeiro/analise-extrato',
-            icon: BarChart3,
-            description: 'Importar e validar extratos bancários',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/financeiro/analise-extrato'))
+            name: 'Pagamento da Folha',
+            href: '/ponto/financeiro',
+            icon: DollarSign,
+            description: 'Borderô em PDF e remessa CNAB400 da folha',
+            permission: isAdministrator || can(pk('/ponto/financeiro'))
           },
         ]
       },
       {
-        id: 'engenharia',
-        name: 'Engenharia',
-        icon: Calculator,
+        id: 'metricas',
+        name: 'Métricas',
+        icon: BarChart3,
         items: [
           {
-            name: 'Contratos',
-            href: '/ponto/contratos',
+            name: 'Balanço Financeiro',
+            href: '/ponto/financeiro/analise-extrato',
+            icon: BarChart3,
+            description: 'Acompanhe o balanço financeiro',
+            permission: isAdministrator || can(pk('/ponto/financeiro/analise-extrato'))
+          },
+          {
+            name: "Controle de NF's",
+            href: '/ponto/financeiro/controle-nfs',
+            icon: FileSpreadsheet,
+            description: 'Controle de notas fiscais por contrato (planilha Relatório de Custos)',
+            permission:
+              isAdministrator || can(pk('/ponto/financeiro/controle-nfs'))
+          },
+          {
+            name: 'Entrada Fiscal',
+            href: '/ponto/financeiro/nfs-recebidas',
             icon: FileText,
-            description: 'Cadastro de contratos da engenharia',
-            permission: isAdministrator || can(pk('/ponto/contratos'))
+            description: 'Notas fiscais emitidas contra a empresa (SEFAZ)',
+            permission:
+              isAdministrator || can(pk('/ponto/financeiro/nfs-recebidas'))
           },
           {
             name: 'Controle Geral de Contratos',
@@ -398,95 +921,438 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
             permission: isAdministrator || can(pk('/ponto/contratos/controle-geral'))
           },
           {
+            name: 'Contratos Sócios',
+            href: '/ponto/contratos/socios',
+            icon: Users,
+            description: 'Controle dos contratos compartilhados com sócios',
+            permission: isAdministrator || can(pk('/ponto/contratos/socios'))
+          },
+          {
+            name: 'Gastos Operacionais',
+            href: '/ponto/contratos/gastos-operacionais',
+            icon: Wallet,
+            description: 'Gastos operacionais por contrato (QUERY BASE DE GASTOS)',
+            permission: isAdministrator || can(pk('/ponto/contratos/gastos-operacionais'))
+          },
+          {
+            name: 'Relatórios de Contrato',
+            href: '/ponto/metricas/relatorios-contrato',
+            icon: FileText,
+            description: 'Reuniões quinzenais por contrato — acompanhamento interno',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/metricas/relatorios-contrato')) ||
+              can(pk('/ponto/contratos/controle-geral')) ||
+              can(pk('/ponto/contratos'))
+          },
+        ]
+      },
+      {
+        id: 'engenharia',
+        name: 'Engenharia',
+        icon: DraftingCompass,
+        items: [
+          {
+            name: 'Central de Chamados',
+            href: '/ponto/sistema-gestao-os',
+            icon: Wrench,
+            description: 'Visão geral e gestão de todos os chamados de manutenção',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Planos de Manutenção',
+            href: '/ponto/sistema-gestao-os/planos',
+            icon: CalendarRange,
+            description: 'Planos preventivos, PMOC e segurança',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/planos')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Relatórios de Chamados',
+            href: '/ponto/sistema-gestao-os/relatorios',
+            icon: BarChart3,
+            description: 'Indicadores e exportação da Central de Chamados',
+            permission: isAdministrator || can(pk('/ponto/sistema-gestao-os/relatorios')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Contratos',
+            href: '/ponto/contratos',
+            icon: FileText,
+            description: 'Cadastro de contratos da engenharia',
+            permission: isAdministrator || can(pk('/ponto/contratos')),
+            section: 'Obras'
+          },
+          {
             name: 'Ordem de Serviço',
             href: '/ponto/andamento-da-os',
             icon: ClipboardList,
             description: 'Acompanhamento e controle das ordens de serviço',
-            permission: canAccessOsRoutePage
+            permission: canAccessOsRoutePage,
+            section: 'Obras'
+          },
+          {
+            name: 'Solicitação de Materiais',
+            href: '/ponto/solicitar-materiais',
+            icon: ShoppingCart,
+            description: 'Solicitar materiais para compra (SC)',
+            permission: isAdministrator || can(pk('/ponto/solicitar-materiais')),
+            section: 'Obras'
           },
           {
             name: 'Pleitos Gerados',
             href: '/ponto/pleitos-gerados',
             icon: FileCheck,
             description: 'Visualizar todos os pleitos com valor pleiteado',
-            permission: isAdministrator || can(pk('/ponto/pleitos-gerados'))
+            permission: isAdministrator || can(pk('/ponto/pleitos-gerados')),
+            section: 'Obras'
+          },
+          {
+            name: 'Fichas de Demanda',
+            href: '/ponto/aprovacao-fds',
+            icon: ClipboardCheck,
+            description: 'Cadastro e gestão das fichas de demanda',
+            permission: isAdministrator || can(pk('/ponto/aprovacao-fds')),
+            section: 'Obras'
+          },
+          {
+            name: 'Recebimento de Entregas',
+            href: '/ponto/recebimento-entregas',
+            icon: PackageCheck,
+            description: 'Confirmar recebimento de material na obra',
+            permission: canAccessRecebimentoEntregasRoutePage,
+            section: 'Obras'
+          },
+          {
+            name: 'Solicitação de Ferramentas',
+            href: '/ponto/solicitar-ferramentas',
+            icon: Wrench,
+            description: 'Solicitar locação, renovação, devolução ou compra de equipamentos',
+            permission: isAdministrator || can(pk('/ponto/solicitar-ferramentas')),
+            section: 'Obras'
+          }
+        ]
+      },
+      {
+        id: 'contratos-licitacoes',
+        name: 'Contratos e Licitações',
+        icon: ScrollText,
+        items: [
+          {
+            name: 'Espelho da Nota Fiscal',
+            href: '/ponto/espelho-nf',
+            icon: FileSpreadsheet,
+            description: 'Montar o espelho da nota fiscal',
+            permission: isAdministrator || can(pk('/ponto/espelho-nf'))
+          },
+          {
+            name: 'Licitações',
+            href: '/ponto/licitacoes',
+            icon: ClipboardList,
+            description: 'Acompanhar processos de licitação',
+            permission: isAdministrator || can(pk('/ponto/licitacoes'))
+          },
+          {
+            name: 'PNCP',
+            href: '/ponto/licitacoes-pncp',
+            icon: Search,
+            description: 'Consultar publicações no Portal Nacional de Contratações',
+            permission: isAdministrator || can(pk('/ponto/licitacoes-pncp')),
+          },
+          {
+            name: 'Responsáveis Técnicos',
+            href: '/ponto/responsaveis-tecnicos',
+            icon: BadgeCheck,
+            description: 'Cadastro de responsáveis técnicos (CREA)',
+            permission: isAdministrator || can(pk('/ponto/responsaveis-tecnicos')),
+          },
+          {
+            name: 'Anuidades',
+            href: '/ponto/controle-anuidade',
+            icon: CalendarDays,
+            description: 'Controle de pagamentos de anuidade CREA',
+            permission: isAdministrator || can(pk('/ponto/controle-anuidade')),
+          },
+          {
+            name: "ART's / Protocolos",
+            href: '/ponto/controle-pagamentos-art',
+            icon: FileCheck,
+            description: 'Controle de pagamentos de ART e protocolos',
+            permission: isAdministrator || can(pk('/ponto/controle-pagamentos-art')),
+          },
+          {
+            name: 'Medições',
+            href: '/ponto/contratos/medicao',
+            icon: FileSpreadsheet,
+            description: 'Importar e visualizar planilhas de medição',
+            permission: isAdministrator || can(pk('/ponto/contratos/medicao'))
+          }
+        ]
+      },
+      {
+        id: 'juridico',
+        name: 'Jurídico',
+        icon: Scale,
+        items: [
+          {
+            name: 'Processos Ativos',
+            href: '/ponto/juridico/processos-ativos',
+            icon: Briefcase,
+            description: 'Lista de processos jurídicos em andamento',
+            permission: isAdministrator || can(pk('/ponto/juridico/processos-ativos'))
+          },
+          {
+            name: 'Dashboards dos Processos',
+            href: '/ponto/juridico/processos-ativos/dashboard',
+            icon: BarChart3,
+            description: 'Indicadores de causas, sentenças, recursos e acordos',
+            permission: isAdministrator || can(pk('/ponto/juridico/processos-ativos/dashboard'))
           }
         ]
       },
       {
         id: 'suprimentos',
         name: 'Suprimentos',
-        icon: Package,
+        icon: Warehouse,
         items: [
-          {
-            name: 'Solicitar Materiais',
-            href: '/ponto/solicitar-materiais',
-            icon: ShoppingCart,
-            description: 'Solicitar materiais para compra (SC)',
-            permission: isAdministrator || can(pk('/ponto/solicitar-materiais'))
-          },
           {
             name: 'Requisições de Materiais',
             href: '/ponto/gerenciar-materiais',
             icon: Package,
             description: 'Aprovar SC e criar OC',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/gerenciar-materiais'))
+            permission: isAdministrator || can(pk('/ponto/gerenciar-materiais'))
           },
           {
             name: 'Mapa de Cotação',
             href: '/ponto/mapa-cotacao',
             icon: FileSpreadsheet,
             description: 'Comparar cotações entre fornecedores e gerar OC por vencedor',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/mapa-cotacao'))
+            permission: isAdministrator || can(pk('/ponto/mapa-cotacao'))
           },
           {
             name: 'Ordens de Compra',
             href: '/ponto/ordem-de-compra',
             icon: FileText,
             description: 'Listar e gerenciar ordens de compra',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/ordem-de-compra'))
+            permission: isAdministrator || can(pk('/ponto/ordem-de-compra'))
+          },
+          {
+            name: 'Controle de Entregas',
+            href: '/ponto/controle-entregas',
+            icon: Truck,
+            description: 'Acompanhar entregas de material e recebimento pela engenharia',
+            permission: isAdministrator || can(pk('/ponto/controle-entregas'))
+          },
+          {
+            name: 'Entregas Logística',
+            href: '/ponto/entregas-logistica',
+            icon: Truck,
+            description: 'Registrar solicitações de entrega logística',
+            permission: isAdministrator || can(pk('/ponto/entregas-logistica'))
+          },
+          {
+            name: 'Estoque',
+            href: '/ponto/estoque',
+            icon: Package,
+            description: 'Gerenciar estoque de materiais',
+            permission: isAdministrator || can(pk('/ponto/estoque'))
+          },
+          {
+            name: 'Furo de Estoque',
+            href: '/ponto/furo-estoque',
+            icon: PackageX,
+            description: 'Pendências de entrega após recebimento parcial',
+            permission: isAdministrator || can(pk('/ponto/furo-estoque'))
+          },
+          {
+            name: 'Ajuste de Estoque',
+            href: '/ponto/ajuste-estoque',
+            icon: Package,
+            description: 'Realizar entradas e saídas de ajuste no estoque',
+            permission: isAdministrator || can(pk('/ponto/ajuste-estoque'))
+          },
+          {
+            name: "FD's Aprovadas",
+            href: '/ponto/fds-aprovadas',
+            icon: ClipboardCheck,
+            description: "FD's aprovadas — status de compras",
+            permission:
+              isAdministrator || can(pk('/ponto/fds-aprovadas'))
+          },
+          {
+            name: 'Fila de Abastecimento',
+            href: '/ponto/solicitacoes-combustivel',
+            icon: Fuel,
+            description: 'Pedidos de abastecimento (sistema e Gennecy)',
+            permission:
+              isAdministrator || can(pk('/ponto/solicitacoes-combustivel'))
+          },
+          {
+            name: 'Gestão da Frota',
+            href: '/ponto/solicitacoes-reserva-veiculos',
+            icon: CalendarRange,
+            description: 'Aprovar ou rejeitar solicitações de uso da frota',
+            permission:
+              isAdministrator || can(pk('/ponto/solicitacoes-reserva-veiculos'))
+          },
+          {
+            name: 'Pedidos de Ferramentas',
+            href: '/ponto/solicitacoes-ferramentas',
+            icon: Wrench,
+            description: 'Analisar solicitações de locação, renovação, devolução ou compra',
+            permission:
+              isAdministrator || can(pk('/ponto/solicitacoes-ferramentas'))
           },
         ]
       },
       {
         id: 'cadastros',
         name: 'Cadastros',
-        icon: BarChart3,
+        icon: Database,
         items: [
           {
-            name: 'Centros de Custo',
-            href: '/ponto/centros-custo',
-            icon: Building2,
-            description: 'Gerenciar centros de custo',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/centros-custo'))
+            name: 'Locais e Ativos',
+            href: '/ponto/sistema-gestao-os/locais',
+            icon: MapPin,
+            description: 'Prédios, setores, salas e ativos com QR',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/locais')),
+            section: 'Central de Chamados'
           },
           {
-            name: 'Materiais de Construção',
-            href: '/ponto/materiais-construcao',
-            icon: Package,
-            description: 'Gerenciar materiais de construção civil',
-            permission: isAdministrator || isDepartmentPessoal || can(pk('/ponto/materiais-construcao'))
+            name: 'Equipamentos',
+            href: '/ponto/sistema-gestao-os/equipamentos',
+            icon: Boxes,
+            description: 'Grupos, subgrupos e equipamentos',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/equipamentos')),
+            section: 'Central de Chamados'
+          },
+          {
+            name: 'Tipos de Serviço',
+            href: '/ponto/sistema-gestao-os/tipos-servico',
+            icon: Wrench,
+            description: 'Categorias de serviço para chamados e OS',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/sistema-gestao-os/tipos-servico')),
+            section: 'Central de Chamados'
           },
           {
             name: 'Fornecedores',
             href: '/ponto/fornecedores',
             icon: Building2,
             description: 'Cadastro de fornecedores',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/fornecedores'))
+            permission: isAdministrator || can(pk('/ponto/fornecedores')),
+            section: 'Compras'
+          },
+          {
+            name: 'Materiais e Serviços',
+            href: '/ponto/materiais-construcao',
+            icon: Package,
+            description: 'Gerenciar cadastro de materiais e serviços',
+            permission: isAdministrator || can(pk('/ponto/materiais-construcao')),
+            section: 'Compras'
           },
           {
             name: 'Condições de Pagamento',
             href: '/ponto/condicoes-pagamento',
             icon: CreditCard,
             description: 'Condições para ordens de compra',
-            permission: isAdministrator || isDepartmentCompras || can(pk('/ponto/condicoes-pagamento'))
+            permission: isAdministrator || can(pk('/ponto/condicoes-pagamento')),
+            section: 'Compras'
+          },
+          {
+            name: 'Veículos',
+            href: '/ponto/veiculos',
+            icon: Car,
+            description: 'Cadastro de veículos da frota',
+            permission: isAdministrator || can(pk('/ponto/veiculos')),
+            section: 'Frota'
+          },
+          {
+            name: 'Postos de Combustível',
+            href: '/ponto/regioes-postos-combustivel',
+            icon: Fuel,
+            description: 'Cidades satélites e postos para abastecimento',
+            permission:
+              isAdministrator || can(pk('/ponto/regioes-postos-combustivel')),
+            section: 'Frota'
+          },
+          {
+            name: 'Centros de Custo',
+            href: '/ponto/centros-custo',
+            icon: Building2,
+            description: 'Gerenciar centros de custo',
+            permission: isAdministrator || can(pk('/ponto/centros-custo')),
+            section: 'Financeiro'
           },
           {
             name: 'Natureza Orçamentária',
             href: '/ponto/natureza-orcamentaria',
             icon: BookPlus,
             description: 'Cadastrar naturezas orçamentárias',
-            permission: isAdministrator || isDepartmentFinanceiro || can(pk('/ponto/natureza-orcamentaria'))
+            permission: isAdministrator || can(pk('/ponto/natureza-orcamentaria')),
+            section: 'Financeiro'
+          },
+          {
+            name: 'Prestadores de Serviço',
+            href: '/ponto/prestadores-servico',
+            icon: Truck,
+            description: 'Cadastro de prestadores para espelho de nota fiscal',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/espelho-nf/prestadores-servico')),
+            section: 'Nota Fiscal'
+          },
+          {
+            name: 'Tomadores de Serviço',
+            href: '/ponto/tomadores-servico',
+            icon: Contact,
+            description: 'Cadastro de tomadores para espelho de nota fiscal',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/espelho-nf/tomadores-servico')),
+            section: 'Nota Fiscal'
+          },
+          {
+            name: 'Contas Bancárias',
+            href: '/ponto/contas-bancarias',
+            icon: Landmark,
+            description: 'Contas usadas em tomadores e no espelho de nota fiscal',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/espelho-nf/contas-bancarias')),
+            section: 'Nota Fiscal'
+          },
+          {
+            name: 'Códigos Tributários',
+            href: '/ponto/codigos-tributarios',
+            icon: Percent,
+            description: 'Parâmetros por município para espelho de nota fiscal',
+            permission:
+              isAdministrator ||
+              can(pk('/ponto/espelho-nf/codigos-tributarios')),
+            section: 'Nota Fiscal'
+          },
+          {
+            name: 'Formulários',
+            href: '/ponto/formularios',
+            icon: ClipboardList,
+            description: 'Criar e editar estrutura de formulários',
+            permission: isAdministrator || can(pk('/ponto/formularios')),
+            section: 'Geral'
+          },
+          {
+            name: 'Notícias',
+            href: '/ponto/noticias',
+            icon: Newspaper,
+            description: 'Comunicados agendados exibidos no primeiro acesso',
+            permission: isAdministrator || can(pk('/ponto/noticias')),
+            section: 'Geral'
           }
         ]
       },
@@ -500,722 +1366,902 @@ export function Sidebar({ userRole, userName, onLogout, onMenuToggle }: SidebarP
             href: '/ponto',
             icon: FolderClock,
             description: 'Gerencie seus registros',
-            permission: (isAdministrator || isDepartmentPessoal || permissions.canRegisterTime) && requiresTimeClock
+            permission: (isAdministrator || permissions.canRegisterTime) && requiresTimeClock
           }
         ]
       }
     ];
 
     // Filtrar categorias que têm pelo menos um item com permissão
-    let filteredCategories = menuCategories.filter(category => 
-      category.items.some(item => item.permission)
+    let filteredCategories = menuCategories.filter((category) =>
+      category.items.some((item) => navItemIsVisible(item as SidebarNavItem)),
     );
 
     // Aplicar filtro de pesquisa se houver termo de busca
     if (searchTerm.trim()) {
-      const searchLower = searchTerm.toLowerCase().trim();
+      const searchQuery = searchTerm.trim();
       filteredCategories = filteredCategories
-        .map(category => {
-          // Filtrar itens dentro da categoria
-          const filteredItems = category.items.filter(item => {
-            if (!item.permission) return false;
-            const matchesName = item.name.toLowerCase().includes(searchLower);
-            const matchesDescription = item.description?.toLowerCase().includes(searchLower) || false;
-            return matchesName || matchesDescription;
-          });
+        .map((category) => {
+          const filteredItems = category.items
+            .map((item) => {
+              const navItem = item as SidebarNavItem;
+              if (!navItemIsVisible(navItem)) return null;
+              if (!navItem.children?.length) {
+                const matchesName = textMatchesSearch(navItem.name, searchQuery);
+                const matchesDescription = textMatchesSearch(navItem.description, searchQuery);
+                return matchesName || matchesDescription ? navItem : null;
+              }
 
-          // Retornar categoria apenas se tiver itens após o filtro
+              const parentMatches = navItemMatchesSearch(
+                { ...navItem, children: undefined },
+                searchQuery,
+              );
+              const matchingChildren = navItem.children.filter((child) => {
+                if (!child.permission) return false;
+                if (parentMatches) return true;
+                return (
+                  textMatchesSearch(child.name, searchQuery) ||
+                  textMatchesSearch(child.description, searchQuery)
+                );
+              });
+              if (matchingChildren.length === 0 && !parentMatches) return null;
+              return {
+                ...navItem,
+                children: parentMatches
+                  ? navItem.children.filter((c) => c.permission)
+                  : matchingChildren,
+              };
+            })
+            .filter((item): item is SidebarNavItem => item != null);
+
           return filteredItems.length > 0 ? { ...category, items: filteredItems } : null;
         })
-        .filter(category => category !== null) as typeof menuCategories;
+        .filter((category) => category !== null) as typeof menuCategories;
     }
 
-    return filteredCategories;
+    return filteredCategories.map((category) => ({
+      ...category,
+      items: sortNavItemsByName(category.items as SidebarNavItem[]),
+    }));
   };
 
   const menuItems = getMenuItems();
 
+  const isFooterShortcutActive = (href: string) => {
+    if (pathname == null) return false;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
+  const resolveNavHref = (href: string) => {
+    if (href === '/ponto/fluig/aprovadores' && !isLoading) {
+      return buildFluigApproversNavHref({
+        fullAccess: fluigApproverFullAccess,
+        nameKeys: fluigApproverNameKeys,
+      });
+    }
+    return href;
+  };
+
   const isActive = (href: string) => {
     if (pathname == null) return false;
+    if (href === '/ponto/fluig/aprovadores') {
+      return pathname === href || pathname.startsWith(`${href}/`);
+    }
     if (href === '/ponto/contratos') {
       if (pathname === '/ponto/contratos') return true;
       // Rotas fixas sob /ponto/contratos (ex.: controle geral) — não marcam "Contratos", só o item próprio.
-      if (pathname.startsWith('/ponto/contratos/controle-geral')) return false;
+      if (
+        pathname.startsWith('/ponto/contratos/controle-geral') ||
+        pathname.startsWith('/ponto/contratos/socios') ||
+        pathname.startsWith('/ponto/contratos/gastos-operacionais')
+      ) {
+        return false;
+      }
       // Detalhe do contrato e subpáginas (orçamento, permissões, etc.)
       return /^\/ponto\/contratos\/[^/]+/.test(pathname);
+    }
+    if (href === '/ponto/funcionarios') {
+      return pathname === href || pathname.startsWith(`${href}/`);
     }
 
     return pathname === href;
   };
 
-  const toggleMenu = (menuId: string) => {
-    setExpandedMenus(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(menuId)) {
-        newSet.delete(menuId);
-      } else {
-        newSet.add(menuId);
-      }
-      return newSet;
-    });
-  };
+  const renderSidebarNavItem = (item: SidebarNavItem, forceExpanded: boolean, navIndex = 0) => {
+    const ItemIcon = item.icon;
+    const visibleChildren = item.children?.filter((child) => child.permission) ?? [];
+    const groupKey = item.name;
+    const wrapStyle = { ['--nav-i' as string]: navIndex } as React.CSSProperties;
 
-  const isMenuExpanded = (menuId: string) => {
-    return expandedMenus.has(menuId);
-  };
+    if (visibleChildren.length > 0) {
+      const childActive = visibleChildren.some((child) => isActive(child.href));
+      const groupState = expandedNavGroups[groupKey];
+      const expanded = forceExpanded
+        ? true
+        : groupState === false
+          ? false
+          : groupState === true || childActive;
+      const groupBadge = visibleChildren.reduce(
+        (sum, child) => sum + navBadgeCountForHref(child.href),
+        0,
+      );
 
-  // Expandir automaticamente grupos com páginas ativas na inicialização
-  React.useEffect(() => {
-    const activeCategories = menuItems.filter(category => 
-      category.items.some(item => isActive(item.href))
+      return (
+        <div key={`group-${groupKey}`} className="sidebar-nav-item-wrap space-y-1" style={wrapStyle}>
+          <button
+            type="button"
+            onClick={() => {
+              if (forceExpanded) return;
+              setExpandedNavGroups((prev) => ({
+                ...prev,
+                [groupKey]: !expanded,
+              }));
+            }}
+            className={`sidebar-nav-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 ${
+              childActive
+                ? 'sidebar-nav-item--active bg-red-50/70 text-red-700 dark:bg-red-900/10 dark:text-red-500'
+                : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+            }`}
+            aria-expanded={expanded}
+          >
+            <ItemIcon
+              className={`sidebar-nav-item__icon h-4 w-4 flex-shrink-0 ${
+                childActive ? 'text-red-600 dark:text-red-500' : 'text-gray-500 dark:text-gray-400'
+              }`}
+            />
+            <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">{item.name}</span>
+            <NotificationCountBadge count={groupBadge} />
+            <ChevronDown
+              className={`h-4 w-4 flex-shrink-0 transition-transform duration-200 ${
+                expanded ? 'rotate-180' : 'rotate-0'
+              } ${
+                childActive ? 'text-red-600 dark:text-red-500' : 'text-gray-400'
+              }`}
+            />
+          </button>
+          {expanded ? (
+            <div className="ml-3 space-y-1 border-l border-gray-200 pl-2 dark:border-gray-700">
+              {visibleChildren.map((child, childIndex) => {
+                const active = isActive(child.href);
+                const badgeCount = navBadgeCountForHref(child.href);
+                return (
+                  <div
+                    key={child.href}
+                    className="sidebar-nav-item-wrap"
+                    style={{ ['--nav-i' as string]: navIndex + childIndex * 0.35 } as React.CSSProperties}
+                  >
+                    <Link
+                      href={resolveNavHref(child.href)}
+                      prefetch={navLinkPrefetch}
+                      onMouseEnter={navDataPrefetchForHref(child.href)}
+                      onClick={(event) => {
+                        if (!active) return;
+                        event.preventDefault();
+                        bumpNavPop(child.href);
+                        dispatchReplayPageEnter();
+                      }}
+                      className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2 ${
+                        active
+                          ? `sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500${
+                              navPopHref === child.href ? ' sidebar-nav-item--pop' : ''
+                            }`
+                          : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{child.name}</span>
+                      <NotificationCountBadge count={badgeCount} />
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    const active = isActive(item.href);
+    const badgeCount = navBadgeCountForHref(item.href);
+    return (
+      <div key={item.href} className="sidebar-nav-item-wrap" style={wrapStyle}>
+        <Link
+          href={resolveNavHref(item.href)}
+          prefetch={navLinkPrefetch}
+          onMouseEnter={navDataPrefetchForHref(item.href)}
+          onClick={(event) => {
+            if (!active) return;
+            event.preventDefault();
+            bumpNavPop(item.href);
+            dispatchReplayPageEnter();
+          }}
+          className={`sidebar-nav-item flex items-center gap-3 rounded-xl px-3 py-2.5 ${
+            active
+              ? `sidebar-nav-item--active bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-500${
+                  navPopHref === item.href ? ' sidebar-nav-item--pop' : ''
+                }`
+              : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800'
+          }`}
+        >
+          <ItemIcon
+            className={`sidebar-nav-item__icon h-4 w-4 flex-shrink-0 ${
+              active ? 'text-red-600 dark:text-red-500' : 'text-gray-500 dark:text-gray-400'
+            }`}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
+          <NotificationCountBadge count={badgeCount} />
+        </Link>
+      </div>
     );
-    
-    if (activeCategories.length > 0) {
-      const newExpandedMenus = new Set(expandedMenus);
-      activeCategories.forEach(category => {
-        newExpandedMenus.add(category.id);
+  };
+
+  const renderNavItemList = (items: SidebarNavItem[], forceExpanded: boolean) => {
+    const visible = items.filter(navItemIsVisible);
+    const groups = groupNavItemsBySection(visible);
+    const useHeaders = groups.some((group) => group.title);
+    if (!useHeaders) {
+      return visible.map((item, index) => renderSidebarNavItem(item, forceExpanded, index));
+    }
+    let navI = 0;
+    return (
+      <div className="space-y-5">
+        {groups.map((group, groupIndex) => {
+          const titleIndex = group.title ? navI++ : 0;
+          return (
+            <div key={group.title ?? `geral-${groupIndex}`} className="space-y-3">
+              {group.title ? (
+                <p
+                  className="sidebar-nav-section-title whitespace-nowrap px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500"
+                  style={{ ['--nav-i' as string]: titleIndex } as React.CSSProperties}
+                >
+                  {group.title}
+                </p>
+              ) : null}
+              {group.items.map((item) =>
+                renderSidebarNavItem(item, forceExpanded, navI++)
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const activeModuleId = menuItems.find((category) =>
+    category.items.some((item) => {
+      const navItem = item as SidebarNavItem;
+      if (!navItemIsVisible(navItem)) return false;
+      if (navItem.children?.length) return navItemHasActiveChild(navItem);
+      return isActive(navItem.href);
+    }),
+  )?.id;
+
+  const onRailFooterRoute = isRailFooterRoute(pathname);
+  const onHomeRoute = isHomeRoute(pathname);
+  const routeForcesCollapsed = onHomeRoute || onRailFooterRoute;
+  const effectiveCollapsed = sidebarHydrated ? isCollapsed : routeForcesCollapsed;
+  const tier2Visible = !effectiveCollapsed || isOpen;
+
+  const displayedModuleId = userPickedModuleRef.current
+    ? selectedModuleId
+    : (activeModuleId ?? selectedModuleId);
+
+  const selectedModule = menuItems.find((c) => c.id === displayedModuleId) ?? menuItems[0];
+
+  /** Anima entrada só ao abrir o painel ou trocar de módulo — nunca ao navegar entre páginas. */
+  const [navEnterClass, setNavEnterClass] = useState(false);
+  const [railEnterClass, setRailEnterClass] = useState(false);
+  /** Borda do painel: permanece durante o fechamento e some só no fim da animação. */
+  const [tier2BorderVisible, setTier2BorderVisible] = useState(false);
+  const [railPop, setRailPop] = useState<{ id: string; n: number }>({ id: '', n: 0 });
+  const [navPopHref, setNavPopHref] = useState('');
+  const railPopRafRef = useRef<number | null>(null);
+  const navPopRafRef = useRef<number | null>(null);
+  const navEnterTimeoutRef = useRef<number | null>(null);
+  const railEnterTimeoutRef = useRef<number | null>(null);
+  const railEnterPlayedRef = useRef(false);
+  const tier2BorderHideTimeoutRef = useRef<number | null>(null);
+
+  const bumpRailPop = useCallback((id: string) => {
+    if (railPopRafRef.current != null) cancelAnimationFrame(railPopRafRef.current);
+    setRailPop({ id, n: 0 });
+    railPopRafRef.current = requestAnimationFrame(() => {
+      railPopRafRef.current = requestAnimationFrame(() => {
+        setRailPop({ id, n: Date.now() });
+        railPopRafRef.current = null;
       });
-      setExpandedMenus(newExpandedMenus);
-    }
-  }, [pathname]); // Executa quando a rota muda
+    });
+  }, []);
 
-  // Expandir automaticamente todos os grupos quando houver pesquisa
-  React.useEffect(() => {
-    if (searchTerm.trim()) {
-      const allCategoryIds = menuItems.map(category => category.id);
-      setExpandedMenus(new Set(allCategoryIds));
-    }
-  }, [searchTerm]); // Executa quando o termo de pesquisa muda
+  const bumpNavPop = useCallback((href: string) => {
+    if (navPopRafRef.current != null) cancelAnimationFrame(navPopRafRef.current);
+    setNavPopHref('');
+    navPopRafRef.current = requestAnimationFrame(() => {
+      navPopRafRef.current = requestAnimationFrame(() => {
+        setNavPopHref(href);
+        navPopRafRef.current = null;
+      });
+    });
+  }, []);
 
-  // Salvar estado no localStorage sempre que mudar
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar-collapsed', JSON.stringify(isCollapsed));
-    }
-  }, [isCollapsed]);
+  const replayNavEnter = useCallback(() => {
+    setNavEnterClass(false);
+    requestAnimationFrame(() => setNavEnterClass(true));
+    if (navEnterTimeoutRef.current != null) window.clearTimeout(navEnterTimeoutRef.current);
+    navEnterTimeoutRef.current = window.setTimeout(() => {
+      setNavEnterClass(false);
+      navEnterTimeoutRef.current = null;
+    }, 700);
+  }, []);
 
-  // Notificar o MainLayout sobre mudanças no estado do menu
-  React.useEffect(() => {
-    if (onMenuToggle) {
-      onMenuToggle(isCollapsed);
-    }
-  }, [isCollapsed, onMenuToggle]);
+  const isRailPopping = (id: string) => railPop.id === id && railPop.n > 0;
 
-  // Controlar quando mostrar o texto dos botões
+  const prevNavModuleRef = useRef(displayedModuleId);
+  const prevTier2VisibleRef = useRef(tier2Visible);
+  useEffect(() => {
+    const moduleChanged = prevNavModuleRef.current !== displayedModuleId;
+    const justOpened = !prevTier2VisibleRef.current && tier2Visible;
+    prevNavModuleRef.current = displayedModuleId;
+    prevTier2VisibleRef.current = tier2Visible;
+
+    if (!tier2Visible || (!moduleChanged && !justOpened)) return;
+
+    replayNavEnter();
+    return () => {
+      if (navEnterTimeoutRef.current != null) {
+        window.clearTimeout(navEnterTimeoutRef.current);
+        navEnterTimeoutRef.current = null;
+      }
+    };
+  }, [displayedModuleId, tier2Visible, replayNavEnter]);
+
+  /** Rail: stagger uma vez quando os módulos carregam (entrada no sistema). */
+  useEffect(() => {
+    if (!sidebarHydrated) return;
+    if (isLoading && menuItems.length === 0) return;
+    if (railEnterPlayedRef.current) return;
+    if (menuItems.length === 0 && !canAccessCollaborationTools) return;
+
+    railEnterPlayedRef.current = true;
+    setRailEnterClass(false);
+    const raf = requestAnimationFrame(() => setRailEnterClass(true));
+    if (railEnterTimeoutRef.current != null) window.clearTimeout(railEnterTimeoutRef.current);
+    railEnterTimeoutRef.current = window.setTimeout(() => {
+      setRailEnterClass(false);
+      railEnterTimeoutRef.current = null;
+    }, 1000);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (railEnterTimeoutRef.current != null) {
+        window.clearTimeout(railEnterTimeoutRef.current);
+        railEnterTimeoutRef.current = null;
+      }
+    };
+  }, [sidebarHydrated, isLoading, menuItems.length, canAccessCollaborationTools]);
+
+  useLayoutEffect(() => {
+    if (tier2BorderHideTimeoutRef.current != null) {
+      window.clearTimeout(tier2BorderHideTimeoutRef.current);
+      tier2BorderHideTimeoutRef.current = null;
+    }
+
+    if (tier2Visible) {
+      setTier2BorderVisible(true);
+      return;
+    }
+
+    // Mantém a borda enquanto a largura anima; só remove após o duration-500.
+    if (!sidebarHydrated) {
+      setTier2BorderVisible(false);
+      return;
+    }
+
+    tier2BorderHideTimeoutRef.current = window.setTimeout(() => {
+      setTier2BorderVisible(false);
+      tier2BorderHideTimeoutRef.current = null;
+    }, SIDEBAR_TRANSITION_MS);
+
+    return () => {
+      if (tier2BorderHideTimeoutRef.current != null) {
+        window.clearTimeout(tier2BorderHideTimeoutRef.current);
+        tier2BorderHideTimeoutRef.current = null;
+      }
+    };
+  }, [tier2Visible, sidebarHydrated]);
+
+  /** Rail: painel aberto → módulo exibido; recolhido → rota ativa; na home recolhida → nenhum (só logo) */
+  const railModuleActiveId: string | null = tier2Visible
+    ? displayedModuleId
+    : activeModuleId ?? (onHomeRoute || onRailFooterRoute ? null : displayedModuleId);
+
+  useEffect(() => {
+    if (railModuleActiveId) {
+      bumpRailPop(railModuleActiveId);
+      return;
+    }
+    if (isFooterShortcutActive('/ponto/conversas')) bumpRailPop('footer:conversas');
+    else if (isFooterShortcutActive('/ponto/kanban')) bumpRailPop('footer:kanban');
+    else if (isFooterShortcutActive('/ponto/agenda')) bumpRailPop('footer:agenda');
+    else if (isFooterShortcutActive('/ponto/flow')) bumpRailPop('footer:flow');
+    else if (isFooterShortcutActive('/ponto/drive')) bumpRailPop('footer:drive');
+  }, [railModuleActiveId, pathname, bumpRailPop]);
+
+  const closeSidebarPanel = useCallback(() => {
+    userPickedModuleRef.current = false;
+    if (activeModuleId) {
+      setSelectedModuleId(activeModuleId);
+    } else if (!onHomeRoute && onRailFooterRoute && menuItems[0]) {
+      setSelectedModuleId(menuItems[0].id);
+    }
+    setCollapsed(true);
+    setIsOpen(false);
+  }, [activeModuleId, menuItems, onHomeRoute, onRailFooterRoute, setCollapsed]);
+
+  const handleCollapseSidebar = () => {
+    closeSidebarPanel();
+  };
+
+  const expandSidebarPanel = useCallback(() => {
+    setCollapsed(false);
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setIsOpen(true);
+    }
+  }, [setCollapsed]);
+
+  useEffect(() => {
+    const onToggle = () => {
+      if (isCollapsed) expandSidebarPanel();
+      else closeSidebarPanel();
+    };
+    const onExpand = () => expandSidebarPanel();
+    const onOpenMobile = () => {
+      window.dispatchEvent(new CustomEvent(LAYOUT_CHROME.CLOSE_PROFILE_MENU));
+      setIsOpen(true);
+    };
+    const onCloseMobile = () => setIsOpen(false);
+    const onSetSearch = (event: Event) => {
+      const detail = (event as CustomEvent<MenuSearchDetail>).detail;
+      const term = detail?.term ?? '';
+      setSearchTerm(term);
+      if (term.trim()) expandSidebarPanel();
+    };
+
+    window.addEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
+    window.addEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
+    window.addEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+    window.addEventListener(LAYOUT_CHROME.CLOSE_MOBILE_SIDEBAR, onCloseMobile);
+    window.addEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
+    return () => {
+      window.removeEventListener(LAYOUT_CHROME.TOGGLE_SIDEBAR, onToggle);
+      window.removeEventListener(LAYOUT_CHROME.EXPAND_SIDEBAR, onExpand);
+      window.removeEventListener(LAYOUT_CHROME.OPEN_MOBILE_SIDEBAR, onOpenMobile);
+      window.removeEventListener(LAYOUT_CHROME.CLOSE_MOBILE_SIDEBAR, onCloseMobile);
+      window.removeEventListener(LAYOUT_CHROME.SET_MENU_SEARCH, onSetSearch);
+    };
+  }, [closeSidebarPanel, expandSidebarPanel, isCollapsed]);
+
+  // Ao mudar de rota: fecha drawer mobile; recolhe painel só em home/atalhos do rodapé
   React.useEffect(() => {
-    setShowButtonText(!isCollapsed);
-  }, [isCollapsed]);
+    if (pathname === prevPathnameRef.current) return;
+    prevPathnameRef.current = pathname;
+    userPickedModuleRef.current = false;
+    setSearchTerm('');
+    setIsOpen(false);
+
+    if (onHomeRoute || onRailFooterRoute) {
+      setCollapsed(true);
+      return;
+    }
+
+    if (activeModuleId && activeModuleId !== selectedModuleId) {
+      setSelectedModuleId(activeModuleId);
+      return;
+    }
+
+    const activeCategory = menuItems.find((category) =>
+      category.items.some((item) => {
+        const navItem = item as SidebarNavItem;
+        if (!navItemIsVisible(navItem)) return false;
+        if (navItem.children?.length) return navItemHasActiveChild(navItem);
+        return isActive(navItem.href);
+      }),
+    );
+    if (activeCategory) {
+      setSelectedModuleId(activeCategory.id);
+    } else if (menuItems.length > 0 && !menuItems.some((c) => c.id === selectedModuleId)) {
+      setSelectedModuleId(menuItems[0].id);
+    }
+  }, [pathname, menuItems.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  React.useEffect(() => {
+    writeSelectedModuleId(selectedModuleId);
+  }, [selectedModuleId]);
+
+  const handleSelectModule = (categoryId: string) => {
+    const panelOpen = !isCollapsed || isOpen;
+    if (panelOpen && displayedModuleId === categoryId) {
+      bumpRailPop(categoryId);
+      closeSidebarPanel();
+      return;
+    }
+    bumpRailPop(categoryId);
+    userPickedModuleRef.current = true;
+    setSelectedModuleId(categoryId);
+    if (isCollapsed) setCollapsed(false);
+  };
+
+  // Fecha o painel ao clicar fora da sidebar no desktop (mobile usa o overlay)
+  React.useEffect(() => {
+    if (effectiveCollapsed) return;
+    if (searchTerm.trim()) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const sidebarEl = sidebarRef.current;
+      if (!sidebarEl) return;
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (sidebarEl.contains(target)) return;
+      if (target instanceof Element && target.closest('[data-app-topnav]')) return;
+      closeSidebarPanel();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [effectiveCollapsed, closeSidebarPanel, searchTerm]);
+
+  // Mobile drawer: trava scroll do body e fecha ao passar para desktop
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onViewportChange = () => {
+      if (mq.matches) setIsOpen(false);
+    };
+    onViewportChange();
+    mq.addEventListener('change', onViewportChange);
+    return () => mq.removeEventListener('change', onViewportChange);
+  }, []);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    if (mq.matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isOpen]);
+
+  useLayoutEffect(() => {
+    const savedModule = readSelectedModuleId();
+    if (savedModule) setSelectedModuleId(savedModule);
+
+    const forceCollapsed = shouldForceSidebarCollapsed(pathname);
+    const collapsed = forceCollapsed || readSidebarCollapsed();
+    setIsCollapsedState(collapsed);
+    onMenuToggle?.(collapsed);
+    setSidebarHydrated(true);
+  }, [onMenuToggle, pathname]);
+
+  // Salvar estado no localStorage sempre que mudar (após hidratação)
+  React.useEffect(() => {
+    if (!sidebarHydrated) return;
+    writeSidebarCollapsed(isCollapsed);
+  }, [isCollapsed, sidebarHydrated]);
 
   return (
     <>
-      {/* Botão de menu mobile */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="lg:hidden fixed top-4 left-4 z-40 p-2 bg-white dark:bg-gray-900 rounded-lg shadow-md hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100"
-      >
-        <Menu className="w-6 h-6" />
-      </button>
-
-      {/* Overlay mobile */}
+      {/* Overlay mobile — acima da TopNavbar para bloquear cliques com o menu aberto */}
       {isOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
-          onClick={() => setIsOpen(false)}
+          className="fixed inset-0 z-[60] bg-black/50 lg:hidden"
+          onClick={closeSidebarPanel}
+          aria-hidden
         />
       )}
 
-      {/* Sidebar */}
+      {/* Dual-tier Sidebar */}
       <div
-        className={`fixed top-0 left-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transform transition-all duration-500 ease-in-out z-40 ${
+        ref={sidebarRef}
+        data-app-sidebar
+        className={`fixed inset-y-0 left-0 z-[70] flex h-[100dvh] max-h-[100dvh] overflow-y-clip overflow-x-visible transition-all ${SIDEBAR_TRANSITION_CLASS} ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 lg:fixed ${
-          isCollapsed ? 'w-20' : 'w-72'
-        } flex flex-col ${isCollapsed ? 'overflow-visible' : 'overflow-x-hidden overflow-y-visible'}`}
+        } lg:translate-x-0`}
       >
-        {/* Header */}
-        <div className={`${isCollapsed ? 'p-4' : 'p-4'} overflow-hidden`}>
-          <div className={`flex items-center overflow-hidden ${
-            isCollapsed ? 'flex-col justify-center space-y-3' : 'justify-between'
-          }`}>
-            {isCollapsed ? (
-              /* Quando colapsada: logo acima do botão */
-              <>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
-                  <img src="/loogo.png" alt="Logo Gennesis" className="w-12 h-12 object-contain" />
-                </div>
-                <button
-                  onClick={() => setIsCollapsed(!isCollapsed)}
-                  className="hidden lg:flex items-center justify-center rounded-lg transition-colors duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-8 h-8"
-                  title="Expandir menu"
-                >
-                  <PanelLeftOpen className="w-5 h-5 flex-shrink-0" />
-                </button>
-              </>
-            ) : (
-              /* Quando expandida: logo e texto à esquerda, botão à direita */
-              <>
-                <div className="flex items-center space-x-3 transition-opacity duration-500 ease-in-out">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
-                    <img src="/loogo.png" alt="Logo Gennesis" className="w-12 h-12 object-contain" />
-                  </div>
-                  <div className="transition-all duration-500 ease-in-out">
-                    <h1 className="text-base font-semibold text-gray-900 dark:text-gray-100 transition-all duration-500">Gennesis</h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 transition-all duration-500">Attendance</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="hidden lg:flex items-center justify-center rounded-lg transition-colors duration-200 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 w-8 h-8"
-                    title="Colapsar menu"
-                  >
-                    <PanelRightOpen className="w-5 h-5 flex-shrink-0" />
-                  </button>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="lg:hidden w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-600 dark:text-gray-300"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </>
-            )}
+        {/* Tier 1 — Rail de módulos */}
+        <div
+          className={`flex h-full min-h-0 w-20 flex-shrink-0 flex-col overflow-x-visible overflow-y-hidden border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900${
+            railEnterClass ? ' sidebar-rail-list--enter' : ''
+          }`}
+        >
+          <div className="relative z-0 isolate flex flex-shrink-0 flex-col items-center p-5 pb-3 [@media(max-height:820px)]:p-2.5 [@media(max-height:820px)]:pb-1.5">
+            <div
+              className="sidebar-rail-enter-item"
+              style={{ ['--rail-i' as string]: 0 } as React.CSSProperties}
+            >
+            <Link
+              href="/ponto/home"
+              prefetch={navLinkPrefetch}
+              className="sidebar-logo-btn flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8"
+              title="Ir para a página inicial"
+              aria-label="Página inicial"
+              aria-current={onHomeRoute ? 'page' : undefined}
+            >
+              <img
+                src={logoSrc}
+                alt={logoAlt}
+                className="sidebar-logo-btn__img h-full w-full object-contain"
+              />
+            </Link>
+            </div>
           </div>
+
+          {/* pt reserva a folga que o badge do primeiro ícone ocupa acima do botão: como o nav
+              rola, qualquer coisa acima do topo do conteúdo é cortada. */}
+          <nav className="scrollbar-hide relative z-30 min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-2 pb-4 pt-3 [@media(max-height:820px)]:space-y-1 [@media(max-height:820px)]:px-1.5 [@media(max-height:820px)]:pb-2">
+            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? menuItems.map((category, railIndex) => {
+              const CategoryIcon = category.icon;
+              const isRailActive = category.id === railModuleActiveId;
+              const visibleItems = category.items.filter((item) =>
+                navItemIsVisible(item as SidebarNavItem),
+              );
+              const forceAsGroup = !(category as { preferDirectLink?: boolean }).preferDirectLink;
+              const isSingleItem = visibleItems.length === 1 && !forceAsGroup;
+              const singleItem = isSingleItem ? visibleItems[0] : null;
+              const enterIndex = railIndex + 1;
+
+              if (isSingleItem && singleItem) {
+                const active = isActive(singleItem.href);
+                const SingleItemIcon = singleItem.icon || CategoryIcon;
+                const singleBadge = navBadgeCountForHref(singleItem.href);
+                return (
+                  <SidebarRailTooltip key={category.id} label={singleItem.name} enterIndex={enterIndex}>
+                    <Link
+                      href={singleItem.href}
+                      prefetch={navLinkPrefetch}
+                      onClick={(event) => {
+                        if (!active) return;
+                        event.preventDefault();
+                        bumpRailPop(category.id);
+                        dispatchReplayPageEnter();
+                      }}
+                      className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                        active
+                          ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                              isRailPopping(category.id) ? ' sidebar-rail-btn--pop' : ''
+                            }`
+                          : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                      }`}
+                      aria-label={singleItem.name}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      <SingleItemIcon className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                      <NotificationCountBadge count={singleBadge} rail />
+                    </Link>
+                  </SidebarRailTooltip>
+                );
+              }
+
+              const moduleBadge = moduleBadgeCountForVisibleItems(visibleItems);
+              return (
+                <SidebarRailTooltip key={category.id} label={category.name} enterIndex={enterIndex}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectModule(category.id)}
+                    className={`sidebar-rail-btn relative z-10 flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                      isRailActive
+                        ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                            isRailPopping(category.id) ? ' sidebar-rail-btn--pop' : ''
+                          }`
+                        : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                    }`}
+                    aria-label={category.name}
+                    aria-current={isRailActive ? 'true' : undefined}
+                  >
+                    <CategoryIcon className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                    <NotificationCountBadge count={moduleBadge} rail />
+                  </button>
+                </SidebarRailTooltip>
+              );
+            }) : (
+              Array.from({ length: 6 }, (_, i) => (
+                <div key={`rail-skeleton-${i}`} className="flex justify-center">
+                  <div className="h-10 w-10 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
+                </div>
+              ))
+            )}
+          </nav>
+
+          {/* Rodapé: atalhos (ocultos para setor Sócios) */}
+          {canAccessCollaborationTools ? (
+          <div className="relative z-20 flex flex-shrink-0 flex-col items-center overflow-visible px-2 pb-4 [@media(max-height:820px)]:pb-2">
+            <div className="flex flex-col items-center gap-2 [@media(max-height:820px)]:gap-1">
+              <SidebarRailTooltip label="Conversas" enterIndex={menuItems.length + 1}>
+                <Link
+                  href="/ponto/conversas"
+                  prefetch={navLinkPrefetch}
+                  aria-label={`Conversas${chatUnreadCount > 0 ? `, ${chatUnreadCount} não lidas` : ''}`}
+                  aria-current={isFooterShortcutActive('/ponto/conversas') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/conversas')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:conversas');
+                    dispatchReplayPageEnter();
+                  }}
+                  className={`sidebar-rail-btn relative flex h-10 w-10 items-center justify-center overflow-visible rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    isFooterShortcutActive('/ponto/conversas')
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:conversas') ? ' sidebar-rail-btn--pop' : ''
+                        }`
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <MessageCircle className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                  <NotificationCountBadge count={chatUnreadCount} rail />
+                </Link>
+              </SidebarRailTooltip>
+              <SidebarRailTooltip label="Tasks" enterIndex={menuItems.length + 2}>
+                <Link
+                  href="/ponto/kanban"
+                  prefetch={navLinkPrefetch}
+                  aria-label="Tasks"
+                  aria-current={isFooterShortcutActive('/ponto/kanban') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/kanban')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:kanban');
+                    dispatchReplayPageEnter();
+                  }}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    isFooterShortcutActive('/ponto/kanban')
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:kanban') ? ' sidebar-rail-btn--pop' : ''
+                        }`
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <SquareKanban className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                </Link>
+              </SidebarRailTooltip>
+              <SidebarRailTooltip label="Agenda" enterIndex={menuItems.length + 3}>
+                <Link
+                  href="/ponto/agenda"
+                  prefetch={navLinkPrefetch}
+                  aria-label="Agenda"
+                  aria-current={isFooterShortcutActive('/ponto/agenda') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/agenda')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:agenda');
+                    dispatchReplayPageEnter();
+                  }}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    isFooterShortcutActive('/ponto/agenda')
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:agenda') ? ' sidebar-rail-btn--pop' : ''
+                        }`
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <CalendarRange className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                </Link>
+              </SidebarRailTooltip>
+              <SidebarRailTooltip label="Flow" enterIndex={menuItems.length + 4}>
+                <Link
+                  href="/ponto/flow"
+                  prefetch={navLinkPrefetch}
+                  aria-label="Flow"
+                  aria-current={isFooterShortcutActive('/ponto/flow') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/flow')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:flow');
+                    dispatchReplayPageEnter();
+                  }}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    isFooterShortcutActive('/ponto/flow')
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:flow') ? ' sidebar-rail-btn--pop' : ''
+                        }`
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <Workflow className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                </Link>
+              </SidebarRailTooltip>
+              <SidebarRailTooltip label="Drive" enterIndex={menuItems.length + 5}>
+                <Link
+                  href="/ponto/drive"
+                  prefetch={navLinkPrefetch}
+                  aria-label="Drive"
+                  aria-current={isFooterShortcutActive('/ponto/drive') ? 'page' : undefined}
+                  onClick={(event) => {
+                    if (!isFooterShortcutActive('/ponto/drive')) return;
+                    event.preventDefault();
+                    bumpRailPop('footer:drive');
+                    dispatchReplayPageEnter();
+                  }}
+                  className={`sidebar-rail-btn flex h-10 w-10 items-center justify-center rounded-xl [@media(max-height:820px)]:h-8 [@media(max-height:820px)]:w-8 ${
+                    isFooterShortcutActive('/ponto/drive')
+                      ? `sidebar-rail-btn--active bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-500${
+                          isRailPopping('footer:drive') ? ' sidebar-rail-btn--pop' : ''
+                        }`
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
+                >
+                  <HardDrive className="sidebar-rail-btn__icon h-5 w-5 [@media(max-height:820px)]:h-4 [@media(max-height:820px)]:w-4" />
+                </Link>
+              </SidebarRailTooltip>
+            </div>
+          </div>
+          ) : null}
         </div>
 
-        {/* Search Bar */}
-        {!isCollapsed ? (
-          <div className="px-4">
-            <div className="relative flex items-center">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="mt-2 mb-2 text-sm w-full pl-10 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="px-4">
-            <div className="flex justify-center">
-              <button
-                onClick={() => {
-                  setIsCollapsed(false);
-                  // Focar no input após a sidebar abrir (aguardar a transição)
-                  setTimeout(() => {
-                    searchInputRef.current?.focus();
-                  }, 300);
-                }}
-                className="w-10 h-10 rounded-xl bg-white hover:bg-gray-200 hover:text-gray-400 dark:bg-gray-900 dark:hover:bg-gray-800 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-800 text-gray-400 dark:text-gray-500 transition-all duration-200 flex items-center justify-center focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-transparent"
-                title="Buscar"
-              >
-                <Search className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Navigation */}
-        <nav className={`flex-1 space-y-2 p-4 ${isCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
-          {(() => {
-            return menuItems.map((category, index) => {
-            const CategoryIcon = category.icon;
-            const hasActiveItem = category.items.some(item => isActive(item.href));
-            const isExpanded = isMenuExpanded(category.id);
-            const visibleItems = category.items.filter(item => item.permission);
-            // Sempre mostrar todas as categorias como grupo expansível (título + subitens),
-            // mesmo quando só resta 1 item permitido para o usuário.
-            const forceAsGroup = true;
-            const isSingleItem = visibleItems.length === 1 && !forceAsGroup;
-            const singleItem = isSingleItem ? visibleItems[0] : null;
-            
-            // Mostrar o título "Menu" sempre no topo da navegação visível.
-            const shouldShowMenuTitle = index === 0 && !isCollapsed;
-            
-            // Se tiver apenas um item, renderizar como link direto
-            if (isSingleItem && singleItem) {
-              
-              const active = isActive(singleItem.href);
-              const SingleItemIcon = singleItem.icon || CategoryIcon;
-              
-              return (
-                <div key={category.id}>
-                  {shouldShowMenuTitle && (
-                    <div className="px-3 pt-2 pb-2">
-                      <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Menu</p>
-                    </div>
-                  )}
-                  <div className={`${isCollapsed ? 'space-y-2' : 'space-y-1'}`}>
-                    {isCollapsed ? (
-                      <div className="flex justify-center">
-                        <Link
-                          href={singleItem.href}
-                          onClick={() => setIsOpen(false)}
-                          className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
-                            active 
-                              ? 'text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                          }`}
-                          title={singleItem.name}
-                        >
-                          <SingleItemIcon className="w-5 h-5" />
-                        </Link>
-                      </div>
-                    ) : (
-                      <Link
-                        href={singleItem.href}
-                        onClick={() => setIsOpen(false)}
-                        className={`w-full flex items-center space-x-2 rounded-xl transition-all duration-200 overflow-hidden ${
-                          active 
-                            ? 'text-red-700 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        <div className="rounded-xl transition-all duration-200 p-3">
-                          <SingleItemIcon className={`w-5 h-5 flex-shrink-0 ${active ? 'text-red-600 dark:text-red-500' : 'text-gray-600 dark:text-gray-400'}`} />
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className={`text-sm font-medium whitespace-nowrap ${active ? 'text-red-700 dark:text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>{singleItem.name}</p>
-                        </div>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            }
-            
-            return (
-              <div key={category.id} className="overflow-hidden">
-                {/* Título "Menu" no topo da navegação */}
-                {shouldShowMenuTitle && (
-                  <div className="px-3 pt-2 pb-2">
-                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Menu</p>
-                  </div>
-                )}
-                {/* Separador entre grupos */}
-                
-                <div className={`${isCollapsed ? 'space-y-2' : 'space-y-1'} overflow-hidden`}>
-                {/* Categoria Header */}
-                {isCollapsed ? (
-                  <div className="flex justify-center">
-                    <button
-                      onClick={() => {
-                        // Abrir a sidebar e expandir o grupo
-                        setIsCollapsed(false);
-                        setExpandedMenus(prev => {
-                          const newSet = new Set(prev);
-                          newSet.add(category.id);
-                          return newSet;
-                        });
-                      }}
-                        className={`w-10 h-10 rounded-xl transition-all duration-200 flex items-center justify-center ${
-                          hasActiveItem 
-                            ? 'text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
-                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
-                        }`}
-                      title={category.name}
-                    >
-                      <CategoryIcon className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => toggleMenu(category.id)}
-                    className={`w-full flex items-center space-x-2 rounded-xl transition-all duration-200 overflow-hidden ${
-                      hasActiveItem 
-                        ? 'text-red-700 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20' 
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    <div className="rounded-xl transition-all duration-200 p-3">
-                      <CategoryIcon className={`w-5 h-5 flex-shrink-0 ${hasActiveItem ? 'text-red-600 dark:text-red-500' : 'text-gray-600 dark:text-gray-400'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0 text-left overflow-hidden">
-                        <p className={`text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis ${hasActiveItem ? 'text-red-700 dark:text-red-500' : 'text-gray-700 dark:text-gray-300'}`}>{category.name}</p>
-                    </div>
-                    {category.items.filter(item => item.permission).length > 0 && (
-                      <div className="flex-shrink-0 pr-3">
-                        {isExpanded ? (
-                          <ChevronUp className={`w-4 h-4 ${hasActiveItem ? 'text-red-600 dark:text-red-500' : 'text-gray-600 dark:text-gray-400'}`} />
-                        ) : (
-                          <ChevronDown className={`w-4 h-4 ${hasActiveItem ? 'text-red-600 dark:text-red-500' : 'text-gray-600 dark:text-gray-400'}`} />
-                        )}
-                      </div>
-                    )}
-                  </button>
-                )}
-
-                {/* Submenu Items */}
-                {isExpanded && !isCollapsed && (
-                  <div className="relative ml-6 pl-4 border-l border-gray-300 dark:border-gray-700 space-y-2">
-                    {category.items
-                      .filter(item => item.permission)
-                      .map((item) => {
-                        const active = isActive(item.href);
-            
-                        return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsOpen(false)}
-                            className={`flex items-center px-3 py-2 rounded-xl transition-all duration-200 overflow-hidden ${
-                              active
-                                ? 'text-red-700 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
-                                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
-                            }`}
-                          >
-                            <p className={`text-sm font-medium ${active ? '' : 'text-gray-700 dark:text-gray-300'}`}>{item.name}</p>
-              </Link>
-                        );
-                      })}
-                  </div>
-                )}
-                </div>
-              </div>
-            );
-            });
-          })()}
-        </nav>
-
-        {/* Perfil do usuário */}
-        <div className="flex-shrink-0 relative z-20 overflow-visible">
-          {/* Linha separadora acima do perfil */}
-          <div className="mx-4">
-            <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
-          </div>
-          
-          <div className="relative" ref={menuRef}>
-            {/* Seção de perfil - sempre visível quando expandida */}
-            <div className="bg-white dark:bg-gray-900">
-              <div className={`${isCollapsed ? 'p-2' : 'p-4'}`}>
-                <div
-                  className={
-                    isCollapsed ? 'flex flex-col items-center gap-2' : 'flex items-center space-x-3'
-                  }
+        {/* Tier 2 — Painel de páginas do módulo */}
+        <div
+          className={`flex h-full min-h-0 flex-shrink-0 flex-col overflow-hidden bg-white dark:bg-gray-900 ${
+            sidebarHydrated ? `transition-[width,opacity] ${SIDEBAR_TRANSITION_CLASS}` : 'transition-none'
+          } ${tier2Visible ? 'w-72 opacity-100' : 'w-0 opacity-100 pointer-events-none'} ${
+            tier2BorderVisible
+              ? 'border-r border-gray-200 dark:border-gray-800'
+              : 'border-r-0'
+          }`}
+        >
+          {/* Largura fixa: o painel só revela o conteúdo, sem o texto refluir no meio da abertura. */}
+          <div className="flex h-full min-h-0 w-72 shrink-0 flex-col">
+          {/* Header do módulo — mesma altura da TopNavbar (h-16) pra linha bater */}
+          <div className="flex h-16 shrink-0 items-center border-b border-gray-200 px-5 dark:border-gray-800">
+            <div className="flex w-full items-center justify-between gap-2">
+              <h2 className="truncate text-lg font-semibold leading-snug text-gray-900 dark:text-gray-100">
+                {searchTerm.trim() ? 'Busca' : selectedModule?.name ?? 'Menu'}
+              </h2>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  onClick={handleCollapseSidebar}
+                  className="hidden h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition-colors duration-200 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 lg:flex"
+                  title="Recolher menu"
                 >
-                  {/* Foto — menu como no grupo (Conversas) */}
-                  <div className={`flex-shrink-0 relative ${!isCollapsed ? '' : ''}`}>
-                    <div ref={profileAvatarSectionRef}>
-                      <button
-                        type="button"
-                        aria-haspopup="true"
-                        aria-expanded={profileAvatarMenu}
-                        aria-label="Opções da foto de perfil"
-                        onClick={() => setProfileAvatarMenu((v) => !v)}
-                        className="group relative block rounded-full overflow-hidden focus:outline-none focus:ring-2 focus:ring-red-500/50"
-                      >
-                        <div
-                          className={`${
-                            isCollapsed ? 'w-11 h-11' : 'w-11 h-11'
-                          } rounded-full overflow-hidden bg-red-600 flex items-center justify-center relative`}
-                        >
-                          {profilePhotoHref ? (
-                            <img
-                              src={profilePhotoHref}
-                              alt=""
-                              className="h-full w-full object-cover"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <span
-                              className={`font-semibold text-white ${
-                                isCollapsed ? 'text-sm' : 'text-sm'
-                              }`}
-                            >
-                              {getInitials(user?.name || userName || 'U')}
-                            </span>
-                          )}
-                          <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 pointer-events-none">
-                            <PencilLine size={isCollapsed ? 12 : 14} className="text-white shrink-0" strokeWidth={2} />
-                          </div>
-                          {(uploadProfilePhotoMutation.isPending ||
-                            removeProfilePhotoMutation.isPending) && (
-                            <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
-                              <Loader2 size={20} className="animate-spin text-white" />
-                            </div>
-                          )}
-                        </div>
-                      </button>
-
-                      <input
-                        ref={profileAvatarInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setProfileCropSrc(URL.createObjectURL(file));
-                          setProfileAvatarMenu(false);
-                          e.target.value = '';
-                        }}
-                      />
-
-                      {profileAvatarMenu && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-[100]"
-                            aria-hidden="true"
-                            onClick={() => setProfileAvatarMenu(false)}
-                          />
-                          <div
-                            className={`absolute z-[120] min-w-[180px] rounded-xl bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden py-1 ${
-                              isCollapsed
-                                ? 'left-1/2 -translate-x-1/2 top-[calc(100%+8px)]'
-                                : 'left-0 bottom-full mb-2'
-                            }`}
-                          >
-                            {profilePhotoHref && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setProfileAvatarMenu(false);
-                                  setProfilePhotoViewer(true);
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                              >
-                                <ImageIcon size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                                Mostrar foto
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setProfileAvatarMenu(false);
-                                profileAvatarInputRef.current?.click();
-                              }}
-                              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              <Camera size={15} className="text-gray-500 dark:text-gray-400 shrink-0" />
-                              Carregar foto
-                            </button>
-                            {profilePhotoHref && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setProfileAvatarMenu(false);
-                                  removeProfilePhotoMutation.mutate();
-                                }}
-                                disabled={removeProfilePhotoMutation.isPending}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-                              >
-                                <Trash2 size={15} className="shrink-0" />
-                                Remover foto
-                              </button>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {!isCollapsed && (
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
-                        {isAdministrator ? 'Administrador' : user?.name || userName || 'Usuário'}
-                      </p>
-                      {!isAdministrator && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          {(user as { employee?: { position?: string } } | undefined)?.employee
-                            ?.position || userPosition}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowUserMenu(!showUserMenu)}
-                      className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      title={showUserMenu ? 'Fechar menu (descer)' : 'Abrir menu (subir)'}
-                      aria-expanded={showUserMenu}
-                      aria-label={showUserMenu ? 'Fechar menu do usuário' : 'Abrir menu do usuário'}
-                    >
-                      {showUserMenu ? (
-                        <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      ) : (
-                        <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      )}
-                    </button>
-                  </div>
-                </div>
+                  <ArrowLeftToLine className="h-5 w-5 flex-shrink-0" />
+                </button>
+                <button
+                  onClick={closeSidebarPanel}
+                  className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 lg:hidden"
+                  aria-label="Fechar menu"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
             </div>
-            
-            {/* Menu de botões que desliza de baixo para cima com animação */}
-            <div 
-              className={`bg-white dark:bg-gray-900 transition-all duration-300 ease-in-out overflow-hidden ${
-                showUserMenu 
-                  ? 'max-h-[300px] opacity-100 translate-y-0' 
-                  : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none'
-              }`}
-            >
-                {/* Linha separadora superior */}
-                <div className="mx-4">
-                  <div className="h-px bg-gray-200 dark:bg-gray-700"></div>
-                </div>
-                
-                {isCollapsed ? (
-                  /* Quando colapsada: apenas ícones */
-                  <div className="p-2 flex flex-col items-center space-y-2">
-                    <button
-                      onClick={() => {
-                        toggleTheme();
-                      }}
-                      className="w-10 h-10 flex items-center justify-center group transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title={isDark ? 'Modo Claro' : 'Modo Escuro'}
-                    >
-                      {isDark ? (
-                        <Sun className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-yellow-600 dark:group-hover:text-yellow-500" />
-                      ) : (
-                        <Moon className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('openChangePasswordModal'));
-                        setShowUserMenu(false);
-                      }}
-                      className="w-10 h-10 flex items-center justify-center group transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title="Alterar Senha"
-                    >
-                      <Lock className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-blue-700 dark:group-hover:text-blue-500" />
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-10 h-10 flex items-center justify-center group transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-                      title="Sair"
-                    >
-                      <LogOut className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-red-700 dark:group-hover:text-red-500" />
-                    </button>
+          </div>
+
+          {/* Lista de páginas */}
+          <nav
+            className={`sidebar-nav-list min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4${
+              navEnterClass ? ' sidebar-nav-list--enter' : ''
+            }`}
+          >
+            {sidebarHydrated && (!isLoading || menuItems.length > 0) ? searchTerm.trim() ? (
+              menuItems.map((category) => {
+                const filteredItems = (category.items as SidebarNavItem[]).filter(navItemIsVisible);
+                if (filteredItems.length === 0) return null;
+                return (
+                  <div key={category.id} className="mb-4">
+                    <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      {category.name}
+                    </p>
+                    {renderNavItemList(filteredItems, true)}
                   </div>
-                ) : (
-                  /* Quando expandida: ícones com texto */
-                  <div className="p-2">
-                    <button
-                      onClick={() => {
-                        toggleTheme();
-                      }}
-                      className="w-full flex items-center space-x-3 px-4 py-3 group transition-colors rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      {isDark ? (
-                        <Sun className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-yellow-600 dark:group-hover:text-yellow-500" />
-                      ) : (
-                        <Moon className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
-                      )}
-                      <span className="text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">
-                        {isDark ? 'Modo Claro' : 'Modo Escuro'}
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        window.dispatchEvent(new CustomEvent('openChangePasswordModal'));
-                        setShowUserMenu(false);
-                      }}
-                      className="w-full flex items-center space-x-3 px-4 py-3 group transition-colors rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <Lock className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-blue-700 dark:group-hover:text-blue-500" />
-                      <span className="text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">Alterar Senha</span>
-                    </button>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center space-x-3 px-4 py-3 group transition-colors rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800"
-                    >
-                      <LogOut className="w-5 h-5 flex-shrink-0 text-gray-600 dark:text-gray-400 group-hover:text-red-700 dark:group-hover:text-red-500" />
-                      <span className="text-sm font-medium whitespace-nowrap text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">Sair</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+                );
+              })
+            ) : (
+              renderNavItemList(
+                (selectedModule?.items ?? []) as SidebarNavItem[],
+                false
+              )
+            ) : null}
+          </nav>
           </div>
         </div>
       </div>
-
-      {/* Modal de Confirmação de Logout */}
-      {showLogoutConfirm && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={handleCancelLogout} />
-          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-full">
-              <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 text-center mb-2">
-              Deseja sair?
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
-              Tem certeza que deseja sair do sistema? Você precisará fazer login novamente para acessar.
-            </p>
-            <div className="flex items-center justify-center space-x-3">
-              <button
-                type="button"
-                onClick={handleCancelLogout}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmLogout}
-                className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
-              >
-                Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <CircularPhotoCropModal
-        open={!!profileCropSrc}
-        imageSrc={profileCropSrc ?? ''}
-        onClose={() => {
-          if (profileCropSrc) URL.revokeObjectURL(profileCropSrc);
-          setProfileCropSrc(null);
-        }}
-        onConfirm={async (file: File) => {
-          await uploadProfilePhotoMutation.mutateAsync(file);
-        }}
-        onPickReplacement={(file) => {
-          if (profileCropSrc) URL.revokeObjectURL(profileCropSrc);
-          setProfileCropSrc(URL.createObjectURL(file));
-        }}
-      />
-
-      {typeof document !== 'undefined' &&
-        profilePhotoViewer &&
-        profilePhotoHref &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[10060] flex cursor-zoom-out flex-col bg-black/90 p-6"
-            onClick={() => setProfilePhotoViewer(false)}
-            role="presentation"
-          >
-            <button
-              type="button"
-              className="absolute top-4 right-4 rounded-full bg-white/10 p-3 text-white transition-colors hover:bg-white/20"
-              onClick={() => setProfilePhotoViewer(false)}
-              aria-label="Fechar"
-            >
-              <X className="h-7 w-7" strokeWidth={2} />
-            </button>
-            <div className="flex flex-1 items-center justify-center min-h-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={profilePhotoHref}
-                alt=""
-                className="max-h-full max-w-full rounded-lg object-contain shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-          </div>,
-          document.body
-        )}
     </>
   );
 }

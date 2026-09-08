@@ -16,6 +16,7 @@ dist/
 build/
 .next/
 out/
+*.tsbuildinfo
 
 # Database
 *.db
@@ -109,6 +110,9 @@ apps/mobile/web-build/
 # Backend
 apps/backend/dist/
 apps/backend/uploads/
+apps/backend/data/nfe-xmls/
+apps/backend/data/nfe-secrets/
+apps/backend/data/nfe-jdk/
 
 # Frontend
 apps/frontend/.next/
@@ -117,6 +121,10 @@ apps/frontend/out/
 # Temporary files
 tmp/
 temp/
+
+# JDK/Maven baixados no build Railway (scripts/railway-build-backend.sh)
+.tools/
+tools/nfe-distribuicao/target/
 
 # AWS
 .aws/

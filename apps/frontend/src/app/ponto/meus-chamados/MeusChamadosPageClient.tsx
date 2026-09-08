@@ -1,0 +1,1154 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ClipboardList, Eye, Plus, Search, Star, Wrench, X, Building2, AlertTriangle, CheckCircle2, FolderKanban } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { Loading } from '@/components/ui/Loading';
+import { Modal } from '@/components/ui/Modal';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { FilterStatCard } from '@/components/ui/FilterStatCard';
+import {
+  CadastroListEmpty,
+  CadastroListLoading,
+  CadastroListSummary
+} from '@/components/ui/CadastroListSummary';
+import {
+  RowActionMenuCell,
+  RowActionMenuPortal,
+  cadastroListClasses,
+  listTableRowClasses
+} from '@/components/ui/RowActionMenu';
+import { ListRowNavigableLabel } from '@/components/ui/listTableUi';
+import { useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { GestaoOsAttachmentsField } from '@/components/gestao-os/GestaoOsAttachmentsField';
+import { GestaoOsCommentsSection } from '@/components/gestao-os/GestaoOsCommentsSection';
+import {
+  GESTAO_OS_FORM_LABEL_CLS,
+  GestaoOsAssetHistoryCard,
+  GestaoOsChamadoResumo,
+  GestaoOsChecklistField,
+  GestaoOsChecklistScrollPane,
+  GestaoOsDetailModalChrome,
+  GestaoOsDocumentsTab,
+  GestaoOsEmptyTab,
+  GestaoOsHistoryList,
+  GestaoOsModalFooter,
+  GestaoOsRecurrenceBanner,
+  GestaoOsRequiredMark,
+  type GestaoOsAssetHistory
+} from '@/components/gestao-os/GestaoOsModalUi';
+import api from '@/lib/api';
+import { FORM_FIELD_INPUT_CLS, FORM_FIELD_TEXTAREA_CLS } from '@/lib/formFieldUi';
+import {
+  GestaoOsAttachment,
+  GestaoOsLocationTree,
+  GestaoOsPriority,
+  GestaoOsServiceCategory,
+  GESTAO_OS_SLA_DOT,
+  GESTAO_OS_SLA_LABEL,
+  GestaoOsWorkOrder,
+  GestaoOsReportsSummary,
+  PRIORITY_LABELS,
+  SERVICE_CATEGORIES,
+  STATUS_LABELS,
+  ORIGIN_LABELS,
+  SAC_KIND_LABELS,
+  type GestaoOsOrigin,
+  type GestaoOsSacKind,
+  formatGestaoOsLabel,
+  formatGestaoOsNumber,
+  gestaoOsSlaState,
+  gestaoOsStatusBadgeClass
+} from '../sistema-gestao-os/gestaoOsTypes';
+
+const PRIORITY_BADGE: Record<GestaoOsPriority, string> = {
+  LOW: 'text-slate-600 dark:text-slate-300',
+  MEDIUM: 'text-sky-700 dark:text-sky-300',
+  HIGH: 'text-orange-700 dark:text-orange-300',
+  URGENT: 'text-rose-700 font-semibold dark:text-rose-300'
+};
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+type MeusChamadosDetailTab =
+  | 'resumo'
+  | 'ativo'
+  | 'seguranca'
+  | 'execucao'
+  | 'documentos'
+  | 'historico'
+  | 'comentarios';
+
+const MEUS_CHAMADOS_DETAIL_TABS: ReadonlyArray<{ id: MeusChamadosDetailTab; label: string }> = [
+  { id: 'resumo', label: 'Resumo' },
+  { id: 'ativo', label: 'Ativo' },
+  { id: 'seguranca', label: 'Segurança' },
+  { id: 'execucao', label: 'Execução' },
+  { id: 'documentos', label: 'Documentos' },
+  { id: 'historico', label: 'Timeline' },
+  { id: 'comentarios', label: 'Comentários' }
+];
+
+export default function MeusChamadosPageClient() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+
+  const [search, setSearch] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<MeusChamadosDetailTab>('resumo');
+
+  const [category, setCategory] = useState<string>(SERVICE_CATEGORIES[0]);
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<GestaoOsPriority>('MEDIUM');
+  const [buildingId, setBuildingId] = useState('');
+  const [sectorId, setSectorId] = useState('');
+  const [placeId, setPlaceId] = useState('');
+  const [assetId, setAssetId] = useState('');
+  const [attachments, setAttachments] = useState<GestaoOsAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [ratingValue, setRatingValue] = useState(5);
+  const [ratingComment, setRatingComment] = useState('');
+  const [qrHandled, setQrHandled] = useState(false);
+  const [origin, setOrigin] = useState<GestaoOsOrigin>('REQUEST');
+  const [sacKind, setSacKind] = useState<GestaoOsSacKind>('CHAMADO');
+  const [listScope, setListScope] = useState<'mine' | 'unit'>('mine');
+  const [openedAtLabel, setOpenedAtLabel] = useState(() =>
+    formatDateTime(new Date().toISOString())
+  );
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
+    router.push('/auth/login');
+  };
+
+  const { data: userData, isLoading: loadingUser } = useQuery({
+    queryKey: ['user'],
+    queryFn: async () => {
+      const res = await api.get('/auth/me');
+      return res.data;
+    }
+  });
+
+  const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE', id: '' };
+
+  const { data: unitBuildings = [] } = useQuery({
+    queryKey: ['gestao-os-my-unit-buildings'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>(
+        '/gestao-os/cadastros/my-unit-buildings'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+
+  const { data: unitSummary } = useQuery({
+    queryKey: ['gestao-os-unit-summary'],
+    enabled: unitBuildings.length > 0 && listScope === 'unit',
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsReportsSummary }>(
+        '/gestao-os/reports/summary',
+        { params: { unitPortal: 1 } }
+      );
+      return res.data?.data;
+    }
+  });
+
+  const {
+    data: rows = [],
+    isLoading: loadingRows
+  } = useQuery({
+    queryKey: ['gestao-os-mine', search, listScope],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder[] }>('/gestao-os', {
+        params:
+          listScope === 'unit'
+            ? { unitPortal: 1, search: search || undefined, limit: 200 }
+            : {
+                mine: 1,
+                involved: 1,
+                search: search || undefined,
+                limit: 200
+              }
+      });
+      return res.data?.data ?? [];
+    }
+  });
+
+  useEffect(() => {
+    if (!createOpen) return;
+    setOpenedAtLabel(formatDateTime(new Date().toISOString()));
+  }, [createOpen]);
+
+  const { data: locationTree = [] } = useQuery({
+    queryKey: ['gestao-os-locations'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsLocationTree }>(
+        '/gestao-os/locations'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+
+  const { data: serviceCategories = [] } = useQuery({
+    queryKey: ['gestao-os-categories'],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsServiceCategory[] }>(
+        '/gestao-os/cadastros/categories'
+      );
+      return res.data?.data ?? [];
+    }
+  });
+
+  const { data: createAssetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history-create', assetId],
+    enabled: createOpen && Boolean(assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${assetId}/history`
+      );
+      return res.data?.data;
+    }
+  });
+
+  const categoryOptions = useMemo(() => {
+    const fromDb = serviceCategories.filter((c) => c.isActive).map((c) => c.name);
+    if (fromDb.length > 0) return fromDb;
+    return [...SERVICE_CATEGORIES];
+  }, [serviceCategories]);
+
+  useEffect(() => {
+    if (qrHandled) return;
+    const qr = searchParams?.get('qr');
+    if (!qr) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/gestao-os/cadastros/qr/resolve', { params: { token: qr } });
+        const asset = res.data?.data as {
+          id: string;
+          name: string;
+          category: string | null;
+          buildingId: string;
+          sectorId: string;
+          placeId: string;
+        };
+        if (cancelled || !asset) return;
+        setBuildingId(asset.buildingId || '');
+        setSectorId(asset.sectorId || '');
+        setPlaceId(asset.placeId || '');
+        setAssetId(asset.id);
+        if (asset.category) setCategory(asset.category);
+        setDescription((prev) => prev || `Manutenção no ativo: ${asset.name}`);
+        setCreateOpen(true);
+        toast.success(`Ativo identificado via QR: ${asset.name}`);
+        router.replace('/ponto/meus-chamados');
+      } catch (err: any) {
+        toast.error(err?.response?.data?.message || 'QR Code inválido ou ativo inativo');
+      } finally {
+        if (!cancelled) setQrHandled(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, qrHandled, router]);
+
+  useEffect(() => {
+    const id = searchParams?.get('id');
+    if (!id) return;
+    setDetailId(id);
+    setDetailTab('resumo');
+  }, [searchParams]);
+
+  const { data: detail, isLoading: loadingDetail } = useQuery({
+    queryKey: ['gestao-os-detail', detailId],
+    enabled: Boolean(detailId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsWorkOrder }>(
+        `/gestao-os/${detailId}`
+      );
+      return res.data?.data;
+    }
+  });
+
+  const { data: assetHistory } = useQuery({
+    queryKey: ['gestao-os-asset-history', detail?.assetId],
+    enabled: Boolean(detailId && detail?.assetId),
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: GestaoOsAssetHistory }>(
+        `/gestao-os/assets/${detail?.assetId}/history`
+      );
+      return res.data?.data;
+    }
+  });
+
+  const buildings = locationTree;
+  const sectors = useMemo(
+    () => buildings.find((b) => b.id === buildingId)?.sectors ?? [],
+    [buildings, buildingId]
+  );
+  const places = useMemo(
+    () => sectors.find((s) => s.id === sectorId)?.places ?? [],
+    [sectors, sectorId]
+  );
+  const assets = useMemo(
+    () => places.find((p) => p.id === placeId)?.assets ?? [],
+    [places, placeId]
+  );
+
+  const buildingFormOptions = useMemo(
+    () => labeledToSelectOptions(buildings.map((b) => ({ value: b.id, label: b.name }))),
+    [buildings]
+  );
+  const sectorFormOptions = useMemo(
+    () => labeledToSelectOptions(sectors.map((s) => ({ value: s.id, label: s.name }))),
+    [sectors]
+  );
+  const placeFormOptions = useMemo(
+    () => labeledToSelectOptions(places.map((p) => ({ value: p.id, label: p.name }))),
+    [places]
+  );
+  const assetFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        assets.map((a) => ({
+          value: a.id,
+          label: a.category ? `${a.name} (${a.category})` : a.name,
+          searchText: `${a.name} ${a.category ?? ''}`
+        }))
+      ),
+    [assets]
+  );
+  const categoryFormOptions = useMemo(
+    () => labeledToSelectOptions(categoryOptions.map((name) => ({ value: name, label: name }))),
+    [categoryOptions]
+  );
+  const priorityFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(PRIORITY_LABELS) as GestaoOsPriority[]).map((key) => ({
+          value: key,
+          label: PRIORITY_LABELS[key]
+        }))
+      ),
+    []
+  );
+  const originFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(ORIGIN_LABELS) as GestaoOsOrigin[]).map((key) => ({
+          value: key,
+          label: ORIGIN_LABELS[key]
+        }))
+      ),
+    []
+  );
+  const sacKindFormOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        (Object.keys(SAC_KIND_LABELS) as GestaoOsSacKind[]).map((key) => ({
+          value: key,
+          label: SAC_KIND_LABELS[key]
+        }))
+      ),
+    []
+  );
+
+  const openDetail = (row: GestaoOsWorkOrder) => {
+    setDetailId(row.id);
+    setDetailTab('resumo');
+    setRatingValue(row.rating ?? 5);
+    setRatingComment('');
+  };
+
+  const {
+    rowActionMenu,
+    rowForActionMenu,
+    toggleRowActionMenu,
+    closeRowActionMenu,
+    isRowMenuOpen
+  } = useRowActionMenu(rows);
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post('/gestao-os', {
+        category,
+        description,
+        priority,
+        origin,
+        sacKind: origin === 'SAC' ? sacKind : undefined,
+        buildingId: buildingId || null,
+        sectorId: sectorId || null,
+        placeId: placeId || null,
+        assetId: assetId || null,
+        attachments
+      });
+      return res.data?.data as GestaoOsWorkOrder;
+    },
+    onSuccess: (created) => {
+      toast.success(`${formatGestaoOsLabel(created)} aberto com sucesso`);
+      setCreateOpen(false);
+      setDescription('');
+      setAttachments([]);
+      setBuildingId('');
+      setSectorId('');
+      setPlaceId('');
+      setAssetId('');
+      setPriority('MEDIUM');
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-mine'] });
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-list'] });
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-summary'] });
+      setDetailTab('resumo');
+      setDetailId(created.id);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'Não foi possível abrir o chamado');
+    }
+  });
+
+  const ratingMutation = useMutation({
+    mutationFn: async () => {
+      if (!detailId) throw new Error('Chamado inválido');
+      const res = await api.post(`/gestao-os/${detailId}/transition`, {
+        status: 'CLOSED',
+        rating: ratingValue,
+        ratingComment: ratingComment.trim() || undefined
+      });
+      return res.data?.data as GestaoOsWorkOrder;
+    },
+    onSuccess: () => {
+      toast.success('Avaliação registrada. Obrigado!');
+      setRatingComment('');
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-mine'] });
+      void queryClient.invalidateQueries({ queryKey: ['gestao-os-detail', detailId] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.message ?? 'Não foi possível registrar a avaliação');
+    }
+  });
+
+  const uploadFiles = async (files: FileList | File[] | null) => {
+    const list = !files ? [] : Array.from(files);
+    if (!list.length) return;
+    setUploading(true);
+    try {
+      const uploaded: GestaoOsAttachment[] = [];
+      for (const file of list) {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await api.post('/gestao-os/upload-attachment', form, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        const data = res.data?.data;
+        if (data?.url) {
+          uploaded.push({
+            url: data.url,
+            name: data.name || file.name,
+            mimeType: data.mimeType || file.type
+          });
+        }
+      }
+      setAttachments((prev) => [...prev, ...uploaded]);
+      toast.success(`${uploaded.length} anexo(s) enviado(s)`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Falha no upload');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  if (loadingUser) {
+    return <Loading message="Carregando..." fullScreen size="lg" />;
+  }
+
+  return (
+    <ProtectedRoute route="/ponto/meus-chamados">
+      <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+        <div className="space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl">
+              Meus Chamados
+            </h1>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+              Canal eletrônico 24h: abra chamados, reclamações do SAC, plantão e ocorrências não
+              planejadas a qualquer hora.
+            </p>
+          </div>
+
+          {unitBuildings.length > 0 ? (
+            <div className="flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setListScope('mine')}
+                className={`rounded-full px-3 py-1.5 text-sm font-medium ${
+                  listScope === 'mine'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                }`}
+              >
+                Meus chamados
+              </button>
+              <button
+                type="button"
+                onClick={() => setListScope('unit')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium ${
+                  listScope === 'unit'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200'
+                }`}
+              >
+                <Building2 className="h-4 w-4" />
+                Portal da unidade
+              </button>
+            </div>
+          ) : null}
+
+          {listScope === 'unit' && unitSummary ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <FilterStatCard
+                label="Em aberto na unidade"
+                count={unitSummary.openLike}
+                icon={FolderKanban}
+                iconBg="bg-red-100 dark:bg-red-900/30"
+                iconColor="text-red-600 dark:text-red-400"
+              />
+              <FilterStatCard
+                label="Resolvidas"
+                count={unitSummary.resolved ?? 0}
+                icon={CheckCircle2}
+                iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+                iconColor="text-emerald-600 dark:text-emerald-400"
+              />
+              <FilterStatCard
+                label="Atrasadas"
+                count={unitSummary.overdue}
+                icon={AlertTriangle}
+                iconBg="bg-rose-100 dark:bg-rose-900/30"
+                iconColor="text-rose-600 dark:text-rose-400"
+              />
+            </div>
+          ) : null}
+
+          <Card className={cadastroListClasses.card}>
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className={cadastroListClasses.cardHeaderRow}>
+                <div className={cadastroListClasses.cardHeaderIconRow}>
+                  <div className="rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+                    <Wrench className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      Chamados
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {rows.length} registro{rows.length === 1 ? '' : 's'}
+                    </p>
+                  </div>
+                </div>
+                <div className={cadastroListClasses.cardToolbar}>
+                  <div className={cadastroListClasses.searchField}>
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder="Pesquisar chamado ou OS..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    {search ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearch('')}
+                        aria-label="Limpar busca"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCreateOpen(true)}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Novo chamado
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className={cadastroListClasses.cardContent}>
+              {loadingRows ? (
+                <CadastroListLoading message="Carregando seus chamados..." />
+              ) : rows.length === 0 ? (
+                <CadastroListEmpty
+                  icon={ClipboardList}
+                  title="Nenhum chamado seu"
+                  hint={
+                    search.trim()
+                      ? 'Tente ajustar a busca'
+                      : 'Clique em Novo chamado para abrir uma solicitação'
+                  }
+                />
+              ) : (
+                <>
+                  <CadastroListSummary
+                    startItem={1}
+                    endItem={rows.length}
+                    total={rows.length}
+                    itemLabel="chamado"
+                    itemLabelPlural="chamados"
+                  />
+                  <div className={cadastroListClasses.tableScroll}>
+                    <table className={`${cadastroListClasses.table} min-w-[64rem]`}>
+                      <colgroup>
+                        <col className="w-[4.5rem]" />
+                        <col />
+                        <col className="w-52" />
+                        <col className="w-36" />
+                        <col className="w-40" />
+                        <col className="w-48" />
+                        <col className="w-[4%]" />
+                      </colgroup>
+                      <thead className="border-b border-gray-200 dark:border-gray-700">
+                        <tr>
+                          <th className={cadastroListClasses.th}>ID</th>
+                          <th className={cadastroListClasses.th}>Local / Ativo</th>
+                          <th className={cadastroListClasses.thCenter}>Status</th>
+                          <th className={cadastroListClasses.thCenter}>Prioridade</th>
+                          <th className={cadastroListClasses.thCenter}>Categoria</th>
+                          <th className={`${cadastroListClasses.thCenter} whitespace-nowrap`}>Abertura</th>
+                          <th className={cadastroListClasses.thRight}>Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                        {rows.map((row) => (
+                          <tr
+                            key={row.id}
+                            role="button"
+                            tabIndex={0}
+                            className={listTableRowClasses.trNavigable}
+                            onClick={() => openDetail(row)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                openDetail(row);
+                              }
+                            }}
+                          >
+                            <td className={cadastroListClasses.tdMono}>
+                              {(() => {
+                                const sla = gestaoOsSlaState(row);
+                                return (
+                                  <span className="inline-flex items-center gap-1.5">
+                                    {sla ? (
+                                      <span
+                                        className={`h-2 w-2 shrink-0 rounded-full ${GESTAO_OS_SLA_DOT[sla]}`}
+                                        title={GESTAO_OS_SLA_LABEL[sla]}
+                                        aria-label={GESTAO_OS_SLA_LABEL[sla]}
+                                      />
+                                    ) : null}
+                                    {formatGestaoOsNumber(row)}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className={cadastroListClasses.td}>
+                              <ListRowNavigableLabel className="whitespace-normal break-words text-sm text-gray-600 dark:text-gray-400">
+                                {row.locationLabel || '—'}
+                              </ListRowNavigableLabel>
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
+                              <span className="flex justify-center">
+                                <span className={gestaoOsStatusBadgeClass(row.status)}>
+                                  {STATUS_LABELS[row.status]}
+                                </span>
+                              </span>
+                            </td>
+                            <td
+                              className={`${cadastroListClasses.tdCenter} ${PRIORITY_BADGE[row.priority]}`}
+                            >
+                              <span className="flex justify-center">
+                                {PRIORITY_LABELS[row.priority]}
+                              </span>
+                            </td>
+                            <td className={`${cadastroListClasses.tdCenter} min-w-0`}>
+                              <span className="flex justify-center">
+                                <span className="max-w-full truncate text-sm text-gray-600 dark:text-gray-400">
+                                  {row.category}
+                                </span>
+                              </span>
+                            </td>
+                            <td className={cadastroListClasses.tdCenter}>
+                              <span className="flex justify-center">
+                                {formatDateTime(row.openedAt)}
+                              </span>
+                            </td>
+                            <RowActionMenuCell
+                              isOpen={isRowMenuOpen(row.id)}
+                              onToggle={(e) =>
+                                toggleRowActionMenu(row.id, e.currentTarget as HTMLButtonElement)
+                              }
+                            />
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+
+              {rowActionMenu && rowForActionMenu ? (
+                <RowActionMenuPortal
+                  menu={rowActionMenu}
+                  onClose={closeRowActionMenu}
+                  onEdit={() => openDetail(rowForActionMenu)}
+                  hideDelete
+                  hideDefaultActions
+                  extraItems={[
+                    {
+                      label: 'Ver detalhes',
+                      icon: <Eye className="h-4 w-4" />,
+                      onClick: () => openDetail(rowForActionMenu)
+                    }
+                  ]}
+                />
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+
+        <Modal
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Novo chamado"
+          size="lg"
+        >
+          <div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Nome do solicitante</label>
+                <input
+                  className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-900/60`}
+                  value={user.name || '—'}
+                  readOnly
+                  tabIndex={-1}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Data de abertura</label>
+                <input
+                  className={`${FORM_FIELD_INPUT_CLS} cursor-default bg-gray-50 dark:bg-gray-900/60`}
+                  value={openedAtLabel}
+                  readOnly
+                  tabIndex={-1}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Prédio
+                  <GestaoOsRequiredMark />
+                </label>
+                <StringSingleSelectDropdown
+                  value={buildingId}
+                  onChange={(v) => {
+                    setBuildingId(v);
+                    setSectorId('');
+                    setPlaceId('');
+                    setAssetId('');
+                  }}
+                  options={buildingFormOptions}
+                  placeholder="Selecione..."
+                  emptyOptionLabel="Selecione..."
+                  allowEmpty
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Andar
+                  <GestaoOsRequiredMark />
+                </label>
+                <StringSingleSelectDropdown
+                  value={sectorId}
+                  onChange={(v) => {
+                    setSectorId(v);
+                    setPlaceId('');
+                    setAssetId('');
+                  }}
+                  options={sectorFormOptions}
+                  placeholder={
+                    !buildingId
+                      ? 'Selecione o prédio primeiro'
+                      : sectors.length === 0
+                        ? 'Nenhum andar cadastrado'
+                        : 'Selecione...'
+                  }
+                  emptyOptionLabel="Selecione..."
+                  allowEmpty
+                  disabled={!buildingId || sectors.length === 0}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Local
+                  <GestaoOsRequiredMark />
+                </label>
+                <StringSingleSelectDropdown
+                  value={placeId}
+                  onChange={(v) => {
+                    setPlaceId(v);
+                    setAssetId('');
+                  }}
+                  options={placeFormOptions}
+                  placeholder={
+                    !sectorId
+                      ? 'Selecione o andar primeiro'
+                      : places.length === 0
+                        ? 'Nenhum local cadastrado'
+                        : 'Selecione...'
+                  }
+                  emptyOptionLabel="Selecione..."
+                  allowEmpty
+                  disabled={!sectorId || places.length === 0}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Ativo</label>
+                <StringSingleSelectDropdown
+                  value={assetId}
+                  onChange={setAssetId}
+                  options={assetFormOptions}
+                  placeholder={
+                    !placeId ? 'Selecione o local primeiro' : 'Nenhum / geral do local'
+                  }
+                  emptyOptionLabel="Nenhum / geral do local"
+                  allowEmpty
+                  disabled={!placeId}
+                />
+              </div>
+              {((createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)) >= 3 ? (
+                <div className="sm:col-span-2">
+                  <GestaoOsRecurrenceBanner
+                    count={(createAssetHistory?.recurrence90dCount ?? 0) + (assetId ? 1 : 0)}
+                    predicted
+                  />
+                </div>
+              ) : null}
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Categoria
+                  <GestaoOsRequiredMark />
+                </label>
+                <StringSingleSelectDropdown
+                  value={category}
+                  onChange={setCategory}
+                  options={categoryFormOptions}
+                  placeholder="Selecione..."
+                  allowEmpty={false}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Prioridade
+                  <GestaoOsRequiredMark />
+                </label>
+                <StringSingleSelectDropdown
+                  value={priority}
+                  onChange={(v) => setPriority((v as GestaoOsPriority) || 'MEDIUM')}
+                  options={priorityFormOptions}
+                  placeholder="Selecione..."
+                  allowEmpty={false}
+                />
+              </div>
+              <div>
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Canal</label>
+                <StringSingleSelectDropdown
+                  value={origin}
+                  onChange={(v) => setOrigin((v as GestaoOsOrigin) || 'REQUEST')}
+                  options={originFormOptions}
+                  placeholder="Selecione..."
+                  allowEmpty={false}
+                />
+              </div>
+              {origin === 'SAC' ? (
+                <div>
+                  <label className={GESTAO_OS_FORM_LABEL_CLS}>Tipo de SAC</label>
+                  <StringSingleSelectDropdown
+                    value={sacKind}
+                    onChange={(v) => setSacKind((v as GestaoOsSacKind) || 'CHAMADO')}
+                    options={sacKindFormOptions}
+                    placeholder="Selecione..."
+                    allowEmpty={false}
+                  />
+                </div>
+              ) : null}
+              <div className="sm:col-span-2">
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>
+                  Descrição
+                  <GestaoOsRequiredMark />
+                </label>
+                <textarea
+                  className={FORM_FIELD_TEXTAREA_CLS}
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Ex.: lâmpada queimada no corredor, vazamento sob a pia, ar-condicionado sem refrigerar..."
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={GESTAO_OS_FORM_LABEL_CLS}>Anexos</label>
+                <GestaoOsAttachmentsField
+                  files={attachments}
+                  uploading={uploading}
+                  onFilesSelect={(selected) => void uploadFiles(selected)}
+                  onRemove={(url) =>
+                    setAttachments((prev) => prev.filter((item) => item.url !== url))
+                  }
+                />
+              </div>
+            </div>
+
+            <GestaoOsModalFooter>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  createMutation.isPending ||
+                  !buildingId ||
+                  !sectorId ||
+                  !placeId ||
+                  !description.trim()
+                }
+                onClick={() => createMutation.mutate()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {createMutation.isPending ? 'Salvando...' : 'Abrir chamado'}
+              </button>
+            </GestaoOsModalFooter>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={Boolean(detailId)}
+          onClose={() => {
+            setDetailId(null);
+            setDetailTab('resumo');
+          }}
+          showCloseButton={false}
+          scrollContent={false}
+          contentClassName="!p-0"
+          size="xl"
+          panelClassName={
+            detailTab === 'comentarios'
+              ? '!max-h-[min(92dvh,calc(100dvh-2rem))] h-[min(92dvh,calc(100dvh-2rem))]'
+              : 'max-h-[min(92dvh,calc(100dvh-2rem))]'
+          }
+        >
+          <GestaoOsDetailModalChrome
+            title={detail ? formatGestaoOsLabel(detail) : 'Detalhe do chamado'}
+            tabs={[...MEUS_CHAMADOS_DETAIL_TABS]}
+            activeTab={detailTab}
+            onTabChange={(id) => setDetailTab(id as MeusChamadosDetailTab)}
+            fillBody={detailTab === 'comentarios'}
+            onClose={() => {
+              setDetailId(null);
+              setDetailTab('resumo');
+            }}
+          >
+            {loadingDetail || !detail ? (
+              <div className="py-10 text-center text-sm text-gray-500">Carregando...</div>
+            ) : (
+              <div
+                className={
+                  detailTab === 'comentarios'
+                    ? 'flex h-full min-h-0 flex-col text-sm'
+                    : 'space-y-5 text-sm'
+                }
+              >
+                {detailTab === 'resumo' ? (
+                  <div className="space-y-5">
+                    <GestaoOsChamadoResumo
+                      detail={detail}
+                      formatDateTime={formatDateTime}
+                      showRequester={false}
+                    />
+
+                    {detail.status === 'COMPLETED' && detail.rating == null ? (
+                      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Avalie o atendimento
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          O serviço foi concluído. Dê sua nota para encerrar o chamado.
+                        </p>
+                        <div className="mt-3 flex items-center gap-1.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              aria-label={`${n} estrela(s)`}
+                              onClick={() => setRatingValue(n)}
+                              className="p-0.5"
+                            >
+                              <Star
+                                className={`h-6 w-6 ${
+                                  n <= ratingValue
+                                    ? 'fill-amber-400 text-amber-400'
+                                    : 'text-gray-300 dark:text-gray-600'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          className={`${FORM_FIELD_TEXTAREA_CLS} mt-3`}
+                          rows={3}
+                          value={ratingComment}
+                          onChange={(e) => setRatingComment(e.target.value)}
+                          placeholder="Comentário (opcional)"
+                        />
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            disabled={ratingMutation.isPending}
+                            onClick={() => ratingMutation.mutate()}
+                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {ratingMutation.isPending ? 'Enviando...' : 'Enviar avaliação'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {detail.rating != null ? (
+                      <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Sua avaliação
+                        </p>
+                        <div className="mt-2 flex items-center gap-1.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={`h-5 w-5 ${
+                                n <= (detail.rating ?? 0)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-gray-300 dark:text-gray-600'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                        {detail.ratingComment ? (
+                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                            {detail.ratingComment}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {detailTab === 'ativo' ? (
+                  assetHistory ? (
+                    <GestaoOsAssetHistoryCard
+                      history={assetHistory}
+                      currentId={detail.id}
+                      onOpenWorkOrder={(id) => {
+                        setDetailId(id);
+                        setDetailTab('resumo');
+                        router.replace(`/ponto/meus-chamados?id=${id}`);
+                      }}
+                    />
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum ativo vinculado a este chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'seguranca' ? (
+                  Array.isArray(detail.safetyChecklistResponses) &&
+                  detail.safetyChecklistResponses.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Segurança do Trabalho
+                        </p>
+                        <GestaoOsChecklistField
+                          items={detail.safetyChecklistResponses}
+                          readOnly
+                        />
+                      </div>
+                    </GestaoOsChecklistScrollPane>
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum checklist de segurança neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'execucao' ? (
+                  Array.isArray(detail.checklistResponses) &&
+                  detail.checklistResponses.length > 0 ? (
+                    <GestaoOsChecklistScrollPane>
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                          Checklist da execução
+                        </p>
+                        <GestaoOsChecklistField items={detail.checklistResponses} allRequired readOnly evidence />
+                      </div>
+                    </GestaoOsChecklistScrollPane>
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum checklist de execução neste chamado.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'documentos' ? <GestaoOsDocumentsTab detail={detail} /> : null}
+
+                {detailTab === 'historico' ? (
+                  detail.events && detail.events.length > 0 ? (
+                    <GestaoOsHistoryList
+                      events={detail.events}
+                      status={detail.status}
+                      formatDateTime={formatDateTime}
+                    />
+                  ) : (
+                    <GestaoOsEmptyTab>Nenhum evento na timeline.</GestaoOsEmptyTab>
+                  )
+                ) : null}
+
+                {detailTab === 'comentarios' ? (
+                  <GestaoOsCommentsSection
+                    workOrderId={detail.id}
+                    currentUserId={user.id}
+                  />
+                ) : null}
+              </div>
+            )}
+          </GestaoOsDetailModalChrome>
+        </Modal>
+      </MainLayout>
+    </ProtectedRoute>
+  );
+}

@@ -1,16 +1,35 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { Prisma } from '@prisma/client';
 import { parseDateInput } from '../utils/dateInput';
 import {
   resolvePleitoCreateCore,
   type ResolvePleitoContractContext
 } from '../utils/pleitoCreateHelpers';
+import {
+  assertPleitoBillingAmount,
+  findBillingForPleito,
+  getPleitoBillableTotal,
+  getPleitoRemainingBalance,
+  syncPleitoFromBillings,
+  upsertBillingFromPleitoFaturamento
+} from '../utils/contractBillingPleitoSync';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 /** Cópia criada em "Gerar pleito"; distinta da linha principal da OS no contrato. */
 const PLEITO_HISTORICO_MARKER = '__PLEITO_HISTORICO__';
+const PLEITO_HISTORICO_MARKER_GERADO_100 = '__PLEITO_HISTORICO__GERADO_100__';
+
+function isPleitoHistoricoGerado(reportsBilling: string | null | undefined): boolean {
+  const marker = (reportsBilling || '').trim();
+  return (
+    marker === PLEITO_HISTORICO_MARKER ||
+    marker === PLEITO_HISTORICO_MARKER_GERADO_100 ||
+    marker.startsWith(PLEITO_HISTORICO_MARKER)
+  );
+}
 
 function toDec(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
@@ -50,18 +69,36 @@ export class PleitoController {
       const andParts: Prisma.PleitoWhereInput[] = [];
 
       if (search) {
-        const s = search as string;
+        const s = String(search);
+        const [pleitoIds, contractIds] = await Promise.all([
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`pleitos`,
+            columns: [
+              '"serviceDescription"',
+              '"folderNumber"',
+              'location',
+              'engineer',
+              '"divSe"',
+              '"invoiceNumber"',
+            ],
+            search: s,
+          }),
+          findIdsByUnaccentSearch({
+            from: Prisma.sql`contracts`,
+            columns: ['name', 'number'],
+            search: s,
+          }),
+        ]);
         andParts.push({
           OR: [
-            { serviceDescription: { contains: s, mode: 'insensitive' } },
-            { folderNumber: { contains: s, mode: 'insensitive' } },
-            { location: { contains: s, mode: 'insensitive' } },
-            { engineer: { contains: s, mode: 'insensitive' } },
-            { divSe: { contains: s, mode: 'insensitive' } },
-            { invoiceNumber: { contains: s, mode: 'insensitive' } },
-            { updatedContract: { is: { name: { contains: s, mode: 'insensitive' } } } },
-            { updatedContract: { is: { number: { contains: s, mode: 'insensitive' } } } }
-          ]
+            ...(pleitoIds?.length ? [{ id: { in: pleitoIds } }] : []),
+            ...(contractIds?.length
+              ? [{ updatedContractId: { in: contractIds } }]
+              : []),
+            ...(!pleitoIds?.length && !contractIds?.length
+              ? [{ id: '__none__' }]
+              : []),
+          ],
         });
       }
 
@@ -111,7 +148,7 @@ export class PleitoController {
       const where: Prisma.PleitoWhereInput =
         andParts.length === 0 ? {} : andParts.length === 1 ? andParts[0]! : { AND: andParts };
 
-      const limitNum = Math.min(Number(limit) || 20, 200);
+      const limitNum = Math.min(Number(limit) || 20, 500);
       const skip = (Number(page) - 1) * limitNum;
 
       const [rows, total] = await Promise.all([
@@ -286,41 +323,124 @@ export class PleitoController {
       const row = await prisma.$transaction(async (tx) => {
         const updated = await tx.pleito.update({ where: { id }, data });
 
-        const isPaid = (updated.billingStatus || '').trim().toLowerCase() === 'pago';
-        const invoiceNumber = (updated.invoiceNumber || '').trim();
-        const serviceOrder = (updated.divSe || '').trim();
-        const grossValue = updated.billingRequest != null ? Number(updated.billingRequest) : 0;
+        const wasPaid = (existing.billingStatus || '').trim().toLowerCase() === 'pago';
+        const nextBillingStatus =
+          b.billingStatus !== undefined
+            ? (b.billingStatus || '').trim().toLowerCase()
+            : (existing.billingStatus || '').trim().toLowerCase();
+        const willBePaid = nextBillingStatus === 'pago';
+        const nextInvoice = (
+          b.invoiceNumber !== undefined ? b.invoiceNumber : updated.invoiceNumber
+        )
+          ?.trim()
+          .toString();
+        const faturar100 = b.faturar100 === true || b.faturar100 === 'true' || b.faturar100 === 1;
+        const faturarRestante = b.faturarRestante === true || b.faturarRestante === 'true' || b.faturarRestante === 1;
+        const faturarValor = b.faturarValor === true || b.faturarValor === 'true' || b.faturarValor === 1;
+        const valorFaturamento =
+          b.valorFaturamento != null && b.valorFaturamento !== ''
+            ? Number(b.valorFaturamento)
+            : 0;
 
-        // Quando o pleito for marcado como pago e tiver Nº NF, refletir automaticamente em faturamento.
-        if (updated.updatedContractId && isPaid && invoiceNumber && serviceOrder && grossValue > 0) {
-          const existingBilling = await tx.contractBilling.findFirst({
-            where: {
-              contractId: updated.updatedContractId,
-              invoiceNumber,
-              serviceOrder
-            }
+        if (faturar100 && updated.updatedContractId) {
+          if (!nextInvoice) {
+            throw createError('Informe o número da nota fiscal para faturar o pleito', 400);
+          }
+          const serviceOrder = (updated.divSe || '').trim();
+          if (!serviceOrder) {
+            throw createError('O pleito não possui OS/SE para vincular o faturamento', 400);
+          }
+          const pleitoTotal = getPleitoBillableTotal(updated);
+          if (pleitoTotal <= 0) {
+            throw createError('O pleito não possui valor apto para faturamento', 400);
+          }
+
+          await upsertBillingFromPleitoFaturamento(tx, {
+            pleitoId: updated.id,
+            contractId: updated.updatedContractId,
+            invoiceNumber: nextInvoice,
+            serviceOrder,
+            grossValue: pleitoTotal,
+            netValue: pleitoTotal,
+            issueDate: new Date()
           });
+          await syncPleitoFromBillings(tx, updated.id);
+        } else if (faturarRestante && updated.updatedContractId) {
+          if (!nextInvoice) {
+            throw createError('Informe o número da nota fiscal para faturar o saldo do pleito', 400);
+          }
+          const serviceOrder = (updated.divSe || '').trim();
+          if (!serviceOrder) {
+            throw createError('O pleito não possui OS/SE para vincular o faturamento', 400);
+          }
 
-          if (existingBilling) {
-            await tx.contractBilling.update({
-              where: { id: existingBilling.id },
-              data: {
-                issueDate: new Date(),
-                grossValue,
-                netValue: grossValue
-              }
-            });
-          } else {
-            await tx.contractBilling.create({
-              data: {
-                contractId: updated.updatedContractId,
-                issueDate: new Date(),
-                invoiceNumber,
-                serviceOrder,
-                grossValue,
-                netValue: grossValue
-              }
-            });
+          const remaining = await getPleitoRemainingBalance(
+            tx,
+            {
+              id: updated.id,
+              billingRequest: updated.billingRequest,
+              budget: updated.budget
+            },
+          );
+          if (remaining <= 0.01) {
+            throw createError('O pleito não possui saldo apto para faturamento', 400);
+          }
+
+          await upsertBillingFromPleitoFaturamento(tx, {
+            pleitoId: updated.id,
+            contractId: updated.updatedContractId,
+            invoiceNumber: nextInvoice,
+            serviceOrder,
+            grossValue: remaining,
+            netValue: remaining,
+            issueDate: new Date()
+          });
+          await syncPleitoFromBillings(tx, updated.id);
+        } else if (faturarValor && updated.updatedContractId) {
+          if (!nextInvoice) {
+            throw createError('Informe o número da nota fiscal para faturar o pleito', 400);
+          }
+          if (!Number.isFinite(valorFaturamento) || valorFaturamento <= 0) {
+            throw createError('Informe um valor válido para o faturamento parcial', 400);
+          }
+          const serviceOrder = (updated.divSe || '').trim();
+          if (!serviceOrder) {
+            throw createError('O pleito não possui OS/SE para vincular o faturamento', 400);
+          }
+
+          await assertPleitoBillingAmount(
+            tx,
+            {
+              id: updated.id,
+              updatedContractId: updated.updatedContractId,
+              divSe: updated.divSe,
+              billingRequest: updated.billingRequest,
+              budget: updated.budget
+            },
+            updated.updatedContractId,
+            valorFaturamento
+          );
+
+          await upsertBillingFromPleitoFaturamento(tx, {
+            pleitoId: updated.id,
+            contractId: updated.updatedContractId,
+            invoiceNumber: nextInvoice,
+            serviceOrder,
+            grossValue: valorFaturamento,
+            netValue: valorFaturamento,
+            issueDate: new Date()
+          });
+          await syncPleitoFromBillings(tx, updated.id);
+        } else if (willBePaid && !wasPaid) {
+          if (!nextInvoice) {
+            throw createError('Informe o número da nota fiscal antes de marcar como pago', 400);
+          }
+          const linkedBilling = await findBillingForPleito(tx, updated, nextInvoice);
+          if (!linkedBilling) {
+            throw createError(
+              'Não é possível marcar como pago sem faturamento vinculado. Cadastre o faturamento do pleito primeiro.',
+              400
+            );
           }
         }
 
@@ -341,20 +461,44 @@ export class PleitoController {
       const existing = await prisma.pleito.findUnique({ where: { id } });
       if (!existing) throw createError('Registro não encontrado', 404);
 
-      const isHistoricoGerado =
-        (existing.reportsBilling || '').trim() === PLEITO_HISTORICO_MARKER;
+      const isHistoricoGerado = isPleitoHistoricoGerado(existing.reportsBilling);
 
-      if (!excluirOrdemServico && !isHistoricoGerado) {
-        throw createError(
-          'Este registro é a ordem de serviço. Aqui só é possível excluir registros de pleito gerado (histórico). Para remover a OS, use a tela do contrato.',
-          400
-        );
+      const deleteLinkedBillings = async () => {
+        await prisma.contractBilling.deleteMany({ where: { pleitoId: id } });
+      };
+
+      if (excluirOrdemServico || isHistoricoGerado) {
+        await deleteLinkedBillings();
+        await prisma.pleito.delete({ where: { id } });
+        return res.json({ success: true, message: 'Excluído com sucesso' });
       }
 
-      await prisma.pleito.delete({ where: { id } });
-      res.json({ success: true, message: 'Excluído com sucesso' });
+      // OS principal com valor pleiteado acumulado: zera o pleito sem apagar a OS.
+      const billingRequest =
+        existing.billingRequest != null ? Number(existing.billingRequest) : 0;
+      if (billingRequest > 0) {
+        await deleteLinkedBillings();
+        const row = await prisma.pleito.update({
+          where: { id },
+          data: {
+            billingRequest: null,
+            billingStatus: null,
+            accumulatedBilled: null,
+          },
+        });
+        return res.json({
+          success: true,
+          data: serializePleito(row),
+          message: 'Pleito removido da ordem de serviço',
+        });
+      }
+
+      throw createError(
+        'Este registro é a ordem de serviço. Aqui só é possível excluir registros de pleito gerado (histórico). Para remover a OS, use a tela do contrato.',
+        400
+      );
     } catch (error) {
-      next(error);
+      return next(error);
     }
   }
 }

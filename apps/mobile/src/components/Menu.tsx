@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,195 +7,374 @@ import {
   Modal,
   ScrollView,
   Animated,
-  TouchableWithoutFeedback,
+  Easing,
+  Pressable,
+  Alert,
+  Dimensions,
 } from 'react-native';
-import { X, Menu as MenuIcon } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  X,
+  Home,
+  Moon,
+  Sun,
+  LogOut,
+  Calendar,
+  LayoutGrid,
+} from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { openFavoriteKanbanBoard } from '../lib/openFavoriteKanbanBoard';
+import type { RootStackParamList } from '../../App';
 
 interface MenuProps {
   visible: boolean;
   onClose: () => void;
 }
 
-export default function Menu({ visible, onClose }: MenuProps) {
-  const { colors } = useTheme();
-  const slideAnim = React.useRef(new Animated.Value(-300)).current;
-  const overlayOpacity = React.useRef(new Animated.Value(0)).current;
-  const [isVisible, setIsVisible] = React.useState(false);
-  
-  // Versão do app
-  const APP_VERSION = '1.0.0';
+const PANEL_WIDTH = Math.min(320, Dimensions.get('window').width * 0.78);
 
-  React.useEffect(() => {
+function MenuItemRow({
+  label,
+  icon: Icon,
+  color,
+  onPress,
+  anim,
+  index,
+}: {
+  label: string;
+  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+  color: string;
+  onPress: () => void;
+  anim: Animated.Value;
+  index: number;
+}) {
+  // Cada item entra um pouco depois do anterior.
+  const start = Math.min(0.12 * index, 0.55);
+  const opacity = anim.interpolate({
+    inputRange: [start, Math.min(start + 0.35, 1)],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const translateX = anim.interpolate({
+    inputRange: [start, Math.min(start + 0.35, 1)],
+    outputRange: [-16, 0],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }] }}>
+      <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.65}>
+        <Icon size={20} color={color} strokeWidth={2} />
+        <Text style={[styles.itemLabel, { color }]}>{label}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+export default function Menu({ visible, onClose }: MenuProps) {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const { logout, user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const queryClient = useQueryClient();
+
+  const slideAnim = useRef(new Animated.Value(-PANEL_WIDTH)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const itemsAnim = useRef(new Animated.Value(0)).current;
+  const [isVisible, setIsVisible] = useState(false);
+
+  const closeThen = useCallback(
+    (action: () => void) => {
+      onClose();
+      setTimeout(action, 230);
+    },
+    [onClose],
+  );
+
+  const go = useCallback(
+    (name: keyof RootStackParamList | 'Home') => {
+      closeThen(() => {
+        let nav: any = navigation;
+        for (let i = 0; i < 6; i++) {
+          const names: string[] | undefined = nav?.getState?.()?.routeNames;
+          if (name === 'Home') {
+            if (names?.includes('Main')) {
+              nav.navigate('Main', { screen: 'Home' });
+              return;
+            }
+          } else if (names?.includes(name)) {
+            nav.navigate(name);
+            return;
+          }
+          const parent = nav?.getParent?.();
+          if (!parent) break;
+          nav = parent;
+        }
+        if (name === 'Home') {
+          (navigation as any).navigate('Main', { screen: 'Home' });
+          return;
+        }
+        navigation.navigate(name as never);
+      });
+    },
+    [closeThen, navigation],
+  );
+
+  const links = [
+    { key: 'home', label: 'Início', icon: Home, onPress: () => go('Home') },
+    { key: 'agenda', label: 'Agenda', icon: Calendar, onPress: () => go('Agenda') },
+    {
+      key: 'tasks',
+      label: 'Tasks',
+      icon: LayoutGrid,
+      onPress: () => {
+        closeThen(() => {
+          void openFavoriteKanbanBoard(navigation, user?.id, queryClient);
+        });
+      },
+    },
+  ];
+
+  useEffect(() => {
     if (visible) {
       setIsVisible(true);
-      // Animar overlay e menu simultaneamente
+      slideAnim.setValue(-PANEL_WIDTH);
+      overlayOpacity.setValue(0);
+      itemsAnim.setValue(0);
+
       Animated.parallel([
         Animated.timing(overlayOpacity, {
           toValue: 1,
-          duration: 300,
+          duration: 240,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(slideAnim, {
+        Animated.spring(slideAnim, {
           toValue: 0,
-          duration: 300,
+          damping: 22,
+          stiffness: 220,
+          mass: 0.9,
+          useNativeDriver: true,
+        }),
+        Animated.timing(itemsAnim, {
+          toValue: 1,
+          duration: 420,
+          delay: 60,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start();
-    } else {
-      // Animar fechamento
-      Animated.parallel([
-        Animated.timing(overlayOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: -300,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        // Só desmonta após a animação terminar
-        setIsVisible(false);
-      });
+      return;
     }
-  }, [visible]);
 
-  const styles = StyleSheet.create({
-    overlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'flex-start',
-    },
-    menuContainer: {
-      backgroundColor: colors.card,
-      width: '80%',
-      height: '100%',
-      paddingTop: 50,
-      paddingHorizontal: 20,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 2,
-        height: 0,
+    Animated.parallel([
+      Animated.timing(overlayOpacity, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: -PANEL_WIDTH,
+        duration: 220,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(itemsAnim, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setIsVisible(false);
+    });
+  }, [visible, overlayOpacity, slideAnim, itemsAnim]);
+
+  const handleLogout = () => {
+    Alert.alert('Sair', 'Tem certeza que deseja sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair',
+        style: 'destructive',
+        onPress: () => {
+          closeThen(() => {
+            void logout();
+          });
+        },
       },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
-    },
-    header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: 30,
-      paddingBottom: 20,
-    },
-    title: {
-      fontSize: 24,
-      fontWeight: 'bold',
-      color: colors.text,
-    },
-    closeButton: {
-      padding: 8,
-      borderRadius: 20,
-    },
-    menuContent: {
-      flex: 1,
-    },
-    menuItem: {
-      paddingVertical: 15,
-      paddingHorizontal: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    menuItemText: {
-      fontSize: 16,
-      color: colors.text,
-      fontWeight: '500',
-    },
-    emptyState: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-    },
-    emptyText: {
-      fontSize: 16,
-      color: colors.textSecondary,
-      textAlign: 'center',
-      lineHeight: 24,
-    },
-    versionContainer: {
-      position: 'absolute',
-      bottom: 20,
-      left: 20,
-      right: 20,
-      alignItems: 'center',
-      paddingVertical: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    versionText: {
-      fontSize: 12,
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
+    ]);
+  };
+
+  const headerOpacity = itemsAnim.interpolate({
+    inputRange: [0, 0.4],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const headerShift = itemsAnim.interpolate({
+    inputRange: [0, 0.4],
+    outputRange: [-10, 0],
+    extrapolate: 'clamp',
   });
 
   return (
     <Modal
       visible={isVisible}
-      transparent={true}
+      transparent
       animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View 
-          style={[
-            styles.overlay,
-            {
-              opacity: overlayOpacity
-            }
-          ]}
-        >
-        <Animated.View 
-          style={[
-            styles.menuContainer,
-            {
-              transform: [{ translateX: slideAnim }]
-            }
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Menu</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={onClose}
-            >
-              <X size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
+      <View style={styles.root}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.overlay, { opacity: overlayOpacity }]}
+          />
+        </Pressable>
 
-          {/* Menu Content */}
-          <ScrollView style={styles.menuContent}>
-            {/* Estado vazio */}
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-              </Text>
-            </View>
+        <Animated.View
+          style={[
+            styles.panel,
+            {
+              width: PANEL_WIDTH,
+              backgroundColor: colors.background,
+              paddingTop: insets.top,
+              paddingBottom: Math.max(insets.bottom, 16),
+              transform: [{ translateX: slideAnim }],
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.header,
+              { opacity: headerOpacity, transform: [{ translateX: headerShift }] },
+            ]}
+          >
+            <Text style={[styles.title, { color: colors.text }]}>Menu</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+              <X size={22} color={colors.text} strokeWidth={2} />
+            </TouchableOpacity>
+          </Animated.View>
+
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.contentInner}
+          >
+            {links.map((item, index) => (
+              <MenuItemRow
+                key={item.key}
+                label={item.label}
+                icon={item.icon}
+                color={colors.text}
+                onPress={item.onPress}
+                anim={itemsAnim}
+                index={index}
+              />
+            ))}
           </ScrollView>
 
-          {/* App Version */}
-          <View style={styles.versionContainer}>
-            <Text style={styles.versionText}>
-              App Version {APP_VERSION}
-            </Text>
-          </View>
+          <Animated.View
+            style={[
+              styles.footer,
+              {
+                borderTopColor: colors.border,
+                opacity: headerOpacity,
+                transform: [{ translateY: headerShift }],
+              },
+            ]}
+          >
+            <TouchableOpacity style={styles.themeRow} onPress={toggleTheme} activeOpacity={0.65}>
+              {isDark ? (
+                <Sun size={20} color={colors.text} strokeWidth={2} />
+              ) : (
+                <Moon size={20} color={colors.text} strokeWidth={2} />
+              )}
+              <Text style={[styles.itemLabel, { color: colors.text }]}>
+                {isDark ? 'Tema claro' : 'Tema escuro'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.themeRow} onPress={handleLogout} activeOpacity={0.65}>
+              <LogOut size={20} color={colors.primary} strokeWidth={2} />
+              <Text style={[styles.itemLabel, { color: colors.primary }]}>Sair</Text>
+            </TouchableOpacity>
+          </Animated.View>
         </Animated.View>
-        </Animated.View>
-      </TouchableWithoutFeedback>
+      </View>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  panel: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    height: '100%',
+    maxWidth: 320,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 4, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+    height: 44,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+  closeBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: { flex: 1 },
+  contentInner: { paddingBottom: 16 },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  itemLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: -0.2,
+  },
+  footer: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 8,
+    gap: 4,
+  },
+  themeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+});

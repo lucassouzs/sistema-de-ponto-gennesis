@@ -1,4 +1,4 @@
-import { MutableRefObject, useEffect, useRef } from 'react';
+import { MutableRefObject, useLayoutEffect, useRef } from 'react';
 
 type ColumnPrefs = {
   order: string[];
@@ -85,14 +85,26 @@ function applyColumnOrder(tableEl: HTMLTableElement, order: string[]) {
   const unlocked = baseOrder.filter((k) => !lockFirstKeys.includes(k));
   const finalOrder = [...lockFirstKeys.filter((k) => existingSet.has(k)), ...unlocked];
 
-  // Reorder thead cells
   const headerCells = Array.from(headerRow.cells);
   const finalIndices = finalOrder.map((k) => indexByKey.get(k)).filter((v): v is number => v !== undefined);
+
+  const rows = Array.from(tableEl.querySelectorAll('tbody tr'));
+  const hasBodyRows = rows.length > 0;
+  const bodyAligned =
+    !hasBodyRows ||
+    rows.every((row) => {
+      const rowCells = Array.from(row.children).filter(
+        (el) => el.tagName === 'TD' || el.tagName === 'TH'
+      );
+      return rowCells.length === headerKeys.length;
+    });
+  if (hasBodyRows && !bodyAligned) return;
+
+  // Reorder thead cells
   const headerFrag = document.createDocumentFragment();
   finalIndices.forEach((idx) => headerFrag.appendChild(headerCells[idx]));
   headerRow.appendChild(headerFrag);
 
-  const rows = Array.from(tableEl.querySelectorAll('tbody tr'));
   rows.forEach((row) => {
     const rowCells = Array.from(row.children).filter((el) => el.tagName === 'TD' || el.tagName === 'TH') as HTMLTableCellElement[];
     if (rowCells.length !== headerKeys.length) return;
@@ -323,7 +335,7 @@ export function useContractTableColumnCustomizer(
 ) {
   const runtimeRef = useRef<TableRuntime>({});
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const tables = Array.from(container.querySelectorAll('table'));
@@ -331,6 +343,7 @@ export function useContractTableColumnCustomizer(
 
     tables.forEach((tableEl, idx) => {
       if (!(tableEl instanceof HTMLTableElement)) return;
+      if (tableEl.getAttribute('data-cc-skip-column-customizer') === '1') return;
 
       const key = `${STORAGE_PREFIX}${storageKeyPrefix}:table${idx}`;
       attachTableInteractions(tableEl, key, runtimeRef);

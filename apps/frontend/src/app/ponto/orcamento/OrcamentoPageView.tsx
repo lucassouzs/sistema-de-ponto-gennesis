@@ -30,7 +30,8 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  DownloadCloud
+  DownloadCloud,
+  Calendar
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -40,18 +41,46 @@ import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import api from '@/lib/api';
+import { FORM_FIELD_INPUT_CLS } from '@/lib/formFieldUi';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 import { Modal } from '@/components/ui/Modal';
+import { AppModalTabButton } from '@/components/ui/AppTabButton';
+import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
+import { formatCadastroListId } from '@/components/ui/CadastroListSummary';
+import { TableCheckbox } from '@/components/ui/Checkbox';
+import {
+  getListTableRowClassName,
+  ListRowNavigableLabel,
+  listTableRowClasses,
+  rowActionMenuButtonClass,
+} from '@/components/ui/listTableUi';
 import { OrcamentoMedicaoPainel } from './OrcamentoMedicaoPainel';
+import { OrcamentoCronogramaPainel } from './OrcamentoCronogramaPainel';
+import {
+  calcularDataFimOrcamento,
+  cronogramaVazio,
+  formatDataBr,
+  normalizarCronograma,
+  type CronogramaLinhaServico,
+  type CronogramaLinhaSubtitulo,
+  type CronogramaPersist
+} from './orcamentoCronogramaTypes';
 import {
   gradeTableCls,
+  gradeTituloSubtituloRowTrCls,
   gradeTableRowTrCls,
   inputGradeCls,
   inputGradeMoedaCls,
   moedaGradeFieldWrapperCls,
-  selectGradeSemSetaCls
+  selectGradeSemSetaCls,
+  tdPlanilhaTipoCls,
+  planilhaTipoVazioCls
 } from './orcamentoGradeCellClasses';
 import { calcV, calcularQuantidadeLinha, inferirTipoUnidadePorDimensao } from './orcamentoMedicaoCalc';
 import type { LinhaMedicao, DimensoesItem, TipoUnidadeFormula } from './orcamentoMedicaoTypes';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 export type { LinhaMedicao, TipoUnidadeFormula, DimensoesItem } from './orcamentoMedicaoTypes';
 
 export type OrcamentoPageProps = {
@@ -944,8 +973,8 @@ export interface ImportRecord {
 
 type OrcamentoMeta = {
   osNumeroPasta: string;
-  dataAbertura: string; // yyyy-mm-dd
-  dataEnvio: string; // yyyy-mm-dd (atualiza ao salvar)
+  dataAbertura: string; // yyyy-mm-dd — data de início
+  dataEnvio: string; // yyyy-mm-dd — data de fim
   prazoExecucaoDias: string; // mantém como string p/ input
   responsavelOrcamento: string;
   descricao: string;
@@ -1002,6 +1031,17 @@ const ORCAMENTO_SECAO_VAZIA_SHELL =
 
 function buildItemKeyOrcamento(blocoKey: string, chave: string) {
   return `${blocoKey}|${chave}`;
+}
+
+/** Prefixo na seleção em lote da aba Orçamento — subtítulo sem composições visíveis. */
+const SELECAO_MONTAGEM_BLOCO_PREFIX = 'montagem-bloco:';
+
+function chaveSelecaoBlocoMontagem(blocoKey: string) {
+  return `${SELECAO_MONTAGEM_BLOCO_PREFIX}${blocoKey}`;
+}
+
+function isChaveComposicaoMontagem(key: string) {
+  return !key.startsWith(SELECAO_MONTAGEM_BLOCO_PREFIX);
 }
 
 /** Parse `servicoId|subtituloId|chave` (chave pode conter `|` em teoria; ids vêm de UUID). */
@@ -1222,6 +1262,8 @@ function classeValorTotalCondicional(valorPct: number): string {
 type EmployeeOption = {
   id: string;
   name: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
 };
 
 /** Estado da montagem do orçamento (persistido por contrato). */
@@ -1240,11 +1282,15 @@ interface SessaoOrcamentoPersist {
    * Não apagamos do catálogo `servicos` para poder restaurar sem reimportar.
    */
   itensOcultosNoOrcamento?: string[];
+  /** Chaves `${composicaoKey}|insumo|${i}` ocultas na aba Orçamento analítico. */
+  insumosAnaliticoOcultos?: string[];
   /**
    * Só em orçamentos `meta.importadoPlanilha`: árvore de serviços deste documento (importação + blocos adicionados).
    * O catálogo da planilha perfeita do contrato continua em `servicos-padrao.json` e vem em GET `servicos`.
    */
   servicosDocumento?: ServicoPadrao[];
+  /** Prazos e andamento por item/bloco do orçamento (aba Cronograma). */
+  cronograma?: CronogramaPersist;
 }
 
 interface OrcamentoRecoverySnapshot {
@@ -1264,6 +1310,8 @@ function sessaoVazia(): SessaoOrcamentoPersist {
     planilhaTipoInsumo: {},
     showDetalhesFinanceiros: false,
     itensOcultosNoOrcamento: [],
+    insumosAnaliticoOcultos: [],
+    cronograma: cronogramaVazio(),
     meta: {
       osNumeroPasta: '',
       dataAbertura: '',
@@ -1330,6 +1378,8 @@ function loadSessaoOrcamento(centroCustoId: string | null, orcamentoId: string |
           : {},
       showDetalhesFinanceiros: Boolean(p.showDetalhesFinanceiros),
       itensOcultosNoOrcamento: Array.isArray(p.itensOcultosNoOrcamento) ? p.itensOcultosNoOrcamento : [],
+      insumosAnaliticoOcultos: Array.isArray(p.insumosAnaliticoOcultos) ? p.insumosAnaliticoOcultos : [],
+      cronograma: normalizarCronograma((p as { cronograma?: unknown }).cronograma),
       meta,
       ...(Array.isArray(p.servicosDocumento) ? { servicosDocumento: p.servicosDocumento as ServicoPadrao[] } : {})
     };
@@ -1585,6 +1635,7 @@ async function fetchOrcamentoDetail(centroCustoId: string, orcamentoId: string):
                 : {},
             showDetalhesFinanceiros: Boolean(so.showDetalhesFinanceiros),
             itensOcultosNoOrcamento: Array.isArray(so.itensOcultosNoOrcamento) ? so.itensOcultosNoOrcamento : [],
+            cronograma: normalizarCronograma(so.cronograma),
             meta,
             ...(Array.isArray(so.servicosDocumento) ? { servicosDocumento: so.servicosDocumento as ServicoPadrao[] } : {})
           }
@@ -3213,6 +3264,8 @@ export function OrcamentoPageView({
   const [servicosSearch, setServicosSearch] = useState('');
   const [contratoSearch, setContratoSearch] = useState('');
   const [showDetalhesFinanceiros, setShowDetalhesFinanceiros] = useState(false);
+  /** Composições marcadas na grade da aba Orçamento (`servicoId|subtituloId|chave`). */
+  const [itensSelecionadosMontagem, setItensSelecionadosMontagem] = useState<Set<string>>(new Set());
   const servicosDropdownRef = useRef<HTMLDivElement | null>(null);
   const contratoDropdownRef = useRef<HTMLDivElement | null>(null);
   const contratoSearchInputRef = useRef<HTMLInputElement | null>(null);
@@ -3237,7 +3290,7 @@ export function OrcamentoPageView({
 
   // Analítico (detalhamento) da composição para visualização/exportação.
   const [orcamentoViewTab, setOrcamentoViewTab] = useState<
-    'dados' | 'montagem' | 'analitico' | 'memorial' | 'planilhaAnalitica'
+    'dados' | 'montagem' | 'analitico' | 'memorial' | 'planilhaAnalitica' | 'cronograma'
   >('montagem');
   const [memorialItemKey, setMemorialItemKey] = useState<string | null>(null);
   // Cache do analítico por composição (por item) para não recalcular a cada clique.
@@ -3246,9 +3299,11 @@ export function OrcamentoPageView({
   const [draftCalc, setDraftCalc] = useState<Record<string, string>>({});
   const [calcHoverSourceIds, setCalcHoverSourceIds] = useState<string[]>([]);
   const [insumosAnaliticoManuais, setInsumosAnaliticoManuais] = useState<Record<string, InsumoAnaliticoManual[]>>({});
-  /** Menu botão direito — composição/insumo catálogo (adicionar manual + excluir composição) ou insumo manual (abaixo + excluir linha). */
+  const [insumosAnaliticoOcultos, setInsumosAnaliticoOcultos] = useState<string[]>([]);
+  /** Menu botão direito — composição, insumo do catálogo ou insumo manual. */
   const [menuCtxAnalitico, setMenuCtxAnalitico] = useState<
     | { kind: 'composicao'; left: number; top: number; composicaoKey: string }
+    | { kind: 'insumo'; left: number; top: number; parentKey: string; insumoKey: string; descricao: string }
     | { kind: 'manual'; left: number; top: number; parentKey: string; insumoId: string; idx: number }
     | null
   >(null);
@@ -3347,6 +3402,29 @@ export function OrcamentoPageView({
   }, [centroCustoId, costCenters]);
 
   const [meta, setMeta] = useState<OrcamentoMeta>(sessaoVazia().meta!);
+  const [cronograma, setCronograma] = useState<CronogramaPersist>(() => cronogramaVazio());
+
+  const dataFimOrcamento = useMemo(
+    () => calcularDataFimOrcamento(meta.dataAbertura, meta.dataEnvio, meta.prazoExecucaoDias),
+    [meta.dataAbertura, meta.dataEnvio, meta.prazoExecucaoDias]
+  );
+
+  useEffect(() => {
+    const ini = meta.dataAbertura || '';
+    const fim = dataFimOrcamento || '';
+    setCronograma((c) => {
+      if ((c.config?.dataInicioObra ?? '') === ini && (c.config?.dataFimObra ?? '') === fim) return c;
+      return {
+        ...c,
+        config: {
+          ...c.config,
+          dataInicioObra: ini,
+          dataFimObra: fim
+        }
+      };
+    });
+  }, [meta.dataAbertura, dataFimOrcamento]);
+
   const [novoOrcamentoMetaOpen, setNovoOrcamentoMetaOpen] = useState(false);
   const [novoOrcamentoStep, setNovoOrcamentoStep] = useState<1 | 2 | 3>(1);
   const [novoOrcamentoMetaDraft, setNovoOrcamentoMetaDraft] = useState<OrcamentoMeta & { nomeOrcamento: string }>(
@@ -3427,7 +3505,9 @@ export function OrcamentoPageView({
         const options = employees
           .map((e: any) => ({
             id: String(e?.id ?? ''),
-            name: String(e?.name ?? '').trim()
+            name: String(e?.name ?? '').trim(),
+            cpf: e?.cpf ? String(e.cpf) : null,
+            profilePhotoUrl: e?.profilePhotoUrl ? String(e.profilePhotoUrl) : null,
           }))
           .filter((e: EmployeeOption) => e.id && e.name);
         const uniqueMap = new Map<string, EmployeeOption>();
@@ -3450,6 +3530,19 @@ export function OrcamentoPageView({
       cancelled = true;
     };
   }, []);
+
+  const employeeSelectOptions = useMemo(
+    () =>
+      toPersonSelectOptions(
+        employeeOptions.map((employee) => ({
+          value: employee.name,
+          name: employee.name,
+          cpf: employee.cpf,
+          profilePhotoUrl: employee.profilePhotoUrl,
+        })),
+      ),
+    [employeeOptions],
+  );
 
   /**
    * Catálogo global (S3): depende do contrato e re-roda ao trocar orçamento.
@@ -3538,13 +3631,19 @@ export function OrcamentoPageView({
     setPlanilhaTipoInsumo({});
     setPlanilhaCompraDraft({});
     setShowDetalhesFinanceiros(false);
+    setCronograma(cronogramaVazio());
     setServicosPadraoContrato([]);
+    setInsumosAnaliticoManuais({});
+    setInsumosAnaliticoOcultos([]);
 
     const aplicarSessao = (s: SessaoOrcamentoPersist | null) => {
       if (!s) return;
       setSubtitulosNoOrcamento(s.subtitulosNoOrcamento);
       setItensOcultosNoOrcamento(
         Array.isArray(s.itensOcultosNoOrcamento) ? s.itensOcultosNoOrcamento : []
+      );
+      setInsumosAnaliticoOcultos(
+        Array.isArray(s.insumosAnaliticoOcultos) ? s.insumosAnaliticoOcultos : []
       );
       setQuantidadesPorItem(s.quantidadesPorItem);
       setDimensoesPorItem(s.dimensoesPorItem);
@@ -3553,6 +3652,7 @@ export function OrcamentoPageView({
       setPlanilhaTipoInsumo(normalizarPlanilhaTipoInsumo(s.planilhaTipoInsumo as Record<string, unknown>));
       setPlanilhaCompraDraft({});
       setShowDetalhesFinanceiros(s.showDetalhesFinanceiros);
+      setCronograma(normalizarCronograma(s.cronograma));
       setMeta(s.meta ? s.meta : sessaoVazia().meta!);
     };
 
@@ -3711,7 +3811,9 @@ export function OrcamentoPageView({
       planilhaTipoInsumo,
       showDetalhesFinanceiros,
       meta,
-      itensOcultosNoOrcamento
+      itensOcultosNoOrcamento,
+      insumosAnaliticoOcultos,
+      cronograma
     };
     servicosImportsRef.current = { servicos, imports };
     if (centroCustoId && orcamentoAtivoId) {
@@ -3733,11 +3835,11 @@ export function OrcamentoPageView({
     showDetalhesFinanceiros,
     meta,
     itensOcultosNoOrcamento,
+    insumosAnaliticoOcultos,
+    cronograma,
     servicos,
     imports
   ]);
-
-  /** Salva montagem + planilha analítica no servidor após pausa na edição (sem alterar revisão/data de envio). */
   useEffect(() => {
     const ORCAMENTO_AUTOSAVE_MS = 900;
     if (!centroCustoId || !orcamentoAtivoId || loadingFromApi) return;
@@ -3809,6 +3911,7 @@ export function OrcamentoPageView({
     showDetalhesFinanceiros,
     meta,
     itensOcultosNoOrcamento,
+    cronograma,
     servicos,
     imports
   ]);
@@ -3932,7 +4035,13 @@ export function OrcamentoPageView({
         percentual: (r.percentual || '').trim()
       })),
       dataAbertura: novoOrcamentoMetaDraft.dataAbertura || todayInputDate(),
-      dataEnvio: ''
+      dataEnvio:
+        novoOrcamentoMetaDraft.dataEnvio.trim() ||
+        calcularDataFimOrcamento(
+          novoOrcamentoMetaDraft.dataAbertura || todayInputDate(),
+          '',
+          novoOrcamentoMetaDraft.prazoExecucaoDias
+        )
     };
     if (!d.osNumeroPasta || !d.descricao) {
       toast.error('Preencha OS/Nº da pasta e descrição.');
@@ -5083,6 +5192,7 @@ export function OrcamentoPageView({
       return next;
     });
     setItensOcultosNoOrcamento(prev => (prev.includes(itemKey) ? prev : [...prev, itemKey]));
+    setInsumosAnaliticoOcultos(prev => prev.filter(k => !k.startsWith(`${itemKey}|insumo`)));
     const baseOcultos = sessaoRef.current.itensOcultosNoOrcamento ?? [];
     const nextOcultosPersist = baseOcultos.includes(itemKey) ? baseOcultos : [...baseOcultos, itemKey];
     if (centroCustoId && orcamentoAtivoId) {
@@ -5102,6 +5212,84 @@ export function OrcamentoPageView({
     const subtituloId = parts[parts.length - 2]!;
     const servicoId = parts.slice(0, -2).join('|');
     removeItemFromServico(servicoId, subtituloId, chave);
+  };
+
+  const apagarItensSelecionadosMontagem = () => {
+    const keys = Array.from(itensSelecionadosMontagem);
+    if (keys.length === 0) return;
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(
+        keys.length === 1
+          ? 'Apagar o item selecionado?'
+          : `Apagar ${keys.length} itens selecionados?`
+      )
+    ) {
+      return;
+    }
+
+    const itemKeys = keys.filter(isChaveComposicaoMontagem);
+    const blocoKeys = keys
+      .filter(k => k.startsWith(SELECAO_MONTAGEM_BLOCO_PREFIX))
+      .map(k => k.slice(SELECAO_MONTAGEM_BLOCO_PREFIX.length));
+
+    let nextOcultos = [...itensOcultosNoOrcamento];
+    const nextQuantidades = { ...quantidadesPorItem };
+    const nextDimensoes = { ...dimensoesPorItem };
+    let nextSubtitulos = [...subtitulosNoOrcamento];
+    const blocosAfetados = new Set<string>(blocoKeys);
+
+    for (const itemKey of itemKeys) {
+      if (!nextOcultos.includes(itemKey)) nextOcultos.push(itemKey);
+      delete nextQuantidades[itemKey];
+      delete nextDimensoes[itemKey];
+      const parsed = parseItemKeyOrcamento(itemKey);
+      if (parsed) blocosAfetados.add(parsed.blocoKey);
+    }
+
+    for (const blocoKey of Array.from(blocosAfetados)) {
+      const sub = findSubtituloPorBlocoKey(servicos, blocoKey);
+      const blocoVazioSelecionado = blocoKeys.includes(blocoKey);
+      if (blocoVazioSelecionado) {
+        nextSubtitulos = nextSubtitulos.filter(k => k !== blocoKey);
+        nextOcultos = nextOcultos.filter(k => !k.startsWith(`${blocoKey}|`));
+        Object.keys(nextQuantidades).forEach(k => {
+          if (k.startsWith(`${blocoKey}|`)) delete nextQuantidades[k];
+        });
+        Object.keys(nextDimensoes).forEach(k => {
+          if (k.startsWith(`${blocoKey}|`)) delete nextDimensoes[k];
+        });
+        continue;
+      }
+      if (!sub || sub.itens.length === 0) continue;
+      const allHidden = sub.itens.every(i =>
+        nextOcultos.includes(buildItemKeyOrcamento(blocoKey, i.chave))
+      );
+      if (!allHidden) continue;
+      nextSubtitulos = nextSubtitulos.filter(k => k !== blocoKey);
+      nextOcultos = nextOcultos.filter(k => !k.startsWith(`${blocoKey}|`));
+      Object.keys(nextQuantidades).forEach(k => {
+        if (k.startsWith(`${blocoKey}|`)) delete nextQuantidades[k];
+      });
+      Object.keys(nextDimensoes).forEach(k => {
+        if (k.startsWith(`${blocoKey}|`)) delete nextDimensoes[k];
+      });
+    }
+
+    setSubtitulosNoOrcamento(nextSubtitulos);
+    setItensOcultosNoOrcamento(nextOcultos);
+    setQuantidadesPorItem(nextQuantidades);
+    setDimensoesPorItem(nextDimensoes);
+    setItensSelecionadosMontagem(new Set());
+
+    if (centroCustoId && orcamentoAtivoId) {
+      persistToApi(servicos, imports, {
+        ...sessaoRef.current,
+        subtitulosNoOrcamento: nextSubtitulos,
+        itensOcultosNoOrcamento: nextOcultos
+      });
+    }
+    toast.success(keys.length === 1 ? 'Item removido' : `${keys.length} itens removidos`);
   };
 
 
@@ -5516,6 +5704,90 @@ export function OrcamentoPageView({
   /** Todos os itens do orçamento na ordem da memória de cálculo (inclui UN e medições dimensionais). */
   const itensMemoriaCalculoLista = useMemo(() => itensCalculados, [itensCalculados]);
 
+  const chavesItensMontagemVisiveis = useMemo(
+    () => itensCalculados.map(row => row.key),
+    [itensCalculados]
+  );
+  const chavesMontagemPorServicoNome = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const row of itensCalculados) {
+      const list = m.get(row.servicoNome) ?? [];
+      list.push(row.key);
+      m.set(row.servicoNome, list);
+    }
+    return m;
+  }, [itensCalculados]);
+  const chavesMontagemPorBlocoKey = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const bloco of subtitulosAdicionados) {
+      m.set(
+        bloco.key,
+        itensCalculados
+          .filter(r => r.servicoNome === bloco.servicoNome && r.subtituloNome === bloco.subtituloNome)
+          .map(r => r.key)
+      );
+    }
+    return m;
+  }, [subtitulosAdicionados, itensCalculados]);
+  const chavesSelecionaveisMontagem = useMemo(() => {
+    const keys = [...chavesItensMontagemVisiveis];
+    for (const bloco of subtitulosAdicionados) {
+      if ((chavesMontagemPorBlocoKey.get(bloco.key) ?? []).length === 0) {
+        keys.push(chaveSelecaoBlocoMontagem(bloco.key));
+      }
+    }
+    return keys;
+  }, [chavesItensMontagemVisiveis, subtitulosAdicionados, chavesMontagemPorBlocoKey]);
+  const montagemChavesGrupoSubtitulo = (blocoKey: string) => {
+    const itemKeys = chavesMontagemPorBlocoKey.get(blocoKey) ?? [];
+    if (itemKeys.length > 0) return itemKeys;
+    return [chaveSelecaoBlocoMontagem(blocoKey)];
+  };
+  const montagemChavesGrupoTitulo = (servicoNome: string) => {
+    const itemKeys = chavesMontagemPorServicoNome.get(servicoNome) ?? [];
+    const blocoKeysVazios = subtitulosAdicionados
+      .filter(b => b.servicoNome === servicoNome)
+      .filter(b => (chavesMontagemPorBlocoKey.get(b.key) ?? []).length === 0)
+      .map(b => chaveSelecaoBlocoMontagem(b.key));
+    return [...itemKeys, ...blocoKeysVazios];
+  };
+  const todosItensMontagemSelecionados =
+    chavesSelecionaveisMontagem.length > 0 &&
+    chavesSelecionaveisMontagem.every(key => itensSelecionadosMontagem.has(key));
+  const algumItemMontagemSelecionado = chavesSelecionaveisMontagem.some(key =>
+    itensSelecionadosMontagem.has(key)
+  );
+
+  useEffect(() => {
+    setItensSelecionadosMontagem(prev => {
+      const validas = new Set(chavesSelecionaveisMontagem);
+      const next = new Set(Array.from(prev).filter(key => validas.has(key)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [chavesSelecionaveisMontagem]);
+
+  const estadoCheckboxGrupoMontagem = (keys: string[]) => {
+    if (keys.length === 0) {
+      return { checked: false, indeterminate: false };
+    }
+    const selecionados = keys.filter(key => itensSelecionadosMontagem.has(key)).length;
+    return {
+      checked: selecionados === keys.length,
+      indeterminate: selecionados > 0 && selecionados < keys.length
+    };
+  };
+
+  const alternarGrupoMontagem = (keys: string[], checked: boolean) => {
+    setItensSelecionadosMontagem(prev => {
+      const next = new Set(prev);
+      for (const key of keys) {
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
+  };
+
   const linhasAnaliticoOrcamento = useMemo(() => {
     type Linha =
       | {
@@ -5568,6 +5840,7 @@ export function OrcamentoPageView({
 
     const out: Linha[] = [];
     if (subtitulosAdicionados.length === 0) return out;
+    const insumosOcultosSet = new Set(insumosAnaliticoOcultos);
 
     const servicoNumero = new Map<string, number>();
     let nextMain = 0;
@@ -5648,13 +5921,15 @@ export function OrcamentoPageView({
 
         for (let i = 0; i < unitAnalitico.linhas.length; i++) {
           const ln = unitAnalitico.linhas[i];
+          const insumoKey = `${key}|insumo|${i}`;
+          if (insumosOcultosSet.has(insumoKey)) continue;
           const quantBase = ln.quantidade || 0;
           const qtd = quantBase * (row.quantidade || 0);
           const valorUnitInsumo = ln.precoUnitario || 0;
           const totalInsumo = qtd * valorUnitInsumo;
           out.push({
             kind: 'insumo',
-            key: `${key}|insumo|${i}`,
+            key: insumoKey,
             parentKey: key,
             item: `${itemComp}.${i + 1}`,
             codigo: ln.codigo ?? '',
@@ -5673,7 +5948,7 @@ export function OrcamentoPageView({
       }
     }
     return out;
-  }, [subtitulosAdicionados, itensCalculados, mapaComposicoes]);
+  }, [subtitulosAdicionados, itensCalculados, mapaComposicoes, insumosAnaliticoOcultos]);
 
   /** Número do item como na planilha analítica (ex. 1.2.3) — memória de cálculo. */
   const rotuloItemComposicaoPorKey = useMemo(() => {
@@ -5683,6 +5958,64 @@ export function OrcamentoPageView({
     }
     return m;
   }, [linhasAnaliticoOrcamento]);
+
+  const linhasCronograma = useMemo((): CronogramaLinhaServico[] => {
+    type Acc = CronogramaLinhaServico & { blocosMap: Map<string, CronogramaLinhaSubtitulo> };
+    const map = new Map<string, Acc>();
+    for (const row of itensCalculados) {
+      const blocoKey = row.blocoKey;
+      const sep = blocoKey.lastIndexOf('|');
+      const servicoKey = sep > 0 ? blocoKey.slice(0, sep) : blocoKey;
+      const compRef = {
+        chave: row.item.chave,
+        codigo: row.item.codigo,
+        descricao: row.item.descricao,
+        subtituloNome: row.subtituloNome,
+        quantidade: row.quantidade,
+        unidade: row.item.unidade
+      };
+      let linha = map.get(servicoKey);
+      if (!linha) {
+        linha = {
+          servicoKey,
+          servicoNome: row.servicoNome,
+          valorTotal: 0,
+          qtdItens: 0,
+          composicoes: [],
+          subtitulos: [],
+          blocosMap: new Map()
+        };
+        map.set(servicoKey, linha);
+      }
+      linha.valorTotal += row.total;
+      linha.qtdItens += 1;
+      linha.composicoes.push(compRef);
+
+      let bloco = linha.blocosMap.get(blocoKey);
+      if (!bloco) {
+        bloco = {
+          blocoKey,
+          subtituloNome: row.subtituloNome,
+          valorTotal: 0,
+          qtdItens: 0,
+          composicoes: []
+        };
+        linha.blocosMap.set(blocoKey, bloco);
+      }
+      bloco.valorTotal += row.total;
+      bloco.qtdItens += 1;
+      bloco.composicoes.push(compRef);
+    }
+    return Array.from(map.values()).map(({ blocosMap, ...linha }) => ({
+      ...linha,
+      subtitulos: Array.from(blocosMap.values())
+    }));
+  }, [itensCalculados]);
+
+  const nomeOrcamentoAtivo = useMemo(
+    () => listaOrcamentos.find((o) => o.id === orcamentoAtivoId)?.nome ?? '',
+    [listaOrcamentos, orcamentoAtivoId]
+  );
 
   /** Ficha de demanda: só composições e insumos (sem faixas de título/subtítulo). */
   const linhasFichaDemanda = useMemo(() => {
@@ -6715,6 +7048,10 @@ export function OrcamentoPageView({
       ...prev,
       [parentKey]: (prev[parentKey] ?? []).filter((ins) => ins.id !== id)
     }));
+  };
+
+  const ocultarInsumoAnalitico = (insumoKey: string) => {
+    setInsumosAnaliticoOcultos(prev => (prev.includes(insumoKey) ? prev : [...prev, insumoKey]));
   };
 
   const normalizarNumeroManualAnalitico = (
@@ -7800,7 +8137,7 @@ export function OrcamentoPageView({
                     </div>
                     <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                       {!carregandoListaOrcamentos && listaOrcamentos.length > 0 && (
-                        <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                        <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                           <input
                             type="text"
@@ -7850,43 +8187,52 @@ export function OrcamentoPageView({
                         </span>
                         <span>Página 1 de 1</span>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className={`w-full border-collapse text-sm ${gradeTableCls}`}>
+                      <div className="table-scroll">
+                        <table className="w-full table-fixed text-sm">
                           <thead className="border-b border-gray-200 dark:border-gray-700">
-                            <tr className={gradeTableRowTrCls}>
-                              <th className="px-3 sm:px-6 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            <tr>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[10%] min-w-[4rem]">
+                                ID
+                              </th>
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                 Orçamento
                               </th>
-                              <th className="px-3 sm:px-6 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[22%]">
                                 Atualizado
                               </th>
-                              <th className="px-3 sm:px-6 py-2.5 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                Ação
-                              </th>
+                              <th className={listTableRowClasses.actionTh}>Ação</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                             {filteredListaOrcamentos.length === 0 ? (
                               <tr>
-                                <td colSpan={3} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                                   Nenhum orçamento encontrado para essa busca.
                                 </td>
                               </tr>
                             ) : (
-                              filteredListaOrcamentos.map((o) => (
+                              filteredListaOrcamentos.map((o, index) => (
                                 <tr
                                   key={o.id}
-                                  className={`transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${gradeTableRowTrCls}`}
+                                  onClick={() => abrirOrcamentoDaLista(o.id)}
+                                  className={getListTableRowClassName(true)}
+                                  aria-label={`Abrir orçamento ${o.nome}`}
                                 >
-                                  <td className="max-w-[min(100%,24rem)] whitespace-nowrap px-3 py-2.5 align-middle sm:px-6">
-                                    <span className="block truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                      {o.nome}
-                                    </span>
+                                  <td className="whitespace-nowrap px-3 py-3 font-mono text-sm text-gray-900 dark:text-gray-100 sm:px-6">
+                                    {formatCadastroListId(null, index + 1)}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-2.5 align-middle text-left text-sm text-gray-700 dark:text-gray-300 tabular-nums sm:px-6">
+                                  <td className="max-w-0 px-3 py-3 align-middle sm:px-6">
+                                    <ListRowNavigableLabel className="block truncate font-medium">
+                                      {o.nome}
+                                    </ListRowNavigableLabel>
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-3 text-left text-sm text-gray-700 dark:text-gray-300 tabular-nums sm:px-6">
                                     {o.updatedAt ? new Date(o.updatedAt).toLocaleString('pt-BR') : '—'}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-2.5 text-right align-middle sm:px-6">
+                                  <td
+                                    className={listTableRowClasses.actionTd}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     <div className="flex justify-end">
                                       <button
                                         type="button"
@@ -7903,8 +8249,8 @@ export function OrcamentoPageView({
                                             return { orcamentoId: o.id, nome: o.nome, top: r.bottom + 4, left };
                                           });
                                         }}
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
-                                        aria-label="Menu de ações"
+                                        className={rowActionMenuButtonClass(orcamentoListaActionMenu?.orcamentoId === o.id)}
+                                        aria-label="Abrir ações"
                                         aria-expanded={orcamentoListaActionMenu?.orcamentoId === o.id}
                                         aria-haspopup="menu"
                                       >
@@ -7918,55 +8264,43 @@ export function OrcamentoPageView({
                           </tbody>
                         </table>
                       </div>
-                      {orcamentoListaActionMenu &&
-                        typeof document !== 'undefined' &&
-                        createPortal(
-                          <>
-                            <div
-                              className="fixed inset-0 z-[200]"
-                              aria-hidden
-                              onClick={() => setOrcamentoListaActionMenu(null)}
-                            />
-                            <div
-                              role="menu"
-                              className="fixed z-[201] w-56 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800 overflow-hidden"
-                              style={{
-                                top: orcamentoListaActionMenu.top,
-                                left: orcamentoListaActionMenu.left
-                              }}
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const id = orcamentoListaActionMenu.orcamentoId;
-                                  setOrcamentoListaActionMenu(null);
-                                  abrirOrcamentoDaLista(id);
-                                }}
-                                className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-                              >
-                                <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                                <span>Ver detalhes</span>
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const { orcamentoId, nome } = orcamentoListaActionMenu;
-                                  setOrcamentoListaActionMenu(null);
-                                  excluirOrcamentoDaLista(orcamentoId, nome);
-                                }}
-                                className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
-                              >
-                                <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-                                <span>Excluir</span>
-                              </button>
-                            </div>
-                          </>,
-                          document.body
-                        )}
+                      {orcamentoListaActionMenu && (
+                        <ActionMenuOverlay
+                          open
+                          onClose={() => setOrcamentoListaActionMenu(null)}
+                          top={orcamentoListaActionMenu.top}
+                          left={orcamentoListaActionMenu.left}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const id = orcamentoListaActionMenu.orcamentoId;
+                              setOrcamentoListaActionMenu(null);
+                              abrirOrcamentoDaLista(id);
+                            }}
+                            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                          >
+                            <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                            <span>Ver detalhes</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const { orcamentoId, nome } = orcamentoListaActionMenu;
+                              setOrcamentoListaActionMenu(null);
+                              excluirOrcamentoDaLista(orcamentoId, nome);
+                            }}
+                            className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
+                          >
+                            <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                            <span>Excluir</span>
+                          </button>
+                        </ActionMenuOverlay>
+                      )}
                     </>
                   )}
                 </CardContent>
@@ -8041,6 +8375,17 @@ export function OrcamentoPageView({
                       >
                         Ficha de demanda
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrcamentoViewTab('cronograma')}
+                        className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 ${
+                          orcamentoViewTab === 'cronograma'
+                            ? 'bg-red-600 text-white shadow-sm'
+                            : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        Cronograma
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -8099,8 +8444,18 @@ export function OrcamentoPageView({
                         <p className="text-xs uppercase tracking-[0.08em] text-gray-500 dark:text-gray-400 mb-2.5">Datas</p>
                         <div className="space-y-2">
                           {[
-                            ['Data de abertura', meta.dataAbertura || '—'],
-                            ['Data de envio', meta.dataEnvio || '—']
+                            ['Data de início', formatDataBr(meta.dataAbertura)],
+                            [
+                              'Data de fim',
+                              formatDataBr(
+                                meta.dataEnvio ||
+                                  calcularDataFimOrcamento(
+                                    meta.dataAbertura,
+                                    meta.dataEnvio,
+                                    meta.prazoExecucaoDias
+                                  )
+                              )
+                            ]
                           ].map(([label, value]) => (
                             <div key={label} className="grid grid-cols-[10.5rem_1fr] gap-3">
                               <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
@@ -8169,7 +8524,7 @@ export function OrcamentoPageView({
                       />
                     ) : (
                     <>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                    <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                       <table className={`min-w-full border-collapse ${gradeTableCls}`}>
                         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                           <tr className={gradeTableRowTrCls}>
@@ -8180,8 +8535,8 @@ export function OrcamentoPageView({
                             <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Descrição</th>
                             <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Und</th>
                             <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Quant.</th>
-                            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Quantidade real</th>
-                            <th className="px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Quantidade orçada</th>
+                            <th className="whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Quant. real</th>
+                            <th className="whitespace-nowrap px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Quant. Orçada</th>
                             <th className={`${GRADE_COL_MOEDA_UNIT} px-2 py-2.5 text-right text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600`}>Valor unit</th>
                             <th className="px-3 py-2.5 text-right text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Total</th>
                           </tr>
@@ -8190,7 +8545,7 @@ export function OrcamentoPageView({
                           {linhasAnaliticoOrcamento.map((l, idxLinha) => {
                             if (l.kind === 'tituloServico') {
                               return (
-                                <tr key={l.key} className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls}`}>
+                                <tr key={l.key} className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}>
                                   <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-sm font-bold tabular-nums text-white">
                                     {l.main}
                                   </td>
@@ -8207,7 +8562,7 @@ export function OrcamentoPageView({
                               return (
                                 <tr
                                   key={l.key}
-                                  className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls}`}
+                                  className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}
                                 >
                                   <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
                                     {`${l.main}.${l.subIdx}`}
@@ -8300,10 +8655,12 @@ export function OrcamentoPageView({
                                   left = Math.min(left, window.innerWidth - mw - 8);
                                   top = Math.min(top, window.innerHeight - mh - 8);
                                   setMenuCtxAnalitico({
-                                    kind: 'composicao',
+                                    kind: 'insumo',
                                     left,
                                     top,
-                                    composicaoKey: l.parentKey
+                                    parentKey: l.parentKey,
+                                    insumoKey: l.key,
+                                    descricao: l.descricao
                                   });
                                 }}
                               >
@@ -8451,21 +8808,14 @@ export function OrcamentoPageView({
                         Exportar orçamento analítico (.xlsx)
                       </button>
                     </div>
-                    {menuCtxAnalitico &&
-                      typeof document !== 'undefined' &&
-                      createPortal(
-                        <>
-                          <div
-                            className="fixed inset-0 z-[200]"
-                            aria-hidden
-                            onClick={() => setMenuCtxAnalitico(null)}
-                          />
-                          <div
-                            role="menu"
-                            className="fixed z-[201] min-w-[17rem] max-w-[min(100vw-1rem,22rem)] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
-                            style={{ left: menuCtxAnalitico.left, top: menuCtxAnalitico.top }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
+                    {menuCtxAnalitico && (
+                      <ActionMenuOverlay
+                        open
+                        onClose={() => setMenuCtxAnalitico(null)}
+                        top={menuCtxAnalitico.top}
+                        left={menuCtxAnalitico.left}
+                        panelClassName="min-w-[17rem] max-w-[min(100vw-1rem,22rem)] py-1"
+                      >
                             {menuCtxAnalitico.kind === 'composicao' ? (
                               <>
                                 <button
@@ -8502,6 +8852,34 @@ export function OrcamentoPageView({
                                   Excluir composição do orçamento
                                 </button>
                               </>
+                            ) : menuCtxAnalitico.kind === 'insumo' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/80"
+                                  onClick={() => {
+                                    addInsumoManualAnalitico(menuCtxAnalitico.parentKey);
+                                    setMenuCtxAnalitico(null);
+                                  }}
+                                >
+                                  <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                                  Adicionar insumo manual
+                                </button>
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-red-700 hover:bg-red-50 dark:border-gray-700 dark:text-red-400 dark:hover:bg-red-950/40"
+                                  onClick={() => {
+                                    ocultarInsumoAnalitico(menuCtxAnalitico.insumoKey);
+                                    setMenuCtxAnalitico(null);
+                                    toast.success('Insumo removido do orçamento analítico.');
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                                  Excluir insumo
+                                </button>
+                              </>
                             ) : (
                               <>
                                 <button
@@ -8536,10 +8914,8 @@ export function OrcamentoPageView({
                                 </button>
                               </>
                             )}
-                          </div>
-                        </>,
-                        document.body
-                      )}
+                      </ActionMenuOverlay>
+                    )}
                     </>
                     )}
                   </div>
@@ -8556,7 +8932,7 @@ export function OrcamentoPageView({
                       />
                     ) : (
                         <>
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                        <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                           <table className={`min-w-full border-collapse ${gradeTableCls}`}>
                             <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                               <tr className={gradeTableRowTrCls}>
@@ -8686,7 +9062,7 @@ export function OrcamentoPageView({
                                   const listaAggTit =
                                     resumoSecoesFicha.aggPorTituloParaTooltip.get(String(l.main)) ?? [];
                                   return (
-                                    <tr key={l.key} className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls}`}>
+                                    <tr key={l.key} className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}>
                                       <td
                                         title={PLANILHA_ANALITICA_TOOLTIP.item}
                                         className={`${itemW} cursor-help font-bold text-white`}
@@ -8742,7 +9118,7 @@ export function OrcamentoPageView({
                                   return (
                                     <tr
                                       key={l.key}
-                                      className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls}`}
+                                      className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}
                                     >
                                       <td
                                         title={PLANILHA_ANALITICA_TOOLTIP.item}
@@ -8885,8 +9261,12 @@ export function OrcamentoPageView({
                                       </td>
                                       <td
                                         title={PLANILHA_ANALITICA_TOOLTIP.tipoCompLinha}
-                                        className="cursor-help px-3 py-2.5 text-sm text-center text-gray-500 dark:text-gray-400 border-l border-gray-200 dark:border-gray-700"
-                                      />
+                                        className={`${tdPlanilhaTipoCls} cursor-help`}
+                                      >
+                                        <span className={planilhaTipoVazioCls} aria-hidden>
+                                          —
+                                        </span>
+                                      </td>
                                       <td
                                         title={PLANILHA_ANALITICA_TOOLTIP.un}
                                         className="cursor-help px-3 py-2.5 text-center text-sm font-medium text-gray-800 dark:text-gray-200 border-l border-gray-200 dark:border-gray-700"
@@ -9087,7 +9467,7 @@ export function OrcamentoPageView({
                                     </td>
                                     <td
                                       title={PLANILHA_ANALITICA_TOOLTIP.tipo}
-                                      className="cursor-help p-0 text-sm text-center font-medium text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700"
+                                      className={`${tdPlanilhaTipoCls} cursor-help`}
                                     >
                                       <select
                                         value={
@@ -9471,6 +9851,27 @@ export function OrcamentoPageView({
                 )}
 
 
+                {!loadingFromApi && orcamentoViewTab === 'cronograma' && (
+                  linhasCronograma.length === 0 ? (
+                    <OrcamentoSecaoVazia
+                      titulo="Cronograma vazio"
+                      texto="Adicione serviços na aba Orçamento para planejar prazos e acompanhar o andamento da obra."
+                      Icon={Calendar}
+                      onIrOrcamento={() => setOrcamentoViewTab('montagem')}
+                    />
+                  ) : (
+                    <OrcamentoCronogramaPainel
+                      linhas={linhasCronograma}
+                      cronograma={cronograma}
+                      onChange={setCronograma}
+                      centroCustoId={centroCustoId}
+                      orcamentoId={orcamentoAtivoId}
+                      dataInicioObra={meta.dataAbertura}
+                      dataFimObra={dataFimOrcamento}
+                    />
+                  )
+                )}
+
                 {!loadingFromApi && orcamentoViewTab === 'memorial' && meta.importadoPlanilha && (
                   <OrcamentoSecaoVazia
                     titulo="Memória de cálculo não disponível"
@@ -9557,7 +9958,7 @@ export function OrcamentoPageView({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setShowServicosDropdown(v => !v); }}
-                      className="w-full h-10 pl-10 pr-11 text-left rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent relative"
+                      className="w-full h-10 pl-10 pr-11 text-left rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent relative"
                     >
                       <ListPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 pointer-events-none" />
                       <span className="block pr-6 truncate">
@@ -9774,23 +10175,50 @@ export function OrcamentoPageView({
 
                 {subtitulosAdicionados.length > 0 && (
                   <>
-                    <div className="flex justify-end">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {itensSelecionadosMontagem.size > 0 && (
+                        <button
+                          type="button"
+                          onClick={apagarItensSelecionadosMontagem}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          Apagar ({itensSelecionadosMontagem.size})
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setShowDetalhesFinanceiros(v => !v)}
-                        className="text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        className="ml-auto text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         {showDetalhesFinanceiros ? 'Ocultar detalhes financeiros' : 'Ver detalhes financeiros'}
                       </button>
                     </div>
                     <div
                       ref={montagemOrcamentoTableRef}
-                      className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
+                      className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900"
                     >
-                      <table className={`min-w-[1210px] w-full border-collapse text-sm ${gradeTableCls}`}>
+                      <table className={`min-w-[1254px] w-full border-collapse text-sm ${gradeTableCls}`}>
                         <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0 z-10 border-b border-gray-200 dark:border-gray-700">
                           <tr className={gradeTableRowTrCls}>
-                            <th className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                            <th className="w-12 min-w-[3rem] px-2 py-2.5 text-center">
+                              <div className="flex justify-center">
+                                <TableCheckbox
+                                  checked={todosItensMontagemSelecionados}
+                                  indeterminate={algumItemMontagemSelecionado && !todosItensMontagemSelecionados}
+                                  onChange={checked => {
+                                    if (checked) {
+                                      setItensSelecionadosMontagem(new Set(chavesSelecionaveisMontagem));
+                                    } else {
+                                      setItensSelecionadosMontagem(new Set());
+                                    }
+                                  }}
+                                  onClick={e => e.stopPropagation()}
+                                  ariaLabel="Selecionar todas as composições do orçamento"
+                                />
+                              </div>
+                            </th>
+                            <th className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">
                               Item
                             </th>
                             <th className="w-[88px] px-3 py-2.5 text-center text-[11px] font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide border-l border-gray-300 dark:border-gray-600">Código</th>
@@ -9813,7 +10241,7 @@ export function OrcamentoPageView({
                         </thead>
                         <tbody className="divide-y divide-gray-200/80 dark:divide-gray-700">
                           {(() => {
-                            const colunasTotais = 11 + (showDetalhesFinanceiros ? 2 : 0);
+                            const colunasTotais = 12 + (showDetalhesFinanceiros ? 2 : 0);
                             const servicoNumero = new Map<string, number>();
                             let nextMain = 0;
                             for (const b of subtitulosAdicionados) {
@@ -9834,19 +10262,34 @@ export function OrcamentoPageView({
                           !blocoAnt ||
                           normalizarNomeServicoOrcamento(blocoAnt.servicoNome) !==
                             normalizarNomeServicoOrcamento(bloco.servicoNome);
+                        const chavesGrupoTitulo = montagemChavesGrupoTitulo(bloco.servicoNome);
+                        const chavesGrupoSubtitulo = montagemChavesGrupoSubtitulo(bloco.key);
+                        const checkboxTitulo = estadoCheckboxGrupoMontagem(chavesGrupoTitulo);
+                        const checkboxSubtitulo = estadoCheckboxGrupoMontagem(chavesGrupoSubtitulo);
                         return (
                           <React.Fragment key={bloco.key}>
                             {mostrarTituloServico && (
                             <tr
-                              className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls}`}
+                              className={`bg-red-600 dark:bg-red-950/90 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}
                               data-orc-ctx-montagem="tituloServico"
                               data-servico-id={bloco.key.split('|')[0] ?? ''}
                               title="Clique com o botão direito para apagar este serviço do orçamento"
                             >
-                              <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-sm font-bold tabular-nums text-white">
+                              <td className="w-12 min-w-[3rem] px-2 py-2.5 align-middle">
+                                <div className="flex justify-center">
+                                  <TableCheckbox
+                                    checked={checkboxTitulo.checked}
+                                    indeterminate={checkboxTitulo.indeterminate}
+                                    onChange={checked => alternarGrupoMontagem(chavesGrupoTitulo, checked)}
+                                    onClick={e => e.stopPropagation()}
+                                    ariaLabel={`Selecionar todas as composições de ${bloco.servicoNome}`}
+                                  />
+                                </div>
+                              </td>
+                              <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-sm font-bold tabular-nums text-white border-l border-red-500/30 dark:border-red-900/40">
                                 {main}
                               </td>
-                              <td colSpan={colunasTotais - 1} className="px-3 py-2.5">
+                              <td colSpan={colunasTotais - 2} className="px-3 py-2.5">
                                 <span className="text-xs font-bold uppercase tracking-wide text-left text-white">
                                   {bloco.servicoNome}
                                 </span>
@@ -9854,14 +10297,25 @@ export function OrcamentoPageView({
                             </tr>
                             )}
                             <tr
-                              className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls}`}
+                              className={`border-b border-gray-200/90 bg-slate-200/90 dark:border-gray-800 dark:bg-gray-900 ${gradeTableRowTrCls} ${gradeTituloSubtituloRowTrCls}`}
                               data-orc-ctx-montagem="subtitulo"
                               data-bloco-key={bloco.key}
                             >
-                              <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200">
+                              <td className="w-12 min-w-[3rem] px-2 py-2.5 align-middle">
+                                <div className="flex justify-center">
+                                  <TableCheckbox
+                                    checked={checkboxSubtitulo.checked}
+                                    indeterminate={checkboxSubtitulo.indeterminate}
+                                    onChange={checked => alternarGrupoMontagem(chavesGrupoSubtitulo, checked)}
+                                    onClick={e => e.stopPropagation()}
+                                    ariaLabel={`Selecionar composições de ${mesmoTituloSubtitulo ? bloco.servicoNome : bloco.subtituloNome}`}
+                                  />
+                                </div>
+                              </td>
+                              <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-xs font-semibold tabular-nums text-gray-800 dark:text-gray-200 border-l border-gray-200 dark:border-gray-700">
                                 {`${main}.${subIdx}`}
                               </td>
-                              <td colSpan={colunasTotais - 1} className="px-3 py-2.5">
+                              <td colSpan={colunasTotais - 2} className="px-3 py-2.5">
                                 <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-800 dark:text-gray-200 sm:text-xs">
                                   {mesmoTituloSubtitulo ? bloco.servicoNome : bloco.subtituloNome}
                                 </span>
@@ -9880,7 +10334,24 @@ export function OrcamentoPageView({
                                       data-orc-ctx-montagem="composicao"
                                       data-item-key={row.key}
                                     >
-                                      <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-xs font-medium tabular-nums text-gray-700 dark:text-gray-300">
+                                      <td className="w-12 min-w-[3rem] px-2 py-2.5 align-middle">
+                                        <div className="flex justify-center">
+                                          <TableCheckbox
+                                            checked={itensSelecionadosMontagem.has(row.key)}
+                                            onChange={checked => {
+                                              setItensSelecionadosMontagem(prev => {
+                                                const next = new Set(prev);
+                                                if (checked) next.add(row.key);
+                                                else next.delete(row.key);
+                                                return next;
+                                              });
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                            ariaLabel={`Selecionar composição ${row.item.descricao}`}
+                                          />
+                                        </div>
+                                      </td>
+                                      <td className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] px-3 py-2.5 align-middle text-center text-xs font-medium tabular-nums text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">
                                         {`${main}.${subIdx}.${itemIdx + 1}`}
                                       </td>
                                       <td className="px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 align-middle text-center border-l border-gray-200 dark:border-gray-700">{row.item.codigo}</td>
@@ -9954,21 +10425,14 @@ export function OrcamentoPageView({
                       </table>
                     </div>
 
-                    {menuCtxMontagem &&
-                      typeof document !== 'undefined' &&
-                      createPortal(
-                        <>
-                          <div
-                            className="fixed inset-0 z-[200]"
-                            aria-hidden
-                            onClick={() => setMenuCtxMontagem(null)}
-                          />
-                          <div
-                            role="menu"
-                            className="fixed z-[201] w-56 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
-                            style={{ left: menuCtxMontagem.left, top: menuCtxMontagem.top }}
-                            onClick={e => e.stopPropagation()}
-                          >
+                    {menuCtxMontagem && (
+                      <ActionMenuOverlay
+                        open
+                        onClose={() => setMenuCtxMontagem(null)}
+                        top={menuCtxMontagem.top}
+                        left={menuCtxMontagem.left}
+                        panelClassName="w-56 py-1"
+                      >
                             {menuCtxMontagem.kind === 'composicao' && (
                               <button
                                 type="button"
@@ -10052,10 +10516,8 @@ export function OrcamentoPageView({
                               <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                               Apagar
                             </button>
-                          </div>
-                        </>,
-                        document.body
-                      )}
+                      </ActionMenuOverlay>
+                    )}
 
                     <div className="mt-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-900/30 px-4 py-4 sm:px-5">
                       <h4 className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
@@ -10288,7 +10750,7 @@ export function OrcamentoPageView({
 
       {/* ── Modal Orçafascio ─────────────────────────────────────────────── */}
       {orcafascioModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 shadow-2xl overflow-hidden">
 
             {/* Header */}
@@ -10318,28 +10780,22 @@ export function OrcamentoPageView({
 
             {/* Abas */}
             <div className="flex gap-0 border-b border-gray-200 dark:border-gray-700 shrink-0 px-6">
-              <button
-                type="button"
+              <AppModalTabButton
+                accent="violet"
+                active={orcafascioModalTab === 'composicoes'}
                 onClick={() => setOrcafascioModalTab('composicoes')}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  orcafascioModalTab === 'composicoes'
-                    ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
+                className="-mb-px px-4 py-2.5 text-sm"
               >
                 Composições
-              </button>
-              <button
-                type="button"
+              </AppModalTabButton>
+              <AppModalTabButton
+                accent="violet"
+                active={orcafascioModalTab === 'orcamentos'}
                 onClick={() => setOrcafascioModalTab('orcamentos')}
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                  orcafascioModalTab === 'orcamentos'
-                    ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                }`}
+                className="-mb-px px-4 py-2.5 text-sm"
               >
                 Orçamentos
-              </button>
+              </AppModalTabButton>
             </div>
 
             {/* ── Aba Orçamentos (API Orçafascio) ────────────────────────────── */}
@@ -10515,7 +10971,7 @@ export function OrcamentoPageView({
                               Nenhuma composição encontrada neste orçamento.
                             </p>
                           ) : (
-                            <div className="overflow-x-auto">
+                            <div className="table-scroll">
                               <table className="w-full min-w-[980px] text-xs border-collapse">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">
@@ -10617,7 +11073,7 @@ export function OrcamentoPageView({
                           orcafascioOrcamentoLinhaCatalogo.items.length === 0 ? (
                             <p className="text-xs text-gray-400 py-6 text-center">Sem insumos/serviços nesta composição.</p>
                           ) : (
-                            <div className="overflow-x-auto">
+                            <div className="table-scroll">
                               <table className="w-full min-w-[900px] text-xs border-collapse">
                                 <thead>
                                   <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">
@@ -11006,29 +11462,23 @@ export function OrcamentoPageView({
 
                       {/* Sub-abas: conteúdo da composição */}
                       <div className="flex border-b border-gray-100 dark:border-gray-800 shrink-0 px-2">
-                        <button
-                          type="button"
+                        <AppModalTabButton
+                          accent="violet"
+                          active={orcafascioComposicaoDetalheTab === 'itens'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('itens')}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
-                            orcafascioComposicaoDetalheTab === 'itens'
-                              ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
+                          className="-mb-px px-3 py-2 text-xs"
                         >
                           Itens
-                        </button>
-                        <button
-                          type="button"
+                        </AppModalTabButton>
+                        <AppModalTabButton
+                          accent="violet"
+                          active={orcafascioComposicaoDetalheTab === 'analitico'}
                           onClick={() => setOrcafascioComposicaoDetalheTab('analitico')}
-                          className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px ${
-                            orcafascioComposicaoDetalheTab === 'analitico'
-                              ? 'border-violet-600 text-violet-600 dark:text-violet-400 dark:border-violet-400'
-                              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                          }`}
+                          className="-mb-px px-3 py-2 text-xs"
                           title="Mesmos insumos e serviços da composição em formato de tabela (visão analítica)"
                         >
                           Analítico
-                        </button>
+                        </AppModalTabButton>
                       </div>
 
                       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -11081,7 +11531,7 @@ export function OrcamentoPageView({
                             {orcafascioDetalhe.items.length === 0 ? (
                               <p className="text-xs text-gray-400 px-2">Sem linhas analíticas.</p>
                             ) : (
-                              <div className="overflow-x-auto">
+                              <div className="table-scroll">
                                 <table className="w-full text-[11px] border-collapse min-w-[280px]">
                                   <thead>
                                     <tr className="bg-gray-50 dark:bg-gray-800/70 sticky top-0 z-10">
@@ -11163,11 +11613,11 @@ export function OrcamentoPageView({
 
             </>}
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {importOrcamentoModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
           <div
             className="absolute inset-0"
             onClick={() => {
@@ -11358,7 +11808,7 @@ export function OrcamentoPageView({
               </div>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       <Modal
@@ -11583,29 +12033,37 @@ export function OrcamentoPageView({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de abertura</label>
-              <input
-                type="date"
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de início</label>
+              <DatePickerField
                 value={editarDadosDraft.dataAbertura}
-                onChange={(e) => setEditarDadosDraft((p) => ({ ...p, dataAbertura: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                onChange={(dataAbertura) => setEditarDadosDraft((p) => ({ ...p, dataAbertura }))}
+                placeholder="dd/mm/aaaa"
+                noFocusRing
+                aria-label="Data de início"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de envio</label>
-              <input
-                type="date"
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Data de fim</label>
+              <DatePickerField
                 value={editarDadosDraft.dataEnvio}
-                onChange={(e) => setEditarDadosDraft((p) => ({ ...p, dataEnvio: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                onChange={(dataEnvio) => setEditarDadosDraft((p) => ({ ...p, dataEnvio }))}
+                placeholder="dd/mm/aaaa"
+                noFocusRing
+                aria-label="Data de fim"
               />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Responsável pelo orçamento</label>
-              <input
+              <SingleSelectSearchDropdown
                 value={editarDadosDraft.responsavelOrcamento}
-                onChange={(e) => setEditarDadosDraft((p) => ({ ...p, responsavelOrcamento: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100"
+                onChange={(responsavelOrcamento) => setEditarDadosDraft((p) => ({ ...p, responsavelOrcamento }))}
+                options={employeeSelectOptions}
+                allowEmpty
+                disabled={loadingEmployeeOptions}
+                placeholder={loadingEmployeeOptions ? 'Carregando funcionários...' : 'Selecione o responsável'}
+                searchPlaceholder="Pesquisar..."
+                emptyOptionsMessage="Nenhum funcionário encontrado"
+                noFocusRing
               />
             </div>
             <div className="sm:col-span-2">
@@ -11752,7 +12210,7 @@ export function OrcamentoPageView({
                               ? 'bg-red-600 dark:bg-red-500 border-red-600 dark:border-red-500 text-white shadow-sm'
                               : isCompleted
                               ? 'bg-green-500 dark:bg-green-600 border-green-500 dark:border-green-600 text-white'
-                              : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
+                              : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500'
                           }`}
                         >
                           {isCompleted ? <CheckCircle className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
@@ -11799,7 +12257,7 @@ export function OrcamentoPageView({
                 <input
                   value={novoOrcamentoMetaDraft.nomeOrcamento}
                   onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, nomeOrcamento: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  className={FORM_FIELD_INPUT_CLS}
                   placeholder="Ex: Orçamento reforma bloco A"
                   disabled={isCreatingOrcamento}
                 />
@@ -11809,7 +12267,7 @@ export function OrcamentoPageView({
                 <input
                   value={novoOrcamentoMetaDraft.osNumeroPasta}
                   onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, osNumeroPasta: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  className={FORM_FIELD_INPUT_CLS}
                   placeholder="Ex: XX/2025 - Nº241"
                   disabled={isCreatingOrcamento}
                 />
@@ -11819,20 +12277,32 @@ export function OrcamentoPageView({
                 <input
                   value={novoOrcamentoMetaDraft.prazoExecucaoDias}
                   onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, prazoExecucaoDias: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  className={FORM_FIELD_INPUT_CLS}
                   placeholder="Ex: 150"
                   inputMode="numeric"
                   disabled={isCreatingOrcamento}
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data de abertura *</label>
-                <input
-                  type="date"
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data de início *</label>
+                <DatePickerField
                   value={novoOrcamentoMetaDraft.dataAbertura}
-                  onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, dataAbertura: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  onChange={(dataAbertura) => setNovoOrcamentoMetaDraft((p) => ({ ...p, dataAbertura }))}
+                  placeholder="dd/mm/aaaa"
                   disabled={isCreatingOrcamento}
+                  noFocusRing
+                  aria-label="Data de início"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data de fim</label>
+                <DatePickerField
+                  value={novoOrcamentoMetaDraft.dataEnvio}
+                  onChange={(dataEnvio) => setNovoOrcamentoMetaDraft((p) => ({ ...p, dataEnvio }))}
+                  placeholder="dd/mm/aaaa"
+                  disabled={isCreatingOrcamento}
+                  noFocusRing
+                  aria-label="Data de fim"
                 />
               </div>
             </div>
@@ -11848,28 +12318,26 @@ export function OrcamentoPageView({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
                   <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Responsável pelo orçamento</label>
-                  <select
+                  <SingleSelectSearchDropdown
                     value={novoOrcamentoMetaDraft.responsavelOrcamento}
-                    onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, responsavelOrcamento: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    onChange={(responsavelOrcamento) =>
+                      setNovoOrcamentoMetaDraft((p) => ({ ...p, responsavelOrcamento }))
+                    }
+                    options={employeeSelectOptions}
+                    allowEmpty
                     disabled={loadingEmployeeOptions || isCreatingOrcamento}
-                  >
-                    <option value="">
-                      {loadingEmployeeOptions ? 'Carregando funcionários...' : 'Selecione o responsável'}
-                    </option>
-                    {employeeOptions.map((employee) => (
-                      <option key={employee.id} value={employee.name}>
-                        {employee.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={loadingEmployeeOptions ? 'Carregando funcionários...' : 'Selecione o responsável'}
+                    searchPlaceholder="Pesquisar..."
+                    emptyOptionsMessage="Nenhum funcionário encontrado"
+                    noFocusRing
+                  />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Desconto (%)</label>
                   <input
                     value={novoOrcamentoMetaDraft.descontoPercentual}
                     onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, descontoPercentual: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    className={FORM_FIELD_INPUT_CLS}
                     placeholder="Ex: 25,01"
                     disabled={isCreatingOrcamento}
                   />
@@ -11879,7 +12347,7 @@ export function OrcamentoPageView({
                   <input
                     value={novoOrcamentoMetaDraft.bdiPercentual}
                     onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, bdiPercentual: e.target.value }))}
-                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                    className={FORM_FIELD_INPUT_CLS}
                     placeholder="Ex: 28,35"
                     disabled={isCreatingOrcamento}
                   />
@@ -11914,7 +12382,7 @@ export function OrcamentoPageView({
                             reajustes: (p.reajustes ?? []).map((rr, i) => (i === idx ? { ...rr, nome: e.target.value } : rr))
                           }))
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        className={FORM_FIELD_INPUT_CLS}
                         placeholder={`Reajuste ${idx + 1}`}
                         disabled={isCreatingOrcamento}
                       />
@@ -11926,7 +12394,7 @@ export function OrcamentoPageView({
                             reajustes: (p.reajustes ?? []).map((rr, i) => (i === idx ? { ...rr, percentual: e.target.value } : rr))
                           }))
                         }
-                        className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        className={FORM_FIELD_INPUT_CLS}
                         placeholder="%"
                         disabled={isCreatingOrcamento}
                       />
@@ -11961,7 +12429,7 @@ export function OrcamentoPageView({
                 <input
                   value={novoOrcamentoMetaDraft.descricao}
                   onChange={(e) => setNovoOrcamentoMetaDraft((p) => ({ ...p, descricao: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm transition placeholder:text-gray-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  className={FORM_FIELD_INPUT_CLS}
                   placeholder="Ex: Manutenção geral da unidade"
                   disabled={isCreatingOrcamento}
                 />
@@ -11969,7 +12437,8 @@ export function OrcamentoPageView({
               <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-sm text-gray-700 dark:text-gray-200">
                 <p><strong>Nome:</strong> {novoOrcamentoMetaDraft.nomeOrcamento.trim() || '—'}</p>
                 <p><strong>OS/Nº da pasta:</strong> {novoOrcamentoMetaDraft.osNumeroPasta || '—'}</p>
-                <p><strong>Data de abertura:</strong> {novoOrcamentoMetaDraft.dataAbertura || '—'}</p>
+                <p><strong>Data de início:</strong> {formatDataBr(novoOrcamentoMetaDraft.dataAbertura)}</p>
+                <p><strong>Data de fim:</strong> {formatDataBr(novoOrcamentoMetaDraft.dataEnvio || calcularDataFimOrcamento(novoOrcamentoMetaDraft.dataAbertura, novoOrcamentoMetaDraft.dataEnvio, novoOrcamentoMetaDraft.prazoExecucaoDias))}</p>
                 <p><strong>Responsável:</strong> {novoOrcamentoMetaDraft.responsavelOrcamento || '—'}</p>
               </div>
             </div>

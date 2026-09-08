@@ -5,6 +5,8 @@ import { AuthRequest } from '../middleware/auth';
 
 /** Igual a pathToModuleKey('/ponto/contratos') no pacote permission-modules. */
 export const CONTRACTS_MODULE_KEY = 'ponto_contratos';
+/** Igual a pathToModuleKey('/ponto/contratos/socios'). */
+export const CONTRACTS_SOCIOS_MODULE_KEY = 'ponto_contratos_socios';
 
 export type ContractAccessFilter =
   | { filter: 'all' }
@@ -36,6 +38,29 @@ export async function getContractAccessForUser(
   return { filter: 'ids', ids: rows.map((r) => r.contractId) };
 }
 
+/**
+ * Gastos operacionais (TOTVS) na tela Sócios: libera quem tem Contratos
+ * ou só o módulo Contratos Sócios (sem precisar do Contratos geral).
+ */
+export async function userCanAccessGastosOperacionais(
+  userId: string,
+  isAdmin: boolean
+): Promise<boolean> {
+  const access = await getContractAccessForUser(userId, isAdmin);
+  if (access.filter !== 'none') return true;
+
+  const hasSociosModule = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: CONTRACTS_SOCIOS_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
+      allowed: true,
+    },
+    select: { id: true },
+  });
+  return Boolean(hasSociosModule);
+}
+
 export async function assertContractAccess(req: AuthRequest, contractId: string): Promise<void> {
   if (!req.user) throw createError('Usuário não autenticado', 401);
 
@@ -51,6 +76,18 @@ export async function assertContractAccess(req: AuthRequest, contractId: string)
 
 /** Flags da aba «Contratos» em permissões (orçamento, relatórios, OS, produção semanal). */
 export type ContractScopedModuleFlag = 'orcamento' | 'relatorios' | 'ordemServico' | 'producaoSemanal';
+
+export async function assertRecebimentoEntregasOnContract(
+  req: AuthRequest,
+  contractId: string | null | undefined
+): Promise<void> {
+  if (!req.user) throw createError('Usuário não autenticado', 401);
+  if (req.user.isAdmin) return;
+  if (!contractId) {
+    throw createError('Entrega sem contrato vinculado', 403);
+  }
+  await assertContractAccess(req, contractId);
+}
 
 export async function assertContractModulePermission(
   req: AuthRequest,
@@ -95,19 +132,74 @@ export async function assertContractModulePermission(
   }
 }
 
-/** Contratos: garante que usuário não-admin pode criar (ação granular `criar`). Administradores passam sempre. */
-export async function assertUserCanCreateContract(userId: string, isAdmin: boolean): Promise<void> {
+async function assertUserHasContractMutation(
+  userId: string,
+  isAdmin: boolean,
+  action: 'criar' | 'editar' | 'excluir',
+  message: string,
+): Promise<void> {
   if (isAdmin) return;
-  const can = await prisma.userPermission.findFirst({
+
+  const crudActions = ['ver', 'criar', 'editar', 'excluir'] as const;
+  const granularRows = await prisma.userPermission.findMany({
     where: {
       userId,
       module: CONTRACTS_MODULE_KEY,
-      action: 'criar',
+      action: { in: [...crudActions] },
+      allowed: true,
+    },
+    select: { action: true },
+  });
+
+  // Matriz nova: exige a ação explícita.
+  if (granularRows.length > 0) {
+    if (!granularRows.some((r) => r.action === action)) {
+      throw createError(message, 403);
+    }
+    return;
+  }
+
+  // Legado: só `acesso` no módulo (sem Ver/Criar/Editar/Excluir) → libera mutação.
+  const hasAcesso = await prisma.userPermission.findFirst({
+    where: {
+      userId,
+      module: CONTRACTS_MODULE_KEY,
+      action: PERMISSION_ACCESS_ACTION,
       allowed: true,
     },
     select: { id: true },
   });
-  if (!can) {
-    throw createError('Sem permissão para criar contratos', 403);
+  if (!hasAcesso) {
+    throw createError(message, 403);
   }
+}
+
+/** Contratos: ação granular `criar`. Administradores passam sempre. */
+export async function assertUserCanCreateContract(userId: string, isAdmin: boolean): Promise<void> {
+  await assertUserHasContractMutation(
+    userId,
+    isAdmin,
+    'criar',
+    'Sem permissão para criar contratos',
+  );
+}
+
+/** Contratos: ação granular `editar`. Administradores passam sempre. */
+export async function assertUserCanEditContract(userId: string, isAdmin: boolean): Promise<void> {
+  await assertUserHasContractMutation(
+    userId,
+    isAdmin,
+    'editar',
+    'Sem permissão para editar contratos',
+  );
+}
+
+/** Contratos: ação granular `excluir`. Administradores passam sempre. */
+export async function assertUserCanDeleteContract(userId: string, isAdmin: boolean): Promise<void> {
+  await assertUserHasContractMutation(
+    userId,
+    isAdmin,
+    'excluir',
+    'Sem permissão para excluir contratos',
+  );
 }

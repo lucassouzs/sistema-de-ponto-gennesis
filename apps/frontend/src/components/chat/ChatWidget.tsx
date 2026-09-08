@@ -23,6 +23,14 @@ import {
   ChevronDown
 } from 'lucide-react';
 import api from '@/lib/api';
+import {
+  incomingChatBubbleClass,
+  ownChatAttachmentLinkClass,
+  ownChatBubbleClass,
+} from '@/components/conversas/chatBubbleTheme';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 const DEPARTMENTS = [
   { value: 'Projetos', label: 'Projetos' },
@@ -33,10 +41,15 @@ const DEPARTMENTS = [
   { value: 'Engenharia', label: 'Engenharia' },
   { value: 'Administrativo', label: 'Administrativo' },
   { value: 'Financeiro', label: 'Financeiro' },
+  { value: 'Operacional', label: 'Operacional' },
+  { value: 'Segurança do Trabalho', label: 'Segurança do Trabalho' },
+  { value: 'Sócios', label: 'Sócios' },
 ];
 
+const departmentSelectOptions = labeledToSelectOptions(DEPARTMENTS);
+
 /** `false` = esconde só o botão flutuante na tela; modal e lógica continuam no código. Para voltar a exibir, use `true`. */
-const SHOW_CHAT_FLOAT_BUTTON = false;
+import { SHOW_CHAT_FLOAT_BUTTON } from '@/lib/chatFloatButton';
 
 interface Chat {
   id: string;
@@ -103,9 +116,9 @@ export function ChatWidget() {
       const res = await api.get('/auth/me');
       return res.data;
     },
-    enabled: hasToken, // Só executar se houver token
-    retry: false, // Não tentar novamente em caso de erro
-    throwOnError: false // Não lançar erro - silenciar erros 401 esperados
+    enabled: SHOW_CHAT_FLOAT_BUTTON && hasToken,
+    retry: false,
+    throwOnError: false,
   });
 
   const userId = userData?.data?.id;
@@ -155,18 +168,17 @@ export function ChatWidget() {
     staleTime: 3000 // Cache por 3 segundos
   });
 
-  // OTIMIZAÇÃO: Reduzir polling de contadores
   const { data: unreadCountResponse } = useQuery({
     queryKey: ['chats-unread-count'],
     queryFn: async () => {
       const res = await api.get('/chats/unread/count');
       return res.data;
     },
-    enabled: hasToken && !!userId, // Só executar se houver token e userId
-    refetchInterval: 20000, // 20 segundos (era 10s)
-    staleTime: 10000, // Cache por 10 segundos
-    retry: false, // Não tentar novamente em caso de erro
-    throwOnError: false // Não lançar erro - silenciar erros 401 esperados
+    enabled: SHOW_CHAT_FLOAT_BUTTON && hasToken && !!userId,
+    refetchInterval: 20000,
+    staleTime: 10000,
+    retry: false,
+    throwOnError: false,
   });
 
   const { data: pendingCountResponse } = useQuery({
@@ -175,11 +187,11 @@ export function ChatWidget() {
       const res = await api.get('/chats/pending/count');
       return res.data;
     },
-    enabled: hasToken && !!userId, // Só executar se houver token e userId
-    refetchInterval: 20000, // 20 segundos (era 10s)
-    staleTime: 10000, // Cache por 10 segundos
-    retry: false, // Não tentar novamente em caso de erro
-    throwOnError: false // Não lançar erro - silenciar erros 401 esperados
+    enabled: SHOW_CHAT_FLOAT_BUTTON && hasToken && !!userId,
+    refetchInterval: 20000,
+    staleTime: 10000,
+    retry: false,
+    throwOnError: false,
   });
 
   const pendingChats: Chat[] = (pendingChatsResponse?.data || []).filter((chat: Chat) => chat.status === 'PENDING');
@@ -574,7 +586,7 @@ export function ChatWidget() {
 
       {/* Modal de Chat */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black/20 dark:bg-black/40 z-50 flex items-center justify-center p-3 md:p-4 lg:p-6">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 bg-black/20 dark:bg-black/40 z-[2000] flex items-center justify-center p-3 md:p-4 lg:p-6">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-[calc(100%-1.5rem)] md:w-[calc(100%-2rem)] lg:w-full max-w-7xl h-[calc(100vh-1.5rem)] md:h-[calc(100vh-2rem)] lg:h-[90vh] flex overflow-hidden border border-gray-200 dark:border-gray-700">
             {/* Sidebar - Lista de Conversas */}
             <div className={`${activeView === 'chat' || activeView === 'new' ? 'hidden' : 'flex'} lg:flex w-full lg:w-80 border-r border-gray-200 dark:border-gray-700 flex-col bg-white dark:bg-gray-800`}>
@@ -908,18 +920,13 @@ export function ChatWidget() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Setor <span className="text-red-500">*</span>
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={selectedDepartment}
-                          onChange={(e) => setSelectedDepartment(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Selecione um setor...</option>
-                          {DEPARTMENTS.map(dept => (
-                            <option key={dept.value} value={dept.value}>
-                              {dept.label}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setSelectedDepartment}
+                          options={departmentSelectOptions}
+                          placeholder="Selecione um setor..."
+                          className="w-full"
+                        />
                       </div>
 
                       <div>
@@ -930,7 +937,7 @@ export function ChatWidget() {
                           value={initialMessage}
                           onChange={(e) => setInitialMessage(e.target.value)}
                           rows={6}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 resize-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 bg-white dark:bg-gray-700"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-1 focus:ring-red-500 focus:border-red-500 resize-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400 bg-white dark:bg-gray-800"
                           placeholder="Digite o assunto da conversa..."
                         />
                       </div>
@@ -1052,7 +1059,7 @@ export function ChatWidget() {
                   </div>
 
                   {/* Área de Mensagens */}
-                  <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+                  <div className="app-theme-bg flex-1 overflow-y-auto p-4">
                     {!safeCurrentChat.messages || safeCurrentChat.messages.length === 0 ? (
                       <div className="h-full flex items-center justify-center">
                         <div className="text-center">
@@ -1099,8 +1106,8 @@ export function ChatWidget() {
                                     <div
                                       className={`rounded-lg px-3 py-2 ${
                                         isOwn
-                                          ? 'bg-red-600 dark:bg-red-500 text-white'
-                                          : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
+                                          ? ownChatBubbleClass
+                                          : incomingChatBubbleClass
                                       }`}
                                     >
                                       <div className="text-sm whitespace-pre-wrap break-words">
@@ -1116,7 +1123,7 @@ export function ChatWidget() {
                                               rel="noopener noreferrer"
                                               className={`flex items-center space-x-2 p-2 rounded text-sm ${
                                                 isOwn
-                                                  ? 'bg-white/20 dark:bg-white/10 hover:bg-white/30 dark:hover:bg-white/20 text-white'
+                                                  ? ownChatAttachmentLinkClass
                                                   : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
                                               }`}
                                             >
@@ -1235,7 +1242,7 @@ export function ChatWidget() {
                             }}
                             placeholder="Digite sua mensagem..."
                             rows={1}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none max-h-24 overflow-y-auto text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none max-h-24 overflow-y-auto text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-400"
                             style={{ minHeight: '40px', maxHeight: '96px', lineHeight: '1.4' }}
                           />
                         </div>
@@ -1281,7 +1288,7 @@ export function ChatWidget() {
               )}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
     </>

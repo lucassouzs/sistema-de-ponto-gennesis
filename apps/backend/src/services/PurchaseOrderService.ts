@@ -1,7 +1,124 @@
-import { prisma } from '../lib/prisma';
+import { prisma, getPrisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { BorderService, BorderData } from './BorderService';
+import { stockShortfallService } from './StockShortfallService';
+import { isUnbCostCenterRecord } from '../lib/unbCostCenterScope';
+import {
+  collectInvoicesForOrderFromMovements,
+  collectLatestPaymentSlipsPerParcelFromMovements,
+  extractOcNumberFromMovementNotes,
+  type StockPaymentSlipParsed
+} from '../utils/stockMovementNotes';
+import { isValidNfNumber, normalizeNfNumberKey } from '../utils/nfInvoiceNumber';
+import {
+  isOcStatusAllowingReturnItemToRm,
+  OC_STATUSES_COVERING_RM_ITEMS,
+} from '../lib/rmProcurementCoverage';
+import { assertUserCanReturnOcItemToRm } from '../lib/ocApprovalAccess';
+
+/** Lock distinto do requestNumber de RM (91827365) — serializa só a sequência de OC. */
+const PURCHASE_ORDER_NUMBER_ADVISORY_LOCK = 91827366;
+
+/**
+ * Transação com advisory lock + generateOrderNumber + create.
+ * Include de create é enxuto (purchaseOrderIncludeCreate) para não segurar o lock
+ * com joins pesados. Timeouts altos cobrem fila sob concorrência na Railway.
+ */
+const PURCHASE_ORDER_CREATE_TX_OPTIONS = {
+  maxWait: Number(process.env.PURCHASE_ORDER_CREATE_TX_MAX_WAIT_MS) || 30_000,
+  timeout: Number(process.env.PURCHASE_ORDER_CREATE_TX_TIMEOUT_MS) || 90_000,
+};
+
+/**
+ * updateStatus: update + include detalhado (joins pesados).
+ * Sob concorrência (http.batch do k6) + pool connection_limit=5 + latência Railway,
+ * o default Prisma (maxWait 2s / timeout 5s) estoura P2028.
+ */
+const PURCHASE_ORDER_STATUS_TX_OPTIONS = {
+  maxWait: Number(process.env.PURCHASE_ORDER_STATUS_TX_MAX_WAIT_MS) || 30_000,
+  timeout: Number(process.env.PURCHASE_ORDER_STATUS_TX_TIMEOUT_MS) || 90_000,
+};
+
+function labelForOcCorrectionSource(previousStatus: string): string {
+  if (previousStatus === 'PENDING') return 'Gestor';
+  if (previousStatus === 'PENDING_DIRETORIA') return 'Diretoria';
+  if (previousStatus === 'PENDING_COMPRAS' || previousStatus === 'DRAFT') return 'Compras';
+  return 'Aprovação';
+}
+
+function constructionMaterialIdFromSinapi(code?: string | null): string | null {
+  const s = (code || '').trim();
+  if (!s.startsWith('CM-')) return null;
+  const id = s.slice(3).trim();
+  return id || null;
+}
+
+type PoItemWithMaterial = {
+  material?: {
+    sinapiCode?: string | null;
+    code?: string | null;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+};
+
+/** Anexa ConstructionMaterial.code em material.code (ponte CM-*). */
+async function withPurchaseOrderCatalogCodes<T extends { items?: PoItemWithMaterial[] | null }>(
+  orders: T[]
+): Promise<T[]> {
+  const cmIds = new Set<string>();
+  for (const order of orders) {
+    for (const item of order.items ?? []) {
+      const cmId = constructionMaterialIdFromSinapi(item.material?.sinapiCode);
+      if (cmId) cmIds.add(cmId);
+    }
+  }
+  if (cmIds.size === 0) return orders;
+
+  const rows = await prisma.constructionMaterial.findMany({
+    where: { id: { in: Array.from(cmIds) } },
+    select: { id: true, code: true },
+  });
+  const codeByCmId = new Map(
+    rows.map((r) => [r.id, (r.code || '').trim() || null] as const)
+  );
+
+  return orders.map((order) => ({
+    ...order,
+    items: (order.items ?? []).map((item) => {
+      const cmId = constructionMaterialIdFromSinapi(item.material?.sinapiCode);
+      const catalogCode = cmId ? codeByCmId.get(cmId) : null;
+      if (!item.material || !catalogCode) return item;
+      return {
+        ...item,
+        material: { ...item.material, code: catalogCode },
+      };
+    }),
+  }));
+}
+
+async function resolveUserDisplayName(userId?: string): Promise<string | null> {
+  if (!userId) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  const name = (user?.name || user?.email || '').trim();
+  return name || null;
+}
+
+function buildOcCorrectionNoteHeader(params: {
+  prefix: string;
+  role: string;
+  actorName: string | null;
+}): string {
+  const at = new Date().toLocaleString('pt-BR');
+  if (params.actorName) {
+    return `[${params.prefix} — ${params.role} em ${at} — ${params.actorName}]`;
+  }
+  return `[${params.prefix} — ${params.role} em ${at}]`;
+}
 
 export type BoletoInstallmentPaymentStatus = 'PENDING_BOLETO' | 'AWAITING_PAYMENT' | 'PAID';
 
@@ -75,10 +192,94 @@ function allMultiInstallmentsPaid(
   return true;
 }
 
+function allInstallmentsHaveBoleto(inst: BoletoInstallmentStored[], parcelCount: number): boolean {
+  if (parcelCount <= 1 || inst.length < parcelCount) return false;
+  for (let i = 0; i < parcelCount; i++) {
+    if (!((inst[i]?.boletoUrl || '').trim())) return false;
+  }
+  return true;
+}
+
+function useParallelBoletoPaymentFlow(_inst: BoletoInstallmentStored[], _parcelCount: number): boolean {
+  return false;
+}
+
+/** Parcela corrente para comprovante/lançamento (sequencial). */
+function resolveSequentialInstallmentProofIndex(
+  inst: BoletoInstallmentStored[],
+  parcelCount: number
+): number {
+  const aw = inst.findIndex((r) => rowStatus(r) === 'AWAITING_PAYMENT');
+  if (aw >= 0 && aw < parcelCount) return aw;
+  for (let i = 0; i < parcelCount; i++) {
+    if (rowStatus(inst[i]) === 'PAID') continue;
+    if ((inst[i]?.boletoUrl || '').trim()) return i;
+  }
+  return -1;
+}
+
+function firstNonPaidInstallmentWithProof(
+  inst: BoletoInstallmentStored[],
+  parcelCount: number
+): number {
+  for (let i = 0; i < parcelCount; i++) {
+    if (rowStatus(inst[i]) === 'PAID') continue;
+    if ((inst[i]?.installmentProofUrl || '').trim()) return i;
+  }
+  return -1;
+}
+
+function allInstallmentsHavePaymentProof(inst: BoletoInstallmentStored[], parcelCount: number): boolean {
+  if (inst.length < parcelCount) return false;
+  for (let i = 0; i < parcelCount; i++) {
+    if (!((inst[i]?.installmentProofUrl || '').trim())) return false;
+  }
+  return true;
+}
+
+/** Coloca parcelas com boleto em AWAITING_PAYMENT (fluxo em lote). */
+function promoteParallelInstallmentsToAwaitingPayment(
+  inst: BoletoInstallmentStored[]
+): BoletoInstallmentStored[] {
+  return inst.map((row) => {
+    const st = rowStatus(row);
+    if (st === 'PAID') return row;
+    if (!((row.boletoUrl || '').trim())) return row;
+    if (st === 'AWAITING_PAYMENT') return row;
+    return { ...row, paymentStatus: 'AWAITING_PAYMENT' as const };
+  });
+}
+
+/** Replica comprovante geral da OC nas parcelas pagas que ainda não têm comprovante por parcela. */
+function spreadOrderPaymentProofToPaidInstallments(
+  inst: BoletoInstallmentStored[],
+  parcelCount: number,
+  paymentProofUrl: string | null | undefined,
+  paymentProofName: string | null | undefined
+): BoletoInstallmentStored[] | null {
+  const url = (paymentProofUrl || '').trim();
+  if (!url || parcelCount <= 1) return null;
+  let changed = false;
+  const next = inst.map((row, i) => {
+    if (i >= parcelCount) return row;
+    if ((row.installmentProofUrl || '').trim()) return row;
+    if (rowStatus(row) !== 'PAID') return row;
+    changed = true;
+    return {
+      ...row,
+      installmentProofUrl: url,
+      installmentProofName: (paymentProofName || '').trim() || null
+    };
+  });
+  return changed ? next : null;
+}
+
 export type NfAttachmentStored = {
   url: string;
   name: string | null;
   uploadedAt: string;
+  /** Número da nota fiscal (obrigatório em novos anexos). */
+  number?: string | null;
 };
 
 function parseNfAttachments(raw: unknown): NfAttachmentStored[] {
@@ -95,9 +296,143 @@ function parseNfAttachments(raw: unknown): NfAttachmentStored[] {
       typeof rec.uploadedAt === 'string' && rec.uploadedAt.trim()
         ? String(rec.uploadedAt).trim()
         : new Date().toISOString();
-    out.push({ url: u, name, uploadedAt });
+    const number =
+      typeof rec.number === 'string' && rec.number.trim() ? String(rec.number).trim() : null;
+    out.push({ url: u, name, uploadedAt, number });
   }
   return out;
+}
+
+async function findInvoiceNumberConflict(
+  numberRaw: string,
+  excludePurchaseOrderId?: string
+): Promise<{ orderNumber: string; purchaseOrderId: string } | null> {
+  const numberKey = normalizeNfNumberKey(numberRaw);
+  if (!numberKey) return null;
+  const existing = await prisma.purchaseOrderInvoiceNumber.findUnique({
+    where: { numberKey },
+    select: {
+      purchaseOrderId: true,
+      purchaseOrder: { select: { orderNumber: true } }
+    }
+  });
+  if (!existing) return null;
+  if (excludePurchaseOrderId && existing.purchaseOrderId === excludePurchaseOrderId) {
+    return null;
+  }
+  return {
+    purchaseOrderId: existing.purchaseOrderId,
+    orderNumber: existing.purchaseOrder.orderNumber
+  };
+}
+
+/** `OC-2026-0008` → `8` (rótulo curto nas mensagens). */
+function formatOcShortLabel(orderNumber: string): string {
+  const trimmed = orderNumber.trim();
+  const match = trimmed.match(/^OC-\d{4}-(\d+)$/i);
+  if (match) return String(parseInt(match[1], 10));
+  const lastSegment = trimmed.split('-').pop();
+  if (lastSegment && /^\d+$/.test(lastSegment)) {
+    return String(parseInt(lastSegment, 10));
+  }
+  return trimmed;
+}
+
+/**
+ * Preenche o número da NF nos lançamentos do Controle Financeiro da OC
+ * (quando a NF é anexada depois do lançamento na fase Pagamento).
+ */
+async function prependNfToFinancialControlParcels(
+  orderNumber: string,
+  nfNumber: string
+): Promise<void> {
+  const oc = orderNumber.trim();
+  const nf = nfNumber.trim();
+  if (!oc || !nf) return;
+  const entries = await prisma.financialControlEntry.findMany({
+    where: { ocNumber: { equals: oc, mode: 'insensitive' } },
+    select: { id: true, parcelNumber: true, nfNumber: true }
+  });
+  for (const entry of entries) {
+    const currentNf = (entry.nfNumber || '').trim();
+    let parcel = (entry.parcelNumber || '').trim();
+    // Dados legados ainda combinados em parcelNumber (ex.: 556713-2/2)
+    const combined =
+      parcel.match(/^(\d+)-(\d+\/\d+)$/) || parcel.match(/^(\d+)-(\d{1,3})$/);
+    if (combined) {
+      const legacyNf = combined[1].trim();
+      parcel = combined[2];
+      if (!currentNf || currentNf === legacyNf) {
+        await prisma.financialControlEntry.update({
+          where: { id: entry.id },
+          data: {
+            nfNumber: currentNf || legacyNf || nf,
+            parcelNumber: parcel || null
+          }
+        });
+        continue;
+      }
+    }
+    if (currentNf) continue;
+    await prisma.financialControlEntry.update({
+      where: { id: entry.id },
+      data: {
+        nfNumber: nf,
+        ...(parcel ? { parcelNumber: parcel } : {})
+      }
+    });
+  }
+}
+
+async function claimInvoiceNumberForOrder(
+  purchaseOrderId: string,
+  numberRaw: string
+): Promise<string> {
+  const display = String(numberRaw || '').trim();
+  const numberKey = normalizeNfNumberKey(display);
+  if (!numberKey) {
+    throw new Error('Número da nota fiscal é obrigatório');
+  }
+  const conflict = await findInvoiceNumberConflict(display, purchaseOrderId);
+  if (conflict) {
+    throw new Error(`Nota fiscal já existe na OC ${formatOcShortLabel(conflict.orderNumber)}`);
+  }
+  try {
+    await prisma.purchaseOrderInvoiceNumber.upsert({
+      where: { numberKey },
+      create: {
+        numberKey,
+        number: display,
+        purchaseOrderId
+      },
+      update: {
+        number: display,
+        purchaseOrderId
+      }
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      const raced = await findInvoiceNumberConflict(display, purchaseOrderId);
+      throw new Error(
+        raced
+          ? `Nota fiscal já existe na OC ${formatOcShortLabel(raced.orderNumber)}`
+          : 'Nota fiscal já existe'
+      );
+    }
+    throw err;
+  }
+  return display;
+}
+
+async function releaseInvoiceNumberForOrder(
+  purchaseOrderId: string,
+  numberRaw: string | null | undefined
+): Promise<void> {
+  const numberKey = normalizeNfNumberKey(numberRaw);
+  if (!numberKey) return;
+  await prisma.purchaseOrderInvoiceNumber.deleteMany({
+    where: { purchaseOrderId, numberKey }
+  });
 }
 
 /** Departamento financeiro ou cargo Administrador (mesma regra do front em gerenciar materiais). */
@@ -137,6 +472,12 @@ async function resolvePaymentProofUrlForOrder(order: {
         const u = (last?.installmentProofUrl || '').trim();
         if (u) return u;
       }
+      if (useParallelBoletoPaymentFlow(inst, meta.paymentParcelCount)) {
+        for (let i = meta.paymentParcelCount - 1; i >= 0; i--) {
+          const u = (inst[i]?.installmentProofUrl || '').trim();
+          if (u) return u;
+        }
+      }
     }
   }
   return '';
@@ -151,6 +492,65 @@ function ymdAddDays(ymdOrDate: Date | string, addDays: number): string {
   }
   d.setDate(d.getDate() + addDays);
   return d.toISOString().slice(0, 10);
+}
+
+function splitAmountInInstallments(total: number, n: number): number[] {
+  if (!Number.isFinite(total) || n < 1) return Array.from({ length: Math.max(n, 0) }, () => 0);
+  const cents = Math.round(total * 100);
+  const q = Math.floor(cents / n);
+  const r = cents % n;
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const c = q + (i === n - 1 ? r : 0);
+    out.push(c / 100);
+  }
+  return out;
+}
+
+function buildEmptyPaymentInstallments(
+  parcelCount: number,
+  parcelDueDays: number[],
+  totalAmount: number,
+  orderDate: Date
+): BoletoInstallmentStored[] {
+  const amounts = splitAmountInInstallments(totalAmount, parcelCount);
+  return Array.from({ length: parcelCount }, (_, i) => ({
+    amount: amounts[i] ?? 0,
+    dueDate: ymdAddDays(
+      orderDate,
+      parcelDueDays[i] ?? parcelDueDays[parcelDueDays.length - 1] ?? 30
+    ),
+    boletoUrl: null,
+    boletoName: null,
+    paymentStatus: 'PENDING_BOLETO' as const,
+  }));
+}
+
+function buildCreationPaymentInstallments(
+  drafts: { boletoUrl: string; boletoName?: string | null; dueDate?: string | null }[],
+  parcelCount: number,
+  parcelDueDays: number[],
+  totalAmount: number,
+  orderDate: Date
+): BoletoInstallmentStored[] {
+  const amounts = splitAmountInInstallments(totalAmount, parcelCount);
+  return Array.from({ length: parcelCount }, (_, i) => {
+    const draftDue = (drafts[i]?.dueDate || '').trim().slice(0, 10);
+    const dueDate =
+      /^\d{4}-\d{2}-\d{2}$/.test(draftDue)
+        ? draftDue
+        : ymdAddDays(
+            orderDate,
+            parcelDueDays[i] ?? parcelDueDays[parcelDueDays.length - 1] ?? 30
+          );
+    return {
+      amount: amounts[i] ?? 0,
+      dueDate,
+      boletoUrl: (drafts[i]?.boletoUrl || '').trim(),
+      boletoName: (drafts[i]?.boletoName || '').trim() || null,
+      paymentStatus: 'PENDING_BOLETO' as const,
+    };
+  });
 }
 
 async function enrichOrdersParcelPlans<T extends { paymentCondition: string | null }>(
@@ -170,6 +570,41 @@ async function enrichOrdersParcelPlans<T extends { paymentCondition: string | nu
   });
 }
 
+/** Boleto anexado na criação (parcela única): pula fase Anexar Boleto e libera Pagamento. */
+function buildCreationBoletoAutoReleaseData(
+  order: {
+    paymentType: string | null;
+    boletoAttachmentUrl: string | null;
+    boletoAttachmentName: string | null;
+    paymentBoletoUrl: string | null;
+    paymentBoletoName: string | null;
+    paymentBoletoPhaseReleased: boolean;
+  },
+  paymentParcelCount: number
+): {
+  paymentBoletoUrl?: string;
+  paymentBoletoName?: string | null;
+  paymentBoletoPhaseReleased: boolean;
+} | null {
+  if (order.paymentType !== 'BOLETO') return null;
+  if (order.paymentBoletoPhaseReleased) return null;
+  if (paymentParcelCount > 1) return null;
+  const creationUrl = (order.boletoAttachmentUrl || '').trim();
+  if (!creationUrl) return null;
+
+  const data: {
+    paymentBoletoUrl?: string;
+    paymentBoletoName?: string | null;
+    paymentBoletoPhaseReleased: boolean;
+  } = { paymentBoletoPhaseReleased: true };
+
+  if (!(order.paymentBoletoUrl || '').trim()) {
+    data.paymentBoletoUrl = creationUrl;
+    data.paymentBoletoName = (order.boletoAttachmentName || '').trim() || null;
+  }
+  return data;
+}
+
 export interface CreatePurchaseOrderData {
   materialRequestId?: string;
   quoteMapId?: string;
@@ -179,13 +614,18 @@ export interface CreatePurchaseOrderData {
   paymentType?: string;
   paymentCondition?: string;
   paymentDetails?: string;
+  pixKeyType?: string;
+  pixKey?: string;
   boletoAttachmentUrl?: string;
   boletoAttachmentName?: string;
+  /** Um boleto por parcela quando a condição de pagamento tem parcelCount > 1. */
+  creationBoletoInstallments?: Array<{ boletoUrl: string; boletoName?: string | null }>;
   /** Frete (R$). Total a pagar gravado = soma dos itens + frete. */
   freightAmount?: number;
   /** @deprecated Ignorado: o total é sempre calculado como itens + frete. */
   amountToPay?: number;
   notes?: string;
+  attachments?: Array<{ url: string; name: string }>;
   items: {
     materialRequestItemId?: string;
     materialId: string;
@@ -203,6 +643,8 @@ export interface UpdatePurchaseOrderDetailsData {
   paymentType?: string | null;
   paymentCondition?: string | null;
   paymentDetails?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
   freightAmount?: number | string | null;
   notes?: string | null;
   items?: {
@@ -215,12 +657,17 @@ export interface UpdatePurchaseOrderDetailsData {
   }[];
 }
 
-async function generateOrderNumber(): Promise<string> {
+/**
+ * Gera número único de OC (formato: OC-YYYY-NNNN).
+ * Deve ser chamado dentro de uma transação que já obteve o advisory lock.
+ */
+async function generateOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `OC-${year}-`;
-  const last = await prisma.purchaseOrder.findFirst({
+  const last = await tx.purchaseOrder.findFirst({
     where: { orderNumber: { startsWith: prefix } },
-    orderBy: { orderNumber: 'desc' }
+    orderBy: { orderNumber: 'desc' },
+    select: { orderNumber: true },
   });
   let n = 1;
   if (last) {
@@ -230,9 +677,80 @@ async function generateOrderNumber(): Promise<string> {
   return `${prefix}${n.toString().padStart(4, '0')}`;
 }
 
-/** Listagem: menos joins aninhados para listas grandes (detalhe via getById). */
+/** Reserva N números consecutivos sob o mesmo peek (lock já obtido). */
+async function generateOrderNumbers(tx: Prisma.TransactionClient, count: number): Promise<string[]> {
+  if (count <= 0) return [];
+  const year = new Date().getFullYear();
+  const prefix = `OC-${year}-`;
+  const last = await tx.purchaseOrder.findFirst({
+    where: { orderNumber: { startsWith: prefix } },
+    orderBy: { orderNumber: 'desc' },
+    select: { orderNumber: true },
+  });
+  let n = 1;
+  if (last) {
+    const num = parseInt(last.orderNumber.replace(prefix, ''), 10);
+    if (!isNaN(num)) n = num + 1;
+  }
+  return Array.from({ length: count }, (_, i) => `${prefix}${(n + i).toString().padStart(4, '0')}`);
+}
+
+type PreparedOcItemCreate = {
+  materialRequestItemId: string | null;
+  materialId: string;
+  quantity: Decimal;
+  unit: string;
+  unitPrice: Decimal;
+  totalPrice: Decimal;
+  notes: string | null;
+};
+
+type PreparedOcCreateData = {
+  orderNumber?: string;
+  materialRequestId: string | null;
+  quoteMapId: string | null;
+  supplierId: string;
+  expectedDelivery: Date | null;
+  deliveryAddress: string | null;
+  paymentType: string | null;
+  paymentCondition: string | null;
+  paymentDetails: string | null;
+  pixKeyType: string | null;
+  pixKey: string | null;
+  boletoAttachmentUrl: string | null;
+  boletoAttachmentName: string | null;
+  paymentBoletoInstallments?: Prisma.InputJsonValue;
+  freightAmount: Decimal;
+  amountToPay: Decimal;
+  notes: string | null;
+  attachments?: Prisma.InputJsonValue;
+  createdBy: string;
+  items: { create: PreparedOcItemCreate[] };
+};
+
+export type CreatePurchaseOrderOptions = {
+  /** Evita rebuscar a SC quando o caller já validou quantidades. */
+  maxQtyByRmItem?: Map<string, Decimal> | null;
+  /** Evita rebuscar condição de pagamento no loop do mapa. */
+  paymentConditionRow?: { parcelCount: number | null; parcelDueDays: unknown } | null;
+  /** Prefetch de várias condições (mapa de cotação com fornecedores distintos). */
+  paymentConditionByCode?: Map<string, { parcelCount: number | null; parcelDueDays: unknown }>;
+};
+
+/** Listagem: joins enxutos (detalhe completo via getById). */
 const purchaseOrderIncludeList = {
-  supplier: true,
+  supplier: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      cnpj: true,
+      bank: true,
+      agency: true,
+      account: true,
+      accountDigit: true
+    }
+  },
   quoteMap: { select: { id: true, createdAt: true } },
   materialRequest: {
     select: {
@@ -244,7 +762,53 @@ const purchaseOrderIncludeList = {
     }
   },
   creator: { select: { id: true, name: true, email: true } },
-  items: { include: { material: true, materialRequestItem: true } }
+  items: {
+    select: {
+      id: true,
+      quantity: true,
+      unit: true,
+      unitPrice: true,
+      totalPrice: true,
+      materialId: true,
+      material: { select: { id: true, name: true, description: true, unit: true, sinapiCode: true } }
+    }
+  }
+} as const;
+
+/** Listagem resumida (mapa/gerenciar): sem itens — bem mais leve. */
+const purchaseOrderIncludeListSummary = {
+  supplier: { select: { id: true, code: true, name: true } },
+  /** Precisa na aba Documentos (ex.: fase Pagamento) sem esperar GET de detalhe. */
+  quoteMap: { select: { id: true, createdAt: true } },
+  materialRequest: {
+    select: {
+      id: true,
+      requestNumber: true,
+      serviceOrder: true,
+      costCenter: { select: { id: true, code: true, name: true } }
+    }
+  },
+  creator: { select: { id: true, name: true } },
+  /** Vínculos leves para saber quais itens da RM já estão em OC ativa. */
+  items: { select: { materialRequestItemId: true } }
+} as const;
+
+/**
+ * Create/generate: include enxuto (sem quoteMap completo nem todos os itens da SC).
+ * O detalhe pesado fica em getById — evita segurar o advisory lock por ~8–11s.
+ */
+const purchaseOrderIncludeCreate = {
+  supplier: { select: { id: true, code: true, name: true, cnpj: true } },
+  materialRequest: {
+    select: {
+      id: true,
+      requestNumber: true,
+      serviceOrder: true,
+      costCenter: { select: { id: true, code: true, name: true } }
+    }
+  },
+  creator: { select: { id: true, name: true, email: true } },
+  items: { include: { material: { select: { id: true, name: true, description: true, sinapiCode: true } } } }
 } as const;
 
 const purchaseOrderIncludeDetail = {
@@ -256,7 +820,15 @@ const purchaseOrderIncludeDetail = {
     }
   },
   materialRequest: {
-    include: {
+    select: {
+      id: true,
+      requestNumber: true,
+      serviceOrder: true,
+      description: true,
+      demandSheet: true,
+      demandSheetAttachmentUrl: true,
+      demandSheetAttachmentName: true,
+      demandSheetAttachments: true,
       requester: true,
       costCenter: true,
       items: { include: { material: true } },
@@ -267,24 +839,96 @@ const purchaseOrderIncludeDetail = {
   items: { include: { material: true, materialRequestItem: true } }
 } as const;
 
+/** PDF da OC: só campos do documento — sem quoteMap / itens da SC (getById fica pesado). */
+const purchaseOrderIncludePdf = {
+  supplier: {
+    select: {
+      code: true,
+      name: true,
+      cnpj: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zipCode: true,
+      contactName: true,
+      bank: true,
+      agency: true,
+      account: true,
+      accountDigit: true,
+      pixKeyType: true,
+      pixKey: true
+    }
+  },
+  materialRequest: {
+    select: {
+      requestNumber: true,
+      serviceOrder: true,
+      description: true,
+      costCenter: { select: { name: true } }
+    }
+  },
+  creator: { select: { name: true, email: true } },
+  items: {
+    select: {
+      quantity: true,
+      unit: true,
+      unitPrice: true,
+      totalPrice: true,
+      notes: true,
+      material: {
+        select: { name: true, description: true, sinapiCode: true }
+      }
+    }
+  }
+} as const;
+
 export class PurchaseOrderService {
-  async create(data: CreatePurchaseOrderData, userId: string) {
+  private async prepareCreatePayload(
+    data: CreatePurchaseOrderData,
+    userId: string,
+    options?: CreatePurchaseOrderOptions,
+  ): Promise<PreparedOcCreateData> {
     if (!data.supplierId || !data.items?.length) {
       throw new Error('Fornecedor e itens são obrigatórios');
     }
 
+    if (data.paymentType === 'AVISTA') {
+      if (!data.paymentDetails?.trim()) {
+        throw new Error('Dados do pagamento são obrigatórios para pagamento à vista');
+      }
+      if (!data.pixKeyType?.trim()) {
+        throw new Error('Tipo de chave PIX é obrigatório para pagamento à vista');
+      }
+      if (!data.pixKey?.trim()) {
+        throw new Error('Chave PIX é obrigatória para pagamento à vista');
+      }
+    }
+    if (data.paymentType === 'CARTAO') {
+      if (!data.paymentDetails?.trim()) {
+        throw new Error('Dados do pagamento são obrigatórios para pagamento por cartão');
+      }
+      // Cartão não exige PIX nem boletos: o backend só monta parcelas/arquivos quando paymentType === 'BOLETO'.
+    }
+
     let maxQtyByRmItem: Map<string, Decimal> | null = null;
-    if (data.materialRequestId) {
+    if (options && 'maxQtyByRmItem' in options) {
+      maxQtyByRmItem = options.maxQtyByRmItem ?? null;
+    } else if (data.materialRequestId) {
       const rm = await prisma.materialRequest.findUnique({
         where: { id: data.materialRequestId },
-        select: { items: { select: { id: true, quantity: true } } }
+        select: { items: { select: { id: true, quantity: true, status: true } } },
       });
       if (rm?.items?.length) {
-        maxQtyByRmItem = new Map(rm.items.map((it) => [it.id, new Decimal(it.quantity)]));
+        maxQtyByRmItem = new Map(
+          rm.items
+            .filter((it) => it.status !== 'CANCELLED')
+            .map((it) => [it.id, new Decimal(it.quantity)])
+        );
       }
     }
 
-    const orderNumber = await generateOrderNumber();
     const items = data.items.map((i) => {
       const qty = new Decimal(i.quantity);
       if (maxQtyByRmItem && i.materialRequestItemId) {
@@ -302,7 +946,7 @@ export class PurchaseOrderService {
         unit: i.unit,
         unitPrice: price,
         totalPrice: total,
-        notes: i.notes || null
+        notes: i.notes || null,
       };
     });
     const freight =
@@ -315,8 +959,65 @@ export class PurchaseOrderService {
     const itemsSum = items.reduce((s, row) => s.plus(row.totalPrice), new Decimal(0));
     const amountToPay = itemsSum.plus(freight);
 
-    const createDataBase = {
-      orderNumber,
+    let paymentBoletoInstallments: Prisma.InputJsonValue | undefined;
+    let boletoAttachmentUrl = data.boletoAttachmentUrl || null;
+    let boletoAttachmentName = data.boletoAttachmentName || null;
+
+    if (data.paymentType === 'BOLETO' && data.paymentCondition) {
+      let cond: { parcelCount: number | null; parcelDueDays: unknown } | null | undefined;
+      if (options?.paymentConditionByCode) {
+        cond = options.paymentConditionByCode.get(data.paymentCondition) ?? null;
+      } else if (options && 'paymentConditionRow' in options) {
+        cond = options.paymentConditionRow;
+      } else {
+        cond = await prisma.paymentCondition.findUnique({
+          where: { code: data.paymentCondition },
+          select: { parcelCount: true, parcelDueDays: true },
+        });
+      }
+      const parcelCount = cond?.parcelCount && cond.parcelCount >= 1 ? cond.parcelCount : 1;
+      const parcelDueDays = normalizeParcelDueDaysJson(cond?.parcelDueDays);
+
+      if (parcelCount > 1) {
+        const drafts = data.creationBoletoInstallments;
+        const hasBoletoDrafts = Array.isArray(drafts) && drafts.some((d) => (d?.boletoUrl || '').trim());
+        if (hasBoletoDrafts) {
+          if (!Array.isArray(drafts) || drafts.length !== parcelCount) {
+            throw new Error(`Anexe ${parcelCount} boletos (um para cada parcela).`);
+          }
+          for (let i = 0; i < parcelCount; i++) {
+            if (!(drafts[i]?.boletoUrl || '').trim()) {
+              throw new Error(`Anexe o boleto da parcela ${i + 1}.`);
+            }
+          }
+          paymentBoletoInstallments = buildCreationPaymentInstallments(
+            drafts,
+            parcelCount,
+            parcelDueDays,
+            Number(amountToPay),
+            new Date(),
+          ) as unknown as Prisma.InputJsonValue;
+        } else {
+          paymentBoletoInstallments = buildEmptyPaymentInstallments(
+            parcelCount,
+            parcelDueDays,
+            Number(amountToPay),
+            new Date(),
+          ) as unknown as Prisma.InputJsonValue;
+        }
+        boletoAttachmentUrl = null;
+        boletoAttachmentName = null;
+      } else if (!(boletoAttachmentUrl || '').trim()) {
+        paymentBoletoInstallments = buildEmptyPaymentInstallments(
+          1,
+          parcelDueDays,
+          Number(amountToPay),
+          new Date(),
+        ) as unknown as Prisma.InputJsonValue;
+      }
+    }
+
+    return {
       materialRequestId: data.materialRequestId || null,
       quoteMapId: data.quoteMapId || null,
       supplierId: data.supplierId,
@@ -325,39 +1026,124 @@ export class PurchaseOrderService {
       paymentType: data.paymentType || null,
       paymentCondition: data.paymentCondition || null,
       paymentDetails: data.paymentDetails || null,
-      boletoAttachmentUrl: data.boletoAttachmentUrl || null,
-      boletoAttachmentName: data.boletoAttachmentName || null,
+      pixKeyType: data.pixKeyType?.trim() || null,
+      pixKey: data.pixKey?.trim() || null,
+      boletoAttachmentUrl,
+      boletoAttachmentName,
+      ...(paymentBoletoInstallments ? { paymentBoletoInstallments } : {}),
       freightAmount: freight,
       amountToPay,
       notes: data.notes || null,
+      attachments: (() => {
+        const files = Array.isArray(data.attachments)
+          ? data.attachments
+              .map((item) => ({
+                url: String(item?.url || '').trim().slice(0, 2000),
+                name: String(item?.name || '').trim().slice(0, 500) || 'Arquivo anexado',
+              }))
+              .filter((item) => item.url)
+          : [];
+        return files.length > 0 ? (files as Prisma.InputJsonValue) : undefined;
+      })(),
       createdBy: userId,
-      items: { create: items }
-    } as const;
+      items: { create: items },
+    };
+  }
+
+  /** UNB: só aprovação do gestor (pula compras e diretoria). Demais CCs: PENDING_COMPRAS. */
+  private async resolveInitialApprovalStatus(
+    tx: Prisma.TransactionClient,
+    materialRequestId: string | null,
+  ): Promise<'PENDING_COMPRAS' | 'PENDING'> {
+    if (!materialRequestId) return 'PENDING_COMPRAS';
+    const rm = await tx.materialRequest.findUnique({
+      where: { id: materialRequestId },
+      select: { costCenter: { select: { name: true, code: true } } },
+    });
+    return isUnbCostCenterRecord(rm?.costCenter) ? 'PENDING' : 'PENDING_COMPRAS';
+  }
+
+  private async createRowInTx(
+    tx: Prisma.TransactionClient,
+    createDataBase: PreparedOcCreateData & { orderNumber: string },
+  ) {
+    const initialStatus = await this.resolveInitialApprovalStatus(
+      tx,
+      createDataBase.materialRequestId,
+    );
+
+    const toUnchecked = (
+      row: PreparedOcCreateData & { orderNumber: string },
+      status: string,
+    ): Prisma.PurchaseOrderUncheckedCreateInput =>
+      ({
+        ...row,
+        status: status as any,
+      }) as Prisma.PurchaseOrderUncheckedCreateInput;
 
     try {
-      return await prisma.purchaseOrder.create({
-        data: { ...createDataBase, status: 'PENDING_COMPRAS' as any },
-        include: purchaseOrderIncludeDetail
+      return await tx.purchaseOrder.create({
+        data: toUnchecked(createDataBase, initialStatus),
+        include: purchaseOrderIncludeCreate,
       });
     } catch (error: any) {
       const msg = typeof error?.message === 'string' ? error.message : '';
       const isPrismaValidation = error?.name === 'PrismaClientValidationError' && msg;
-      // Compatibilidade temporária: Prisma Client antigo sem enum / campo.
-      if (isPrismaValidation && msg.includes('PENDING_COMPRAS')) {
-        return await prisma.purchaseOrder.create({
-          data: { ...createDataBase, status: 'PENDING' as any },
-          include: purchaseOrderIncludeDetail
+      if (isPrismaValidation && msg.includes('PENDING_COMPRAS') && initialStatus === 'PENDING_COMPRAS') {
+        return await tx.purchaseOrder.create({
+          data: toUnchecked(createDataBase, 'PENDING'),
+          include: purchaseOrderIncludeCreate,
         });
       }
       if (isPrismaValidation && msg.includes('quoteMapId') && createDataBase.quoteMapId) {
-        const { quoteMapId: _omit, ...withoutQuote } = createDataBase as typeof createDataBase & { quoteMapId?: string | null };
-        return await prisma.purchaseOrder.create({
-          data: { ...withoutQuote, status: 'PENDING_COMPRAS' as any },
-          include: purchaseOrderIncludeDetail
+        const { quoteMapId: _omit, ...withoutQuote } = createDataBase;
+        return await tx.purchaseOrder.create({
+          data: toUnchecked({ ...withoutQuote, quoteMapId: null }, initialStatus),
+          include: purchaseOrderIncludeCreate,
         });
       }
       throw error;
     }
+  }
+
+  async create(data: CreatePurchaseOrderData, userId: string, options?: CreatePurchaseOrderOptions) {
+    const createDataBase = await this.prepareCreatePayload(data, userId, options);
+
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_NUMBER_ADVISORY_LOCK})`,
+      );
+      const orderNumber = await generateOrderNumber(tx);
+      return this.createRowInTx(tx, { ...createDataBase, orderNumber });
+    }, PURCHASE_ORDER_CREATE_TX_OPTIONS);
+  }
+
+  /**
+   * Cria várias OCs (ex.: mapa de cotação) com um único advisory lock e números consecutivos.
+   * Prep/validação ficam fora da transação para manter o lock curto.
+   */
+  async createMany(entries: CreatePurchaseOrderData[], userId: string, options?: CreatePurchaseOrderOptions) {
+    if (entries.length === 0) return [];
+    if (entries.length === 1) {
+      return [await this.create(entries[0], userId, options)];
+    }
+
+    const prepared: PreparedOcCreateData[] = [];
+    for (const data of entries) {
+      prepared.push(await this.prepareCreatePayload(data, userId, options));
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_NUMBER_ADVISORY_LOCK})`,
+      );
+      const orderNumbers = await generateOrderNumbers(tx, prepared.length);
+      const created: Awaited<ReturnType<PurchaseOrderService['createRowInTx']>>[] = [];
+      for (let i = 0; i < prepared.length; i++) {
+        created.push(await this.createRowInTx(tx, { ...prepared[i], orderNumber: orderNumbers[i] }));
+      }
+      return created;
+    }, PURCHASE_ORDER_CREATE_TX_OPTIONS);
   }
 
   private buildPurchaseOrderListWhere(filters: {
@@ -365,6 +1151,9 @@ export class PurchaseOrderService {
     supplierId?: string;
     materialRequestId?: string;
     costCenterId?: string;
+    costCenterIds?: string[];
+    serviceOrderId?: string;
+    serviceOrderText?: string;
     orderDateFrom?: string;
     orderDateTo?: string;
     q?: string;
@@ -377,6 +1166,27 @@ export class PurchaseOrderService {
 
     if (filters.costCenterId) {
       andParts.push({ materialRequest: { costCenterId: filters.costCenterId } });
+    } else if (filters.costCenterIds?.length) {
+      andParts.push({ materialRequest: { costCenterId: { in: filters.costCenterIds } } });
+    }
+
+    const serviceOrderParts: object[] = [];
+    if (filters.serviceOrderId?.trim()) {
+      serviceOrderParts.push({
+        materialRequest: { serviceOrderId: filters.serviceOrderId.trim() }
+      });
+    }
+    if (filters.serviceOrderText?.trim()) {
+      serviceOrderParts.push({
+        materialRequest: {
+          serviceOrder: { equals: filters.serviceOrderText.trim(), mode: 'insensitive' as const }
+        }
+      });
+    }
+    if (serviceOrderParts.length === 1) {
+      andParts.push(serviceOrderParts[0]);
+    } else if (serviceOrderParts.length > 1) {
+      andParts.push({ OR: serviceOrderParts });
     }
 
     if (filters.status) {
@@ -431,28 +1241,39 @@ export class PurchaseOrderService {
     supplierId?: string;
     materialRequestId?: string;
     costCenterId?: string;
+    costCenterIds?: string[];
+    serviceOrderId?: string;
+    serviceOrderText?: string;
     orderDateFrom?: string;
     orderDateTo?: string;
     q?: string;
     page?: number;
     limit?: number;
+    /** false = listagem leve (sem itens) — mapa/gerenciar só precisam do vínculo RM. */
+    includeItems?: boolean;
   }) {
     const where = this.buildPurchaseOrderListWhere(filters);
     const page = filters.page || 1;
-    const limit = Math.min(Math.max(filters.limit || 20, 1), 100);
+    const limit = Math.min(Math.max(filters.limit || 20, 1), 500);
     const skip = (page - 1) * limit;
+    const includeItems = filters.includeItems !== false;
+    const include = includeItems
+      ? purchaseOrderIncludeList
+      : purchaseOrderIncludeListSummary;
     const [orders, total] = await Promise.all([
       prisma.purchaseOrder.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { orderDate: 'desc' },
-        include: purchaseOrderIncludeList
+        orderBy: [{ updatedAt: 'desc' }, { orderNumber: 'desc' }],
+        include
       }),
       prisma.purchaseOrder.count({ where })
     ]);
+    /** Listagem = só leitura. Syncs de estoque/boleto ficam no lançamento de estoque e nas mutações. */
     const enriched = await enrichOrdersParcelPlans(orders);
-    return { orders: enriched, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+    const withCodes = includeItems ? await withPurchaseOrderCatalogCodes(enriched) : enriched;
+    return { orders: withCodes, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
   /**
@@ -461,6 +1282,7 @@ export class PurchaseOrderService {
   async exportFinalizedOrdersCsv(filters: {
     supplierId?: string;
     costCenterId?: string;
+    costCenterIds?: string[];
     orderDateFrom?: string;
     orderDateTo?: string;
     q?: string;
@@ -469,6 +1291,7 @@ export class PurchaseOrderService {
       status: 'FINALIZED,SENT',
       supplierId: filters.supplierId,
       costCenterId: filters.costCenterId,
+      costCenterIds: filters.costCenterIds,
       orderDateFrom: filters.orderDateFrom,
       orderDateTo: filters.orderDateTo,
       q: filters.q
@@ -476,7 +1299,7 @@ export class PurchaseOrderService {
     const orders = await prisma.purchaseOrder.findMany({
       where,
       take: 25_000,
-      orderBy: { orderDate: 'desc' },
+      orderBy: [{ updatedAt: 'desc' }, { orderNumber: 'desc' }],
       include: purchaseOrderIncludeList
     });
     const rows = await enrichOrdersParcelPlans(orders);
@@ -540,8 +1363,51 @@ export class PurchaseOrderService {
       include: purchaseOrderIncludeDetail
     });
     if (!order) return null;
+
+    /** GET de detalhe deve ser só leitura e rápido — syncs pesados ficam na listagem / mutações / estoque. */
     const [withPlan] = await enrichOrdersParcelPlans([order]);
-    return withPlan;
+    const [withCodes] = await withPurchaseOrderCatalogCodes([withPlan]);
+    return withCodes;
+  }
+
+  /** Dados mínimos para gerar o PDF da OC no cliente (bem mais leve que getById). */
+  async getForPdf(id: string) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: purchaseOrderIncludePdf
+    });
+    if (!order) return null;
+    const [withCodes] = await withPurchaseOrderCatalogCodes([order]);
+    return withCodes;
+  }
+
+  /** Contexto leve para PATCH /status (evita getById com joins pesados só para checar permissão). */
+  async getStatusChangeContext(id: string) {
+    return prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        materialRequest: {
+          select: { costCenter: { select: { id: true } } }
+        }
+      }
+    });
+  }
+
+  /** Resumo de recebimento/saída no estoque (consulta separada para não atrasar a abertura da modal). */
+  async getStockReceiptSummary(id: string) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        orderNumber: true,
+        items: { include: { material: true } }
+      }
+    });
+    if (!order) return null;
+    return stockShortfallService.getReceiptSummaryForOrderNumber(order.orderNumber, {
+      items: order.items
+    });
   }
 
   async updateStatus(
@@ -550,51 +1416,85 @@ export class PurchaseOrderService {
     userId?: string,
     options?: { rejectionReason?: string }
   ) {
-    const order = await prisma.purchaseOrder.findUnique({ where: { id } });
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      include: {
+        items: { select: { materialRequestItemId: true } },
+        materialRequest: {
+          select: { costCenter: { select: { name: true, code: true } } },
+        },
+      },
+    });
     if (!order) {
       throw new Error('Ordem de compra não encontrada');
     }
 
     const st = order.status;
+    const isUnbOc = isUnbCostCenterRecord(order.materialRequest?.costCenter);
+    let requestedStatus = status;
+
+    // UNB: reenvio pós-correção volta direto para o gestor (não para compras).
+    if (requestedStatus === 'PENDING_COMPRAS' && st === 'IN_REVIEW' && isUnbOc) {
+      requestedStatus = 'PENDING';
+    }
 
     // Fase 1 (compras): PENDING_COMPRAS | DRAFT → PENDING
-    if (status === 'PENDING') {
-      if (st !== 'PENDING_COMPRAS' && st !== 'DRAFT') {
+    // UNB: também IN_REVIEW → PENDING (reenvio após correção)
+    if (requestedStatus === 'PENDING') {
+      const okFromCompras = st === 'PENDING_COMPRAS' || st === 'DRAFT';
+      const okUnbResubmit = isUnbOc && st === 'IN_REVIEW';
+      if (!okFromCompras && !okUnbResubmit) {
         throw new Error('Apenas OC em rascunho ou na fase de compras pode seguir para aprovação do gestor');
+      }
+      if (okUnbResubmit && (!userId || order.createdBy !== userId)) {
+        throw new Error('Apenas quem criou a OC pode reenviá-la após correção');
       }
     }
 
-    // Fase 2 (gestor): PENDING → PENDING_DIRETORIA
-    if (status === 'PENDING_DIRETORIA') {
+    // Fase 2 (gestor): PENDING → PENDING_DIRETORIA (não se aplica a UNB)
+    if (requestedStatus === 'PENDING_DIRETORIA') {
+      if (isUnbOc) {
+        throw new Error('OC de centro de custo UNB não passa por aprovação da diretoria');
+      }
       if (st !== 'PENDING') {
         throw new Error('Apenas OC na fase do gestor pode seguir para aprovação da diretoria');
       }
     }
 
-    // 2ª fase (diretoria): PENDING_DIRETORIA → APPROVED
-    if (status === 'APPROVED') {
-      if (st !== 'PENDING_DIRETORIA') {
-        throw new Error('A OC só pode ser aprovada após aprovação do gestor (fase diretoria)');
+    // Diretoria: PENDING_DIRETORIA → APPROVED
+    // UNB: gestor aprova direto PENDING → APPROVED
+    if (requestedStatus === 'APPROVED') {
+      const okFromDiretoria = st === 'PENDING_DIRETORIA';
+      const okUnbGestor = isUnbOc && st === 'PENDING';
+      if (!okFromDiretoria && !okUnbGestor) {
+        throw new Error(
+          isUnbOc
+            ? 'A OC UNB só pode ser aprovada na fase do gestor'
+            : 'A OC só pode ser aprovada após aprovação do gestor (fase diretoria)',
+        );
       }
     }
 
-    if (status === 'IN_REVIEW') {
+    if (requestedStatus === 'IN_REVIEW') {
       if (st !== 'PENDING_COMPRAS' && st !== 'PENDING' && st !== 'DRAFT' && st !== 'PENDING_DIRETORIA') {
         throw new Error('Apenas OC nas fases de aprovação ou rascunho pode ir para correção');
       }
     }
 
-    if (status === 'REJECTED') {
+    if (requestedStatus === 'REJECTED') {
       if (st !== 'PENDING_COMPRAS' && st !== 'PENDING' && st !== 'DRAFT' && st !== 'PENDING_DIRETORIA') {
         throw new Error('Apenas OC pendente de aprovação pode ser reprovada');
       }
     }
 
-    if (status === 'PENDING_COMPRAS' && st === 'IN_REVIEW') {
+    if (requestedStatus === 'PENDING_COMPRAS' && st === 'IN_REVIEW') {
       if (!userId || order.createdBy !== userId) {
         throw new Error('Apenas quem criou a OC pode reenviá-la após correção');
       }
     }
+
+    // A partir daqui, `status` segue o status efetivo (pode ter sido remapeado p/ UNB).
+    status = requestedStatus;
 
     let fillPaymentProofFromLastInstallment: { paymentProofUrl: string; paymentProofName: string | null } | null =
       null;
@@ -612,35 +1512,63 @@ export class PurchaseOrderService {
           'Apenas OC na fase Pagamento ou em correção do comprovante pode ser enviada para validação do comprovante'
         );
       }
-      if (st === 'PENDING_PROOF_CORRECTION') {
-        await assertUserIsFinanceOrAdmin(
-          userId,
-          'Apenas o financeiro pode reenviar o comprovante para validação após correção'
+      const fcCount = await prisma.financialControlEntry.count({
+        where: { ocNumber: { equals: order.orderNumber.trim(), mode: 'insensitive' } }
+      });
+      if (fcCount === 0) {
+        throw new Error(
+          'Registre o lançamento desta OC no Controle Financeiro antes de enviar o comprovante para validação'
         );
       }
-      if (order.paymentType === 'BOLETO' && !order.paymentBoletoPhaseReleased) {
-        throw new Error(
-          'Envie a OC para a fase Pagamento (botão após anexar o boleto) antes de enviar o comprovante para validação'
-        );
+      if (st === 'PENDING_PROOF_CORRECTION') {
+        // Permissão da aba Correção Comprovante é validada na rota (assertOcFlowStatusChange).
+      }
+      let boletoMeta: { paymentParcelCount: number } | null = null;
+      if (order.paymentType === 'BOLETO') {
+        const [meta] = await enrichOrdersParcelPlans([order]);
+        boletoMeta = meta;
+        if (!order.paymentBoletoPhaseReleased && meta.paymentParcelCount <= 1) {
+          throw new Error(
+            'Envie a OC para a fase Pagamento (botão após anexar o boleto) antes de enviar o comprovante para validação'
+          );
+        }
       }
       let proofUrl = (order.paymentProofUrl || '').trim();
       let proofName = ((order.paymentProofName || '').trim() || null) as string | null;
 
-      if (order.paymentType === 'BOLETO') {
-        const [meta] = await enrichOrdersParcelPlans([order]);
-        if (meta.paymentParcelCount > 1) {
-          const inst = parseStoredInstallments(order.paymentBoletoInstallments);
-          if (!allMultiInstallmentsPaid(inst, meta.paymentParcelCount)) {
+      if (order.paymentType === 'BOLETO' && boletoMeta && boletoMeta.paymentParcelCount > 1) {
+        const n = boletoMeta.paymentParcelCount;
+        const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+        const parallel = useParallelBoletoPaymentFlow(inst, n);
+        if (parallel) {
+          if (!allInstallmentsHavePaymentProof(inst, n)) {
             throw new Error(
-              'Aguarde o pagamento de todas as parcelas antes de enviar o comprovante para validação'
+              'Anexe o comprovante de pagamento em todas as parcelas antes de enviar para validação'
             );
           }
-          if (!proofUrl) {
-            const last = inst[meta.paymentParcelCount - 1];
-            const fromLast = (last?.installmentProofUrl || '').trim();
-            if (fromLast) {
-              proofUrl = fromLast;
-              proofName = ((last?.installmentProofName || '').trim() || null) as string | null;
+        } else {
+          if (allMultiInstallmentsPaid(inst, n)) {
+            if (!proofUrl && !allInstallmentsHavePaymentProof(inst, n)) {
+              throw new Error(
+                'Anexe o comprovante de pagamento antes de enviar para validação'
+              );
+            }
+          } else {
+            const proofIdx = firstNonPaidInstallmentWithProof(inst, n);
+            if (proofIdx < 0) {
+              throw new Error(
+                'Anexe o comprovante de pagamento da parcela atual antes de enviar para validação'
+              );
+            }
+          }
+        }
+        if (!proofUrl) {
+          for (let i = 0; i < n; i++) {
+            const fromInst = (inst[i]?.installmentProofUrl || '').trim();
+            if (fromInst) {
+              proofUrl = fromInst;
+              proofName = ((inst[i]?.installmentProofName || '').trim() || null) as string | null;
+              break;
             }
           }
         }
@@ -655,10 +1583,63 @@ export class PurchaseOrderService {
       }
     }
 
-    if (status === 'PENDING_NF_ATTACHMENT') {
+    let targetStatus = status;
+    let sequentialAfterProofValidation: {
+      paymentBoletoInstallments: BoletoInstallmentStored[];
+      paymentBoletoPhaseReleased: boolean;
+      paymentProofUrl: null;
+      paymentProofName: null;
+    } | null = null;
+
+    if (targetStatus === 'PENDING_NF_ATTACHMENT' && st === 'PENDING_PROOF_VALIDATION') {
+      const forSeq = await prisma.purchaseOrder.findUnique({
+        where: { id },
+        select: {
+          paymentType: true,
+          paymentCondition: true,
+          paymentBoletoInstallments: true
+        }
+      });
+      if (forSeq?.paymentType === 'BOLETO') {
+        const [meta] = await enrichOrdersParcelPlans([forSeq]);
+        const n = meta.paymentParcelCount;
+        if (n > 1) {
+          const inst = parseStoredInstallments(forSeq.paymentBoletoInstallments);
+          if (!useParallelBoletoPaymentFlow(inst, n)) {
+            const proofIdx = firstNonPaidInstallmentWithProof(inst, n);
+            if (proofIdx >= 0) {
+              const next = inst.map((row, j) =>
+                j === proofIdx ? { ...row, paymentStatus: 'PAID' as const } : row
+              );
+              if (!allMultiInstallmentsPaid(next, n)) {
+                targetStatus = 'APPROVED';
+                sequentialAfterProofValidation = {
+                  paymentBoletoInstallments: next,
+                  paymentBoletoPhaseReleased: false,
+                  paymentProofUrl: null,
+                  paymentProofName: null
+                };
+              } else {
+                sequentialAfterProofValidation = {
+                  paymentBoletoInstallments: next,
+                  paymentBoletoPhaseReleased: true,
+                  paymentProofUrl: null,
+                  paymentProofName: null
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (targetStatus === 'PENDING_NF_ATTACHMENT') {
       if (st !== 'PENDING_PROOF_VALIDATION') {
         throw new Error('Apenas OC em validação de comprovante pode seguir para anexo de NF');
       }
+      void this.syncNfAttachmentsFromStockReceipt(order.orderNumber).catch((err) => {
+        console.error('[PurchaseOrder] syncNfAttachmentsFromStockReceipt before NF phase', order.orderNumber, err);
+      });
       const forProof = await prisma.purchaseOrder.findUnique({
         where: { id },
         select: {
@@ -686,13 +1667,10 @@ export class PurchaseOrderService {
       }
       const row = await prisma.purchaseOrder.findUnique({
         where: { id },
-        select: { nfAttachments: true, createdBy: true }
+        select: { nfAttachments: true }
       });
       if (!row) {
         throw new Error('Ordem de compra não encontrada');
-      }
-      if (row.createdBy !== userId) {
-        throw new Error('Apenas quem criou a OC pode finalizar após anexar as notas fiscais');
       }
       const nfs = parseNfAttachments(row.nfAttachments);
       if (nfs.length === 0) {
@@ -701,42 +1679,112 @@ export class PurchaseOrderService {
     }
 
     const data: any = {
-      status,
+      status: targetStatus,
       updatedAt: new Date(),
-      ...(fillPaymentProofFromLastInstallment || {})
+      ...(fillPaymentProofFromLastInstallment || {}),
+      ...(sequentialAfterProofValidation || {})
     };
 
+    if (status === 'PENDING' && userId && (st === 'PENDING_COMPRAS' || st === 'DRAFT')) {
+      data.comprasApprovedBy = userId;
+      data.comprasApprovedAt = new Date();
+    }
+
+    if (status === 'PENDING_DIRETORIA' && userId && st === 'PENDING') {
+      data.gestorApprovedBy = userId;
+      data.gestorApprovedAt = new Date();
+    }
+
     if (status === 'APPROVED' && userId) {
+      // UNB: aprovação do gestor já finaliza (grava gestor + aprovador final).
+      if (isUnbOc && st === 'PENDING') {
+        data.gestorApprovedBy = userId;
+        data.gestorApprovedAt = new Date();
+      }
       data.approvedBy = userId;
       data.approvedAt = new Date();
+      const [meta] = await enrichOrdersParcelPlans([{ paymentCondition: order.paymentCondition }]);
+      const release = buildCreationBoletoAutoReleaseData(order, meta.paymentParcelCount);
+      if (release) {
+        Object.assign(data, release);
+      }
     }
 
     if (
       status === 'IN_REVIEW' ||
-      status === 'REJECTED' ||
-      status === 'PENDING' ||
-      status === 'PENDING_DIRETORIA' ||
-      (status === 'PENDING_COMPRAS' && st === 'IN_REVIEW')
+      (status === 'PENDING_COMPRAS' && st === 'IN_REVIEW') ||
+      (status === 'PENDING' && st === 'IN_REVIEW')
     ) {
+      data.comprasApprovedBy = null;
+      data.comprasApprovedAt = null;
+      data.gestorApprovedBy = null;
+      data.gestorApprovedAt = null;
+      data.approvedBy = null;
+      data.approvedAt = null;
+    } else if (status === 'REJECTED' || status === 'PENDING' || status === 'PENDING_DIRETORIA') {
       data.approvedBy = null;
       data.approvedAt = null;
     }
 
     if (status === 'REJECTED' && options?.rejectionReason) {
-      const note = `[Reprovação ${new Date().toLocaleString('pt-BR')}] ${options.rejectionReason}`;
+      const note = `[Cancelamento ${new Date().toLocaleString('pt-BR')}] ${options.rejectionReason}`;
       data.notes = order.notes ? `${order.notes}\n\n${note}` : note;
     }
 
     if (status === 'PENDING_PROOF_CORRECTION' && options?.rejectionReason?.trim()) {
-      const note = `[Correção comprovante ${new Date().toLocaleString('pt-BR')}] ${options.rejectionReason.trim()}`;
+      const actorName = await resolveUserDisplayName(userId);
+      const header = buildOcCorrectionNoteHeader({
+        prefix: 'Correção comprovante',
+        role: 'Financeiro',
+        actorName,
+      });
+      const note = `${header}\n${options.rejectionReason.trim()}`;
       data.notes = order.notes ? `${order.notes}\n\n${note}` : note;
     }
 
-    const updated = await prisma.purchaseOrder.update({
-      where: { id },
-      data,
-      include: purchaseOrderIncludeDetail
-    });
+    if (status === 'IN_REVIEW' && options?.rejectionReason?.trim()) {
+      const actorName = await resolveUserDisplayName(userId);
+      const header = buildOcCorrectionNoteHeader({
+        prefix: 'Correção OC',
+        role: labelForOcCorrectionSource(st),
+        actorName,
+      });
+      const note = `${header}\n${options.rejectionReason.trim()}`;
+      data.notes = order.notes ? `${order.notes}\n\n${note}` : note;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const po = await tx.purchaseOrder.update({
+        where: { id },
+        data,
+        // Resposta leve — o front atualiza a lista summary; detalhe completo vem do GET :id
+        include: purchaseOrderIncludeListSummary
+      });
+
+      if (status === 'REJECTED' && order.materialRequestId) {
+        const rmItemIds = order.items
+          .map((i) => i.materialRequestItemId)
+          .filter((id): id is string => Boolean(id));
+        if (rmItemIds.length > 0) {
+          await tx.materialRequestItem.updateMany({
+            where: { id: { in: rmItemIds } },
+            data: {
+              status: 'CANCELLED',
+              updatedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      return po;
+    }, PURCHASE_ORDER_STATUS_TX_OPTIONS);
+
+    if (status === 'APPROVED') {
+      void this.syncDocumentsFromStockReceipt(order.orderNumber).catch((err) => {
+        console.error('[PurchaseOrder] syncDocumentsFromStockReceipt on APPROVED', order.orderNumber, err);
+      });
+    }
+
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
   }
@@ -757,6 +1805,21 @@ export class PurchaseOrderService {
 
     if (order.status !== 'IN_REVIEW') {
       throw new Error('A OC só pode ser editada durante a CORREÇÃO OC');
+    }
+
+    const nextPaymentType =
+      data.paymentType !== undefined && data.paymentType !== null ? data.paymentType : undefined;
+
+    if (nextPaymentType === 'AVISTA') {
+      if (!data.paymentDetails?.trim()) {
+        throw new Error('Dados do pagamento são obrigatórios para pagamento à vista');
+      }
+      if (!data.pixKeyType?.trim()) {
+        throw new Error('Tipo de chave PIX é obrigatório para pagamento à vista');
+      }
+      if (!data.pixKey?.trim()) {
+        throw new Error('Chave PIX é obrigatória para pagamento à vista');
+      }
     }
 
     const expectedDelivery =
@@ -818,6 +1881,18 @@ export class PurchaseOrderService {
           paymentType: data.paymentType !== undefined ? data.paymentType : undefined,
           paymentCondition: data.paymentCondition !== undefined ? data.paymentCondition : undefined,
           paymentDetails: data.paymentDetails !== undefined ? data.paymentDetails : undefined,
+          pixKeyType:
+            nextPaymentType === 'BOLETO'
+              ? null
+              : data.pixKeyType !== undefined
+                ? data.pixKeyType?.trim() || null
+                : undefined,
+          pixKey:
+            nextPaymentType === 'BOLETO'
+              ? null
+              : data.pixKey !== undefined
+                ? data.pixKey?.trim() || null
+                : undefined,
           freightAmount: freightToStore,
           amountToPay,
           notes: data.notes !== undefined ? data.notes : undefined,
@@ -826,7 +1901,8 @@ export class PurchaseOrderService {
       });
     });
 
-    return await this.getById(id);
+    const refreshed = await this.getById(id);
+    return refreshed;
   }
 
   /**
@@ -890,7 +1966,7 @@ export class PurchaseOrderService {
         paymentBoletoInstallments: [row] as unknown as Prisma.InputJsonValue,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     }).then(async (o) => {
       const [e] = await enrichOrdersParcelPlans([o]);
       return e;
@@ -919,7 +1995,8 @@ export class PurchaseOrderService {
         status: true,
         paymentType: true,
         paymentCondition: true,
-        paymentBoletoInstallments: true
+        paymentBoletoInstallments: true,
+        amountToPay: true
       }
     });
     if (!order) throw new Error('Ordem de compra não encontrada');
@@ -979,6 +2056,24 @@ export class PurchaseOrderService {
         throw new Error('Data de vencimento inválida (use AAAA-MM-DD)');
       }
     }
+    const orderTotal =
+      order.amountToPay != null && String(order.amountToPay).trim() !== ''
+        ? Number(order.amountToPay)
+        : NaN;
+    if (Number.isFinite(orderTotal)) {
+      const sumCents = merged.reduce((s, m) => s + Math.round(Number(m.amount) * 100), 0);
+      const totalCents = Math.round(orderTotal * 100);
+      if (sumCents !== totalCents) {
+        throw new Error(
+          `A soma das parcelas deve ser igual ao total da OC (R$ ${orderTotal.toFixed(2).replace('.', ',')}).`
+        );
+      }
+      for (const m of merged) {
+        if (Number(m.amount) > orderTotal) {
+          throw new Error('Nenhuma parcela pode ultrapassar o total da OC.');
+        }
+      }
+    }
     const data: Prisma.PurchaseOrderUpdateInput = {
       paymentBoletoInstallments: merged as unknown as Prisma.InputJsonValue,
       updatedAt: new Date()
@@ -996,7 +2091,206 @@ export class PurchaseOrderService {
     const updated = await prisma.purchaseOrder.update({
       where: { id },
       data,
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
+    });
+    const [e] = await enrichOrdersParcelPlans([updated]);
+    return e;
+  }
+
+  /**
+   * Administrador: força esta OC a ter apenas 1 parcela de boleto (total integral),
+   * trocando a condição de pagamento para uma de 1 parcela.
+   */
+  async forceSingleBoletoParcel(id: string, _userId?: string) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true,
+        amountToPay: true,
+        orderDate: true,
+      },
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+    if (order.paymentType !== 'BOLETO') {
+      throw new Error('Só é possível ajustar parcelas em OC com pagamento em boleto');
+    }
+    if (order.status !== 'APPROVED') {
+      throw new Error('Só é possível forçar 1 boleto em OC aprovada (fase de anexar boleto)');
+    }
+    if (order.paymentBoletoPhaseReleased) {
+      throw new Error(
+        'Não é possível reduzir parcelas depois que a OC já foi enviada para a fase Pagamento'
+      );
+    }
+
+    const [metaBefore] = await enrichOrdersParcelPlans([
+      { paymentCondition: order.paymentCondition },
+    ]);
+    if (metaBefore.paymentParcelCount <= 1) {
+      const current = await prisma.purchaseOrder.findUniqueOrThrow({
+        where: { id },
+        include: purchaseOrderIncludeListSummary,
+      });
+      const [already] = await enrichOrdersParcelPlans([current]);
+      return already;
+    }
+
+    const existing = parseStoredInstallments(order.paymentBoletoInstallments);
+    for (const row of existing) {
+      const st = rowStatus(row);
+      if (st === 'PAID' || st === 'AWAITING_PAYMENT') {
+        throw new Error(
+          'Não é possível reduzir para 1 boleto: já há parcela em pagamento ou paga'
+        );
+      }
+    }
+
+    const oneParcelCondition = await prisma.paymentCondition.findFirst({
+      where: { paymentType: 'BOLETO', parcelCount: 1, isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      select: { code: true, parcelDueDays: true },
+    });
+    if (!oneParcelCondition) {
+      throw new Error(
+        'Não há condição de pagamento de boleto com 1 parcela ativa. Cadastre uma em Condições de pagamento.'
+      );
+    }
+
+    const total =
+      order.amountToPay != null && String(order.amountToPay).trim() !== ''
+        ? Number(order.amountToPay)
+        : NaN;
+    if (!Number.isFinite(total) || total < 0) {
+      throw new Error('Total da OC inválido para montar a parcela única');
+    }
+
+    const first = existing[0] || {};
+    const dueDaysList = normalizeParcelDueDaysJson(oneParcelCondition.parcelDueDays);
+    const dueDays = dueDaysList[0] ?? metaBefore.paymentParcelDueDays?.[0] ?? 0;
+    const baseDate =
+      order.orderDate instanceof Date
+        ? order.orderDate
+        : new Date(order.orderDate || Date.now());
+    const fallbackDue = new Date(baseDate);
+    fallbackDue.setDate(fallbackDue.getDate() + (Number.isFinite(dueDays) ? Number(dueDays) : 0));
+    const fallbackDueYmd = fallbackDue.toISOString().slice(0, 10);
+    const dueDate =
+      typeof first.dueDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(first.dueDate.slice(0, 10))
+        ? first.dueDate.slice(0, 10)
+        : fallbackDueYmd;
+
+    const single: BoletoInstallmentStored = {
+      amount: total,
+      dueDate,
+      boletoUrl: first.boletoUrl || null,
+      boletoName: first.boletoName || null,
+      paymentStatus: 'PENDING_BOLETO',
+    };
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        paymentCondition: oneParcelCondition.code,
+        paymentBoletoInstallments: [single] as unknown as Prisma.InputJsonValue,
+        paymentBoletoUrl: single.boletoUrl || null,
+        paymentBoletoName: single.boletoName || null,
+        updatedAt: new Date(),
+      },
+      include: purchaseOrderIncludeListSummary,
+    });
+    const [e] = await enrichOrdersParcelPlans([updated]);
+    return e;
+  }
+
+  /**
+   * Atualiza só a data de vencimento de parcelas ainda não pagas (fase Pagamento).
+   * Parcelas PAID ficam bloqueadas.
+   */
+  async updateUnpaidInstallmentDueDates(
+    id: string,
+    body: { dueDates: Array<{ index: number; dueDate: string }> }
+  ) {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+    if (order.paymentType !== 'BOLETO') {
+      throw new Error('Vencimento de parcelas aplica-se apenas a OC com pagamento em boleto');
+    }
+    if (
+      order.status !== 'APPROVED' &&
+      order.status !== 'PENDING_PROOF_VALIDATION' &&
+      order.status !== 'PENDING_PROOF_CORRECTION'
+    ) {
+      throw new Error('Só é possível editar vencimento na fase de pagamento do boleto');
+    }
+    if (!order.paymentBoletoPhaseReleased) {
+      throw new Error(
+        'Anexe os boletos e envie para a fase Pagamento antes de editar vencimentos por aqui'
+      );
+    }
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const parcelCount = meta.paymentParcelCount;
+    const existing = parseStoredInstallments(order.paymentBoletoInstallments);
+    if (existing.length < parcelCount) {
+      throw new Error('Parcelas de boleto ainda não foram registradas nesta OC');
+    }
+
+    const updates = Array.isArray(body?.dueDates) ? body.dueDates : [];
+    if (updates.length === 0) {
+      throw new Error('Informe ao menos uma data de vencimento');
+    }
+
+    const next = existing.map((row) => ({ ...row }));
+    let changed = 0;
+    for (const item of updates) {
+      const index = Math.round(Number(item.index));
+      if (!Number.isInteger(index) || index < 0 || index >= parcelCount) {
+        throw new Error(`Índice de parcela inválido: ${item.index}`);
+      }
+      const dueDate = String(item.dueDate || '').trim().slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+        throw new Error('Data de vencimento inválida (use AAAA-MM-DD)');
+      }
+      const st = rowStatus(next[index]);
+      if (st === 'PAID') {
+        throw new Error(`A parcela ${index + 1} já está paga e não pode ter o vencimento alterado`);
+      }
+      if ((next[index]?.dueDate || '') === dueDate) continue;
+      next[index] = { ...next[index], dueDate };
+      changed += 1;
+    }
+    if (changed === 0) {
+      const [unchanged] = await enrichOrdersParcelPlans([
+        await prisma.purchaseOrder.findUniqueOrThrow({
+          where: { id },
+          include: purchaseOrderIncludeListSummary
+        })
+      ]);
+      return unchanged;
+    }
+
+    const updated = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        paymentBoletoInstallments: next as unknown as Prisma.InputJsonValue,
+        updatedAt: new Date()
+      },
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
@@ -1012,7 +2306,15 @@ export class PurchaseOrderService {
   ) {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id },
-      select: { id: true, status: true, paymentType: true, paymentBoletoPhaseReleased: true }
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true,
+        createdBy: true,
+      },
     });
     if (!order) {
       throw new Error('Ordem de compra não encontrada');
@@ -1022,63 +2324,57 @@ export class PurchaseOrderService {
         'Só é possível anexar comprovante na fase Pagamento ou em correção do comprovante'
       );
     }
-    if (order.status === 'PENDING_PROOF_CORRECTION') {
-      await assertUserIsFinanceOrAdmin(
-        userId,
-        'Apenas o financeiro pode anexar ou substituir o comprovante nesta fase'
-      );
-    }
     if (order.paymentType === 'BOLETO' && !order.paymentBoletoPhaseReleased) {
       throw new Error(
         'Confirme o envio para a fase Pagamento (botão após anexar o boleto) antes de anexar o comprovante'
       );
     }
-    if (order.paymentType === 'BOLETO') {
-      const full = await prisma.purchaseOrder.findUnique({
-        where: { id },
-        select: { paymentCondition: true, paymentBoletoInstallments: true }
-      });
-      if (full) {
-        const [meta] = await enrichOrdersParcelPlans([{ paymentCondition: full.paymentCondition }]);
-        const n = meta.paymentParcelCount;
-        if (n > 1) {
-          const inst = parseStoredInstallments(full.paymentBoletoInstallments);
-          if (!allMultiInstallmentsPaid(inst, n)) {
-            throw new Error(
-              'Aguarde o pagamento de todas as parcelas (financeiro libera cada uma) antes de anexar o comprovante'
-            );
-          }
-        }
-      }
-    }
     const url = (data.paymentProofUrl || '').trim();
     if (!url) {
       throw new Error('Arquivo do comprovante é obrigatório');
     }
+    const proofName = (data.paymentProofName || '').trim() || null;
+    const updateData: Prisma.PurchaseOrderUpdateInput = {
+      paymentProofUrl: url,
+      paymentProofName: proofName,
+      updatedAt: new Date()
+    };
+    if (order.paymentType === 'BOLETO') {
+      const [meta] = await enrichOrdersParcelPlans([{ paymentCondition: order.paymentCondition }]);
+      const n = meta.paymentParcelCount;
+      if (n > 1) {
+        const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+        if (!allMultiInstallmentsPaid(inst, n)) {
+          throw new Error(
+            'Aguarde o pagamento de todas as parcelas (financeiro libera cada uma) antes de anexar o comprovante'
+          );
+        }
+        const spread = spreadOrderPaymentProofToPaidInstallments(inst, n, url, proofName);
+        if (spread) {
+          updateData.paymentBoletoInstallments = spread as unknown as Prisma.InputJsonValue;
+        }
+      }
+    }
     const updated = await prisma.purchaseOrder.update({
       where: { id },
-      data: {
-        paymentProofUrl: url,
-        paymentProofName: (data.paymentProofName || '').trim() || null,
-        updatedAt: new Date()
-      },
-      include: purchaseOrderIncludeDetail
+      data: updateData,
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
   }
 
   /**
-   * Comprador: anexa uma NF na fase após validação do comprovante (pode repetir quantas vezes precisar).
+   * Anexa uma NF na fase após validação do comprovante (qualquer usuário autenticado com acesso à OC).
    */
   async appendNfAttachment(
     id: string,
-    data: { nfUrl: string; nfName?: string | null },
+    data: { nfUrl: string; nfName?: string | null; nfNumber?: string | null },
     userId?: string
   ) {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id },
-      select: { id: true, status: true, createdBy: true, nfAttachments: true }
+      select: { id: true, orderNumber: true, status: true, createdBy: true, nfAttachments: true }
     });
     if (!order) {
       throw new Error('Ordem de compra não encontrada');
@@ -1086,19 +2382,31 @@ export class PurchaseOrderService {
     if (order.status !== 'PENDING_NF_ATTACHMENT') {
       throw new Error('Só é possível anexar NF quando a OC está na fase Anexar NF');
     }
-    if (!userId || order.createdBy !== userId) {
-      throw new Error('Apenas quem criou a OC pode anexar notas fiscais nesta fase');
+    if (!userId) {
+      throw new Error('Usuário não autenticado');
     }
     const url = (data.nfUrl || '').trim();
     if (!url) {
       throw new Error('Arquivo da nota fiscal é obrigatório');
     }
-    const name = (data.nfName || '').trim() || null;
+    if (!isValidNfNumber(data.nfNumber)) {
+      throw new Error('Número da nota fiscal é obrigatório');
+    }
     const list = parseNfAttachments(order.nfAttachments);
+    const incomingKey = normalizeNfNumberKey(data.nfNumber);
+    const alreadyOnOrder = list.some(
+      (nf) => nf.number && normalizeNfNumberKey(nf.number) === incomingKey
+    );
+    if (alreadyOnOrder) {
+      throw new Error('Esta nota fiscal já está anexada nesta OC');
+    }
+    const nfNumber = await claimInvoiceNumberForOrder(id, String(data.nfNumber));
+    const name = (data.nfName || '').trim() || null;
     list.push({
       url,
       name,
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      number: nfNumber
     });
     const updated = await prisma.purchaseOrder.update({
       where: { id },
@@ -1106,14 +2414,15 @@ export class PurchaseOrderService {
         nfAttachments: list as unknown as Prisma.InputJsonValue,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
+    await prependNfToFinancialControlParcels(order.orderNumber, nfNumber);
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
   }
 
   /**
-   * Comprador: remove uma NF anexada (ainda na fase Anexar NF).
+   * Remove uma NF anexada (ainda na fase Anexar NF).
    */
   async removeNfAttachment(id: string, index: number, userId?: string) {
     const order = await prisma.purchaseOrder.findUnique({
@@ -1126,24 +2435,82 @@ export class PurchaseOrderService {
     if (order.status !== 'PENDING_NF_ATTACHMENT') {
       throw new Error('Só é possível remover NF na fase Anexar NF');
     }
-    if (!userId || order.createdBy !== userId) {
-      throw new Error('Apenas quem criou a OC pode remover notas fiscais nesta fase');
+    if (!userId) {
+      throw new Error('Usuário não autenticado');
     }
     const list = parseNfAttachments(order.nfAttachments);
     if (!Number.isInteger(index) || index < 0 || index >= list.length) {
       throw new Error('Índice da nota fiscal inválido');
     }
-    list.splice(index, 1);
+    const [removed] = list.splice(index, 1);
+    if (removed?.number) {
+      await releaseInvoiceNumberForOrder(id, removed.number);
+    }
     const updated = await prisma.purchaseOrder.update({
       where: { id },
       data: {
         nfAttachments: list.length > 0 ? (list as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
+  }
+
+  /**
+   * Valida se o número de NF pode ser usado nesta OC (ou em entrada de estoque vinculada).
+   * @throws se já existir em outra OC
+   */
+  async assertInvoiceNumberAvailable(
+    nfNumber: string,
+    options?: { excludePurchaseOrderId?: string; excludeOrderNumber?: string }
+  ): Promise<void> {
+    if (!isValidNfNumber(nfNumber)) {
+      throw new Error('Número da nota fiscal é obrigatório');
+    }
+    let excludeId = options?.excludePurchaseOrderId;
+    if (!excludeId && options?.excludeOrderNumber?.trim()) {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { orderNumber: options.excludeOrderNumber.trim() },
+        select: { id: true }
+      });
+      excludeId = po?.id;
+    }
+    const conflict = await findInvoiceNumberConflict(nfNumber, excludeId);
+    if (conflict) {
+      throw new Error(`Nota fiscal já existe na OC ${formatOcShortLabel(conflict.orderNumber)}`);
+    }
+  }
+
+  /** Consulta se o nº da NF já está em uso (outra OC). */
+  async checkInvoiceNumberAvailability(
+    nfNumber: string,
+    excludePurchaseOrderId?: string
+  ): Promise<{ available: boolean; conflictOrderNumber?: string }> {
+    if (!isValidNfNumber(nfNumber)) {
+      return { available: true };
+    }
+    const conflict = await findInvoiceNumberConflict(nfNumber, excludePurchaseOrderId);
+    if (conflict) {
+      return { available: false, conflictOrderNumber: conflict.orderNumber };
+    }
+    return { available: true };
+  }
+
+  /** Reserva o número da NF para a OC (entrada de estoque). */
+  async registerInvoiceNumberForOrderNumber(
+    orderNumber: string,
+    nfNumber: string
+  ): Promise<void> {
+    const trimmed = orderNumber.trim();
+    if (!trimmed) throw new Error('Número da OC é obrigatório');
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { orderNumber: trimmed },
+      select: { id: true }
+    });
+    if (!po) throw new Error('Ordem de compra não encontrada');
+    await claimInvoiceNumberForOrder(po.id, nfNumber);
   }
 
   /**
@@ -1159,7 +2526,8 @@ export class PurchaseOrderService {
         paymentCondition: true,
         paymentBoletoUrl: true,
         paymentBoletoInstallments: true,
-        paymentBoletoPhaseReleased: true
+        paymentBoletoPhaseReleased: true,
+        amountToPay: true
       }
     });
     if (!order) {
@@ -1177,6 +2545,39 @@ export class PurchaseOrderService {
     const [meta] = await enrichOrdersParcelPlans([order]);
     const n = meta.paymentParcelCount;
 
+    const orderTotal =
+      order.amountToPay != null && String(order.amountToPay).trim() !== ''
+        ? Number(order.amountToPay)
+        : NaN;
+    if (Number.isFinite(orderTotal)) {
+      const instForSum = parseStoredInstallments(order.paymentBoletoInstallments);
+      const rowsForSum =
+        instForSum.length >= n
+          ? instForSum.slice(0, n)
+          : [
+              ...instForSum,
+              ...Array.from({ length: n - instForSum.length }, () => ({
+                amount: 0,
+                dueDate: '',
+                boletoUrl: null,
+                boletoName: null,
+                paymentStatus: 'PENDING_BOLETO' as const
+              }))
+            ];
+      const sumCents = rowsForSum.reduce((s, m) => s + Math.round(Number(m.amount) * 100), 0);
+      const totalCents = Math.round(orderTotal * 100);
+      if (sumCents !== totalCents) {
+        throw new Error(
+          `A soma das parcelas deve ser igual ao total da OC (R$ ${orderTotal.toFixed(2).replace('.', ',')}).`
+        );
+      }
+      for (const m of rowsForSum) {
+        if (Number(m.amount) > orderTotal) {
+          throw new Error('Nenhuma parcela pode ultrapassar o total da OC.');
+        }
+      }
+    }
+
     if (n <= 1) {
       if (!((order.paymentBoletoUrl || '').trim())) {
         throw new Error('Anexe o boleto antes de enviar para a fase Pagamento');
@@ -1185,25 +2586,6 @@ export class PurchaseOrderService {
       let inst = parseStoredInstallments(order.paymentBoletoInstallments);
       if (inst.length < n) {
         throw new Error('Registre as parcelas (valores e vencimentos) antes de enviar o boleto');
-      }
-      if (isLegacyBulkNoExplicitStatus(inst, n)) {
-        inst = inst.map((row, i) => ({
-          ...row,
-          paymentStatus: (i === 0 ? 'AWAITING_PAYMENT' : 'PENDING_BOLETO') as BoletoInstallmentPaymentStatus
-        }));
-        const updated = await prisma.purchaseOrder.update({
-          where: { id },
-          data: {
-            paymentBoletoInstallments: inst as unknown as Prisma.InputJsonValue,
-            paymentBoletoUrl: null,
-            paymentBoletoName: null,
-            paymentBoletoPhaseReleased: true,
-            updatedAt: new Date()
-          },
-          include: purchaseOrderIncludeDetail
-        });
-        const [e] = await enrichOrdersParcelPlans([updated]);
-        return e;
       }
       for (let i = 0; i < n; i++) {
         const st = rowStatus(inst[i]);
@@ -1227,7 +2609,7 @@ export class PurchaseOrderService {
               paymentBoletoPhaseReleased: true,
               updatedAt: new Date()
             },
-            include: purchaseOrderIncludeDetail
+            include: purchaseOrderIncludeListSummary
           });
           const [e] = await enrichOrdersParcelPlans([updated]);
           return e;
@@ -1242,7 +2624,7 @@ export class PurchaseOrderService {
         paymentBoletoPhaseReleased: true,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
@@ -1253,7 +2635,7 @@ export class PurchaseOrderService {
    */
   async attachBoletoInstallmentPaymentProof(
     id: string,
-    data: { paymentProofUrl: string; paymentProofName?: string },
+    data: { paymentProofUrl: string; paymentProofName?: string; installmentIndex?: number },
     _userId?: string
   ) {
     const order = await prisma.purchaseOrder.findUnique({
@@ -1276,34 +2658,50 @@ export class PurchaseOrderService {
     if (order.paymentType !== 'BOLETO') {
       throw new Error('Comprovante de parcela aplica-se apenas a OC em boleto');
     }
-    if (!order.paymentBoletoPhaseReleased) {
-      throw new Error('Anexe o comprovante apenas quando a parcela estiver na fase Pagamento');
-    }
     const [meta] = await enrichOrdersParcelPlans([order]);
     const n = meta.paymentParcelCount;
     if (n <= 1) {
       throw new Error('Use o comprovante geral da OC para pagamento em parcela única');
     }
     const inst = parseStoredInstallments(order.paymentBoletoInstallments);
-    const idx = inst.findIndex((r) => rowStatus(r) === 'AWAITING_PAYMENT');
-    if (idx < 0) {
+    const idx =
+      data.installmentIndex != null && data.installmentIndex >= 0
+        ? data.installmentIndex
+        : resolveSequentialInstallmentProofIndex(inst, n);
+    if (idx < 0 || idx >= n) {
       throw new Error('Não há parcela aguardando pagamento para anexar comprovante');
+    }
+    if (!order.paymentBoletoPhaseReleased) {
+      await prisma.purchaseOrder.update({
+        where: { id },
+        data: { paymentBoletoPhaseReleased: true, updatedAt: new Date() }
+      });
+    }
+    const target = inst[idx];
+    if (!((target?.boletoUrl || '').trim())) {
+      throw new Error(`A parcela ${idx + 1} ainda não tem boleto anexado`);
     }
     const url = (data.paymentProofUrl || '').trim();
     if (!url) {
       throw new Error('Arquivo do comprovante é obrigatório');
     }
     const name = (data.paymentProofName || '').trim() || null;
-    const next = inst.map((row, j) =>
-      j === idx ? { ...row, installmentProofUrl: url, installmentProofName: name } : row
-    );
+    const next = inst.map((row, j) => {
+      if (j !== idx) return row;
+      const base = { ...row, installmentProofUrl: url, installmentProofName: name };
+      if (rowStatus(row) === 'PENDING_BOLETO') {
+        return { ...base, paymentStatus: 'AWAITING_PAYMENT' as const };
+      }
+      return base;
+    });
     const updated = await prisma.purchaseOrder.update({
       where: { id },
       data: {
         paymentBoletoInstallments: next as unknown as Prisma.InputJsonValue,
+        paymentBoletoPhaseReleased: true,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
@@ -1361,7 +2759,7 @@ export class PurchaseOrderService {
         paymentBoletoPhaseReleased: allPaid,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
@@ -1399,7 +2797,7 @@ export class PurchaseOrderService {
         paymentBoletoPhaseReleased: false,
         updatedAt: new Date()
       },
-      include: purchaseOrderIncludeDetail
+      include: purchaseOrderIncludeListSummary
     });
     const [e] = await enrichOrdersParcelPlans([updated]);
     return e;
@@ -1498,5 +2896,915 @@ export class PurchaseOrderService {
 
     const content = await borderService.generateCNAB400FromBorderData(borderItems);
     return { content, skippedOrderNumbers };
+  }
+
+  /** Status em que parcelas de boleto já existem e podem ser preenchidas a partir do estoque. */
+  private static readonly STOCK_BOLETO_SYNC_STATUSES = new Set([
+    'APPROVED',
+    'PENDING_PROOF_VALIDATION',
+    'PENDING_PROOF_CORRECTION',
+    'PENDING_NF_ATTACHMENT',
+    'SENT',
+    'FINALIZED',
+    'PARTIALLY_RECEIVED',
+    'RECEIVED'
+  ]);
+
+  private async persistBoletoInstallmentsFromStock(
+    orderId: string,
+    base: BoletoInstallmentStored[],
+    parcelCount: number
+  ): Promise<void> {
+    const data: Prisma.PurchaseOrderUpdateInput = {
+      paymentBoletoInstallments: base as unknown as Prisma.InputJsonValue,
+      updatedAt: new Date()
+    };
+    if (parcelCount === 1 && base[0]?.boletoUrl) {
+      data.paymentBoletoUrl = base[0].boletoUrl;
+      data.paymentBoletoName = base[0].boletoName;
+    } else if (parcelCount === 1 && !base[0]?.boletoUrl) {
+      data.paymentBoletoUrl = null;
+      data.paymentBoletoName = null;
+    } else {
+      data.paymentBoletoUrl = null;
+      data.paymentBoletoName = null;
+    }
+    await prisma.purchaseOrder.update({ where: { id: orderId }, data });
+  }
+
+  /**
+   * Boleto já anexado na criação (parcela única): copia para pagamento e libera fase Pagamento.
+   */
+  async maybeSkipAttachBoletoFromCreation(orderId: string): Promise<boolean> {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        boletoAttachmentUrl: true,
+        boletoAttachmentName: true,
+        paymentBoletoUrl: true,
+        paymentBoletoName: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order || order.status !== 'APPROVED' || order.paymentType !== 'BOLETO') return false;
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const release = buildCreationBoletoAutoReleaseData(order, meta.paymentParcelCount);
+    if (!release) return false;
+
+    await prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: { ...release, updatedAt: new Date() }
+    });
+    return true;
+  }
+
+  /** Corrige OCs aprovadas com flag de fase Pagamento sem parcela AWAITING_PAYMENT (estado inconsistente). */
+  async normalizeStaleBoletoPhaseReleased(orderId: string): Promise<boolean> {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoUrl: true,
+        boletoAttachmentUrl: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order || order.status !== 'APPROVED' || order.paymentType !== 'BOLETO') return false;
+    if (!order.paymentBoletoPhaseReleased) return false;
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const n = meta.paymentParcelCount;
+    if (n <= 1) {
+      if ((order.paymentBoletoUrl || '').trim() || (order.boletoAttachmentUrl || '').trim()) return false;
+    } else {
+      const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+      if (inst.some((r) => rowStatus(r) === 'AWAITING_PAYMENT')) return false;
+      let needsReset = false;
+      for (let i = 0; i < n; i++) {
+        const st = rowStatus(inst[i]);
+        if (st === 'PENDING_BOLETO' && !((inst[i]?.boletoUrl || '').trim())) {
+          needsReset = true;
+          break;
+        }
+      }
+      if (!needsReset) return false;
+    }
+
+    await prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: { paymentBoletoPhaseReleased: false, updatedAt: new Date() }
+    });
+    return true;
+  }
+
+  async normalizeStaleBoletoPhaseReleasedToListedOrders<T extends {
+    id: string;
+    status: string;
+    paymentType: string | null;
+    paymentCondition: string | null;
+    paymentBoletoUrl: string | null;
+    boletoAttachmentUrl: string | null;
+    paymentBoletoInstallments: unknown;
+    paymentBoletoPhaseReleased: boolean;
+    paymentParcelCount: number;
+  }>(orders: T[]): Promise<T[]> {
+    const next = [...orders];
+    for (let i = 0; i < next.length; i++) {
+      const changed = await this.normalizeStaleBoletoPhaseReleased(next[i].id);
+      if (changed) next[i] = { ...next[i], paymentBoletoPhaseReleased: false };
+    }
+    return next;
+  }
+
+  /** Corrige OCs já aprovadas que tinham boleto na criação mas ainda pediam reanexo. */
+  async applyCreationBoletoAutoReleaseToListedOrders<T extends {
+    id: string;
+    status: string;
+    paymentType: string | null;
+    paymentCondition: string | null;
+    boletoAttachmentUrl: string | null;
+    boletoAttachmentName: string | null;
+    paymentBoletoUrl: string | null;
+    paymentBoletoName: string | null;
+    paymentBoletoPhaseReleased: boolean;
+    paymentParcelCount: number;
+  }>(orders: T[]): Promise<T[]> {
+    const next = [...orders];
+    for (let i = 0; i < next.length; i++) {
+      const o = next[i];
+      if (o.status !== 'APPROVED' || o.paymentType !== 'BOLETO' || o.paymentBoletoPhaseReleased) continue;
+      if (!(o.boletoAttachmentUrl || '').trim()) continue;
+      const release = buildCreationBoletoAutoReleaseData(o, o.paymentParcelCount);
+      if (!release) continue;
+      await prisma.purchaseOrder.update({
+        where: { id: o.id },
+        data: { ...release, updatedAt: new Date() }
+      });
+      next[i] = { ...o, ...release };
+    }
+    return next;
+  }
+
+  /**
+   * Com todos os boletos já anexados e fase Pagamento ativa, alinha parcelas pendentes para AWAITING_PAYMENT
+   * (evita devolver OC ao comprador entre parcelas).
+   */
+  async normalizeParallelBoletoInstallmentsIfNeeded(orderId: string): Promise<void> {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order || order.status !== 'APPROVED' || order.paymentType !== 'BOLETO') return;
+    if (!order.paymentBoletoPhaseReleased) return;
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const n = meta.paymentParcelCount;
+    if (n <= 1) return;
+
+    const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+    if (!useParallelBoletoPaymentFlow(inst, n)) return;
+    if (!allInstallmentsHaveBoleto(inst, n)) return;
+
+    const promoted = promoteParallelInstallmentsToAwaitingPayment(inst);
+    const before = JSON.stringify(inst);
+    const after = JSON.stringify(promoted);
+    if (before === after) return;
+
+    await prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: {
+        paymentBoletoInstallments: promoted as unknown as Prisma.InputJsonValue,
+        paymentBoletoPhaseReleased: true,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * Quando o comprovante foi anexado só no nível da OC, replica nas parcelas pagas sem comprovante.
+   */
+  async syncInstallmentProofsFromOrderPaymentProof(orderId: string): Promise<void> {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        paymentType: true,
+        paymentCondition: true,
+        paymentProofUrl: true,
+        paymentProofName: true,
+        paymentBoletoInstallments: true
+      }
+    });
+    if (!order || order.paymentType !== 'BOLETO') return;
+    const proofUrl = (order.paymentProofUrl || '').trim();
+    if (!proofUrl) return;
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const n = meta.paymentParcelCount;
+    if (n <= 1) return;
+
+    const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+    const spread = spreadOrderPaymentProofToPaidInstallments(
+      inst,
+      n,
+      proofUrl,
+      order.paymentProofName
+    );
+    if (!spread) return;
+
+    await prisma.purchaseOrder.update({
+      where: { id: orderId },
+      data: {
+        paymentBoletoInstallments: spread as unknown as Prisma.InputJsonValue,
+        updatedAt: new Date()
+      }
+    });
+  }
+
+  /**
+   * Sincroniza boletos das entradas de estoque para as parcelas da OC.
+   * Preenche parcelas vazias e substitui arquivos quando o estoque envia um boleto mais recente.
+   */
+  async syncBoletoInstallmentsFromStockReceipt(orderNumber: string): Promise<void> {
+    const trimmed = orderNumber.trim();
+    if (!trimmed) return;
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { orderNumber: trimmed },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        orderDate: true,
+        amountToPay: true,
+        paymentBoletoInstallments: true
+      }
+    });
+    if (!order) return;
+    if (order.paymentType !== 'BOLETO') return;
+    if (!PurchaseOrderService.STOCK_BOLETO_SYNC_STATUSES.has(order.status)) return;
+
+    const inMovements = await prisma.stockMovement.findMany({
+      where: { type: 'IN', notes: { contains: trimmed, mode: 'insensitive' } },
+      select: { notes: true },
+      take: 5000,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const parcelCount = meta.paymentParcelCount;
+    const existing = parseStoredInstallments(order.paymentBoletoInstallments);
+    const totalPay =
+      order.amountToPay != null && String(order.amountToPay).trim() !== ''
+        ? Number(order.amountToPay)
+        : 0;
+    const defaultAmountPerParcel =
+      parcelCount > 0 && Number.isFinite(totalPay) ? totalPay / parcelCount : 0;
+
+    const base: BoletoInstallmentStored[] = Array.from({ length: parcelCount }, (_, i) => {
+      const prev = existing[i];
+      const days = meta.paymentParcelDueDays[i] ?? meta.paymentParcelDueDays[0] ?? 30;
+      const dueDate =
+        (prev?.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(prev.dueDate))
+          ? prev.dueDate
+          : ymdAddDays(order.orderDate, days);
+      return {
+        amount:
+          prev && Number.isFinite(prev.amount) && prev.amount >= 0
+            ? prev.amount
+            : defaultAmountPerParcel,
+        dueDate,
+        boletoUrl: prev?.boletoUrl ?? null,
+        boletoName: prev?.boletoName ?? null,
+        paymentStatus: prev ? rowStatus(prev) : 'PENDING_BOLETO',
+        installmentProofUrl: prev?.installmentProofUrl ?? null,
+        installmentProofName: prev?.installmentProofName ?? null
+      };
+    });
+
+    const latestByParcel = collectLatestPaymentSlipsPerParcelFromMovements(
+      inMovements,
+      trimmed,
+      base.map((row) => row.dueDate)
+    );
+    if (latestByParcel.size === 0) return;
+
+    const applyStockSlipToParcel = (parcelIndex: number, slip: StockPaymentSlipParsed): void => {
+      const row = base[parcelIndex];
+      if (!row) return;
+      if (rowStatus(row) === 'PAID') return;
+
+      const nextUrl = (slip.url || '').trim();
+      if (!nextUrl) return;
+
+      row.boletoUrl = nextUrl;
+      row.boletoName = (slip.name || '').trim() || row.boletoName;
+      if (slip.amount != null && Number.isFinite(slip.amount) && slip.amount >= 0) {
+        row.amount = slip.amount;
+      }
+      if (slip.dueDateYmd && /^\d{4}-\d{2}-\d{2}$/.test(slip.dueDateYmd)) {
+        row.dueDate = slip.dueDateYmd;
+      }
+      if (rowStatus(row) === 'PENDING_BOLETO') {
+        row.paymentStatus = 'PENDING_BOLETO';
+      }
+    };
+
+    for (const [parcelIndex, slip] of latestByParcel) {
+      applyStockSlipToParcel(parcelIndex, slip);
+    }
+
+    const installmentChanged = (prev: BoletoInstallmentStored | undefined, next: BoletoInstallmentStored) => {
+      const prevUrl = (prev?.boletoUrl || '').trim();
+      const nextUrl = (next.boletoUrl || '').trim();
+      if (prevUrl !== nextUrl) return true;
+      const prevName = (prev?.boletoName || '').trim();
+      const nextName = (next.boletoName || '').trim();
+      if (prevName !== nextName) return true;
+      if (prev && Number.isFinite(prev.amount) && prev.amount !== next.amount) return true;
+      if ((prev?.dueDate || '') !== (next.dueDate || '')) return true;
+      return false;
+    };
+
+    const hasChanges = base.some((row, i) => installmentChanged(existing[i], row));
+    if (!hasChanges) return;
+
+    await this.persistBoletoInstallmentsFromStock(order.id, base, parcelCount);
+    await this.maybeAutoReleasePaymentBoletoPhaseFromStock(order.id);
+  }
+
+  /**
+   * Sincroniza NF anexadas na entrada de estoque para nfAttachments da OC.
+   */
+  async syncNfAttachmentsFromStockReceipt(orderNumber: string): Promise<void> {
+    const trimmed = orderNumber.trim();
+    if (!trimmed) return;
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { orderNumber: trimmed },
+      select: { id: true, status: true, nfAttachments: true }
+    });
+    if (!order) return;
+    if (!PurchaseOrderService.STOCK_BOLETO_SYNC_STATUSES.has(order.status)) return;
+
+    const inMovements = await prisma.stockMovement.findMany({
+      where: { type: 'IN', notes: { contains: trimmed, mode: 'insensitive' } },
+      select: { notes: true },
+      take: 5000,
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const invoices = collectInvoicesForOrderFromMovements(inMovements, trimmed);
+    if (invoices.length === 0) return;
+
+    const existing = parseNfAttachments(order.nfAttachments);
+    const seen = new Set(existing.map((n) => n.url));
+    let changed = false;
+    const newlyClaimedNfNumbers: string[] = [];
+    for (const inv of invoices) {
+      if (!inv.url || seen.has(inv.url)) continue;
+      const nfNumber = (inv.number || '').trim();
+      if (nfNumber) {
+        try {
+          await claimInvoiceNumberForOrder(order.id, nfNumber);
+          newlyClaimedNfNumbers.push(nfNumber);
+        } catch (err) {
+          console.error(
+            '[PurchaseOrder] syncNf skip (número NF em conflito)',
+            trimmed,
+            nfNumber,
+            err
+          );
+          continue;
+        }
+      }
+      seen.add(inv.url);
+      existing.push({
+        url: inv.url,
+        name: inv.name || null,
+        uploadedAt: new Date().toISOString(),
+        number: nfNumber || null
+      });
+      changed = true;
+    }
+    if (!changed) return;
+
+    await prisma.purchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        nfAttachments: existing as unknown as Prisma.InputJsonValue,
+        updatedAt: new Date()
+      }
+    });
+    for (const nfNumber of newlyClaimedNfNumbers) {
+      await prependNfToFinancialControlParcels(trimmed, nfNumber);
+    }
+  }
+
+  /** Sincroniza boleto e NF do estoque para a OC. */
+  async syncDocumentsFromStockReceipt(orderNumber: string): Promise<void> {
+    await this.syncBoletoInstallmentsFromStockReceipt(orderNumber);
+    await this.syncNfAttachmentsFromStockReceipt(orderNumber);
+  }
+
+  /**
+   * Boletos vindos do estoque: libera fase Pagamento automaticamente (pula Anexar Boleto).
+   */
+  private async maybeAutoReleasePaymentBoletoPhaseFromStock(orderId: string): Promise<void> {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        status: true,
+        paymentType: true,
+        paymentCondition: true,
+        paymentBoletoUrl: true,
+        paymentBoletoInstallments: true,
+        paymentBoletoPhaseReleased: true
+      }
+    });
+    if (!order || order.status !== 'APPROVED' || order.paymentType !== 'BOLETO') return;
+    if (order.paymentBoletoPhaseReleased) return;
+
+    const [meta] = await enrichOrdersParcelPlans([order]);
+    const n = meta.paymentParcelCount;
+    const inst = parseStoredInstallments(order.paymentBoletoInstallments);
+
+    let canRelease = false;
+    if (n <= 1) {
+      canRelease =
+        !!((order.paymentBoletoUrl || '').trim()) || !!((inst[0]?.boletoUrl || '').trim());
+    } else {
+      for (let i = 0; i < n; i++) {
+        const st = rowStatus(inst[i]);
+        if (st === 'PAID') continue;
+        if (st === 'AWAITING_PAYMENT') return;
+        if (st === 'PENDING_BOLETO') {
+          canRelease = !!((inst[i]?.boletoUrl || '').trim());
+          break;
+        }
+      }
+    }
+    if (!canRelease) return;
+
+    try {
+      await this.releasePaymentBoletoPhase(orderId);
+    } catch (err) {
+      console.error('[PurchaseOrder] maybeAutoReleasePaymentBoletoPhaseFromStock', orderId, err);
+    }
+  }
+
+  /** Reprocessa OCs com entradas de estoque que tenham boletos nas observações. */
+  async rebuildBoletoInstallmentsFromAllStockMovements(): Promise<void> {
+    const movements = await prisma.stockMovement.findMany({
+      where: { type: 'IN', notes: { not: null } },
+      select: { notes: true },
+      take: 15000,
+      orderBy: { createdAt: 'desc' }
+    });
+    const ocNumbers = new Set<string>();
+    for (const m of movements) {
+      const oc = extractOcNumberFromMovementNotes(m.notes);
+      if (oc) ocNumbers.add(oc);
+    }
+    for (const orderNumber of ocNumbers) {
+      try {
+        await this.syncDocumentsFromStockReceipt(orderNumber);
+      } catch (err) {
+        console.error('[PurchaseOrder] rebuildBoleto sync', orderNumber, err);
+      }
+    }
+  }
+
+  async listComments(purchaseOrderId: string) {
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        findMany: (args: unknown) => Promise<any[]>;
+      };
+      auditLog?: {
+        findMany: (args: unknown) => Promise<any[]>;
+      };
+    };
+
+    const existing = await db.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        creator: { select: { id: true, name: true, profilePhotoUrl: true } },
+        comprasApprovedAt: true,
+        comprasApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+        gestorApprovedAt: true,
+        gestorApprover: { select: { id: true, name: true, profilePhotoUrl: true } },
+        approvedAt: true,
+        approver: { select: { id: true, name: true, profilePhotoUrl: true } },
+        invoiceNumbers: { select: { id: true, number: true, createdAt: true } },
+      },
+    });
+    if (!existing) throw new Error('Ordem de compra não encontrada');
+
+    type Author = { id: string; name: string; profilePhotoUrl?: string | null };
+    type FeedItem = {
+      id: string;
+      kind: 'comment' | 'system';
+      content: string;
+      createdAt: string;
+      author: Author | null;
+    };
+
+    const feed: FeedItem[] = [];
+
+    const pushSystem = (id: string, at: Date | string | null | undefined, text: string, author?: Author | null) => {
+      if (!at || !text.trim()) return;
+      const createdAt = typeof at === 'string' ? at : at.toISOString();
+      feed.push({
+        id,
+        kind: 'system',
+        content: text.trim(),
+        createdAt,
+        author: author ?? null,
+      });
+    };
+
+    if (existing.creator) {
+      pushSystem(
+        `sys-created-${existing.id}`,
+        existing.createdAt,
+        `${existing.creator.name} criou a ordem de compra`,
+        existing.creator
+      );
+    }
+    if (existing.comprasApprovedAt && existing.comprasApprover) {
+      pushSystem(
+        `sys-compras-${existing.id}`,
+        existing.comprasApprovedAt,
+        `${existing.comprasApprover.name} aprovou no compras`,
+        existing.comprasApprover
+      );
+    }
+    if (existing.gestorApprovedAt && existing.gestorApprover) {
+      pushSystem(
+        `sys-gestor-${existing.id}`,
+        existing.gestorApprovedAt,
+        `${existing.gestorApprover.name} aprovou como gestor`,
+        existing.gestorApprover
+      );
+    }
+    if (existing.approvedAt && existing.approver) {
+      pushSystem(
+        `sys-approved-${existing.id}`,
+        existing.approvedAt,
+        `${existing.approver.name} aprovou como diretoria`,
+        existing.approver
+      );
+    }
+    for (const inv of existing.invoiceNumbers || []) {
+      pushSystem(
+        `sys-nf-${inv.id}`,
+        inv.createdAt,
+        `NF ${inv.number} foi adicionada à ordem de compra`
+      );
+    }
+
+    // Eventos de auditoria (rejeição / exclusão — aprovações já vêm dos campos da OC)
+    if (db.auditLog?.findMany) {
+      try {
+        const audits = await db.auditLog.findMany({
+          where: {
+            entity: 'PurchaseOrder',
+            entityId: purchaseOrderId,
+            action: { in: ['REJECT', 'DELETE'] },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 50,
+        });
+        const userIds = Array.from(
+          new Set(audits.map((a: any) => a.userId).filter(Boolean))
+        ) as string[];
+        const users =
+          userIds.length > 0
+            ? await db.user.findMany({
+                where: { id: { in: userIds } },
+                select: { id: true, name: true, profilePhotoUrl: true },
+              })
+            : [];
+        const userById = new Map(users.map((u) => [u.id, u]));
+        for (const a of audits) {
+          const summary = String(a.summary || '').trim();
+          if (!summary) continue;
+          const author = a.userId ? userById.get(a.userId) || null : null;
+          const who = author?.name ? `${author.name} ` : '';
+          const rest = summary.charAt(0).toLowerCase() + summary.slice(1);
+          pushSystem(
+            `sys-audit-${a.id}`,
+            a.createdAt,
+            `${who}${rest}`.replace(/\s+/g, ' ').trim(),
+            author
+          );
+        }
+      } catch (err) {
+        console.warn('[PurchaseOrder] falha ao carregar auditoria no feed:', err);
+      }
+    }
+
+    if (db.purchaseOrderComment?.findMany) {
+      const rows = await db.purchaseOrderComment.findMany({
+        where: { purchaseOrderId },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          author: { select: { id: true, name: true, profilePhotoUrl: true } },
+        },
+      });
+      for (const c of rows) {
+        feed.push({
+          id: c.id,
+          kind: 'comment',
+          content: c.content,
+          createdAt: c.createdAt.toISOString(),
+          author: {
+            id: c.author.id,
+            name: c.author.name,
+            profilePhotoUrl: c.author.profilePhotoUrl,
+          },
+        });
+      }
+    }
+
+    feed.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return feed;
+  }
+
+  async createComment(purchaseOrderId: string, userId: string, content: string) {
+    const text = content.trim();
+    if (!text) throw new Error('Escreva um comentário');
+    if (text.length > 4000) throw new Error('Comentário muito longo (máx. 4000 caracteres)');
+
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        create: (args: unknown) => Promise<any>;
+      };
+    };
+
+    if (!db.purchaseOrderComment?.create) {
+      throw new Error(
+        'Comentários de OC indisponíveis no servidor. Rode `npx prisma generate` em apps/backend e reinicie o backend.'
+      );
+    }
+
+    const existing = await db.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      select: { id: true },
+    });
+    if (!existing) throw new Error('Ordem de compra não encontrada');
+
+    const comment = await db.purchaseOrderComment.create({
+      data: {
+        purchaseOrderId,
+        userId,
+        content: text,
+      },
+      include: {
+        author: { select: { id: true, name: true, profilePhotoUrl: true } },
+      },
+    });
+
+    return {
+      id: comment.id,
+      kind: 'comment' as const,
+      content: comment.content,
+      createdAt: comment.createdAt.toISOString(),
+      author: {
+        id: comment.author.id,
+        name: comment.author.name,
+        profilePhotoUrl: comment.author.profilePhotoUrl,
+      },
+    };
+  }
+
+  async deleteComment(commentId: string, userId: string, isAdmin: boolean) {
+    const db = getPrisma() as typeof prisma & {
+      purchaseOrderComment?: {
+        findUnique: (args: unknown) => Promise<any>;
+        delete: (args: unknown) => Promise<any>;
+      };
+    };
+    if (!db.purchaseOrderComment?.findUnique) {
+      throw new Error('Comentários de OC indisponíveis no servidor');
+    }
+    const comment = await db.purchaseOrderComment.findUnique({
+      where: { id: commentId },
+      select: { id: true, userId: true },
+    });
+    if (!comment) throw new Error('Comentário não encontrado');
+    if (!isAdmin && comment.userId !== userId) {
+      throw new Error('Sem permissão para excluir este comentário');
+    }
+    await db.purchaseOrderComment.delete({ where: { id: commentId } });
+  }
+
+  /**
+   * Remove um item da OC e devolve à RM para novo mapa/cotação (mesmo requestNumber).
+   * Só em fases pré-aprovação; exige ≥2 itens na OC.
+   */
+  async returnItemToMaterialRequest(
+    purchaseOrderId: string,
+    purchaseOrderItemId: string,
+    userId: string,
+    isAdmin: boolean,
+    reason: string,
+    options?: { cancelItem?: boolean }
+  ) {
+    const reasonText = reason.trim();
+    if (!reasonText) throw new Error('Informe o motivo da retirada do item');
+    if (reasonText.length > 2000) throw new Error('Motivo muito longo (máx. 2000 caracteres)');
+    if (!userId) throw new Error('Usuário não autenticado');
+
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: {
+        items: {
+          include: {
+            material: { select: { id: true, name: true, description: true, sinapiCode: true } },
+          },
+        },
+        materialRequest: {
+          select: {
+            id: true,
+            requestNumber: true,
+            status: true,
+            costCenter: { select: { id: true } },
+          },
+        },
+      },
+    });
+    if (!order) throw new Error('Ordem de compra não encontrada');
+
+    if (!isOcStatusAllowingReturnItemToRm(order.status)) {
+      throw new Error(
+        'Só é possível retirar itens da OC antes da validação de comprovante / conclusão do fluxo'
+      );
+    }
+
+    // Pagamento: se já existe lançamento no Controle Financeiro, não permite.
+    if (order.status === 'APPROVED') {
+      const launchCount = await prisma.financialControlEntry.count({
+        where: { ocNumber: { equals: order.orderNumber, mode: 'insensitive' } },
+      });
+      if (launchCount > 0) {
+        throw new Error(
+          'Não é possível devolver itens após o lançamento financeiro desta OC'
+        );
+      }
+    }
+
+    // Administrador ou permissão Controle «Devolver item da OC à RM».
+    await assertUserCanReturnOcItemToRm(userId, isAdmin);
+
+    const line = order.items.find((i) => i.id === purchaseOrderItemId);
+    if (!line) throw new Error('Item não encontrado nesta ordem de compra');
+
+    const isLastItem = order.items.length <= 1;
+    const cancelItem = options?.cancelItem === true;
+
+    const materialLabel =
+      line.material?.name?.trim() ||
+      line.material?.description?.trim() ||
+      line.material?.sinapiCode?.trim() ||
+      line.materialId;
+
+    const actorName = await resolveUserDisplayName(userId);
+    const at = new Date().toLocaleString('pt-BR');
+    const noteHeader = actorName
+      ? cancelItem
+        ? `[Item cancelado — ${at} — ${actorName}]`
+        : `[Item devolvido à RM — ${at} — ${actorName}]`
+      : cancelItem
+        ? `[Item cancelado — ${at}]`
+        : `[Item devolvido à RM — ${at}]`;
+    const noteBody = `${materialLabel} (qtd ${Number(line.quantity)} ${line.unit || ''}). Motivo: ${reasonText}`;
+    const cancelNote = isLastItem
+      ? `\n\n[OC cancelada — ${cancelItem ? 'item cancelado' : 'último item devolvido à RM'} em ${at}]`
+      : '';
+    const note = `${noteHeader}\n${noteBody}${cancelNote}`;
+    const nextNotes = order.notes?.trim() ? `${order.notes.trim()}\n\n${note}` : note;
+
+    const rmItemId = line.materialRequestItemId;
+
+    await prisma.$transaction(async (tx) => {
+      if (!isLastItem) {
+        await tx.purchaseOrderItem.delete({ where: { id: line.id } });
+      }
+
+      const remaining = isLastItem
+        ? order.items
+        : await tx.purchaseOrderItem.findMany({
+            where: { purchaseOrderId },
+            select: { totalPrice: true },
+          });
+      const itemsSum = remaining.reduce(
+        (acc, i) => acc.plus(new Decimal(i.totalPrice)),
+        new Decimal(0)
+      );
+      const freight =
+        order.freightAmount != null ? new Decimal(order.freightAmount) : new Decimal(0);
+      const amountToPay = itemsSum.plus(freight);
+
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          amountToPay,
+          notes: nextNotes,
+          ...(isLastItem ? { status: 'CANCELLED' as const } : {}),
+          updatedAt: new Date(),
+        },
+      });
+
+      if (rmItemId) {
+        await tx.materialRequestItem.update({
+          where: { id: rmItemId },
+          data: {
+            status: cancelItem ? 'CANCELLED' : 'APPROVED',
+            fulfilledQuantity: null,
+            updatedAt: new Date(),
+          },
+        });
+
+        if (!cancelItem) {
+          // Remove vencedores/preços do item em mapas antigos para não travar nova cotação.
+          await tx.quoteMapWinnerItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+          await tx.quoteMapSupplierItem.deleteMany({ where: { materialRequestItemId: rmItemId } });
+        }
+      }
+
+      if (order.materialRequestId && order.materialRequest?.status === 'APPROVED') {
+        await tx.materialRequestComment.create({
+          data: {
+            materialRequestId: order.materialRequestId,
+            userId,
+            content: isLastItem
+              ? cancelItem
+                ? `Item cancelado na OC ${order.orderNumber} (OC cancelada): ${noteBody}`
+                : `Último item devolvido da OC ${order.orderNumber} (OC cancelada) para nova cotação: ${noteBody}`
+              : cancelItem
+                ? `Item cancelado e retirado da OC ${order.orderNumber}: ${noteBody}`
+                : `Item devolvido da OC ${order.orderNumber} para nova cotação: ${noteBody}`,
+          },
+        });
+      }
+
+      await tx.purchaseOrderComment.create({
+        data: {
+          purchaseOrderId,
+          userId,
+          content: isLastItem
+            ? cancelItem
+              ? `Item cancelado (OC cancelada): ${noteBody}`
+              : `Último item retirado e devolvido à RM (OC cancelada): ${noteBody}`
+            : cancelItem
+              ? `Item cancelado e retirado da OC: ${noteBody}`
+              : `Item retirado e devolvido à RM: ${noteBody}`,
+        },
+      });
+    });
+
+    const fresh = await this.getById(purchaseOrderId);
+    if (!fresh) throw new Error('Ordem de compra não encontrada após a retirada');
+    return fresh;
+  }
+
+  /** Itens da RM que já estão em OC ativa (não rejeitada/cancelada). */
+  async getCoveredMaterialRequestItemIds(materialRequestId: string): Promise<string[]> {
+    const rows = await prisma.purchaseOrderItem.findMany({
+      where: {
+        materialRequestItemId: { not: null },
+        purchaseOrder: {
+          materialRequestId,
+          status: { in: [...OC_STATUSES_COVERING_RM_ITEMS] },
+        },
+      },
+      select: { materialRequestItemId: true },
+    });
+    const ids = new Set<string>();
+    for (const row of rows) {
+      if (row.materialRequestItemId) ids.add(row.materialRequestItemId);
+    }
+    return [...ids];
   }
 }

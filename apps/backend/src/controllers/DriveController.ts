@@ -154,6 +154,48 @@ export class DriveController {
 
   // ── Arquivos ──────────────────────────────────────────────────────────────
 
+  static async presignUpload(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const ownerId = req.user!.id;
+      const { name, mimeType, size } = req.body ?? {};
+      const folderId = parseParentId(req.body?.folderId);
+
+      const data = await driveService.createUploadPresign(ownerId, {
+        name: String(name || ''),
+        mimeType: mimeType ? String(mimeType) : undefined,
+        size: Number(size),
+        folderId,
+      });
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async confirmUpload(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const ownerId = req.user!.id;
+      const { s3Key, name, mimeType, size } = req.body ?? {};
+      const folderId = parseParentId(req.body?.folderId);
+
+      if (!s3Key || typeof s3Key !== 'string') {
+        res.status(400).json({ success: false, error: 's3Key é obrigatório' });
+        return;
+      }
+
+      const result = await driveService.confirmUpload(ownerId, {
+        s3Key,
+        name: String(name || ''),
+        mimeType: mimeType ? String(mimeType) : undefined,
+        size: Number(size),
+        folderId,
+      });
+      res.status(201).json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
   static async uploadFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       if (!req.file) {
@@ -204,6 +246,23 @@ export class DriveController {
     }
   }
 
+  /** Bytes do arquivo (proxy autenticado) para gerar miniatura no cliente. */
+  static async contentFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      const userId = req.user!.id;
+      const { buffer, mimeType, name } = await driveService.getFileContentBuffer(id, userId);
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(name)}"`);
+      res.setHeader('Cache-Control', 'private, max-age=120');
+      res.send(buffer);
+    } catch (err: any) {
+      const msg = err?.message || 'Falha ao ler arquivo';
+      const status = /grande demais/i.test(msg) ? 413 : 400;
+      res.status(status).json({ success: false, error: msg });
+    }
+  }
+
   static async renameFile(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { id } = req.params;
@@ -239,6 +298,109 @@ export class DriveController {
       const { id } = req.params;
       const ownerId = req.user!.id;
       await driveService.deleteFile(id, ownerId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  // ── Views / sidebar ───────────────────────────────────────────────────────
+
+  static async viewShared(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.listSharedWithMe(req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async viewRecent(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.listRecent(req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async viewStarred(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.listStarred(req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async viewTrash(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.listTrash(req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async storage(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.getStorageUsage(req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+
+  static async starFolder(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const starred = Boolean(req.body?.starred);
+      const data = await driveService.setFolderStarred(req.params.id, req.user!.id, starred);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async starFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const starred = Boolean(req.body?.starred);
+      const data = await driveService.setFileStarred(req.params.id, req.user!.id, starred);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async restoreFolder(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.restoreFolder(req.params.id, req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async restoreFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const data = await driveService.restoreFile(req.params.id, req.user!.id);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async permanentDeleteFolder(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      await driveService.permanentlyDeleteFolder(req.params.id, req.user!.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+
+  static async permanentDeleteFile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      await driveService.permanentlyDeleteFile(req.params.id, req.user!.id);
       res.json({ success: true });
     } catch (err: any) {
       res.status(400).json({ success: false, error: err.message });

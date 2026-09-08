@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { 
@@ -24,6 +26,19 @@ import {
   CalendarX
 } from 'lucide-react';
 import { VacationFormData, VacationBalance, Vacation } from '@/types';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+
+const VACATION_TYPE_OPTIONS = labeledToSelectOptions([
+  { value: 'ANNUAL', label: 'Férias Completas' },
+  { value: 'FRACTIONED', label: 'Fracionado' },
+]);
+
+const VACATION_FRACTION_OPTIONS = labeledToSelectOptions([
+  { value: '1', label: '1º Período' },
+  { value: '2', label: '2º Período' },
+  { value: '3', label: '3º Período' },
+]);
 
 // Função helper para formatar data corretamente (evita problemas de timezone)
 const formatDate = (dateString: string | Date): string => {
@@ -35,7 +50,7 @@ const formatDate = (dateString: string | Date): string => {
   return `${day}/${month}/${year}`;
 };
 
-export default function VacationsPage() {
+function VacationsPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
@@ -240,20 +255,27 @@ export default function VacationsPage() {
     }
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <MainLayout
+        userRole={user.role}
+        userName={user.name}
+        onLogout={() => {
+          localStorage.removeItem('token');
+          router.push('/auth/login');
+        }}
+      >
+        <Loading message="Carregando..." fullScreen size="lg" />
+      </MainLayout>
+    );
+  }
+
+  
 
   // Removido: verificação de role - agora usamos apenas cargos
 
@@ -377,7 +399,7 @@ export default function VacationsPage() {
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                       required
                       min={new Date().toISOString().split('T')[0]}
-                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 cursor-pointer relative"
+                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 cursor-pointer relative"
                     />
                   </div>
                   <div>
@@ -390,7 +412,7 @@ export default function VacationsPage() {
                       onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                       required
                       min={formData.startDate || new Date().toISOString().split('T')[0]}
-                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 cursor-pointer relative"
+                      className="w-full px-3 py-2.5 pr-10 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 cursor-pointer relative"
                     />
                   </div>
                 </div>
@@ -408,34 +430,30 @@ export default function VacationsPage() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Tipo de Férias *
                     </label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.type}
-                      onChange={(e) => handleTypeChange(e.target.value)}
-                      className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="ANNUAL">Férias Completas</option>
-                      <option value="FRACTIONED">Fracionado</option>
-                    </select>
+                      onChange={handleTypeChange}
+                      options={VACATION_TYPE_OPTIONS}
+                      allowEmpty={false}
+                    />
                   </div>
                   {formData.type === 'FRACTIONED' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Período Fracionado *
                       </label>
-                      <select
-                        value={formData.fraction || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          fraction: e.target.value ? Number(e.target.value) : undefined 
-                        })}
-                        required={formData.type === 'FRACTIONED'}
-                        className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                      >
-                        <option value="">Selecione o período</option>
-                        <option value="1">1º Período</option>
-                        <option value="2">2º Período</option>
-                        <option value="3">3º Período</option>
-                      </select>
+                      <StringSingleSelectDropdown
+                        value={formData.fraction != null ? String(formData.fraction) : ''}
+                        onChange={(v) =>
+                          setFormData({
+                            ...formData,
+                            fraction: v ? Number(v) : undefined,
+                          })
+                        }
+                        options={VACATION_FRACTION_OPTIONS}
+                        placeholder="Selecione o período"
+                        emptyOptionLabel="Selecione o período"
+                      />
                     </div>
                   )}
                 </div>
@@ -448,7 +466,7 @@ export default function VacationsPage() {
                     value={formData.reason || ''}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                     rows={3}
-                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                     placeholder="Descreva o motivo da solicitação..."
                   />
                 </div>
@@ -490,10 +508,7 @@ export default function VacationsPage() {
           </CardHeader>
           <CardContent className="p-6">
             {loadingVacations ? (
-              <div className="text-center py-8">
-                <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">Carregando férias...</p>
-              </div>
+              <CadastroListLoading message="Carregando férias..." />
             ) : vacations.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -552,5 +567,13 @@ export default function VacationsPage() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function VacationsPage() {
+  return (
+    <ProtectedRoute route="/ponto/ferias">
+      <VacationsPageContent />
+    </ProtectedRoute>
   );
 }

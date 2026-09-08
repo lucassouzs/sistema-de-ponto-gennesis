@@ -1,4 +1,4 @@
-# Arquivos e pastas para ignorar no Railway
+# Arquivos e pastas para ignorar no Railway (upload inicial)
 node_modules/
 .git/
 .gitignore
@@ -12,8 +12,8 @@ Thumbs.db
 *.md
 docs/
 apps/mobile/
-dist/
 .next/
 coverage/
 .nyc_output/
 .cache/
+# NÃO ignore apps/backend/dist nem vendor — o start usa dist/ e o worker NF-e fica em vendor/

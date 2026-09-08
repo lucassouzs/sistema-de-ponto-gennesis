@@ -17,6 +17,10 @@ router.get('/conversations', (req, res, next) =>
   controller.listConversations(req as any, res, next)
 );
 
+router.get('/medical-certificate-submissions', (req, res, next) =>
+  controller.listMedicalCertificateSubmissions(req as any, res, next)
+);
+
 router.get('/conversations/:id', (req, res, next) =>
   controller.getConversation(req as any, res, next)
 );
@@ -32,6 +36,16 @@ router.post('/conversations/:id/messages', (req, res, next) =>
 // Encerra a conversa para o WhatsApp (status CANCELLED)
 router.post('/conversations/:id/end', (req, res, next) =>
   controller.endConversation(req as any, res, next)
+);
+
+// Finaliza análise de um submission de atestado (PENDING -> PROCESSED)
+router.post('/conversations/:id/submissions/:submissionId/finalize', (req, res, next) =>
+  controller.finalizeMedicalCertificateSubmission(req as any, res, next)
+);
+
+// Download do arquivo do atestado (Content-Disposition: attachment)
+router.get('/conversations/:id/submissions/:submissionId/file', (req, res, next) =>
+  controller.downloadMedicalCertificateSubmissionFile(req as any, res, next)
 );
 
 export default router;

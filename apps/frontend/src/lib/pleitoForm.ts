@@ -4,6 +4,7 @@ export const RVI_RVF_OPCOES = ['FEITO', 'PENDENTE'];
 
 export const STATUS_EXECUCAO_OPCOES = [
   'CONCLUÍDA',
+  'ANDAMENTO',
   'EXECUÇÃO',
   'FINALIZADA',
   'GARANTIA',

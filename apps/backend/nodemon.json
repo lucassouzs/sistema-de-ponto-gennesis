@@ -1,8 +1,8 @@
 {
-  "watch": ["src", "prisma"],
-  "ext": "ts,json,prisma",
-  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist"],
+  "watch": ["src"],
+  "ext": "ts,json",
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts", "node_modules", "dist", "prisma"],
   "exec": "ts-node --transpile-only src/index.ts",
-  "delay": 1000
+  "delay": 1500,
+  "legacyWatch": true
 }
-

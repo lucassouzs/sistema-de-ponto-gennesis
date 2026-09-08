@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import {
   MessageSquare,
@@ -9,8 +11,6 @@ import {
   Clock,
   FileText,
   ChevronRight,
-  User,
-  Bot,
   Paperclip,
   Loader2,
   ArrowLeft,
@@ -23,7 +23,10 @@ import {
   UserCircle,
   Hash,
   Calendar,
-  FileType
+  FileType,
+  Download,
+  Eye,
+  X
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
@@ -31,6 +34,7 @@ import api from '@/lib/api';
 import { absoluteUploadUrl } from '@/lib/apiOrigin';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ConversationSummary {
   id: string;
@@ -38,8 +42,11 @@ interface ConversationSummary {
   name?: string | null;
   flowStatus: string;
   status: string;
+  medicalCertificateStatus?: string | null;
   attendantRequested?: boolean;
   attendantInProgress?: boolean;
+  /** True após encerrar atendimento humano (persistido no payload). */
+  attendantHandoffEver?: boolean;
   updatedAt: string;
   createdAt: string;
   messageCount: number;
@@ -99,6 +106,41 @@ interface ConversationDetail {
   messages: Message[];
   submissions: Submission[];
 }
+
+interface SupportTicketSummary {
+  id: string;
+  displayNumber: number;
+  category: string;
+  status: string;
+  channel: string;
+  subject: string;
+  description: string;
+  moduleHint: string | null;
+  requesterName: string | null;
+  requesterPhone: string | null;
+  requesterCpf: string | null;
+  whatsAppConversationId: string | null;
+  resolutionNote: string | null;
+  createdAt: string;
+  requester?: { name: string; email: string } | null;
+}
+
+type QueueItem =
+  | { kind: 'whatsapp'; data: ConversationSummary }
+  | { kind: 'support'; data: SupportTicketSummary };
+
+const SUPPORT_CATEGORY_LABELS: Record<string, string> = {
+  PASSWORD_RESET: 'Senha / acesso',
+  SYSTEM_ERROR: 'Erro no sistema',
+  PERMISSION: 'Permissão / menu',
+  OTHER: 'Outro',
+};
+
+const SUPPORT_CHANNEL_LABELS: Record<string, string> = {
+  GENNECY_CHAT: 'Gennecy (chat)',
+  WHATSAPP: 'WhatsApp',
+  WEB: 'Web',
+};
 
 function formatPhone(phone: string) {
   const n = phone.replace(/\D/g, '');
@@ -165,6 +207,115 @@ function LinhaDado({
   );
 }
 
+function getAtestadoFilePreviewKind(fileName: string | null | undefined): 'image' | 'pdf' | 'other' {
+  const n = (fileName || '').toLowerCase();
+  if (n.endsWith('.pdf')) return 'pdf';
+  if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(n)) return 'image';
+  return 'other';
+}
+
+function ListaMensagensWhatsAppDetalhe({
+  messages,
+  messagesEndRef,
+  scrollClassName,
+  clientDisplayName,
+  onPreviewAttachment,
+  onDownloadAttachment
+}: {
+  messages: Message[];
+  messagesEndRef: React.Ref<HTMLDivElement>;
+  scrollClassName?: string;
+  clientDisplayName: string;
+  onPreviewAttachment?: (url: string, fileName: string | null | undefined) => void;
+  onDownloadAttachment?: (url: string, fileName: string | null | undefined) => void;
+}) {
+  const userLabel = clientDisplayName?.trim() || 'Cliente';
+
+  return (
+    <div className={`space-y-3 overflow-y-auto pr-2 ${scrollClassName ?? 'max-h-[320px]'}`}>
+      {messages.map((m) => (
+        <div key={m.id} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            className={`max-w-[85%] rounded-xl px-3 py-2.5 ${
+              m.role === 'user'
+                ? 'bg-red-600 text-white dark:bg-red-500'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+            }`}
+          >
+            <div
+              className={`flex items-center gap-2 text-xs mb-1 flex-wrap ${
+                m.role === 'user'
+                  ? 'text-white/90'
+                  : 'opacity-80 text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              <span className="font-medium truncate max-w-[11rem] sm:max-w-[14rem]">
+                {m.role === 'user' ? userLabel : 'Gennecy'}
+              </span>
+              <span className="shrink-0">{format(new Date(m.createdAt), 'dd/MM HH:mm', { locale: ptBR })}</span>
+            </div>
+            <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
+            {(m.mediaUrl || m.content === '[Arquivo enviado]') && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {m.mediaUrl && onPreviewAttachment && (
+                  <button
+                    type="button"
+                    onClick={() => onPreviewAttachment(m.mediaUrl!, m.fileName)}
+                    title="Ver arquivo"
+                    aria-label="Ver arquivo"
+                    className={
+                      m.role === 'user'
+                        ? 'inline-flex items-center justify-center w-8 h-8 rounded-lg border border-white/40 text-white hover:bg-white/15 transition-colors'
+                        : 'inline-flex items-center justify-center w-8 h-8 rounded-lg border border-gray-300 dark:border-gray-500 text-gray-800 dark:text-gray-100 bg-white/80 dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors'
+                    }
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                )}
+                {m.mediaUrl && onDownloadAttachment && (
+                  <button
+                    type="button"
+                    onClick={() => onDownloadAttachment(m.mediaUrl!, m.fileName)}
+                    title="Baixar arquivo"
+                    aria-label="Baixar arquivo"
+                    className={
+                      m.role === 'user'
+                        ? 'inline-flex items-center justify-center w-8 h-8 rounded-lg text-white hover:bg-white/15 transition-colors'
+                        : 'inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/25 transition-colors'
+                    }
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
+                )}
+                {m.mediaUrl && (!onPreviewAttachment || !onDownloadAttachment) && (
+                  <a
+                    href={getFileHref(m.mediaUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1 text-xs underline ${
+                      m.role === 'user' ? 'text-white' : ''
+                    }`}
+                  >
+                    <Paperclip className="w-3 h-3" />
+                    {m.fileName || 'Anexo'}
+                  </a>
+                )}
+                {!m.mediaUrl && (
+                  <div className={`inline-flex items-center gap-1 text-xs opacity-80 ${m.role === 'user' ? 'text-white/90' : ''}`}>
+                    <Paperclip className="w-3 h-3" />
+                    <span>{m.fileName || 'Arquivo enviado'}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+      <div ref={messagesEndRef} />
+    </div>
+  );
+}
+
 const ABAS: { id: TabFiltro; label: string; icon: React.ElementType }[] = [
   { id: 'todas', label: 'Todas', icon: LayoutList },
   { id: 'atestados', label: 'Atestados', icon: FileCheck },
@@ -172,16 +323,25 @@ const ABAS: { id: TabFiltro; label: string; icon: React.ElementType }[] = [
   { id: 'outros', label: 'Outros', icon: MoreHorizontal }
 ];
 
-export default function ConversasWhatsAppPage() {
+function ConversasWhatsAppPageContent() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedSupportId, setSelectedSupportId] = useState<string | null>(null);
+  const [supportResolutionNote, setSupportResolutionNote] = useState('');
   const [replyText, setReplyText] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const [painelTab, setPainelTab] = useState<'atendimentos' | 'atestados'>('atendimentos');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [painelTab] = useState<'atendimentos' | 'atestados'>('atendimentos');
   const [atendimentoTab, setAtendimentoTab] = useState<'aguardando' | 'andamento' | 'encerradas'>('aguardando');
-  const [atestadoTab, setAtestadoTab] = useState<'pendentes' | 'finalizados'>('pendentes');
   const [isEndingConversation, setIsEndingConversation] = useState(false);
+  const [isFinalizingSubmissionId, setIsFinalizingSubmissionId] = useState<string | null>(null);
+  const [selectedAtestadoSubmissionId, setSelectedAtestadoSubmissionId] = useState<string | null>(null);
+  const [atestadoConversationModalOpen, setAtestadoConversationModalOpen] = useState(false);
+  const [atestadoFilePreview, setAtestadoFilePreview] = useState<{
+    href: string;
+    fileName: string | null;
+    kind: 'image' | 'pdf' | 'other';
+  } | null>(null);
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -207,6 +367,20 @@ export default function ConversasWhatsAppPage() {
     }
   });
 
+  const { data: supportListData, isLoading: loadingSupport } = useQuery({
+    queryKey: ['support-tickets-central'],
+    queryFn: async () => {
+      const res = await api.get('/support-tickets');
+      return (res.data?.data ?? []) as SupportTicketSummary[];
+    },
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: () => {
+      if (typeof document === 'undefined') return false;
+      return document.hidden ? false : 5000;
+    },
+  });
+
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ['whatsapp-conversation', selectedId],
     queryFn: async () => {
@@ -214,7 +388,7 @@ export default function ConversasWhatsAppPage() {
       const res = await api.get(`/whatsapp/conversations/${selectedId}`);
       return res.data;
     },
-    enabled: !!selectedId,
+    enabled: !!selectedId && !selectedSupportId,
     staleTime: 0,
     refetchOnWindowFocus: true,
     // Mensagens do cliente chegam pelo webhook; polling mantém o chat em tempo quase real.
@@ -234,9 +408,61 @@ export default function ConversasWhatsAppPage() {
   };
 
   const conversations: ConversationSummary[] = listData?.data ?? [];
-  const aguardandoAtendimento = conversations.filter((c) => c.status === 'PENDING' && !!c.attendantRequested);
-  const atendimentoEmAndamento = conversations.filter((c) => c.status === 'PENDING' && !!c.attendantInProgress);
-  const conversasEncerradas = conversations.filter((c) => c.status === 'COMPLETED' || c.status === 'CANCELLED');
+  const supportTickets: SupportTicketSummary[] = supportListData ?? [];
+
+  /** Chamados Gennecy/chat sem conversa WhatsApp duplicada na fila. */
+  const supportOnlyTickets = useMemo(() => {
+    const waIds = new Set(conversations.map((c) => c.id));
+    return supportTickets.filter(
+      (t) => !t.whatsAppConversationId || !waIds.has(t.whatsAppConversationId),
+    );
+  }, [conversations, supportTickets]);
+
+  const isAtestadoConversation = (c: ConversationSummary) =>
+    getCategoriaConversa(c.flowStatus) === 'atestados' ||
+    c.submissionCount > 0 ||
+    !!c.medicalCertificateStatus;
+  /**
+   * Quem já enviou atestado na mesma conversa ainda pode pedir atendente humano.
+   * Só tratamos como "fila exclusiva de atestado" quando não há escalonamento ativo.
+   */
+  const isOnlyAtestadoQueue = (c: ConversationSummary) =>
+    isAtestadoConversation(c) && !c.attendantRequested && !c.attendantInProgress;
+
+  const aguardandoAtendimento: QueueItem[] = [
+    ...conversations
+      .filter(
+        (c) =>
+          !isOnlyAtestadoQueue(c) &&
+          c.status === 'PENDING' &&
+          !!c.attendantRequested &&
+          !c.attendantInProgress,
+      )
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'OPEN')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
+  const atendimentoEmAndamento: QueueItem[] = [
+    ...conversations
+      .filter((c) => !isOnlyAtestadoQueue(c) && c.status === 'PENDING' && !!c.attendantInProgress)
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'IN_PROGRESS')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
+  const conversasEncerradas: QueueItem[] = [
+    ...conversations
+      .filter(
+        (c) =>
+          (c.status === 'COMPLETED' || c.status === 'CANCELLED') &&
+          (!isOnlyAtestadoQueue(c) || !!c.attendantHandoffEver),
+      )
+      .map((c) => ({ kind: 'whatsapp' as const, data: c })),
+    ...supportOnlyTickets
+      .filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED')
+      .map((t) => ({ kind: 'support' as const, data: t })),
+  ];
 
   const conversasFiltradas =
     atendimentoTab === 'aguardando'
@@ -244,16 +470,14 @@ export default function ConversasWhatsAppPage() {
       : atendimentoTab === 'andamento'
         ? atendimentoEmAndamento
         : conversasEncerradas;
-  const conversasAtestadoBase = conversations.filter(
-    (c) => getCategoriaConversa(c.flowStatus) === 'atestados' || c.submissionCount > 0
-  );
-  const atestadosPendentes = conversasAtestadoBase.filter((c) => c.status === 'PENDING');
-  const atestadosFinalizados = conversasAtestadoBase.filter((c) => c.status !== 'PENDING');
-  const conversasAtestadoFiltradas = atestadoTab === 'pendentes' ? atestadosPendentes : atestadosFinalizados;
-  const conversasVisiveis = painelTab === 'atendimentos' ? conversasFiltradas : conversasAtestadoFiltradas;
+  const conversasVisiveis = conversasFiltradas;
   const detail: ConversationDetail | null = detailData?.data ?? null;
-  const isLoading = loadingUser || loadingList;
-  const showLegacyData = painelTab === 'atestados';
+  const selectedSupport = useMemo(
+    () => supportTickets.find((t) => t.id === selectedSupportId) ?? null,
+    [supportTickets, selectedSupportId],
+  );
+  const isLoading = loadingUser || loadingList || loadingSupport;
+  const showLegacyData = false;
 
   /** Categoria da conversa selecionada (para acompanhar aba só quando o status mudar na mesma conversa, ex. após refetch). */
   const lastSelectedIdForCategoryRef = useRef<string | null>(null);
@@ -266,24 +490,140 @@ export default function ConversasWhatsAppPage() {
         ? 'aguardando'
         : 'encerradas';
 
+  const tabForSupport = (t: SupportTicketSummary) =>
+    t.status === 'IN_PROGRESS' ? 'andamento' : t.status === 'OPEN' ? 'aguardando' : 'encerradas';
+
   const conversationBelongsToTab = (
     c: ConversationSummary,
     tab: 'aguardando' | 'andamento' | 'encerradas'
   ) => tabForConversation(c) === tab;
 
+  const supportBelongsToTab = (
+    t: SupportTicketSummary,
+    tab: 'aguardando' | 'andamento' | 'encerradas',
+  ) => tabForSupport(t) === tab;
+
   const handleAtendimentoTabChange = (tab: 'aguardando' | 'andamento' | 'encerradas') => {
     setAtendimentoTab(tab);
-    if (!selectedId) return;
-    const selected = conversations.find((x) => x.id === selectedId);
-    if (!selected || !conversationBelongsToTab(selected, tab)) {
-      setSelectedId(null);
+    if (selectedId) {
+      const selected = conversations.find((x) => x.id === selectedId);
+      if (!selected || !conversationBelongsToTab(selected, tab)) {
+        setSelectedId(null);
+      }
+    }
+    if (selectedSupportId) {
+      const selected = supportTickets.find((x) => x.id === selectedSupportId);
+      if (!selected || !supportBelongsToTab(selected, tab)) {
+        setSelectedSupportId(null);
+      }
     }
   };
 
-  const handlePainelTabChange = (tab: 'atendimentos' | 'atestados') => {
-    setPainelTab(tab);
-    setSelectedId(null);
+  const updateSupportTicket = async (id: string, status: string, resolutionNote?: string) => {
+    await api.patch(`/support-tickets/${id}`, { status, resolutionNote });
+    await queryClient.invalidateQueries({ queryKey: ['support-tickets-central'] });
   };
+
+  const isMedicalCertificatePending = (status: string | null | undefined) =>
+    String(status || '').toUpperCase() === 'PENDING' || !status;
+
+  const latestPendingMedicalSubmission = useMemo(() => {
+    if (!detail) return null;
+    const pending = detail.submissions.filter(
+      (s) => s.type === 'MEDICAL_CERTIFICATE' && isMedicalCertificatePending(s.status)
+    );
+    if (pending.length === 0) return null;
+    return pending[pending.length - 1];
+  }, [detail]);
+
+  const selectedMedicalSubmission = useMemo(() => {
+    if (!detail || !selectedAtestadoSubmissionId) return null;
+    return detail.submissions.find((s) => s.type === 'MEDICAL_CERTIFICATE' && s.id === selectedAtestadoSubmissionId) ?? null;
+  }, [detail, selectedAtestadoSubmissionId]);
+
+  const handleDownloadAtestado = async (
+    url: string | null | undefined,
+    fileName: string | null | undefined,
+    opts?: { submissionId?: string; conversationId?: string }
+  ) => {
+    const safeName = (fileName?.trim() || 'atestado').replace(/[/\\?%*:|"<>]/g, '-');
+
+    const triggerBlobDownload = (blob: Blob, name: string) => {
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    };
+
+    // Atestado no painel: baixa via API com Content-Disposition (evita abrir S3/JPG em nova aba).
+    if (opts?.submissionId && opts?.conversationId) {
+      try {
+        const res = await api.get(`/whatsapp/conversations/${opts.conversationId}/submissions/${opts.submissionId}/file`, {
+          responseType: 'blob'
+        });
+        const blob = res.data instanceof Blob ? res.data : new Blob([res.data]);
+        triggerBlobDownload(blob, safeName);
+      } catch {
+        alert('Não foi possível baixar o arquivo. Tente de novo ou use “Ver”.');
+      }
+      return;
+    }
+
+    if (!url) return;
+    const href = getFileHref(url);
+    if (!href || href === '#') return;
+
+    try {
+      const res = await fetch(href, { mode: 'cors', credentials: 'omit' });
+      if (!res.ok) throw new Error('download failed');
+      const blob = await res.blob();
+      triggerBlobDownload(blob, safeName);
+    } catch {
+      alert(
+        'Não foi possível baixar o arquivo automaticamente. Tente em “Ver” e salve pelo navegador.'
+      );
+    }
+  };
+
+  const openAtestadoFilePreview = (fileUrl: string | null | undefined, fileName: string | null | undefined) => {
+    if (!fileUrl) return;
+    const href = getFileHref(fileUrl);
+    if (!href || href === '#') return;
+    const kind = getAtestadoFilePreviewKind(fileName);
+    setAtestadoFilePreview({ href, fileName: fileName ?? null, kind });
+  };
+
+  const handleFinalizeSubmission = async (submissionId: string) => {
+    if (!selectedId || !submissionId) return;
+    try {
+      setIsFinalizingSubmissionId(submissionId);
+      await api.post(`/whatsapp/conversations/${selectedId}/submissions/${submissionId}/finalize`);
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-conversation', selectedId] });
+      await queryClient.invalidateQueries({ queryKey: ['whatsapp-medical-certificate-submissions'] });
+    } catch (error) {
+      console.error('Erro ao finalizar atestado:', error);
+      alert('Erro ao finalizar atestado.');
+    } finally {
+      setIsFinalizingSubmissionId(null);
+    }
+  };
+
+  useEffect(() => {
+    setAtestadoConversationModalOpen(false);
+    setAtestadoFilePreview(null);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!atestadoConversationModalOpen && !atestadoFilePreview) return;
+    document.body.classList.add('overflow-hidden');
+    return () => document.body.classList.remove('overflow-hidden');
+  }, [atestadoConversationModalOpen, atestadoFilePreview]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -315,7 +655,7 @@ export default function ConversasWhatsAppPage() {
   useEffect(() => {
     // Garante que o admin veja as mensagens mais recentes.
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [selectedId, detail?.messages?.length]);
+  }, [selectedId, detail?.messages?.length, atestadoConversationModalOpen]);
 
   const getAtestadoName = (source: unknown): string | null => {
     if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
@@ -402,7 +742,7 @@ export default function ConversasWhatsAppPage() {
   if (loadingUser) {
     return (
       <MainLayout userRole="EMPLOYEE" userName="" onLogout={handleLogout}>
-        <Loading />
+        <Loading message="Carregando..." fullScreen size="lg" />
       </MainLayout>
     );
   }
@@ -413,131 +753,64 @@ export default function ConversasWhatsAppPage() {
       userName={userData?.data?.name ?? ''}
       onLogout={handleLogout}
     >
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="w-full space-y-6">
         {/* Título e subtítulo centralizados */}
         <div className="text-center">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
             Central de Atendimentos
           </h1>
           <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400 max-w-xl mx-auto">
-            {painelTab === 'atendimentos'
-              ? 'Encaminhe, acompanhe e encerre conversas com atendente humano.'
-              : 'Acompanhe os envios de atestado e os documentos recebidos.'}
+            Fila única: conversas WhatsApp e chamados da Gennecy que precisam de atendimento humano.
           </p>
-        </div>
-
-        {/* Alternância de painel */}
-        <div className="flex flex-wrap justify-center gap-2 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl w-fit mx-auto">
-          <button
-            type="button"
-            onClick={() => handlePainelTabChange('atendimentos')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              painelTab === 'atendimentos'
-                ? 'bg-red-600 text-white dark:bg-red-500'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4 shrink-0" />
-            Atendimentos
-          </button>
-          <button
-            type="button"
-            onClick={() => handlePainelTabChange('atestados')}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              painelTab === 'atestados'
-                ? 'bg-red-600 text-white dark:bg-red-500'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-            }`}
-          >
-            <FileCheck className="w-4 h-4 shrink-0" />
-            Atestados
-          </button>
         </div>
 
         {/* Filtros por etapa */}
         <div className="flex flex-wrap justify-center gap-2 p-1 bg-gray-100 dark:bg-gray-800/60 rounded-xl w-fit mx-auto">
-          {painelTab === 'atendimentos' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => handleAtendimentoTabChange('aguardando')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  atendimentoTab === 'aguardando'
-                    ? 'bg-blue-600 text-white dark:bg-blue-500'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                <HelpCircle className="w-4 h-4 shrink-0" />
-                Aguardando atendente
-                <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'aguardando' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                  {aguardandoAtendimento.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAtendimentoTabChange('andamento')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  atendimentoTab === 'andamento'
-                    ? 'bg-indigo-600 text-white dark:bg-indigo-500'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                <Clock className="w-4 h-4 shrink-0" />
-                Em atendimento
-                <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'andamento' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                  {atendimentoEmAndamento.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAtendimentoTabChange('encerradas')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  atendimentoTab === 'encerradas'
-                    ? 'bg-green-600 text-white dark:bg-green-500'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                <FileCheck className="w-4 h-4 shrink-0" />
-                Encerradas
-                <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'encerradas' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                  {conversasEncerradas.length}
-                </span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setAtestadoTab('pendentes')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  atestadoTab === 'pendentes'
-                    ? 'bg-amber-600 text-white dark:bg-amber-500'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                <Clock className="w-4 h-4 shrink-0" />
-                Pendentes
-                <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atestadoTab === 'pendentes' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                  {atestadosPendentes.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAtestadoTab('finalizados')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  atestadoTab === 'finalizados'
-                    ? 'bg-green-600 text-white dark:bg-green-500'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                <FileCheck className="w-4 h-4 shrink-0" />
-                Finalizados
-                <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atestadoTab === 'finalizados' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                  {atestadosFinalizados.length}
-                </span>
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => handleAtendimentoTabChange('aguardando')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              atendimentoTab === 'aguardando'
+                ? 'bg-blue-600 text-white dark:bg-blue-500'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <HelpCircle className="w-4 h-4 shrink-0" />
+            Aguardando atendente
+            <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'aguardando' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+              {aguardandoAtendimento.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAtendimentoTabChange('andamento')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              atendimentoTab === 'andamento'
+                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <Clock className="w-4 h-4 shrink-0" />
+            Em atendimento
+            <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'andamento' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+              {atendimentoEmAndamento.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAtendimentoTabChange('encerradas')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              atendimentoTab === 'encerradas'
+                ? 'bg-green-600 text-white dark:bg-green-500'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-100'
+            }`}
+          >
+            <FileCheck className="w-4 h-4 shrink-0" />
+            Encerradas
+            <span className={`ml-1 min-w-[1.25rem] text-center text-xs rounded-full px-1.5 ${atendimentoTab === 'encerradas' ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'}`}>
+              {conversasEncerradas.length}
+            </span>
+          </button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -545,15 +818,11 @@ export default function ConversasWhatsAppPage() {
           <Card className="lg:col-span-1 shadow-sm">
             <CardHeader className="p-2">
               <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                {painelTab === 'atendimentos'
-                  ? atendimentoTab === 'aguardando'
-                    ? 'Aguardando atendente'
-                    : atendimentoTab === 'andamento'
-                      ? 'Em atendimento'
-                      : 'Encerradas'
-                  : atestadoTab === 'pendentes'
-                    ? 'Atestados pendentes'
-                    : 'Atestados finalizados'}
+                {atendimentoTab === 'aguardando'
+                  ? 'Aguardando atendente'
+                  : atendimentoTab === 'andamento'
+                    ? 'Em atendimento'
+                    : 'Encerradas'}
               </h2>
             </CardHeader>
             <CardContent className="p-0">
@@ -568,42 +837,82 @@ export default function ConversasWhatsAppPage() {
                     <AlertCircle className="w-7 h-7 text-gray-500 dark:text-gray-400" />
                   </div>
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {painelTab === 'atendimentos'
-                      ? atendimentoTab === 'aguardando'
-                        ? 'Nenhuma conversa aguardando atendimento'
-                        : atendimentoTab === 'andamento'
-                          ? 'Nenhuma conversa em atendimento'
-                          : 'Nenhuma conversa finalizada'
-                      : atestadoTab === 'pendentes'
-                        ? 'Nenhum atestado pendente'
-                        : 'Nenhum atestado finalizado'}
+                    {atendimentoTab === 'aguardando'
+                      ? 'Nenhuma conversa aguardando atendimento'
+                      : atendimentoTab === 'andamento'
+                        ? 'Nenhuma conversa em atendimento'
+                        : 'Nenhuma conversa finalizada'}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-[240px] mx-auto">
-                    {painelTab === 'atendimentos'
-                      ? atendimentoTab === 'encerradas'
-                        ? 'Quando a conversa for concluída ou cancelada, ela aparece aqui.'
-                        : 'Quando alguém solicitar atendimento humano, aparecerá aqui.'
-                      : 'Quando houver envio de atestado pelo chatbot, ele aparecerá aqui.'}
+                    {atendimentoTab === 'encerradas'
+                      ? 'Quando a conversa for concluída ou cancelada, ela aparece aqui.'
+                      : 'Quando alguém solicitar atendimento humano, aparecerá aqui.'}
                   </p>
                 </div>
               ) : (
                 <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[calc(100vh-20rem)] overflow-y-auto">
-                  {conversasVisiveis.map((c) => {
+                  {conversasVisiveis.map((item) => {
+                    if (item.kind === 'support') {
+                      const t = item.data;
+                      return (
+                        <li key={`support-${t.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedSupportId(t.id);
+                              setSelectedId(null);
+                              setSupportResolutionNote(t.resolutionNote || '');
+                              setSelectedAtestadoSubmissionId(null);
+                              setAtestadoConversationModalOpen(false);
+                              setAtestadoFilePreview(null);
+                            }}
+                            className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-4 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                              selectedSupportId === t.id
+                                ? 'bg-red-50 dark:bg-red-900/20 border-l-red-600 dark:border-l-red-500'
+                                : ''
+                            }`}
+                          >
+                            <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/20 shrink-0">
+                              <HelpCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                #{t.displayNumber} · {SUPPORT_CATEGORY_LABELS[t.category] || t.subject}
+                              </div>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                {t.requester?.name || t.requesterName || 'Solicitante'} ·{' '}
+                                {SUPPORT_CHANNEL_LABELS[t.channel] || t.channel}
+                              </p>
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2">
+                                {t.description}
+                              </p>
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 shrink-0" />
+                          </button>
+                        </li>
+                      );
+                    }
+
+                    const c = item.data;
                     return (
                       <li key={c.id}>
                         <button
                           type="button"
-                          onClick={() => setSelectedId(c.id)}
+                          onClick={() => {
+                            setSelectedId(c.id);
+                            setSelectedSupportId(null);
+                            setSelectedAtestadoSubmissionId(null);
+                            setAtestadoConversationModalOpen(false);
+                            setAtestadoFilePreview(null);
+                          }}
                           className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-l-4 border-transparent hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
-                            selectedId === c.id
+                            selectedId === c.id && !selectedSupportId
                               ? 'bg-red-50 dark:bg-red-900/20 border-l-red-600 dark:border-l-red-500'
                               : ''
                           }`}
                         >
                           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 shrink-0">
-                            {painelTab === 'atestados' ? (
-                              <FileCheck className="w-4 h-4 text-red-600 dark:text-red-400" />
-                            ) : c.attendantRequested ? (
+                            {c.attendantRequested ? (
                               <HelpCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                             ) : c.attendantInProgress ? (
                               <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
@@ -668,9 +977,99 @@ export default function ConversasWhatsAppPage() {
             </CardContent>
           </Card>
 
-          {/* Detalhe da conversa */}
+          {/* Detalhe da conversa ou chamado Gennecy */}
           <div className="lg:col-span-2 min-h-[320px]">
-            {!selectedId ? (
+            {selectedSupport ? (
+              <Card className="shadow-sm">
+                <CardHeader className="border-b border-gray-200 dark:border-gray-700 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSupportId(null)}
+                    className="lg:hidden flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-2 px-1 py-1 -ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" /> Voltar
+                  </button>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                        Chamado #{selectedSupport.displayNumber}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {SUPPORT_CATEGORY_LABELS[selectedSupport.category]} ·{' '}
+                        {SUPPORT_CHANNEL_LABELS[selectedSupport.channel]}
+                      </p>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 space-y-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-400">Solicitante</p>
+                    <p className="text-sm">
+                      {selectedSupport.requester?.name || selectedSupport.requesterName || '—'}
+                    </p>
+                    {selectedSupport.requesterCpf ? (
+                      <p className="text-xs text-gray-500">CPF: {selectedSupport.requesterCpf}</p>
+                    ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-gray-400">Problema</p>
+                    <p className="text-sm whitespace-pre-wrap">{selectedSupport.description}</p>
+                  </div>
+                  {selectedSupport.moduleHint ? (
+                    <div>
+                      <p className="text-xs font-semibold uppercase text-gray-400">Tela / módulo</p>
+                      <p className="text-sm">{selectedSupport.moduleHint}</p>
+                    </div>
+                  ) : null}
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Observação da equipe</label>
+                    <textarea
+                      value={supportResolutionNote}
+                      onChange={(e) => setSupportResolutionNote(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800"
+                      placeholder="Como foi resolvido…"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedSupport.status === 'OPEN' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await updateSupportTicket(selectedSupport.id, 'IN_PROGRESS', supportResolutionNote);
+                        }}
+                        className="rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white hover:bg-indigo-700"
+                      >
+                        Iniciar atendimento
+                      </button>
+                    )}
+                    {(selectedSupport.status === 'OPEN' || selectedSupport.status === 'IN_PROGRESS') && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await updateSupportTicket(selectedSupport.id, 'RESOLVED', supportResolutionNote);
+                        }}
+                        className="rounded-lg bg-green-600 px-3 py-2 text-sm text-white hover:bg-green-700"
+                      >
+                        Marcar resolvido
+                      </button>
+                    )}
+                    {selectedSupport.whatsAppConversationId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(selectedSupport.whatsAppConversationId);
+                          setSelectedSupportId(null);
+                        }}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600"
+                      >
+                        Abrir conversa WhatsApp
+                      </button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ) : !selectedId ? (
               <Card className="h-full min-h-[320px] flex items-center justify-center shadow-sm">
                 <div className="text-center py-12 px-6">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gray-100 dark:bg-gray-700/60 mb-4">
@@ -723,7 +1122,7 @@ export default function ConversasWhatsAppPage() {
                           Em atendimento
                         </span>
                       ) : null}
-                      {detail.status !== 'PENDING' && (
+                      {painelTab === 'atendimentos' && detail.status !== 'PENDING' && (
                         <span
                           className={`text-xs px-2 py-1 rounded-md shrink-0 font-medium ${
                             detail.status === 'COMPLETED'
@@ -754,15 +1153,54 @@ export default function ConversasWhatsAppPage() {
                       <button
                         type="button"
                         onClick={handleRemoveConversation}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/25 transition-colors shrink-0"
+                        title="Remover conversa"
+                        aria-label="Remover conversa"
                       >
-                        <Trash2 className="w-4 h-4" />
-                        Remover
+                        <Trash2 className="w-5 h-5" />
                       </button>
+                      {painelTab === 'atestados' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setAtestadoConversationModalOpen(true)}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 shrink-0"
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                            Ver conversa
+                          </button>
+                          {(selectedMedicalSubmission ?? latestPendingMedicalSubmission) &&
+                            isMedicalCertificatePending((selectedMedicalSubmission ?? latestPendingMedicalSubmission)?.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleFinalizeSubmission((selectedMedicalSubmission ?? latestPendingMedicalSubmission)!.id)}
+                              disabled={isFinalizingSubmissionId === (selectedMedicalSubmission ?? latestPendingMedicalSubmission)!.id}
+                              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white transition-colors shrink-0"
+                            >
+                              {isFinalizingSubmissionId === (selectedMedicalSubmission ?? latestPendingMedicalSubmission)!.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : null}
+                              Finalizar
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 space-y-6">
+                  {detail.payload && (detail.payload as any).supportTicketNumber ? (
+                    <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                        Chamado Gennecy #{(detail.payload as any).supportTicketNumber}
+                      </p>
+                      {(detail.payload as any).supportDescription ? (
+                        <p className="text-sm text-amber-800 dark:text-amber-200 mt-1 whitespace-pre-wrap">
+                          {String((detail.payload as any).supportDescription)}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {detail.status === 'PENDING' && detail.payload && (detail.payload as any).attendantRequested ? (
                     <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 flex items-start gap-3">
                       <AlertCircle className="w-4 h-4 text-blue-700 dark:text-blue-300 mt-0.5" />
@@ -788,10 +1226,6 @@ export default function ConversasWhatsAppPage() {
                   {showLegacyData &&
                     detail.submissions.filter((s) => s.type === 'MEDICAL_CERTIFICATE').length > 0 && (
                     <div className="space-y-4">
-                      <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                        <FileCheck className="w-4 h-4 text-red-600 dark:text-red-400" />
-                        Dados do atestado
-                      </h3>
                       <div className="space-y-4">
                         {detail.submissions
                           .filter((s) => s.type === 'MEDICAL_CERTIFICATE')
@@ -801,41 +1235,23 @@ export default function ConversasWhatsAppPage() {
                             return (
                               <div
                                 key={s.id}
-                                className="rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden bg-white dark:bg-gray-800/50"
+                                className={`rounded-xl border overflow-hidden bg-white dark:bg-gray-800/50 ${
+                                  selectedAtestadoSubmissionId === s.id
+                                    ? 'border-red-400 dark:border-red-500 ring-1 ring-red-200 dark:ring-red-900/60'
+                                    : 'border-gray-200 dark:border-gray-600'
+                                }`}
                               >
-                                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between flex-wrap gap-2 bg-gray-50 dark:bg-gray-800">
+                                <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600 flex items-center flex-wrap gap-2 bg-gray-50 dark:bg-gray-800">
                                   <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                                     {detail.submissions.filter((x) => x.type === 'MEDICAL_CERTIFICATE').length > 1
                                       ? `Atestado #${idx + 1}`
                                       : 'Atestado médico'}
-                                  </span>
-                                  <span
-                                    className={`text-xs px-2 py-1 rounded-md ${
-                                      s.status === 'PENDING'
-                                        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
-                                        : s.status === 'PROCESSED' || s.status === 'APPROVED'
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                                        : 'bg-gray-100 text-gray-700 dark:bg-gray-600 dark:text-gray-300'
-                                    }`}
-                                  >
-                                    {s.status === 'PENDING' ? 'Pendente' : s.status === 'PROCESSED' || s.status === 'APPROVED' ? 'Processado' : s.status}
                                   </span>
                                 </div>
                                 <div className="p-4 space-y-0">
                                   {isPayload ? (
                                     <>
                                       <LinhaDado icon={UserCircle} label="Nome completo" value={p.name} />
-                                          <LinhaDado
-                                            icon={UserCircle}
-                                            label="Para quem"
-                                            value={
-                                              p.forWhom === 'SELF'
-                                                ? 'Você'
-                                                : p.forWhom === 'OTHER'
-                                                  ? 'Outra pessoa'
-                                                  : null
-                                            }
-                                          />
                                       {p.requesterSector && (
                                         <LinhaDado
                                           icon={Hash}
@@ -843,20 +1259,6 @@ export default function ConversasWhatsAppPage() {
                                           value={p.requesterSector ?? null}
                                         />
                                       )}
-                                          <LinhaDado
-                                            icon={Hash}
-                                            label="Centro de custo/contrato"
-                                            value={
-                                              p.costCenterCode
-                                                ? `${p.costCenterCode}${p.costCenterName ? ` - ${p.costCenterName}` : ''}`
-                                                : null
-                                            }
-                                          />
-                                      <LinhaDado
-                                        icon={FileType}
-                                        label="Tipo de atestado"
-                                        value={p.atestadoTypeLabel ?? p.atestadoType ?? null}
-                                      />
                                           {p.atestadoOtherType && (
                                             <LinhaDado
                                               icon={FileType}
@@ -874,20 +1276,35 @@ export default function ConversasWhatsAppPage() {
                                             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                                               Arquivo do atestado
                                             </p>
-                                            {s.fileUrl ? (
-                                              <a
-                                                href={getFileHref(s.fileUrl)}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 mt-1 text-sm text-red-600 dark:text-red-400 hover:underline"
+                                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => openAtestadoFilePreview(s.fileUrl, s.fileName)}
+                                                disabled={!s.fileUrl}
+                                                title="Ver arquivo"
+                                                aria-label="Ver arquivo"
+                                                className="inline-flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                               >
-                                                {s.fileName || 'Ver arquivo'}
-                                              </a>
-                                            ) : (
-                                              <p className="text-sm text-gray-900 dark:text-gray-100 mt-1 break-all">
-                                                {s.fileName || 'Arquivo recebido'}
-                                              </p>
-                                            )}
+                                                <Eye className="w-3.5 h-3.5" />
+                                                Ver
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (!selectedId) return;
+                                                  void handleDownloadAtestado(s.fileUrl, s.fileName, {
+                                                    submissionId: s.id,
+                                                    conversationId: selectedId
+                                                  });
+                                                }}
+                                                disabled={!s.fileUrl}
+                                                title="Baixar arquivo"
+                                                aria-label="Baixar arquivo"
+                                                className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              >
+                                                <Download className="w-5 h-5" />
+                                              </button>
+                                            </div>
                                           </div>
                                         </div>
                                       )}
@@ -909,23 +1326,40 @@ export default function ConversasWhatsAppPage() {
                                         Dados não disponíveis neste formato.
                                       </div>
                                       {(s.fileUrl || s.fileName) && (
-                                        <>
-                                          {s.fileUrl ? (
-                                            <a
-                                              href={getFileHref(s.fileUrl)}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1 text-sm text-red-600 dark:text-red-400 hover:underline"
-                                            >
-                                              <Paperclip className="w-4 h-4" />
-                                              {s.fileName || 'Ver arquivo'}
-                                            </a>
-                                          ) : (
-                                            <div className="mt-2 text-sm text-gray-900 dark:text-gray-100 break-all">
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => openAtestadoFilePreview(s.fileUrl, s.fileName)}
+                                            disabled={!s.fileUrl}
+                                            title="Ver arquivo"
+                                            aria-label="Ver arquivo"
+                                            className="inline-flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                            Ver
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (!selectedId) return;
+                                              void handleDownloadAtestado(s.fileUrl, s.fileName, {
+                                                submissionId: s.id,
+                                                conversationId: selectedId
+                                              });
+                                            }}
+                                            disabled={!s.fileUrl}
+                                            title="Baixar arquivo"
+                                            aria-label="Baixar arquivo"
+                                            className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          >
+                                            <Download className="w-5 h-5" />
+                                          </button>
+                                          {!s.fileUrl && (
+                                            <span className="text-sm text-gray-900 dark:text-gray-100 break-all">
                                               {s.fileName || 'Arquivo recebido'}
-                                            </div>
+                                            </span>
                                           )}
-                                        </>
+                                        </div>
                                       )}
                                       <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
                                         <Clock className="w-3 h-3 inline mr-1" />
@@ -989,17 +1423,6 @@ export default function ConversasWhatsAppPage() {
                           {isAtestadoPayload(detail.payload as Record<string, unknown>) && (
                             <div className="space-y-0">
                               <LinhaDado icon={UserCircle} label="Nome completo" value={(detail.payload as AtestadoPayload).name} />
-                              <LinhaDado
-                                icon={UserCircle}
-                                label="Para quem"
-                                value={
-                                  (detail.payload as AtestadoPayload).forWhom === 'SELF'
-                                    ? 'Você'
-                                    : (detail.payload as AtestadoPayload).forWhom === 'OTHER'
-                                      ? 'Outra pessoa'
-                                      : null
-                                }
-                              />
                               {(detail.payload as AtestadoPayload).requesterSector && (
                                 <LinhaDado
                                   icon={Hash}
@@ -1007,20 +1430,6 @@ export default function ConversasWhatsAppPage() {
                                   value={(detail.payload as AtestadoPayload).requesterSector ?? null}
                                 />
                               )}
-                              <LinhaDado
-                                icon={Hash}
-                                label="Centro de custo/contrato"
-                                value={
-                                  (detail.payload as AtestadoPayload).costCenterCode
-                                    ? `${(detail.payload as AtestadoPayload).costCenterCode}${(detail.payload as AtestadoPayload).costCenterName ? ` - ${(detail.payload as AtestadoPayload).costCenterName}` : ''}`
-                                    : null
-                                }
-                              />
-                              <LinhaDado
-                                icon={FileType}
-                                label="Tipo de atestado"
-                                value={(detail.payload as AtestadoPayload).atestadoTypeLabel ?? (detail.payload as AtestadoPayload).atestadoType ?? null}
-                              />
                               {(detail.payload as AtestadoPayload).atestadoOtherType && (
                                 <LinhaDado
                                   icon={FileType}
@@ -1046,94 +1455,54 @@ export default function ConversasWhatsAppPage() {
                       </div>
                     )}
 
-                  {/* Conversa (mensagens) */}
+                  {/* Conversa (mensagens) — em atestados o acesso é pelo botão no cabeçalho */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400" /> Conversa
-                    </h3>
-                    <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
-                      {detail.messages.map((m) => (
-                        <div
-                          key={m.id}
-                          className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div
-                            className={`max-w-[85%] rounded-xl px-3 py-2.5 ${
-                              m.role === 'user'
-                                ? 'bg-red-600 text-white dark:bg-red-500'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 text-xs opacity-80 mb-1">
-                              {m.role === 'user' ? (
-                                <User className="w-3 h-3 shrink-0" />
-                              ) : (
-                                <Bot className="w-3 h-3 shrink-0" />
-                              )}
-                              <span className="font-medium text-gray-600 dark:text-gray-300">
-                                {m.role === 'user' ? 'Cliente' : 'Sistema'}
-                              </span>
-                              <span>
-                                {format(new Date(m.createdAt), "dd/MM HH:mm", { locale: ptBR })}
-                              </span>
-                            </div>
-                            <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
-                            {(m.mediaUrl || m.content === '[Arquivo enviado]') && (
-                              m.mediaUrl ? (
-                                <a
-                                  href={getFileHref(m.mediaUrl)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 mt-2 text-xs underline"
-                                >
-                                  <Paperclip className="w-3 h-3" />
-                                  {m.fileName || 'Anexo'}
-                                </a>
-                              ) : (
-                                <div className="inline-flex items-center gap-1 mt-2 text-xs opacity-80">
-                                  <Paperclip className="w-3 h-3" />
-                                  <span>{m.fileName || 'Arquivo enviado'}</span>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      <div ref={messagesEndRef} />
-                    </div>
-
-                    {painelTab === 'atendimentos' && (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        handleSendManualMessage();
-                      }}
-                      className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3 items-end"
-                    >
-                      <div className="flex-1">
-                        <textarea
-                          value={replyText}
-                          onChange={(e) => setReplyText(e.target.value)}
-                          placeholder={
-                            detail.status === 'PENDING'
-                              ? 'Digite uma mensagem para a pessoa...'
-                              : 'Conversa encerrada — não é possível enviar novas mensagens.'
-                          }
-                          disabled={detail.status !== 'PENDING' || isSending}
-                          className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-gray-200 resize-none disabled:opacity-60 disabled:cursor-not-allowed"
-                          rows={1}
-                          style={{ minHeight: 42, maxHeight: 120 }}
+                    {painelTab === 'atendimentos' ? (
+                      <>
+                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400" /> Conversa
+                        </h3>
+                        <ListaMensagensWhatsAppDetalhe
+                          messages={detail.messages}
+                          messagesEndRef={messagesEndRef}
+                          scrollClassName="max-h-[320px]"
+                          clientDisplayName={headerName ?? formatPhone(detail.phone)}
+                          onPreviewAttachment={openAtestadoFilePreview}
+                          onDownloadAttachment={handleDownloadAtestado}
                         />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={detail.status !== 'PENDING' || !replyText.trim() || isSending}
-                        className="px-4 py-2.5 bg-red-600 dark:bg-red-700 hover:bg-red-700 dark:hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                      >
-                        {isSending ? 'Enviando...' : 'Enviar'}
-                      </button>
-                    </form>
-                    )}
+
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSendManualMessage();
+                          }}
+                          className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex gap-3 items-end"
+                        >
+                          <div className="flex-1">
+                            <textarea
+                              value={replyText}
+                              onChange={(e) => setReplyText(e.target.value)}
+                              placeholder={
+                                detail.status === 'PENDING'
+                                  ? 'Digite uma mensagem para a pessoa...'
+                                  : 'Conversa encerrada — não é possível enviar novas mensagens.'
+                              }
+                              disabled={detail.status !== 'PENDING' || isSending}
+                              className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-gray-200 resize-none disabled:opacity-60 disabled:cursor-not-allowed"
+                              rows={1}
+                              style={{ minHeight: 42, maxHeight: 120 }}
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={detail.status !== 'PENDING' || !replyText.trim() || isSending}
+                            className="px-4 py-2.5 bg-red-600 dark:bg-red-700 hover:bg-red-700 dark:hover:bg-red-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                          >
+                            {isSending ? 'Enviando...' : 'Enviar'}
+                          </button>
+                        </form>
+                      </>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -1148,6 +1517,116 @@ export default function ConversasWhatsAppPage() {
           </div>
         </div>
       </div>
+
+      {atestadoConversationModalOpen &&
+        detail &&
+        painelTab === 'atestados' &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="whatsapp-atestado-conversa-title"
+            onClick={() => setAtestadoConversationModalOpen(false)}
+          >
+            <div
+              className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
+                <h2
+                  id="whatsapp-atestado-conversa-title"
+                  className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2"
+                >
+                  <MessageSquare className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  Conversa
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setAtestadoConversationModalOpen(false)}
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  aria-label="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-4 overflow-hidden flex flex-col min-h-0">
+                <ListaMensagensWhatsAppDetalhe
+                  messages={detail.messages}
+                  messagesEndRef={messagesEndRef}
+                  scrollClassName="max-h-[min(70vh,520px)]"
+                  clientDisplayName={headerName ?? formatPhone(detail.phone)}
+                  onPreviewAttachment={openAtestadoFilePreview}
+                  onDownloadAttachment={handleDownloadAtestado}
+                />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {atestadoFilePreview &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <AppModalOverlay
+            className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Visualizar arquivo do atestado"
+            onClick={() => setAtestadoFilePreview(null)}
+          >
+            <button
+              type="button"
+              onClick={() => setAtestadoFilePreview(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors z-10"
+              aria-label="Fechar"
+            >
+              <X className="w-[22px] h-[22px]" />
+            </button>
+            <div
+              className="max-w-[92vw] max-h-[88vh] flex flex-col items-center justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {atestadoFilePreview.kind === 'image' ? (
+                <img
+                  src={atestadoFilePreview.href}
+                  alt={atestadoFilePreview.fileName || 'Atestado'}
+                  className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+                  referrerPolicy="no-referrer"
+                />
+              ) : atestadoFilePreview.kind === 'pdf' ? (
+                <iframe
+                  title={atestadoFilePreview.fileName || 'PDF'}
+                  src={atestadoFilePreview.href}
+                  className="w-[min(90vw,800px)] h-[80vh] rounded-xl bg-white"
+                />
+              ) : (
+                <div className="rounded-xl bg-gray-800 dark:bg-gray-950 text-white p-6 text-center max-w-md border border-gray-700">
+                  <p className="text-sm mb-4">
+                    Não foi possível pré-visualizar este tipo de arquivo aqui.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.open(atestadoFilePreview.href, '_blank', 'noopener,noreferrer')}
+                    className="text-sm px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    Abrir em nova aba
+                  </button>
+                </div>
+              )}
+            </div>
+          </AppModalOverlay>,
+          document.body
+        )}
     </MainLayout>
+  );
+}
+
+export default function ConversasWhatsAppPage() {
+  return (
+    <ProtectedRoute route="/ponto/conversas-whatsapp">
+      <ConversasWhatsAppPageContent />
+    </ProtectedRoute>
   );
 }

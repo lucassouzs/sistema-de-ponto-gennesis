@@ -122,7 +122,7 @@ export class ContractPleitoController {
         const requestedIsGerado100 = requestedReportsBilling === '__PLEITO_HISTORICO__GERADO_100__';
         const reportsBillingToPersist =
           requestedIsGerado100
-            ? requestedReportsBilling
+            ? existingReportsBilling
             : existingReportsBilling === '__PLEITO_HISTORICO__' || existingReportsBilling === '__PLEITO_HISTORICO__GERADO_100__'
             ? requestedReportsBilling
             : existingReportsBilling;

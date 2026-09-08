@@ -1,0 +1,10 @@
+-- CreateEnum
+DO $$ BEGIN
+  CREATE TYPE "FuelTankLevelAfter" AS ENUM ('RESERVE', 'QUARTER', 'HALF', 'THREE_QUARTERS', 'FULL');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+-- AlterEnum
+ALTER TYPE "FuelRefuelRequestStatus" ADD VALUE IF NOT EXISTS 'AWAITING_REFUEL';
+ALTER TYPE "FuelRefuelRequestStatus" ADD VALUE IF NOT EXISTS 'COMPLETED';

@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
@@ -16,13 +15,23 @@ import {
   MoreVertical,
   Eye,
   Pencil,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import {
+  ListRowNavigableLabel,
+  getListTableRowClassName,
+  listTableRowClasses,
+  rowActionMenuButtonClass,
+} from '@/components/ui/RowActionMenu';
+import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import {
   UserPermissionsEditor,
   UserPermissionsTabBar,
@@ -33,7 +42,9 @@ import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useLogout } from '@/hooks/useLogout';
 import { PERMISSION_ACCESS_ACTION, pathToModuleKey } from '@sistema-ponto/permission-modules';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface CostCenter {
   id: string;
@@ -107,26 +118,64 @@ function parseCurrencyInput(value: string): number {
   return isNaN(num) ? 0 : num;
 }
 
-function getYearsBetween(startDate: string, endDate: string): number {
-  if (!startDate || !endDate) return 0;
-  const startMatch = String(startDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const endMatch = String(endDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  const start = startMatch
-    ? new Date(`${startMatch[1]}-${startMatch[2]}-${startMatch[3]}T12:00:00`)
-    : new Date(startDate);
-  const end = endMatch
-    ? new Date(`${endMatch[1]}-${endMatch[2]}-${endMatch[3]}T12:00:00`)
-    : new Date(endDate);
-  if (end <= start) return 0;
-  // Conta anos completos de vigência (ex: 01/03/2026 a 01/03/2028 = 2 anos)
-  const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-  return Math.max(1, Math.floor(diffMonths / 12));
+function parseYmdLocal(value: string): Date | null {
+  if (!value) return null;
+  const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function getValorMaisAditivosAnual(valuePlusAddenda: number, startDate: string, endDate: string): number | null {
-  const years = getYearsBetween(startDate, endDate);
-  if (years <= 0) return null;
-  return valuePlusAddenda / years;
+function calendarMonthInVigencia(
+  calendarYear: number,
+  calendarMonth1to12: number,
+  contractStart: Date,
+  contractEnd: Date
+): boolean {
+  const ms = new Date(calendarYear, calendarMonth1to12 - 1, 1, 12, 0, 0, 0);
+  const me = new Date(calendarYear, calendarMonth1to12, 0, 12, 0, 0, 0);
+  return ms.getTime() < contractEnd.getTime() && me.getTime() >= contractStart.getTime();
+}
+
+function countVigenciaMonths(startDate: string, endDate: string): number {
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return 0;
+  let n = 0;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12, 0, 0, 0);
+  const endCursor = new Date(end.getFullYear(), end.getMonth(), 1, 12, 0, 0, 0);
+  while (cursor.getTime() <= endCursor.getTime()) {
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth() + 1;
+    if (calendarMonthInVigencia(y, m, start, end)) n += 1;
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return n;
+}
+
+/** Valor anual por ano civil: proporcional aos meses da vigência naquele ano. */
+function getValorAnualPorAno(
+  valuePlusAddenda: number,
+  startDate: string,
+  endDate: string
+): Array<{ year: number; months: number; value: number }> {
+  const start = parseYmdLocal(startDate);
+  const end = parseYmdLocal(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return [];
+  const totalMonths = countVigenciaMonths(startDate, endDate);
+  if (totalMonths <= 0 || !Number.isFinite(valuePlusAddenda)) return [];
+  const monthly = valuePlusAddenda / totalMonths;
+  const rows: Array<{ year: number; months: number; value: number }> = [];
+  for (let y = start.getFullYear(); y <= end.getFullYear(); y++) {
+    let months = 0;
+    for (let m = 1; m <= 12; m++) {
+      if (calendarMonthInVigencia(y, m, start, end)) months += 1;
+    }
+    if (months > 0) rows.push({ year: y, months, value: monthly * months });
+  }
+  return rows;
 }
 
 function ContractAccessCheckbox({
@@ -171,7 +220,16 @@ function ContractAccessCheckbox({
 
 export default function ContratosPage() {
   const router = useRouter();
-  const { isAdministrator, can, canAction } = usePermissions();
+  const {
+    isAdministrator,
+    isElevatedUser,
+    isLoading: loadingPermissions,
+    can,
+    canAction,
+    permissions,
+    canAccessContract,
+    allowedContractIds,
+  } = usePermissions();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -201,24 +259,29 @@ export default function ContratosPage() {
     setPermissionTab('gerais');
     setShowContractsTab(false);
   };
-  const canCreateContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'criar');
-  const canEditContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'editar');
-  const canDeleteContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'excluir');
+  const canCreateContrato = isElevatedUser || permissions.canCreateContracts;
+  const canEditContrato = isElevatedUser || permissions.canEditContracts;
+  const canDeleteContrato = isElevatedUser || permissions.canDeleteContracts;
   const canManageUserPermissions =
     isAdministrator ||
     can(pk('/ponto/controle/alterar-permissoes')) ||
     canAction(pk('/ponto/controle/alterar-permissoes'), 'ver');
-  const canManageContrato = canEditContrato || canDeleteContrato;
-  const showActionsColumn = canManageContrato || canManageUserPermissions;
+  /** Sempre exibe a coluna (ao menos «Ver detalhes»); criar/editar/excluir só com a ação marcada. */
+  const showActionsColumn = true;
+
+  const openContractDetails = useCallback(
+    (contractId: string) => {
+      router.push(`/ponto/contratos/${contractId}`);
+    },
+    [router]
+  );
+
+  const tableColSpan = showActionsColumn ? 7 : 6;
 
   const { costCenters, isLoading: loadingCostCenters } = useCostCenters();
   const costCentersList = (Array.isArray(costCenters) ? costCenters : []) as CostCenter[];
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('token');
-    router.push('/auth/login');
-  };
+  const handleLogout = useLogout();
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -443,7 +506,14 @@ export default function ContratosPage() {
     deleteMutation.mutate(id);
   };
 
-  const contracts = contractsData?.data || [];
+  const contracts = useMemo(() => {
+    const list = (contractsData?.data || []) as Contract[];
+    if (isElevatedUser) return list;
+    // Enquanto permissões carregam, não mostrar lista (evita flash de todos os contratos)
+    if (loadingPermissions) return [];
+    if (allowedContractIds.length === 0) return [];
+    return list.filter((c) => canAccessContract(c.id));
+  }, [contractsData?.data, isElevatedUser, loadingPermissions, allowedContractIds, canAccessContract]);
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
   const totalFiltered = contracts.length;
   const startItem = totalFiltered > 0 ? 1 : 0;
@@ -478,7 +548,13 @@ export default function ContratosPage() {
   }, [permissionsContract?.id]);
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/contratos">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   return (
@@ -580,16 +656,6 @@ export default function ContratosPage() {
                         </div>
                       </div>
                       <div className="flex w-full shrink-0 flex-col gap-2 sm:max-w-sm sm:flex-row sm:items-center sm:justify-end">
-                        {canEditContrato && (
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(permissionsContract)}
-                            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Editar contrato
-                          </button>
-                        )}
                         <div className="relative w-full sm:max-w-xs">
                           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                           <input
@@ -607,7 +673,7 @@ export default function ContratosPage() {
                   </div>
 
                   <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-                    <div className="overflow-x-auto pt-4 first:pt-4">
+                    <div className="table-scroll pt-4 first:pt-4">
                       <table className="w-full min-w-[640px] table-fixed text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
@@ -717,8 +783,8 @@ export default function ContratosPage() {
             <CardHeader className="border-b-0 pb-1">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center">
-                  <div className="p-2 sm:p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                    <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <div className="p-2 sm:p-3 bg-red-100 dark:bg-red-900/30 rounded-lg flex-shrink-0">
+                    <FileText className="w-6 h-6 text-red-600 dark:text-red-400" />
                   </div>
                   <div className="ml-3 sm:ml-4 min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -730,7 +796,7 @@ export default function ContratosPage() {
                   </div>
                 </div>
                 <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                  <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
@@ -766,30 +832,30 @@ export default function ContratosPage() {
                 </span>
                 <span>Página 1 de 1</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+              <div className="table-scroll">
+                <table className="w-full table-fixed text-sm">
                   <thead className="border-b border-gray-200 dark:border-gray-700">
                     <tr>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[240px]">
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[24%] min-w-[160px]">
                         Nome
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[20%]">
                         Nº Contrato
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[16%]">
                         Vigência
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[14%]">
                         Centro de Custo
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-[12%]">
                         Valor + Aditivos
                       </th>
-                      <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <th className={`px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider ${showActionsColumn ? 'w-[10%]' : 'w-[14%]'}`}>
                         Valor + Aditivos Anual
                       </th>
                       {showActionsColumn && (
-                        <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        <th className={listTableRowClasses.actionTh}>
                           Ação
                         </th>
                       )}
@@ -798,18 +864,13 @@ export default function ContratosPage() {
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                     {loadingContracts ? (
                       <tr>
-                        <td colSpan={showActionsColumn ? 7 : 6} className="px-6 py-8 text-center">
-                          <div className="flex items-center justify-center">
-                            <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">
-                              Carregando contratos...
-                            </span>
-                          </div>
+                        <td colSpan={tableColSpan} className="px-6 py-8 text-center">
+                          <CadastroListLoading message="Carregando contratos..." />
                         </td>
                       </tr>
                     ) : contracts.length === 0 ? (
                       <tr>
-                        <td colSpan={showActionsColumn ? 7 : 6} className="px-6 py-8 text-center">
+                        <td colSpan={tableColSpan} className="px-6 py-8 text-center">
                           <div className="text-gray-500 dark:text-gray-400">
                             <p>Nenhum contrato encontrado.</p>
                             <p className="text-sm mt-1">
@@ -822,57 +883,84 @@ export default function ContratosPage() {
                       contracts.map((c: Contract) => (
                         <tr
                           key={c.id}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                          onClick={() => openContractDetails(c.id)}
+                          className={getListTableRowClassName(true)}
+                          aria-label={`Abrir detalhes do contrato ${c.name}`}
                         >
-                          <td className="px-3 sm:px-6 py-3 min-w-[240px] align-middle text-left">
-                            <span className="text-sm text-gray-900 dark:text-gray-100 font-medium whitespace-normal">
+                          <td className="min-w-0 overflow-hidden px-3 py-3 align-middle text-left sm:px-6">
+                            <ListRowNavigableLabel className="font-medium break-words whitespace-normal">
                               {c.name}
-                            </span>
+                            </ListRowNavigableLabel>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-left text-gray-700 dark:text-gray-300">
-                            <span className="text-sm font-mono text-gray-900 dark:text-gray-100">
+                          <td
+                            className="min-w-0 overflow-hidden px-3 py-3 align-middle text-left text-sm text-gray-700 dark:text-gray-300 sm:px-6"
+                            title={c.number}
+                          >
+                            <span className="block break-all font-mono text-sm text-gray-900 dark:text-gray-100">
                               {c.number}
                             </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-left text-gray-700 dark:text-gray-300">
-                            {formatDate(c.startDate)} até {formatDate(c.endDate)}
+                          <td className="overflow-hidden px-3 py-3 text-center text-sm text-gray-700 dark:text-gray-300 sm:px-6">
+                            <span className="block whitespace-normal">
+                              {formatDate(c.startDate)} até {formatDate(c.endDate)}
+                            </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-left text-gray-700 dark:text-gray-300">
-                            {c.costCenter?.name || c.costCenter?.code || '-'}
+                          <td
+                            className="min-w-0 overflow-hidden px-3 py-3 text-center text-sm text-gray-700 dark:text-gray-300 sm:px-6"
+                            title={c.costCenter?.name || c.costCenter?.code || '-'}
+                          >
+                            <span className="block truncate">
+                              {c.costCenter?.name || c.costCenter?.code || '-'}
+                            </span>
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-left text-gray-700 dark:text-gray-300">
+                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
                             {formatCurrency(c.valuePlusAddenda)}
                           </td>
-                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-left text-gray-700 dark:text-gray-300">
+                          <td className="px-3 sm:px-6 py-3 whitespace-nowrap text-sm text-center text-gray-700 dark:text-gray-300">
                             {(() => {
-                              const anual = getValorMaisAditivosAnual(c.valuePlusAddenda, c.startDate, c.endDate);
-                              return anual !== null ? formatCurrency(anual) : '-';
+                              const rows = getValorAnualPorAno(c.valuePlusAddenda, c.startDate, c.endDate);
+                              if (!rows.length) return '-';
+                              if (rows.length === 1) return formatCurrency(rows[0].value);
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5 text-xs leading-tight">
+                                  {rows.map((r) => (
+                                    <span key={r.year}>
+                                      {r.year}: {formatCurrency(r.value)}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
                             })()}
                           </td>
                           {showActionsColumn && (
-                            <td className="relative px-3 sm:px-6 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                                  setContractActionMenu((prev) => {
-                                    if (prev?.contractId === c.id) return null;
-                                    let left = r.right - CONTRACT_ACTION_MENU_WIDTH_PX;
-                                    left = Math.max(
-                                      8,
-                                      Math.min(left, window.innerWidth - CONTRACT_ACTION_MENU_WIDTH_PX - 8)
-                                    );
-                                    return { contractId: c.id, top: r.bottom + 4, left };
-                                  });
-                                }}
-                                className="inline-flex items-center justify-center w-9 h-9 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Abrir ações"
-                                aria-expanded={contractActionMenu?.contractId === c.id}
-                                aria-haspopup="menu"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </button>
+                            <td
+                              className={listTableRowClasses.actionTd}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                    setContractActionMenu((prev) => {
+                                      if (prev?.contractId === c.id) return null;
+                                      let left = r.right - CONTRACT_ACTION_MENU_WIDTH_PX;
+                                      left = Math.max(
+                                        8,
+                                        Math.min(left, window.innerWidth - CONTRACT_ACTION_MENU_WIDTH_PX - 8)
+                                      );
+                                      return { contractId: c.id, top: r.bottom + 4, left };
+                                    });
+                                  }}
+                                  className={rowActionMenuButtonClass(contractActionMenu?.contractId === c.id)}
+                                  aria-label="Abrir ações"
+                                  aria-expanded={contractActionMenu?.contractId === c.id}
+                                  aria-haspopup="menu"
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -881,88 +969,75 @@ export default function ContratosPage() {
                   </tbody>
                 </table>
               </div>
-              {contractActionMenu &&
-                contractForActionMenu &&
-                typeof document !== 'undefined' &&
-                createPortal(
-                  <>
-                    <div
-                      className="fixed inset-0 z-[200]"
-                      aria-hidden
-                      onClick={() => setContractActionMenu(null)}
-                    />
-                    <div
-                      role="menu"
-                      className="fixed z-[201] w-56 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden"
-                      style={{
-                        top: contractActionMenu.top,
-                        left: contractActionMenu.left,
+              {contractActionMenu && contractForActionMenu && (
+                <ActionMenuOverlay
+                  open
+                  onClose={() => setContractActionMenu(null)}
+                  top={contractActionMenu.top}
+                  left={contractActionMenu.left}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setContractActionMenu(null);
+                      openContractDetails(contractForActionMenu.id);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  >
+                    <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>Ver detalhes</span>
+                  </button>
+                  {canEditContrato && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContractActionMenu(null);
+                        handleEdit(contractForActionMenu);
                       }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
                     >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setContractActionMenu(null);
-                          router.push(`/ponto/contratos/${contractForActionMenu.id}`);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                      >
-                        <Eye className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <span>Ver detalhes</span>
-                      </button>
-                      {canEditContrato && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setContractActionMenu(null);
-                            handleEdit(contractForActionMenu);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
-                        >
-                          <Pencil className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                          <span>Editar contrato</span>
-                        </button>
-                      )}
-                      {canDeleteContrato && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setContractActionMenu(null);
-                            setShowDeleteModal(contractForActionMenu.id);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
-                          <span>Excluir contrato</span>
-                        </button>
-                      )}
-                      {canManageUserPermissions && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setContractActionMenu(null);
-                            setPermissionsContract(contractForActionMenu);
-                            setPermissionsTarget(null);
-                            setPermissionTab('gerais');
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
-                        >
-                          <Shield className="w-4 h-4 text-gray-600 dark:text-gray-400 shrink-0" />
-                          <span>Gerenciar permissões</span>
-                        </button>
-                      )}
-                    </div>
-                  </>,
-                  document.body
-                )}
+                      <Pencil className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>Editar contrato</span>
+                    </button>
+                  )}
+                  {canDeleteContrato && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContractActionMenu(null);
+                        setShowDeleteModal(contractForActionMenu.id);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
+                    >
+                      <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+                      <span>Excluir contrato</span>
+                    </button>
+                  )}
+                  {canManageUserPermissions && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContractActionMenu(null);
+                        setPermissionsContract(contractForActionMenu);
+                        setPermissionsTarget(null);
+                        setPermissionTab('gerais');
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-200 dark:border-gray-700"
+                    >
+                      <Shield className="w-4 h-4 text-gray-600 dark:text-gray-400 shrink-0" />
+                      <span>Gerenciar permissões</span>
+                    </button>
+                  )}
+                </ActionMenuOverlay>
+              )}
             </CardContent>
           </Card>
           </>
@@ -990,7 +1065,7 @@ export default function ContratosPage() {
 
         {/* Modal Exclusão */}
         {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/50"
               onClick={() => setShowDeleteModal(null)}
@@ -1023,7 +1098,7 @@ export default function ContratosPage() {
                 </button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
       </MainLayout>
     </ProtectedRoute>
@@ -1054,182 +1129,37 @@ function ContractFormModal({
   loadingCostCenters: boolean;
 }) {
   const ccList = Array.isArray(costCenters) ? costCenters : [];
-  const [ccDropdownOpen, setCcDropdownOpen] = useState(false);
-  const [ccSearch, setCcSearch] = useState('');
-  const ccSearchInputRef = useRef<HTMLInputElement>(null);
-  const ccTriggerRef = useRef<HTMLButtonElement>(null);
-  const ccPopoverRef = useRef<HTMLDivElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const syncCcDropdownPlacement = useCallback(() => {
-    const el = ccTriggerRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const gap = 4;
-    let top = r.bottom + gap;
-    /** altura disponível até o fim da viewport (popover fica sempre visível) */
-    const maxPopoverH = 320;
-    const spaceBelow = window.innerHeight - top - 12;
-    if (spaceBelow < 120) {
-      const above = Math.max(8, r.top - gap - maxPopoverH);
-      top = above;
-    }
-    setDropdownPos({
-      top,
-      left: r.left,
-      width: Math.max(r.width, 280),
-    });
-  }, []);
+  const costCenterSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        ccList.map((cc) => {
+          const label = `${cc.code ? `${cc.code} - ` : ''}${cc.name || 'Sem nome'}`;
+          return { value: cc.id, label, searchText: label };
+        })
+      ),
+    [ccList]
+  );
 
-  const filteredCostCenters = useMemo(() => {
-    const q = ccSearch.trim().toLowerCase();
-    if (!q) return ccList;
-    return ccList.filter((cc) => {
-      const label = `${cc.code ? `${cc.code} - ` : ''}${cc.name || 'Sem nome'}`.toLowerCase();
-      return label.includes(q);
-    });
-  }, [ccList, ccSearch]);
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
 
-  useLayoutEffect(() => {
-    if (!ccDropdownOpen) return;
-    syncCcDropdownPlacement();
-    window.addEventListener('resize', syncCcDropdownPlacement);
-    window.addEventListener('scroll', syncCcDropdownPlacement, true);
-    return () => {
-      window.removeEventListener('resize', syncCcDropdownPlacement);
-      window.removeEventListener('scroll', syncCcDropdownPlacement, true);
-    };
-  }, [ccDropdownOpen, syncCcDropdownPlacement]);
-
-  useEffect(() => {
-    if (!ccDropdownOpen) return;
-    const onDocMouseDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (ccTriggerRef.current?.contains(t)) return;
-      if (ccPopoverRef.current?.contains(t)) return;
-      setCcDropdownOpen(false);
-    };
-    document.addEventListener('mousedown', onDocMouseDown);
-    return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [ccDropdownOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setCcDropdownOpen(false);
-      setCcSearch('');
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!ccDropdownOpen) return;
-    const id = window.requestAnimationFrame(() => ccSearchInputRef.current?.focus());
-    return () => window.cancelAnimationFrame(id);
-  }, [ccDropdownOpen]);
-
-  useEffect(() => {
-    if (!ccDropdownOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCcDropdownOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [ccDropdownOpen]);
-
-  function costCenterDisplayLabel(cc: CostCenter): string {
-    return `${cc.code ? `${cc.code} - ` : ''}${cc.name || 'Sem nome'}`;
-  }
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
 
   if (!isOpen) return null;
 
-  const ccDropdownPanel =
-    ccDropdownOpen && !loadingCostCenters && dropdownPos ? (
-      <div
-        ref={ccPopoverRef}
-        role="listbox"
-        className="fixed z-[9999] rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg flex flex-col overflow-hidden"
-        style={{
-          top: dropdownPos.top,
-          left: dropdownPos.left,
-          width: dropdownPos.width,
-          maxHeight: Math.min(320, typeof window !== 'undefined' ? window.innerHeight - dropdownPos.top - 12 : 320),
-        }}
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="shrink-0 border-b border-gray-100 dark:border-gray-700 px-3 pt-2 pb-2 bg-white dark:bg-gray-800">
-          <div className="relative">
-            <Search className="w-4 h-4 text-gray-400 dark:text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              ref={ccSearchInputRef}
-              type="search"
-              value={ccSearch}
-              onChange={(e) => setCcSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') setCcDropdownOpen(false);
-              }}
-              placeholder="Pesquisar centro de custo..."
-              autoComplete="off"
-              className="w-full pl-9 pr-3 py-2 rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/40 text-sm text-gray-900 dark:text-gray-100 outline-none focus:ring-2 focus:ring-red-500/70 focus:border-red-500 dark:focus:border-red-500"
-            />
-          </div>
-        </div>
-        <div className="overflow-y-auto min-h-0 flex-1 py-1 max-h-52">
-          {ccSearch.trim() === '' && (
-            <button
-              type="button"
-              className={`w-full px-4 py-2.5 text-left text-sm ${
-                !formData.costCenterId
-                  ? 'bg-red-600 text-white'
-                  : 'text-gray-900 dark:text-gray-100 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white'
-              }`}
-              onClick={() => {
-                setFormData({ ...formData, costCenterId: '' });
-                setCcDropdownOpen(false);
-              }}
-            >
-              {!formData.costCenterId ? 'Selecione o centro de custo' : 'Limpar seleção'}
-            </button>
-          )}
-          {filteredCostCenters.length === 0 ? (
-            <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">Nenhum centro encontrado.</div>
-          ) : (
-            filteredCostCenters.map((cc) => (
-              <button
-                key={cc.id}
-                type="button"
-                className={`w-full px-4 py-2.5 text-left text-sm ${
-                  formData.costCenterId === cc.id
-                    ? 'bg-red-600 text-white'
-                    : 'text-gray-900 dark:text-gray-100 hover:bg-red-600 hover:text-white dark:hover:bg-red-600 dark:hover:text-white'
-                }`}
-                onClick={() => {
-                  setFormData({ ...formData, costCenterId: cc.id });
-                  setCcDropdownOpen(false);
-                  setCcSearch('');
-                }}
-              >
-                {costCenterDisplayLabel(cc)}
-              </button>
-            ))
-          )}
-        </div>
-      </div>
-    ) : null;
-
   return (
     <>
-      {typeof document !== 'undefined' && ccDropdownPanel
-        ? createPortal(ccDropdownPanel, document.body)
-        : null}
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="absolute inset-0" onClick={onClose} />
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+      <div className="absolute inset-0" onClick={requestClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {editingContract ? 'Editar Contrato' : 'Cadastrar Contrato'}
           </h3>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
             aria-label="Fechar"
           >
@@ -1241,7 +1171,7 @@ function ContractFormModal({
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Nome do Contrato *
                 </label>
                 <input
@@ -1249,12 +1179,12 @@ function ContractFormModal({
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="h-10 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Ex: Contrato de Obra X"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <div className="md:col-span-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Número do Contrato *
                 </label>
                 <input
@@ -1262,74 +1192,52 @@ function ContractFormModal({
                   required
                   value={formData.number}
                   onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="h-10 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="Ex: 001/2025"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Início da Vigência *
                 </label>
-                <input
-                  type="date"
-                  required
+                <DatePickerField
                   value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(startDate) => setFormData({ ...formData, startDate })}
+                  placeholder="dd/mm/aaaa"
+                  aria-label="Início da vigência"
+                  className="w-full"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Fim da Vigência *
                 </label>
-                <input
-                  type="date"
-                  required
+                <DatePickerField
                   value={formData.endDate}
-                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  onChange={(endDate) => setFormData({ ...formData, endDate })}
+                  placeholder="dd/mm/aaaa"
+                  aria-label="Fim da vigência"
+                  className="w-full"
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Centro de Custo *
                 </label>
-                <div className="relative">
-                  <button
-                    ref={ccTriggerRef}
-                    type="button"
-                    disabled={loadingCostCenters}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (ccDropdownOpen) {
-                        setCcDropdownOpen(false);
-                        return;
-                      }
-                      syncCcDropdownPlacement();
-                      setCcDropdownOpen(true);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left flex items-center justify-between gap-2 disabled:opacity-50 outline-none focus:ring-2 focus:ring-red-500/80 dark:focus:ring-red-500/70 focus:border-red-500 dark:focus:border-red-500"
-                  >
-                    <span className="truncate min-w-0">
-                      {loadingCostCenters
-                        ? 'Carregando...'
-                        : (() => {
-                            if (!formData.costCenterId) return 'Selecione o centro de custo';
-                            const cc = ccList.find((c) => c.id === formData.costCenterId);
-                            if (!cc) return 'Selecione o centro de custo';
-                            return costCenterDisplayLabel(cc);
-                          })()}
-                    </span>
-                    {ccDropdownOpen ? (
-                      <ChevronUp className="w-4 h-4 shrink-0 opacity-60" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 shrink-0 opacity-60" />
-                    )}
-                  </button>
-                </div>
+                <StringSingleSelectDropdown
+                  value={formData.costCenterId || ''}
+                  onChange={(costCenterId) => setFormData({ ...formData, costCenterId })}
+                  options={costCenterSelectOptions}
+                  allowEmpty={false}
+                  disabled={loadingCostCenters}
+                  placeholder={loadingCostCenters ? 'Carregando...' : 'Selecione o centro de custo'}
+                  searchPlaceholder="Pesquisar centro de custo..."
+                  emptyOptionsMessage="Nenhum centro de custo disponível."
+                  className="w-full"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Valor mais Aditivos *
                 </label>
                 <div className="relative">
@@ -1342,10 +1250,15 @@ function ContractFormModal({
                     value={formData.valuePlusAddenda}
                     onChange={(e) => {
                       const v = e.target.value.replace(/\D/g, '');
-                      const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                      const formatted = v
+                        ? (Number(v) / 100).toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })
+                        : '';
                       setFormData({ ...formData, valuePlusAddenda: formatted });
                     }}
-                    className="w-full pl-12 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="h-10 w-full pl-12 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="0,00"
                   />
                 </div>
@@ -1354,19 +1267,54 @@ function ContractFormModal({
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Valor mais Aditivos Anual
                 </label>
-                <div className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100 font-medium">
-                  {(() => {
-                    const valor = parseCurrencyInput(formData.valuePlusAddenda);
-                    const anual = getValorMaisAditivosAnual(valor, formData.startDate, formData.endDate);
-                    return anual !== null ? formatCurrency(anual) : 'Informe valor e vigência';
-                  })()}
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Calculado automaticamente: Valor ÷ anos de vigência
-                </p>
+                {(() => {
+                  const valor = parseCurrencyInput(formData.valuePlusAddenda);
+                  const rows = getValorAnualPorAno(valor, formData.startDate, formData.endDate);
+                  const totalMonths = countVigenciaMonths(formData.startDate, formData.endDate);
+                  if (!rows.length) {
+                    return (
+                      <>
+                        <div className="flex h-10 items-center px-3 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 font-medium">
+                          Informe valor e vigência
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Rateio proporcional aos meses de cada ano
+                        </p>
+                      </>
+                    );
+                  }
+                  const monthly = totalMonths > 0 ? valor / totalMonths : 0;
+                  return (
+                    <>
+                      <div className="space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-600 dark:bg-gray-700/50">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {formatCurrency(monthly)}/mês × {totalMonths}{' '}
+                          {totalMonths === 1 ? 'mês' : 'meses'}
+                        </p>
+                        {rows.map((r) => (
+                          <div
+                            key={r.year}
+                            className="flex items-center justify-between gap-3 text-sm font-medium text-gray-900 dark:text-gray-100"
+                          >
+                            <span className="text-gray-600 dark:text-gray-300">
+                              {r.year}{' '}
+                              <span className="font-normal text-gray-400 dark:text-gray-500">
+                                ({r.months} {r.months === 1 ? 'mês' : 'meses'})
+                              </span>
+                            </span>
+                            <span>{formatCurrency(r.value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Calculado automaticamente: Valor ÷ meses × meses de cada ano
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1383,7 +1331,7 @@ function ContractFormModal({
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
               >
                 Cancelar
@@ -1403,7 +1351,8 @@ function ContractFormModal({
           </form>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
     </>
   );
 }

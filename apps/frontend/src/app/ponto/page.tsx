@@ -1,19 +1,50 @@
 'use client';
 
 // Desabilitar prerendering
-export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { BarChart3, Clock, Calendar, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { TimeRecordsList } from '@/components/ponto/TimeRecordsList';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { Loading } from '@/components/ui/Loading';
 import { PunchCard } from '@/components/ponto/PunchCard';
 import api from '@/lib/api';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+
+const DAY_SELECT_OPTIONS = labeledToSelectOptions(
+  Array.from({ length: 31 }, (_, i) => {
+    const day = i + 1;
+    return { value: String(day), label: String(day) };
+  })
+);
+
+const MONTH_NUM_SELECT_OPTIONS = labeledToSelectOptions(
+  ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map((label, i) => ({
+    value: String(i + 1),
+    label,
+  }))
+);
+
+const BANK_MONTH_SELECT_OPTIONS = labeledToSelectOptions([
+  { value: '1', label: 'Janeiro' },
+  { value: '2', label: 'Fevereiro' },
+  { value: '3', label: 'Março' },
+  { value: '4', label: 'Abril' },
+  { value: '5', label: 'Maio' },
+  { value: '6', label: 'Junho' },
+  { value: '7', label: 'Julho' },
+  { value: '8', label: 'Agosto' },
+  { value: '9', label: 'Setembro' },
+  { value: '10', label: 'Outubro' },
+  { value: '11', label: 'Novembro' },
+  { value: '12', label: 'Dezembro' },
+]);
 
 export default function PontoPage() {
   const router = useRouter();
@@ -59,19 +90,6 @@ export default function PontoPage() {
       setIsChangePasswordOpen(true);
     }
   }, [isFirstLogin, userData]);
-
-  // Listener para abrir modal de alterar senha via sidebar
-  useEffect(() => {
-    const handleOpenChangePasswordModal = () => {
-      setIsChangePasswordOpen(true);
-    };
-
-    window.addEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    
-    return () => {
-      window.removeEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    };
-  }, []);
 
   // Detectar dispositivo móvel
   useEffect(() => {
@@ -191,6 +209,28 @@ export default function PontoPage() {
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
   const [selectedDay, setSelectedDay] = useState<number>(now.getDate());
+
+  const recordsYearSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        Array.from({ length: 6 }, (_, i) => {
+          const year = now.getFullYear() - 4 + i;
+          return { value: String(year), label: String(year) };
+        })
+      ),
+    [now]
+  );
+
+  const bankYearSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        Array.from({ length: 10 }, (_, i) => {
+          const year = now.getFullYear() - 5 + i;
+          return { value: String(year), label: String(year) };
+        })
+      ),
+    [now]
+  );
 
   const { data: dayRecordsData, isLoading: loadingDay } = useQuery({
     queryKey: ['day-records', selectedYear, selectedMonth, selectedDay],
@@ -421,7 +461,7 @@ export default function PontoPage() {
 
       {/* Modal de registros detalhados */}
       {isPanelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsPanelOpen(false)} />
           <div className="relative w-full max-w-3xl mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between">
@@ -438,39 +478,30 @@ export default function PontoPage() {
               <div className="flex items-end gap-3 flex-wrap justify-center">
                 <div className="flex flex-col">
                   <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Dia</label>
-                  <select
-                    className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(Number(e.target.value))}
-                  >
-                    {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(selectedDay)}
+                    onChange={(v) => setSelectedDay(Number(v))}
+                    options={DAY_SELECT_OPTIONS}
+                    allowEmpty={false}
+                  />
                 </div>
                 <div className="flex flex-col">
                   <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Mês</label>
-                  <select
-                    className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                  >
-                    {['01','02','03','04','05','06','07','08','09','10','11','12'].map((label, i) => (
-                      <option key={i+1} value={i+1}>{label}</option>
-                    ))}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(selectedMonth)}
+                    onChange={(v) => setSelectedMonth(Number(v))}
+                    options={MONTH_NUM_SELECT_OPTIONS}
+                    allowEmpty={false}
+                  />
                 </div>
                 <div className="flex flex-col">
                   <label className="text-xs text-gray-500 dark:text-gray-400 mb-1">Ano</label>
-                  <select
-                    className="px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(Number(e.target.value))}
-                  >
-                    {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 4 + i).map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(selectedYear)}
+                    onChange={(v) => setSelectedYear(Number(v))}
+                    options={recordsYearSelectOptions}
+                    allowEmpty={false}
+                  />
                 </div>
               </div>
             </div>
@@ -478,12 +509,12 @@ export default function PontoPage() {
               <TimeRecordsList records={dayRecordsData?.data?.records || []} />
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de detalhamento do banco de horas */}
       {isBankDetailsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setIsBankDetailsOpen(false)} />
           <div className="relative w-full max-w-6xl mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden">
             <div className="px-6 py-4 border-b dark:border-gray-700">
@@ -511,42 +542,24 @@ export default function PontoPage() {
               <div className="flex items-center space-x-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Mês</label>
-                  <select
-                    value={selectedBankMonth}
-                    onChange={(e) => setSelectedBankMonth(Number(e.target.value))}
-                    className="w-32 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value={1}>Janeiro</option>
-                    <option value={2}>Fevereiro</option>
-                    <option value={3}>Março</option>
-                    <option value={4}>Abril</option>
-                    <option value={5}>Maio</option>
-                    <option value={6}>Junho</option>
-                    <option value={7}>Julho</option>
-                    <option value={8}>Agosto</option>
-                    <option value={9}>Setembro</option>
-                    <option value={10}>Outubro</option>
-                    <option value={11}>Novembro</option>
-                    <option value={12}>Dezembro</option>
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(selectedBankMonth)}
+                    onChange={(v) => setSelectedBankMonth(Number(v))}
+                    options={BANK_MONTH_SELECT_OPTIONS}
+                    allowEmpty={false}
+                    className="w-32"
+                  />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ano</label>
-                  <select
-                    value={selectedBankYear}
-                    onChange={(e) => setSelectedBankYear(Number(e.target.value))}
-                    className="w-24 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {Array.from({ length: 10 }, (_, i) => {
-                      const year = now.getFullYear() - 5 + i;
-                      return (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      );
-                    })}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(selectedBankYear)}
+                    onChange={(v) => setSelectedBankYear(Number(v))}
+                    options={bankYearSelectOptions}
+                    allowEmpty={false}
+                    className="w-24"
+                  />
                 </div>
               </div>
             </div>
@@ -630,7 +643,7 @@ export default function PontoPage() {
               )}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de alterar senha */}
@@ -646,7 +659,7 @@ export default function PontoPage() {
 
       {/* Modal de bater ponto */}
       {isPunchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50">
           <div className="relative w-full max-w-md">
             <PunchCard
               onSuccess={() => {
@@ -660,7 +673,7 @@ export default function PontoPage() {
               onClose={() => setIsPunchModalOpen(false)}
             />
           </div>
-        </div>
+        </AppModalOverlay>
       )}
       </div>
     </MainLayout>

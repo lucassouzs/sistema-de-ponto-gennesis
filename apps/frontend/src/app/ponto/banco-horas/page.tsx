@@ -5,14 +5,24 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Clock, Calendar, Filter, Download, Search, Building2, User, CreditCard, ChevronDown, ChevronUp, ListPlus, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import { DEPARTMENTS_LIST, CLIENTS_LIST, POLOS_LIST } from '@/constants/payrollFilters';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { CARGOS_LIST } from '@/constants/cargos';
 import * as XLSX from 'xlsx';
 import api from '@/lib/api';
+import { listTableRowClasses } from '@/components/ui/listTableUi';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+
+const BANK_HOURS_STATUS_OPTIONS = labeledToSelectOptions([
+  { value: 'positive', label: 'Positivo' },
+  { value: 'negative', label: 'Negativo' },
+  { value: 'zero', label: 'Neutro' },
+]);
 
 interface BankHoursData {
   employeeId: string;
@@ -45,7 +55,7 @@ interface BankHoursFilters {
   endDate: string;
 }
 
-export default function BankHoursPage() {
+function BankHoursPageContent() {
   const { costCentersList } = useCostCenters();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -76,7 +86,6 @@ export default function BankHoursPage() {
   });
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isFiltersMinimized, setIsFiltersMinimized] = useState(true); // Minimizados por padrão
 
   const handleLogout = () => {
@@ -89,28 +98,28 @@ export default function BankHoursPage() {
     setFilters(prev => ({ ...prev, search: e.target.value }));
   };
 
-  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, department: e.target.value }));
+  const handleDepartmentChange = (value: string) => {
+    setFilters(prev => ({ ...prev, department: value }));
   };
 
-  const handlePositionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, position: e.target.value }));
+  const handlePositionChange = (value: string) => {
+    setFilters(prev => ({ ...prev, position: value }));
   };
 
-  const handleCostCenterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, costCenter: e.target.value }));
+  const handleCostCenterChange = (value: string) => {
+    setFilters(prev => ({ ...prev, costCenter: value }));
   };
 
-  const handleClientChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, client: e.target.value }));
+  const handleClientChange = (value: string) => {
+    setFilters(prev => ({ ...prev, client: value }));
   };
 
-  const handlePoloChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, polo: e.target.value }));
+  const handlePoloChange = (value: string) => {
+    setFilters(prev => ({ ...prev, polo: value }));
   };
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters(prev => ({ ...prev, status: e.target.value }));
+  const handleStatusChange = (value: string) => {
+    setFilters(prev => ({ ...prev, status: value }));
   };
 
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -147,19 +156,6 @@ export default function BankHoursPage() {
       status: ''
     }));
   };
-
-  // Listener para abrir modal de alterar senha via sidebar
-  useEffect(() => {
-    const handleOpenChangePasswordModal = () => {
-      setIsChangePasswordOpen(true);
-    };
-
-    window.addEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    
-    return () => {
-      window.removeEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    };
-  }, []);
 
   const { data: bankHoursData, isLoading: loadingBankHours, error: bankHoursError } = useQuery({
     queryKey: ['bank-hours', filters],
@@ -380,7 +376,7 @@ export default function BankHoursPage() {
                     value={filters.search}
                     onChange={handleSearchChange}
                     placeholder="Digite nome, CPF, matrícula, setor, empresa ou qualquer informação..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
               </div>
@@ -397,7 +393,7 @@ export default function BankHoursPage() {
                       type="date"
                       value={filters.startDate}
                       onChange={handleStartDateChange}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     />
                   </div>
                 </div>
@@ -412,7 +408,7 @@ export default function BankHoursPage() {
                       type="date"
                       value={filters.endDate}
                       onChange={handleEndDateChange}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                     />
                   </div>
                 </div>
@@ -436,18 +432,12 @@ export default function BankHoursPage() {
                         </label>
                         <div className="relative">
                           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.department}
+                          <StringSingleSelectDropdown
+                            value={filters.department ?? ''}
                             onChange={handleDepartmentChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os setores</option>
-                            {(DEPARTMENTS_LIST || []).map(dept => (
-                              <option key={dept} value={dept}>
-                                {dept}
-                              </option>
-                            ))}
-                          </select>
+                            options={DEPARTMENTS_LIST || []}
+                            emptyOptionLabel="Todos os setores"
+                          />
                         </div>
                       </div>
 
@@ -455,21 +445,12 @@ export default function BankHoursPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Cargo
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.position}
-                            onChange={handlePositionChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os cargos</option>
-                            {(CARGOS_LIST || []).map(cargo => (
-                              <option key={cargo} value={cargo}>
-                                {cargo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.position ?? ''}
+                          onChange={handlePositionChange}
+                          options={CARGOS_LIST || []}
+                          emptyOptionLabel="Todos os cargos"
+                        />
                       </div>
 
                       <div>
@@ -477,17 +458,14 @@ export default function BankHoursPage() {
                           Status do Banco
                         </label>
                         <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.status}
+                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 z-10 pointer-events-none" />
+                          <StringSingleSelectDropdown
+                            value={filters.status ?? ''}
                             onChange={handleStatusChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os status</option>
-                            <option value="positive">Positivo</option>
-                            <option value="negative">Negativo</option>
-                            <option value="zero">Neutro</option>
-                          </select>
+                            options={BANK_HOURS_STATUS_OPTIONS}
+                            emptyOptionLabel="Todos os status"
+                            className="[&>button]:pl-10"
+                          />
                         </div>
                       </div>
                     </div>
@@ -502,19 +480,14 @@ export default function BankHoursPage() {
                           Centro de Custo
                         </label>
                         <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.costCenter}
+                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 z-10 pointer-events-none" />
+                          <StringSingleSelectDropdown
+                            value={filters.costCenter ?? ''}
                             onChange={handleCostCenterChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os centros de custo</option>
-                            {costCentersList.map(center => (
-                              <option key={center} value={center}>
-                                {center}
-                              </option>
-                            ))}
-                          </select>
+                            options={costCentersList}
+                            emptyOptionLabel="Todos os centros de custo"
+                            className="[&>button]:pl-10"
+                          />
                         </div>
                       </div>
 
@@ -524,18 +497,12 @@ export default function BankHoursPage() {
                         </label>
                         <div className="relative">
                           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.client}
+                          <StringSingleSelectDropdown
+                            value={filters.client ?? ''}
                             onChange={handleClientChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os tomadores</option>
-                            {(CLIENTS_LIST || []).map(client => (
-                              <option key={client} value={client}>
-                                {client}
-                              </option>
-                            ))}
-                          </select>
+                            options={CLIENTS_LIST || []}
+                            emptyOptionLabel="Todos os tomadores"
+                          />
                         </div>
                       </div>
 
@@ -545,18 +512,12 @@ export default function BankHoursPage() {
                         </label>
                         <div className="relative">
                           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.polo}
+                          <StringSingleSelectDropdown
+                            value={filters.polo ?? ''}
                             onChange={handlePoloChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os polos</option>
-                            {(POLOS_LIST || []).map(polo => (
-                              <option key={polo} value={polo}>
-                                {polo}
-                              </option>
-                            ))}
-                          </select>
+                            options={POLOS_LIST || []}
+                            emptyOptionLabel="Todos os polos"
+                          />
                         </div>
                       </div>
                     </div>
@@ -593,7 +554,7 @@ export default function BankHoursPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>
@@ -648,10 +609,7 @@ export default function BankHoursPage() {
                   ) : loadingBankHours ? (
                     <tr>
                       <td colSpan={8} className="px-6 py-8 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                          <span className="text-gray-600 dark:text-gray-400">Carregando banco de horas...</span>
-                        </div>
+                        <CadastroListLoading message="Carregando banco de horas..." />
                       </td>
                     </tr>
                   ) : !Array.isArray(filteredData) || filteredData.length === 0 ? (
@@ -665,12 +623,12 @@ export default function BankHoursPage() {
                     </tr>
                   ) : (
                     filteredData.map((employee: BankHoursData) => (
-                      <tr key={employee.employeeId} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <tr key={employee.employeeId} className={listTableRowClasses.tr}>
                         <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                           <div>
-                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
                               {employee.employeeName}
-                            </div>
+                            </span>
                             <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                               {employee.employeeCpf}
                             </div>
@@ -755,16 +713,14 @@ export default function BankHoursPage() {
         </Card>
       </div>
 
-      {/* Modal de alterar senha */}
-      <ChangePasswordModal
-        isOpen={isChangePasswordOpen}
-        onClose={() => setIsChangePasswordOpen(false)}
-        onSuccess={() => {
-          setIsChangePasswordOpen(false);
-          // Invalidar query para recarregar dados do usuário
-          queryClient.invalidateQueries({ queryKey: ['user'] });
-        }}
-      />
     </MainLayout>
+  );
+}
+
+export default function BankHoursPage() {
+  return (
+    <ProtectedRoute route="/ponto/banco-horas">
+      <BankHoursPageContent />
+    </ProtectedRoute>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +8,8 @@ import jsPDF from 'jspdf';
 import {
   ArrowLeft,
   FileText,
+  FileSpreadsheet,
+  Download,
   Plus,
   Receipt,
   X,
@@ -17,38 +19,111 @@ import {
   ExternalLink,
   BarChart3,
   Trash2,
-  Percent,
+  CheckCircle2,
+  CalendarDays,
   Calculator,
   FileImage,
+  Loader2,
+  Eye,
+  ChevronDown,
+  Info,
+  Search,
+  Filter,
+  MoreVertical,
+  Clock,
+  Video,
+  Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { Button } from '@/components/ui/Button';
+import { DatePickerField } from '@/components/ui/DatePickerField';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { TableCheckbox } from '@/components/ui/Checkbox';
 import toast from 'react-hot-toast';
+import { AxiosError } from 'axios';
 import api from '@/lib/api';
-import { PleitoFormModal } from '@/components/pleito/PleitoFormModal';
 import {
-  STATUS_ORCAMENTO_OPCOES,
-  STATUS_EXECUCAO_OPCOES,
+  filterNaturezaRowsForPaidModalDisplay,
+  isNaturezaIncludedInContractPaidTotal,
+  normalizeNaturezaLabel
+} from '@/lib/contractPaidNaturezaExclusions';
+import { PleitoFormModal } from '@/components/pleito/PleitoFormModal';
+import { ContractCronogramaMensalPanel } from '@/components/contract/ContractCronogramaMensalPanel';
+import { ContractHistoricoPleitosPanel } from '@/components/contract/ContractHistoricoPleitosPanel';
+import { ContractOsDetailModal } from '@/components/contract/ContractOsDetailModal';
+import { ContractOsPleitoListPanel } from '@/components/contract/ContractOsPleitoListPanel';
+import { OsPleitoBillingImportModal } from '@/components/contract/OsPleitoBillingImportModal';
+import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, rowActionMenuButtonClass } from '@/components/ui/RowActionMenu';
+import { listTableRowClasses } from '@/components/ui/listTableUi';
+import { CadastroListSummary, getCadastroListRange } from '@/components/ui/CadastroListSummary';
+import { ListPagination } from '@/components/ui/ListPagination';
+import { ROW_ACTION_MENU_WIDTH_PX, type RowActionMenuState, useRowActionMenu } from '@/hooks/useRowActionMenu';
+import { computeRowActionMenuPosition } from '@/lib/computeRowActionMenuPosition';
+import {
   isBudgetStatusInValorOrcadoSum,
   type PleitoFormData
 } from '@/lib/pleitoForm';
-import { pleitoStatusReadOnlySpanClass } from '@/lib/pleitoStatusStyles';
 import { useContractTableColumnCustomizer } from '@/components/useContractTableColumnCustomizer';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { pathToModuleKey } from '@sistema-ponto/permission-modules';
 import {
   formatOsSePasta,
   formatOsSePastaOrDash,
   folderForDivSe,
   enrichDivSeOptionsWithPleitos,
+  compareOsSeNatural,
+  osSeSearchRank,
   type DivSeOptionRow
 } from '@/lib/formatOsSePasta';
+import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
+import { isUnbRelatedLabel } from '@/lib/unbBranding';
+import { exportHistoricoOsPdf, exportPleitosOsToXlsx, getOsFaturamentoAcumulado, getOsPleiteadoPct, getOsRestantePleitear, getOsStatus, getOsStatusFaturamento, isOsConcluida, isOsPleiteada100, osStatusBadgeClass, sumOsPleiteadoTotal, type BillingForOsCheck, type PleitoOsExportRow } from '@/lib/pleitoOsExport';
+import { exportContractBillingsToXlsx } from '@/lib/contractBillingExport';
+import {
+  billingAndamentoBadgeClass,
+  buildDisplayIdMap,
+  formatDisplayId,
+  getOsLinkedPleitos,
+  isGeneratedPleito,
+} from '@/lib/contractHistoricoPleitos';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import {
+  formatAjusteValorInput,
+  maskAjusteValorInput,
+  parseAjusteValorInput
+} from '@/lib/extratoCaixaAjuste';
+import { formatDateTimeBr } from '@/lib/dateTimeBr';
+import {
+  aggregateGastosNaturezaMonthlyTotals,
+  aggregateGastosNaturezaYearlyTotals,
+  filterGastosNaturezaDetailRowsForSystemContract,
+  gastosMonthPeriodBounds,
+  gastosYearPeriodBounds
+} from '@/app/ponto/contratos/controle-geral/controleGeralGastosFluxo';
+import type { QueryGastosDetailRow, QueryGastosNaturezaDetailRow } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
+import { aggregateGastosNaturezaRows } from '@/app/ponto/contratos/controle-geral/buildQueryGastosRows';
+import { useGastosOperacionaisTotvsQuery } from '@/app/ponto/contratos/controle-geral/useGastosOperacionaisTotvsQuery';
+import { normalizeGastosOperacionaisContractName } from '@/app/ponto/contratos/controle-geral/gastosOperacionaisContractOrder';
+import {
+  buildTetoOrcamentarioLookup,
+  resolveMonthlyTetoOrcamentarioForLabels,
+  resolveYearlyTetoOrcamentarioForLabels,
+  tetoLabelsForSystemContract,
+  type ControleGeralTetoOrcamentarioEntry
+} from '@/app/ponto/contratos/controle-geral/tetoOrcamentario';
+import { ContractGastosResumoModal } from '@/components/contract/ContractGastosResumoModal';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ContractBilling {
   id: string;
   contractId: string;
+  pleitoId?: string | null;
   issueDate: string;
   invoiceNumber: string;
   serviceOrder: string;
@@ -85,6 +160,7 @@ interface ContractPleito {
   pv: string | null;
   ipi: string | null;
   billingRequest?: number | null;
+  accumulatedBilled?: number | null;
   createdAt?: string;
 }
 
@@ -131,9 +207,123 @@ interface ContractWeeklyProduction {
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 const LIST_DISPLAY_LIMIT = 10;
+const LIST_SEARCH_INPUT_CLASS =
+  'h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+
+const OS_TOOLBAR_BTN_ICON = 'h-4 w-4 shrink-0 text-gray-500 dark:text-gray-400';
+
+const OS_TOOLBAR_BTN =
+  'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700';
+
+const OS_TOOLBAR_BTN_DANGER =
+  'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-red-600 transition-colors hover:border-red-200 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-red-400 dark:hover:border-red-900/50 dark:hover:bg-red-950/25';
+
+const OS_TOOLBAR_BTN_PRIMARY =
+  'inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40';
+
+function pleitoMatchesSearchTerm(p: ContractPleito, term: string): boolean {
+  const t = term.trim().toLowerCase();
+  if (!t) return true;
+  const haystack = [
+    p.divSe,
+    p.serviceDescription,
+    p.folderNumber,
+    p.budgetStatus,
+    p.executionStatus,
+    p.lot,
+    p.location,
+    p.unit,
+    p.engineer,
+    p.supervisor,
+    p.billingStatus,
+    p.creationMonth,
+    p.creationYear != null ? String(p.creationYear) : '',
+    p.budget,
+    p.pv,
+    p.ipi,
+    p.reportsBilling,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(t);
+}
+
+function productionMatchesSearchTerm(p: ContractWeeklyProduction, term: string): boolean {
+  const t = term.trim().toLowerCase();
+  if (!t) return true;
+  const haystack = [
+    p.divSe,
+    p.responsiblePerson,
+    p.fillingDate,
+    formatCurrencyInput(p.weeklyProductionValue),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(t);
+}
+
+function billingMatchesSearchTerm(b: ContractBilling, term: string): boolean {
+  const t = term.trim().toLowerCase();
+  if (!t) return true;
+  const haystack = [
+    b.invoiceNumber,
+    b.serviceOrder,
+    b.issueDate,
+    formatCurrencyInput(b.grossValue),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return haystack.includes(t);
+}
+
 const PLEITO_HISTORY_MARKER = '__PLEITO_HISTORICO__';
-const PLEITO_HISTORY_MARKER_GERADO_100 = '__PLEITO_HISTORICO__GERADO_100__';
-const HISTORICO_ETIQUETA_GERADO_100 = 'Gerado 100%';
+
+type RmPaidLineRow = { valor: number; natureza: string; dataISO: string | null };
+type RmNaturezaAggRow = { natureza: string; total: number; count: number };
+type RmLinhaComCompetencia = RmPaidLineRow & { competencia?: string };
+
+function aggregateGastosNaturezaFromLines(lines: RmPaidLineRow[]): RmNaturezaAggRow[] {
+  const map = new Map<string, RmNaturezaAggRow>();
+  for (const line of lines) {
+    if (!isNaturezaIncludedInContractPaidTotal(line.natureza)) continue;
+    const key = normalizeNaturezaLabel(line.natureza);
+    const prev = map.get(key);
+    const valor = Number(line.valor) || 0;
+    if (prev) {
+      prev.total += valor;
+      prev.count += 1;
+    } else {
+      map.set(key, { natureza: line.natureza, total: valor, count: 1 });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+}
+
+function buildGastosLinesMapFromLines(
+  lines: RmPaidLineRow[],
+  competencia?: string
+): Map<string, RmLinhaComCompetencia[]> {
+  const map = new Map<string, RmLinhaComCompetencia[]>();
+  for (const line of lines) {
+    if (!isNaturezaIncludedInContractPaidTotal(line.natureza)) continue;
+    const key = normalizeNaturezaLabel(line.natureza);
+    const list = map.get(key) ?? [];
+    list.push({ ...line, competencia });
+    map.set(key, list);
+  }
+  map.forEach((arr, key) => {
+    arr.sort((a, b) => {
+      const ta = a.dataISO ? new Date(`${a.dataISO}T12:00:00`).getTime() : 0;
+      const tb = b.dataISO ? new Date(`${b.dataISO}T12:00:00`).getTime() : 0;
+      return tb - ta;
+    });
+    map.set(key, arr);
+  });
+  return map;
+}
 
 const MESES_FILTRO = [
   { value: 0, label: 'Todos os meses' },
@@ -150,6 +340,30 @@ const MESES_FILTRO = [
   { value: 11, label: 'Novembro' },
   { value: 12, label: 'Dezembro' }
 ];
+
+const MESES_FILTRO_SELECT_OPTIONS = labeledToSelectOptions(
+  MESES_FILTRO.map((m) => ({ value: String(m.value), label: m.label }))
+);
+
+const FILTER_OS_STATUS_OPTIONS = labeledToSelectOptions([
+  { value: '', label: 'Todos' },
+  { value: 'Pendente', label: 'Pendente' },
+  { value: 'Pleiteado parcial', label: 'Pleiteado parcial' },
+  { value: 'Pleiteado 100%', label: 'Pleiteado 100%' },
+]);
+
+const FILTER_OS_STATUS_FATURAMENTO_OPTIONS = labeledToSelectOptions([
+  { value: '', label: 'Todos' },
+  { value: 'Pendente', label: 'Pendente' },
+  { value: 'Faturado parcial', label: 'Faturado parcial' },
+  { value: 'Faturado 100%', label: 'Faturado 100%' },
+]);
+
+const CONTROLE_GERAL_META_AJUDA =
+  'Meta ideal = saldo ÷ meses restantes até o fim da vigência e permanece fixa até aditivo ou ajuste. Aditivos contratuais entram na data e vão até o fim da vigência. Ajuste do valor anual redistribui só o delta (+/−) somado às metas já planejadas do mês da data até dezembro daquele ano (não troca a base pela fatia anual inteira nem altera anos seguintes). Meta real = saldo contratual (base + aditivos − faturamento) ÷ meses restantes da vigência; com ajuste anual, aplica o mesmo pool (metas restantes do ano + delta) só até dezembro, reduzindo com o faturamento.';
+
+/** Oculta gasto total e linha Gastos na UI; dados RM continuam sendo carregados. */
+const EXIBIR_GASTOS_CONTRATO_NA_UI = false;
 
 const TIMEZONE_BRASILIA = 'America/Sao_Paulo';
 const pk = pathToModuleKey;
@@ -323,15 +537,17 @@ function annualAdjustmentEffectiveCivilMonth(civilYear: number, effectiveDate: D
   return 1;
 }
 
-function sumGlobalMetaAllocatedBeforeEffMonth(
+/** Soma das metas contratuais (sem ajuste anual) nos meses civis [monthStart, monthEnd] em vigência. */
+function sumGlobalMetaAllocatedInMonthRange(
   globalMap: Map<string, number>,
   civilYear: number,
-  effMonth: number,
+  monthStart: number,
+  monthEnd: number,
   contractStart: Date,
   contractEnd: Date
 ): number {
   let sum = 0;
-  for (let m = 1; m < effMonth; m++) {
+  for (let m = monthStart; m <= monthEnd; m++) {
     if (!calendarMonthHasMetaMensalInVigencia(civilYear, m, contractStart, contractEnd)) continue;
     sum += globalMap.get(toYearMonthKey(civilYear, m)) ?? 0;
   }
@@ -396,19 +612,6 @@ function formatDate(dateStr: string) {
   return d.toLocaleDateString('pt-BR', { timeZone: TIMEZONE_BRASILIA });
 }
 
-function formatDateTime(dateStr: string) {
-  const d = parseDateSafe(dateStr);
-  if (!d) return '-';
-  return d.toLocaleString('pt-BR', {
-    timeZone: TIMEZONE_BRASILIA,
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function toInputDate(dateStr: string | Date): string {
   if (typeof dateStr === 'string') {
     const t = dateStr.trim();
@@ -439,21 +642,53 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function getYearsBetween(startDate: string, endDate: string): number {
-  if (!startDate || !endDate) return 0;
-  const start = parseDateSafe(startDate);
-  const end = parseDateSafe(endDate);
-  if (!start || !end) return 0;
-  if (end <= start) return 0;
-  // Conta anos completos de vigência (ex: 01/03/2026 a 01/03/2028 = 2 anos)
-  const diffMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
-  return Math.max(1, Math.floor(diffMonths / 12));
+function signedGastosValueClassName(value: number): string {
+  if (value > 0) return 'text-green-600 dark:text-green-400';
+  if (value < 0) return 'text-red-600 dark:text-red-400';
+  return 'text-violet-800 dark:text-violet-300';
 }
 
-function getValorMaisAditivosAnual(valuePlusAddenda: number, startDate: string, endDate: string): number | null {
-  const years = getYearsBetween(startDate, endDate);
-  if (years <= 0) return null;
-  return valuePlusAddenda / years;
+/** Anos civis com pelo menos um mês de vigência (alinhado à tabela Acumulado Anual). */
+function buildContractAvailableYears(startDate: string, endDate: string): number[] {
+  const start = parseDateSafe(startDate);
+  const end = parseDateSafe(endDate);
+  const years = new Set<number>();
+
+  if (start && end) {
+    for (const { y } of listVigenciaMonthKeys(start, end)) {
+      years.add(y);
+    }
+  }
+
+  const yStart = getDateYear(startDate);
+  const yEnd = getDateYear(endDate);
+  if (yStart != null && yEnd != null) {
+    for (let y = Math.min(yStart, yEnd); y <= Math.max(yStart, yEnd); y++) {
+      years.add(y);
+    }
+  }
+
+  if (years.size === 0) {
+    years.add(yStart ?? yEnd ?? new Date().getFullYear());
+  }
+
+  return Array.from(years).sort((a, b) => a - b);
+}
+
+function getValorAnualBaseDoAno(
+  valuePlusAddenda: number,
+  startDate: string,
+  endDate: string,
+  year: number
+): number | null {
+  const start = parseDateSafe(startDate);
+  const end = parseDateSafe(endDate);
+  if (!start || !end || end.getTime() <= start.getTime()) return null;
+  const months = listVigenciaMonthKeys(start, end);
+  if (!months.length) return null;
+  const monthsInYear = months.filter((m) => m.y === year).length;
+  if (monthsInYear <= 0) return 0;
+  return (valuePlusAddenda / months.length) * monthsInYear;
 }
 
 function parseCurrencyInput(value: string): number {
@@ -463,6 +698,27 @@ function parseCurrencyInput(value: string): number {
   return isNaN(num) ? 0 : num;
 }
 
+/** Fator fixo das NFs do contrato UNB: líquido = bruto × 86,65%. */
+const BILLING_NET_FROM_GROSS_RATE = 0.8665;
+
+function formatBillingCurrencyFromDigits(digits: string): string {
+  return digits
+    ? (Number(digits) / 100).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })
+    : '';
+}
+
+/** Sugere o líquido a partir do bruto; o usuário ainda pode corrigir na mão. */
+function calcBillingNetFromGrossFormatted(grossFormatted: string): string {
+  if (!grossFormatted.trim()) return '';
+  const gross = parseCurrencyInput(grossFormatted);
+  if (!(gross > 0)) return '';
+  const net = Math.round(gross * BILLING_NET_FROM_GROSS_RATE * 100) / 100;
+  return net.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function isNetValueMissing(b: ContractBilling): boolean {
   const net = Number(b.netValue || 0);
   if (net === 0) return true;
@@ -470,6 +726,46 @@ function isNetValueMissing(b: ContractBilling): boolean {
   if (net !== gross) return false;
   if (!b.createdAt || !b.updatedAt) return true;
   return new Date(b.updatedAt).getTime() === new Date(b.createdAt).getTime();
+}
+
+function getPleitoBillableTotal(p: ContractPleito): number {
+  const br = p.billingRequest != null ? Number(p.billingRequest) : 0;
+  if (Number.isFinite(br) && br > 0) return br;
+  return parseBudgetToNumberSafe(p.budget);
+}
+
+function getPleitoBilledAmount(p: ContractPleito, billings: ContractBilling[]): number {
+  const linked = billings
+    .filter((b) => b.pleitoId === p.id)
+    .reduce((sum, b) => sum + Number(b.grossValue || 0), 0);
+  if (linked > 0) return linked;
+  const accumulated = p.accumulatedBilled != null ? Number(p.accumulatedBilled) : 0;
+  if (accumulated > 0) return accumulated;
+  const os = (p.divSe || '').trim();
+  if (!os) return 0;
+  return billings
+    .filter((b) => !b.pleitoId && (b.serviceOrder || '').trim() === os)
+    .reduce((sum, b) => sum + Number(b.grossValue || 0), 0);
+}
+
+function getPleitoRemainingBalance(p: ContractPleito, billings: ContractBilling[]): number {
+  const total = getPleitoBillableTotal(p);
+  if (total <= 0) return 0;
+  return Math.max(0, total - getPleitoBilledAmount(p, billings));
+}
+
+function isPleitoAptoParaFaturamento(p: ContractPleito, billings: ContractBilling[]): boolean {
+  const total = getPleitoBillableTotal(p);
+  if (total <= 0) return false;
+  return getPleitoRemainingBalance(p, billings) > 0.01;
+}
+
+function formatPleitoBillingOptionLabel(p: ContractPleito, billings: ContractBilling[]): string {
+  const saldo = getPleitoRemainingBalance(p, billings);
+  const desc = (p.serviceDescription || '').trim();
+  const shortDesc = desc.length > 40 ? `${desc.slice(0, 40)}…` : desc;
+  const pasta = p.folderNumber ? ` · Pasta ${p.folderNumber}` : '';
+  return `${formatOsSePasta(p.divSe || '-', p.folderNumber)}${pasta}${shortDesc ? ` — ${shortDesc}` : ''} (saldo ${formatCurrency(saldo)})`;
 }
 
 function parseBudgetToNumberSafe(v: string | null | undefined): number {
@@ -485,17 +781,13 @@ function parseBudgetToNumberSafe(v: string | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function filterDivSeOptions(options: DivSeOptionRow[], query: string): DivSeOptionRow[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return options;
-  return options.filter((o) => {
-    const label = formatOsSePasta(o.divSe, o.folderNumber).toLowerCase();
-    return (
-      label.includes(q) ||
-      o.divSe.toLowerCase().includes(q) ||
-      (o.folderNumber || '').toLowerCase().includes(q)
-    );
-  });
+function divSeOptionsToSelectOptions(options: DivSeOptionRow[]) {
+  return labeledToSelectOptions(
+    options.map((opt) => ({
+      value: opt.divSe,
+      label: formatOsSePasta(opt.divSe, opt.folderNumber),
+    }))
+  );
 }
 
 function formatCurrencyInput(value: number): string {
@@ -503,30 +795,91 @@ function formatCurrencyInput(value: number): string {
   return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Soma valores já pleiteados (billingRequest) para o mesmo OS/SE no contrato. */
-function sumBillingRequestSameOs(
-  allPleitos: ContractPleito[],
-  divSe: string | null | undefined
-): number {
-  const key = (divSe || '').trim().toLowerCase();
-  if (!key) return 0;
-  return allPleitos.reduce((sum, p) => {
-    if ((p.divSe || '').trim().toLowerCase() !== key) return sum;
-    const br = p.billingRequest != null ? Number(p.billingRequest) : 0;
-    return sum + (Number.isFinite(br) && br > 0 ? br : 0);
-  }, 0);
-}
-
 type PleitoGerarBuildResult =
   | { ok: true; items: { id: string; billingRequest: number }[] }
   | { ok: false; message: string };
 
-/** Monta payload para gerar pleito: % do orçamento por OS (mesmas regras do modal). */
+function formatPctFromNumber(pct: number): string {
+  if (pct <= 0) return '';
+  return pct.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getPleitoGerarValorFromDraft(
+  id: string,
+  pleitos: ContractPleito[],
+  pctById: Record<string, string>,
+  valorById: Record<string, string>
+): number {
+  const p = pleitos.find((x) => x.id === id);
+  if (!p) return 0;
+  const orcamento = p.budget ? Number(p.budget) : 0;
+  const valorDirect = parseCurrencyInput(valorById[id] || '');
+  if (valorDirect > 0) return valorDirect;
+  const pct = parseCurrencyInput(pctById[id] || '');
+  if (orcamento > 0 && pct > 0) return (orcamento * pct) / 100;
+  return 0;
+}
+
+function getBatchPleitoValorSameOs(
+  id: string,
+  selectedIds: string[],
+  pleitos: ContractPleito[],
+  pctById: Record<string, string>,
+  valorById: Record<string, string>
+): number {
+  const current = pleitos.find((x) => x.id === id);
+  const osKey = (current?.divSe || '').trim().toLowerCase();
+  if (!osKey) return 0;
+  return selectedIds.reduce((sum, otherId) => {
+    if (otherId === id) return sum;
+    const p = pleitos.find((x) => x.id === otherId);
+    if (!p || (p.divSe || '').trim().toLowerCase() !== osKey) return sum;
+    return sum + getPleitoGerarValorFromDraft(otherId, pleitos, pctById, valorById);
+  }, 0);
+}
+
+function getMaxPleitoValorForOs(
+  id: string,
+  pleitos: ContractPleito[],
+  allPleitos: ContractPleito[],
+  selectedIds: string[],
+  pctById: Record<string, string>,
+  valorById: Record<string, string>
+): number {
+  const p = pleitos.find((x) => x.id === id);
+  if (!p) return 0;
+  const orcamento = p.budget ? Number(p.budget) : 0;
+  if (orcamento <= 0) return 0;
+  const alreadyPleiteado = sumOsPleiteadoTotal(allPleitos, p.divSe);
+  const batchOther = getBatchPleitoValorSameOs(id, selectedIds, pleitos, pctById, valorById);
+  return Math.max(0, orcamento - alreadyPleiteado - batchOther);
+}
+
+function clampPleitoDraftToMax(valor: number, maxValor: number): number {
+  if (valor <= 0 || maxValor <= 0) return 0;
+  return Math.min(valor, maxValor);
+}
+
+function pleitoDraftFromValor(valor: number, orc: number, maxValor: number): { pct: string; valor: string } {
+  const clamped = clampPleitoDraftToMax(valor, maxValor);
+  const pct = orc > 0 && clamped > 0 ? (clamped / orc) * 100 : 0;
+  return {
+    pct: formatPctFromNumber(pct),
+    valor: clamped > 0 ? formatCurrencyInput(clamped) : '',
+  };
+}
+
+function pleitoDraftFromPct(pct: number, orc: number, maxValor: number): { pct: string; valor: string } {
+  const rawValor = orc > 0 && pct > 0 ? (orc * pct) / 100 : 0;
+  return pleitoDraftFromValor(rawValor, orc, maxValor);
+}
+
+/** Monta payload para gerar pleito: valor do pleito por OS (via % ou valor em R$). */
 function buildPleitoGerarItems(
   ids: string[],
   pleitos: ContractPleito[],
   allPleitos: ContractPleito[],
-  getPctForId: (id: string) => number
+  getValorForId: (id: string) => number
 ): PleitoGerarBuildResult {
   const pendingByOs = new Map<string, number>();
   const items: { id: string; billingRequest: number }[] = [];
@@ -539,13 +892,12 @@ function buildPleitoGerarItems(
     if (orcamento <= 0) {
       return { ok: false, message: `A OS ${p.divSe || id} está sem orçamento para cálculo do pleito.` };
     }
-    const pct = getPctForId(id);
-    if (pct <= 0) {
-      return { ok: false, message: `Informe a % do orçamento para a OS ${p.divSe || id}` };
+    const valorCalculado = getValorForId(id);
+    if (valorCalculado <= 0) {
+      return { ok: false, message: `Informe a % ou o valor do pleito para a OS ${p.divSe || id}` };
     }
-    const valorCalculado = (orcamento * pct) / 100;
     const osKey = (p.divSe || '').trim().toLowerCase();
-    const alreadyPleiteado = sumBillingRequestSameOs(allPleitos, p.divSe);
+    const alreadyPleiteado = sumOsPleiteadoTotal(allPleitos, p.divSe);
     const batchPending = pendingByOs.get(osKey) || 0;
     if (alreadyPleiteado + batchPending + valorCalculado > orcamento + 0.01) {
       return { ok: false, message: 'valor faturado acima do permitido' };
@@ -558,13 +910,22 @@ function buildPleitoGerarItems(
 
 function isPleitoHistorico(p: ContractPleito): boolean {
   const marker = (p.reportsBilling || '').trim();
-  return marker === PLEITO_HISTORY_MARKER || marker === PLEITO_HISTORY_MARKER_GERADO_100;
+  return marker === PLEITO_HISTORY_MARKER || marker.startsWith(PLEITO_HISTORY_MARKER);
 }
 
-function getHistoricoEtiqueta(p: ContractPleito): string | null {
-  const marker = (p.reportsBilling || '').trim();
-  if (marker === PLEITO_HISTORY_MARKER_GERADO_100) return HISTORICO_ETIQUETA_GERADO_100;
-  return null;
+function totvsQueryTransportErrorMessage(err: unknown): string {
+  const ax = err as AxiosError<{ message?: string }>;
+  if (ax?.code === 'ECONNABORTED') {
+    return 'Tempo esgotado ao consultar o RM. O relatório pode demorar vários minutos — tente de novo ou verifique o backend.';
+  }
+  const fromBody =
+    ax?.response?.data &&
+    typeof ax.response.data === 'object' &&
+    'message' in ax.response.data &&
+    typeof (ax.response.data as { message?: string }).message === 'string'
+      ? (ax.response.data as { message: string }).message
+      : null;
+  return fromBody || ax?.message || 'Falha de rede ou servidor ao consultar o RM.';
 }
 
 export default function ContractDetailPage() {
@@ -573,8 +934,11 @@ export default function ContractDetailPage() {
   const queryClient = useQueryClient();
   const {
     isAdministrator,
+    isElevatedUser,
     can,
     canAction,
+    permissions,
+    canAccessContract,
     canAccessContractOrcamentoTab,
     canAccessContractRelatoriosTab,
     canAccessContractOrdemServicoTab,
@@ -585,11 +949,19 @@ export default function ContractDetailPage() {
     typeof idParam === 'string' ? idParam : Array.isArray(idParam) ? idParam[0] ?? '' : '';
   const canAccessOrcamento = canAccessContractOrcamentoTab(contractId);
   const canAccessRelatorios = canAccessContractRelatoriosTab(contractId);
+  const canAccessReunioes = true;
   const canAccessOrdemServicoModulo = canAccessContractOrdemServicoTab(contractId);
   const canAccessProducaoSemanalModulo = canAccessContractProducaoSemanalTab(contractId);
-  const canCreateContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'criar');
-  const canEditContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'editar');
-  const canDeleteContrato = isAdministrator || canAction(pk('/ponto/contratos'), 'excluir');
+  // Liberado na aba Contratos = pode cadastrar/editar neste contrato (sem exigir coluna Criar da aba Acesso)
+  const hasThisContractAccess = isElevatedUser || canAccessContract(contractId);
+  const canCreateContrato =
+    isElevatedUser || permissions.canCreateContracts || hasThisContractAccess;
+  const canEditContrato =
+    isElevatedUser || permissions.canEditContracts || hasThisContractAccess;
+  /** Excluir o contrato na listagem — só matriz Contratos → Excluir (ou admin). */
+  const canDeleteContrato = isElevatedUser || permissions.canDeleteContracts;
+  /** Excluir OS na aba do contrato — quem pode criar OS também pode excluir. */
+  const canDeleteOs = canCreateContrato;
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -603,9 +975,10 @@ export default function ContractDetailPage() {
     issueDate: '',
     invoiceNumber: '',
     serviceOrder: '',
-    grossValue: ''
+    pleitoId: '',
+    grossValue: '',
+    netValue: ''
   });
-  const [osSeDropdownOpen, setOsSeDropdownOpen] = useState(false);
   const [selectedBilling, setSelectedBilling] = useState<ContractBilling | null>(null);
   const [editingBilling, setEditingBilling] = useState(false);
   const [filterBillingOsSe, setFilterBillingOsSe] = useState('');
@@ -618,43 +991,126 @@ export default function ContractDetailPage() {
     grossValue: '',
     netValue: ''
   });
-  const [osSeEditDropdownOpen, setOsSeEditDropdownOpen] = useState(false);
   const [selectedPleitoId, setSelectedPleitoId] = useState<string | null>(null);
   const [pleitoToEdit, setPleitoToEdit] = useState<(PleitoFormData & { id: string }) | null>(null);
-  const [filterStatusOrcamento, setFilterStatusOrcamento] = useState('');
-  const [filterStatusExecucao, setFilterStatusExecucao] = useState('');
-  const [filterStatusFaturamento, setFilterStatusFaturamento] = useState('');
+  const [filterOsStatus, setFilterOsStatus] = useState('');
+  const [filterOsStatusFat, setFilterOsStatusFat] = useState('');
+  const [searchTermPleitos, setSearchTermPleitos] = useState('');
+  const [showPleitosFilterModal, setShowPleitosFilterModal] = useState(false);
+  const [showOsExportModal, setShowOsExportModal] = useState(false);
+  const [showOsImportModal, setShowOsImportModal] = useState(false);
+  const [exportingOsPdf, setExportingOsPdf] = useState(false);
+  const [searchTermProduction, setSearchTermProduction] = useState('');
+  const [showProductionFilterModal, setShowProductionFilterModal] = useState(false);
+  const [filterProductionOsSe, setFilterProductionOsSe] = useState('');
+  const [filterProductionResponsible, setFilterProductionResponsible] = useState('');
+  const [searchTermBillings, setSearchTermBillings] = useState('');
+  const [showBillingFilterModal, setShowBillingFilterModal] = useState(false);
+  const [pleitosListPage, setPleitosListPage] = useState(1);
+  const [productionListPage, setProductionListPage] = useState(1);
+  const [billingsListPage, setBillingsListPage] = useState(1);
   const [selectedForPleito, setSelectedForPleito] = useState<Set<string>>(new Set());
+  const [selectedForBilling, setSelectedForBilling] = useState<Set<string>>(new Set());
+  const [osSelectionMenu, setOsSelectionMenu] = useState<RowActionMenuState>(null);
+  const [billingSelectionMenu, setBillingSelectionMenu] = useState<RowActionMenuState>(null);
   const [valorPleiteado, setValorPleiteado] = useState<Record<string, string>>({});
+  const [pleitoValorInput, setPleitoValorInput] = useState<Record<string, string>>({});
   const [showPleitoValoresModal, setShowPleitoValoresModal] = useState(false);
   const [showPleitoResumoModal, setShowPleitoResumoModal] = useState(false);
-  const [showHistoricoPleitosModal, setShowHistoricoPleitosModal] = useState(false);
-  const [showHistoricoOsModal, setShowHistoricoOsModal] = useState(false);
-  const [histYearFilter, setHistYearFilter] = useState('all');
-  const [histMonthFilter, setHistMonthFilter] = useState('all');
-  const [histOsFilter, setHistOsFilter] = useState('');
-  const [histPastaFilter, setHistPastaFilter] = useState('');
-  const [histDescricaoFilter, setHistDescricaoFilter] = useState('');
-  const [histEtiquetaFilter, setHistEtiquetaFilter] = useState('all');
-  const [historicoDrafts, setHistoricoDrafts] = useState<Record<string, { billingStatus: 'pago' | 'nao-pago'; invoiceNumber: string }>>({});
-  const [selectedHistoricoPleitos, setSelectedHistoricoPleitos] = useState<Set<string>>(new Set());
-  const [showHistoricoBatchNfModal, setShowHistoricoBatchNfModal] = useState(false);
-  const [historicoBatchInvoiceModalValue, setHistoricoBatchInvoiceModalValue] = useState('');
+  const [showVisualizarPleitoModal, setShowVisualizarPleitoModal] = useState(false);
+  const [showAndamentoTodosModal, setShowAndamentoTodosModal] = useState(false);
+  const [showCronogramaMensalModal, setShowCronogramaMensalModal] = useState(false);
+  const [showFaturamentoTodosModal, setShowFaturamentoTodosModal] = useState(false);
   const [pleitoGeradoData, setPleitoGeradoData] = useState<Array<{ pleito: ContractPleito; valorPleiteado: number; pctOrcamento: number }>>([]);
   const [productionForm, setProductionForm] = useState({ fillingDate: '', divSe: '', weeklyProductionValue: '', responsiblePerson: '' });
-  const [productionOsSeDropdownOpen, setProductionOsSeDropdownOpen] = useState(false);
   const [selectedProduction, setSelectedProduction] = useState<ContractWeeklyProduction | null>(null);
   const [editingProduction, setEditingProduction] = useState(false);
   const [productionEditForm, setProductionEditForm] = useState({ fillingDate: '', divSe: '', weeklyProductionValue: '', responsiblePerson: '' });
-  const [productionOsSeEditDropdownOpen, setProductionOsSeEditDropdownOpen] = useState(false);
   const [showValorAnualAdjustModal, setShowValorAnualAdjustModal] = useState(false);
   const [adjFormYear, setAdjFormYear] = useState(currentYear);
   const [adjFormDeltaStr, setAdjFormDeltaStr] = useState('');
   const [adjFormDate, setAdjFormDate] = useState('');
   const [showAddendumModal, setShowAddendumModal] = useState(false);
+  const [showPaidNaturezaModal, setShowPaidNaturezaModal] = useState(false);
+  const [naturezaModalMesIdx, setNaturezaModalMesIdx] = useState<number | null>(null);
+  const [expandedNaturezaKey, setExpandedNaturezaKey] = useState<string | null>(null);
+  const [gastosResumoModal, setGastosResumoModal] = useState<
+    { kind: 'month'; mesIdx: number } | { kind: 'year'; year: number } | null
+  >(null);
+
+  const openPaidNaturezaModal = (mesIdx: number | null) => {
+    setNaturezaModalMesIdx(mesIdx);
+    setExpandedNaturezaKey(null);
+    setShowPaidNaturezaModal(true);
+  };
   const [addendumDate, setAddendumDate] = useState('');
   const [addendumAmount, setAddendumAmount] = useState('');
   const [addendumNote, setAddendumNote] = useState('');
+
+  const closeAddendumModal = useCallback(() => {
+    setShowAddendumModal(false);
+  }, []);
+
+  const closeValorAnualAdjustModal = useCallback(() => {
+    setShowValorAnualAdjustModal(false);
+  }, []);
+
+  const closeProductionModal = useCallback(() => {
+    setShowProductionModal(false);
+  }, []);
+
+  const closeEditingProduction = useCallback(() => {
+    setEditingProduction(false);
+  }, []);
+
+  const closeBillingModal = useCallback(() => {
+    setShowBillingModal(false);
+    setBillingForm({ issueDate: '', invoiceNumber: '', serviceOrder: '', pleitoId: '', grossValue: '', netValue: '' });
+  }, []);
+
+  const closePleitoValoresModal = useCallback(() => {
+    setShowPleitoValoresModal(false);
+  }, []);
+
+  const closePleitoResumoModal = useCallback(() => {
+    setShowPleitoResumoModal(false);
+  }, []);
+
+  const closeSelectedBillingModal = useCallback(() => {
+    setSelectedBilling(null);
+    setEditingBilling(false);
+  }, []);
+
+  const closeSelectedPleitoModal = useCallback(() => {
+    setSelectedPleitoId(null);
+  }, []);
+
+  const { requestClose: requestCloseAddendumModal, confirmUi: addendumModalConfirmUi } =
+    useModalCloseConfirm(closeAddendumModal, { isParentOpen: showAddendumModal });
+
+  const { requestClose: requestCloseValorAnualAdjustModal, confirmUi: valorAnualAdjustModalConfirmUi } =
+    useModalCloseConfirm(closeValorAnualAdjustModal, { isParentOpen: showValorAnualAdjustModal });
+
+  const { requestClose: requestCloseProductionModal, confirmUi: productionModalConfirmUi } =
+    useModalCloseConfirm(closeProductionModal, { isParentOpen: showProductionModal && !editingProduction });
+
+  const { requestClose: requestCloseEditingProduction, confirmUi: editingProductionConfirmUi } =
+    useModalCloseConfirm(closeEditingProduction, { isParentOpen: editingProduction && !!selectedProduction });
+
+  const { requestClose: requestCloseBillingModal, confirmUi: billingModalConfirmUi } =
+    useModalCloseConfirm(closeBillingModal, { isParentOpen: showBillingModal });
+
+  const { requestClose: requestClosePleitoValoresModal, confirmUi: pleitoValoresModalConfirmUi } =
+    useModalCloseConfirm(closePleitoValoresModal, { isParentOpen: showPleitoValoresModal });
+
+  const { requestClose: requestClosePleitoResumoModal, confirmUi: pleitoResumoModalConfirmUi } =
+    useModalCloseConfirm(closePleitoResumoModal, { isParentOpen: showPleitoResumoModal });
+
+  const { requestClose: requestCloseSelectedBillingModal, confirmUi: selectedBillingModalConfirmUi } =
+    useModalCloseConfirm(closeSelectedBillingModal, { isParentOpen: !!selectedBilling });
+
+  const { requestClose: requestCloseSelectedPleitoModal, confirmUi: selectedPleitoModalConfirmUi } =
+    useModalCloseConfirm(closeSelectedPleitoModal, { isParentOpen: !!selectedPleitoId });
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -672,6 +1128,98 @@ export default function ContractDetailPage() {
     },
     enabled: !!contractId
   });
+
+  type TotvsRmPaidLineDetail = {
+    valor: number;
+    natureza: string;
+    dataISO: string | null;
+  };
+
+  type TotvsTotalPagoApi = {
+    success: boolean;
+    message?: string;
+    data: {
+      configured: boolean;
+      total: number | null;
+      matchedRowCount?: number;
+      totalRowCount?: number;
+      ccColumn?: string | null;
+      valueColumn?: string | null;
+      naturezaColumn?: string | null;
+      dateColumn?: string | null;
+      totalsByNatureza?: { natureza: string; total: number; count: number }[];
+      sampleCcValuesMatched?: string[];
+      /** Total pago (exclui naturezas operacionais). */
+      paidByCalendarMonth?: {
+        year: number;
+        month: number;
+        total: number;
+        count: number;
+        lines: TotvsRmPaidLineDetail[];
+      }[];
+      paidUndated?: { total: number; count: number; lines: TotvsRmPaidLineDetail[] } | null;
+      /** Linha «Solicitações»: soma por mês (CC + data de pagamento + valor), mesmas exclusões de natureza do Total Pago. */
+      solicitacoesByCalendarMonth?: {
+        year: number;
+        month: number;
+        total: number;
+        count: number;
+        lines: TotvsRmPaidLineDetail[];
+      }[];
+      solicitacoesUndated?: { total: number; count: number; lines: TotvsRmPaidLineDetail[] } | null;
+      solicitacoesMatchedRowCount?: number;
+      solicitacoesDateColumn?: string | null;
+      solicitacoesValueColumn?: string | null;
+      solicitacoesCcColumn?: string | null;
+      message?: string;
+      costCenterCode?: string;
+      costCenterName?: string;
+    };
+  };
+
+  const {
+    data: totvsTotalPagoRes,
+    isPending: totvsTotalPagoPending,
+    isLoading: totvsTotalPagoLoading,
+    isFetching: totvsTotalPagoFetching,
+    isError: totvsTotalPagoIsError,
+    error: totvsTotalPagoError
+  } = useQuery({
+    queryKey: ['contract-totvs-total-pago', contractId],
+    queryFn: async () => {
+      const res = await api.get(`/contracts/${contractId}/totvs-total-pago`, { timeout: 180000 });
+      return res.data as TotvsTotalPagoApi;
+    },
+    enabled: !!contractId,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    retry: false
+  });
+
+  const {
+    data: gastosOperacionaisModuleData,
+    isLoading: gastosOperacionaisModuleLoading,
+    isError: gastosOperacionaisModuleIsError,
+    error: gastosOperacionaisModuleError
+  } = useGastosOperacionaisTotvsQuery({ enabled: !!contractId });
+
+  const gastosOperacionaisCarregando = gastosOperacionaisModuleLoading;
+
+  const gastosOperacionaisNaoConfigurado =
+    gastosOperacionaisModuleIsError &&
+    /não configurada|nao configurada/i.test(
+      gastosOperacionaisModuleError instanceof Error
+        ? gastosOperacionaisModuleError.message
+        : String(gastosOperacionaisModuleError ?? '')
+    );
+
+  /** RM ainda sem resposta definitiva (1ª carga ou refetch). */
+  const totvsRmCarregando =
+    totvsTotalPagoPending ||
+    totvsTotalPagoLoading ||
+    totvsTotalPagoFetching ||
+    (totvsTotalPagoRes === undefined && !totvsTotalPagoIsError);
 
   const { data: billingsData, isLoading: loadingBillings } = useQuery({
     queryKey: ['contract-billings', contractId],
@@ -707,7 +1255,7 @@ export default function ContractDetailPage() {
       return res.data as {
         success: boolean;
         data: ContractAnnualValueRow[];
-        computedBaseAnnual: number | null;
+        computedBaseAnnualByYear?: Record<number, number>;
       };
     },
     enabled: !!contractId
@@ -717,6 +1265,18 @@ export default function ContractDetailPage() {
     queryFn: async () => {
       const res = await api.get(`/contracts/${contractId}/addenda`);
       return res.data as { success: boolean; data: ContractAddendumRow[] };
+    },
+    enabled: !!contractId
+  });
+
+  const { data: tetoOrcamentarioEntries = [], isLoading: loadingTetoOrcamentario } = useQuery({
+    queryKey: ['controle-geral-teto-orcamentario'],
+    queryFn: async () => {
+      const res = await api.get<{
+        success?: boolean;
+        data?: ControleGeralTetoOrcamentarioEntry[];
+      }>('/controle-geral/teto-orcamentario');
+      return (res.data?.data ?? []) as ControleGeralTetoOrcamentarioEntry[];
     },
     enabled: !!contractId
   });
@@ -737,8 +1297,9 @@ export default function ContractDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contract-billings', contractId] });
+      queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
       setShowBillingModal(false);
-      setBillingForm({ issueDate: '', invoiceNumber: '', serviceOrder: '', grossValue: '' });
+      setBillingForm({ issueDate: '', invoiceNumber: '', serviceOrder: '', pleitoId: '', grossValue: '', netValue: '' });
       toast.success('Faturamento cadastrado com sucesso!');
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
@@ -753,6 +1314,7 @@ export default function ContractDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['contract-billings', contractId] });
+      queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
       setEditingBilling(false);
       toast.success('Faturamento atualizado com sucesso!');
     },
@@ -762,15 +1324,26 @@ export default function ContractDetailPage() {
   });
 
   const deleteBillingMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.delete(`/contracts/${contractId}/billings/${id}`);
-      return res.data;
+    mutationFn: async (ids: string | string[]) => {
+      const list = Array.isArray(ids) ? ids : [ids];
+      await Promise.all(
+        list.map((id) => api.delete(`/contracts/${contractId}/billings/${id}`))
+      );
+      return list;
     },
-    onSuccess: () => {
+    onSuccess: (_data, ids) => {
+      const list = Array.isArray(ids) ? ids : [ids];
       queryClient.invalidateQueries({ queryKey: ['contract-billings', contractId] });
+      queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
       setSelectedBilling(null);
       setEditingBilling(false);
-      toast.success('Faturamento excluído com sucesso!');
+      setSelectedForBilling(new Set());
+      setBillingSelectionMenu(null);
+      toast.success(
+        list.length === 1
+          ? 'Faturamento excluído com sucesso!'
+          : `${list.length} faturamentos excluídos com sucesso!`
+      );
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
       toast.error(err.response?.data?.message || 'Erro ao excluir faturamento');
@@ -895,6 +1468,198 @@ export default function ContractDetailPage() {
   });
 
   const contract = contractData?.data as Contract | undefined;
+
+  /** Cálculo automático líquido = bruto × 86,65% só no contrato UNB. */
+  const usesUnbBillingNetFactor = useMemo(() => {
+    if (!contract) return false;
+    return (
+      isUnbRelatedLabel(contract.name) ||
+      isUnbRelatedLabel(contract.costCenter?.name) ||
+      isUnbRelatedLabel(contract.costCenter?.code)
+    );
+  }, [contract]);
+
+  useDocumentTitle(contract?.name ? `Contratos - ${contract.name}` : null);
+
+  const { data: orcamentosListaData, isLoading: loadingOrcamentosCount } = useQuery({
+    queryKey: ['contract-orcamentos-count', contract?.costCenterId],
+    queryFn: async () => {
+      const res = await api.get(`/orcamento/${contract!.costCenterId}`);
+      return res.data as { orcamentos?: { id: string }[] };
+    },
+    enabled: !!contract?.costCenterId && canAccessOrcamento,
+  });
+
+  const { data: relatoriosListaData, isLoading: loadingRelatoriosCount } = useQuery({
+    queryKey: ['relatorios-fotograficos', contractId],
+    queryFn: async () => (await api.get(`/relatorios-fotograficos/${contractId}`)).data,
+    enabled: !!contractId && canAccessRelatorios,
+  });
+
+  const { data: semanalListaData, isLoading: loadingSemanalCount } = useQuery({
+    queryKey: ['reunioes', 'semanal', contractId],
+    queryFn: async () => (await api.get(`/reunioes/${contractId}/semanal`)).data,
+    enabled: !!contractId && canAccessReunioes,
+  });
+
+  const { data: mensalListaData, isLoading: loadingMensalCount } = useQuery({
+    queryKey: ['reunioes', 'mensal', contractId],
+    queryFn: async () => (await api.get(`/reunioes/${contractId}/mensal`)).data,
+    enabled: !!contractId && canAccessReunioes,
+  });
+
+  const orcamentosCount = Array.isArray(orcamentosListaData?.orcamentos)
+    ? orcamentosListaData.orcamentos.length
+    : 0;
+  const relatoriosCount = Array.isArray(relatoriosListaData?.data)
+    ? relatoriosListaData.data.length
+    : 0;
+  const semanalCount = Array.isArray(semanalListaData?.data) ? semanalListaData.data.length : 0;
+  const mensalCount = Array.isArray(mensalListaData?.data) ? mensalListaData.data.length : 0;
+
+
+  const paidDisplay = useMemo(() => {
+    const c = contract;
+    if (!c) {
+      return {
+        total: 0,
+        loading: true,
+        totvsConfigured: false,
+        totvsErrorMessage: null as string | null
+      };
+    }
+
+    if (totvsTotalPagoIsError) {
+      return {
+        total: 0,
+        loading: totvsRmCarregando,
+        totvsConfigured: true,
+        totvsErrorMessage: totvsQueryTransportErrorMessage(totvsTotalPagoError)
+      };
+    }
+
+    if (totvsRmCarregando) {
+      const t = totvsTotalPagoRes;
+      const partialTotal =
+        typeof t?.data?.total === 'number' && !Number.isNaN(t.data.total) ? t.data.total : 0;
+      return {
+        total: partialTotal,
+        loading: true,
+        totvsConfigured: Boolean(t?.data?.configured),
+        totvsErrorMessage: null as string | null
+      };
+    }
+
+    const t = totvsTotalPagoRes;
+    const configured = Boolean(t?.data?.configured);
+    const totvsCallFailed = configured && t?.success === false;
+    const total =
+      Boolean(t?.success) &&
+      configured &&
+      typeof t?.data?.total === 'number' &&
+      !Number.isNaN(t.data.total)
+        ? (t!.data!.total as number)
+        : 0;
+
+    return {
+      total,
+      loading: false,
+      totvsConfigured: configured,
+      totvsErrorMessage: totvsCallFailed ? t?.message || null : null
+    };
+  }, [contract, totvsTotalPagoRes, totvsRmCarregando, totvsTotalPagoIsError, totvsTotalPagoError]);
+
+  const rmTotalsByNatureza = useMemo((): { natureza: string; total: number; count: number }[] => {
+    const raw = totvsTotalPagoRes?.data?.totalsByNatureza;
+    if (!Array.isArray(raw)) return [];
+    const out: { natureza: string; total: number; count: number }[] = [];
+    for (const x of raw) {
+      if (!x || typeof x !== 'object') continue;
+      const o = x as { natureza?: unknown; total?: unknown; count?: unknown };
+      if (typeof o.natureza !== 'string' || typeof o.total !== 'number' || typeof o.count !== 'number') continue;
+      out.push({ natureza: o.natureza, total: o.total, count: o.count });
+    }
+    return out;
+  }, [totvsTotalPagoRes]);
+
+  /** Total Pago no cabeçalho: soma apenas naturezas da allowlist (quando há detalhe por natureza). */
+  const paidHeaderTotal = useMemo(() => {
+    if (rmTotalsByNatureza.length) {
+      return rmTotalsByNatureza
+        .filter((r) => isNaturezaIncludedInContractPaidTotal(r.natureza))
+        .reduce((s, r) => s + r.total, 0);
+    }
+    return paidDisplay.total;
+  }, [paidDisplay.total, rmTotalsByNatureza]);
+
+  const naturezaModalRows = useMemo(
+    () =>
+      filterNaturezaRowsForPaidModalDisplay(rmTotalsByNatureza).sort((a, b) => b.total - a.total),
+    [rmTotalsByNatureza]
+  );
+
+  type RmSolicitacaoLinha = TotvsRmPaidLineDetail & { competencia?: string };
+
+  const { solicitacoesLinesByNaturezaKey, rmLinhasDetalheFonte } = useMemo(() => {
+    const map = new Map<string, RmSolicitacaoLinha[]>();
+    const d = totvsTotalPagoRes?.data;
+    if (!d) {
+      return { solicitacoesLinesByNaturezaKey: map, rmLinhasDetalheFonte: 'none' as const };
+    }
+
+    const push = (line: TotvsRmPaidLineDetail, competencia?: string) => {
+      if (!isNaturezaIncludedInContractPaidTotal(line.natureza)) return;
+      const key = normalizeNaturezaLabel(line.natureza);
+      const list = map.get(key) ?? [];
+      list.push({ ...line, competencia });
+      map.set(key, list);
+    };
+
+    const collectSolicitacoes = () => {
+      for (const bm of d.solicitacoesByCalendarMonth ?? []) {
+        const competencia = `${String(bm.month).padStart(2, '0')}/${bm.year}`;
+        for (const line of bm.lines ?? []) push(line, competencia);
+      }
+      for (const line of d.solicitacoesUndated?.lines ?? []) push(line, 'Sem data');
+    };
+
+    const collectPaid = () => {
+      for (const bm of d.paidByCalendarMonth ?? []) {
+        const competencia = `${String(bm.month).padStart(2, '0')}/${bm.year}`;
+        for (const line of bm.lines ?? []) push(line, competencia);
+      }
+      for (const line of d.paidUndated?.lines ?? []) push(line, 'Sem data');
+    };
+
+    collectSolicitacoes();
+    let fonte: 'solicitacoes' | 'paid' | 'none' = 'solicitacoes';
+    let totalLinhas = 0;
+    map.forEach((arr) => {
+      totalLinhas += arr.length;
+    });
+    if (totalLinhas === 0) {
+      map.clear();
+      collectPaid();
+      fonte = 'paid';
+      totalLinhas = 0;
+      map.forEach((arr) => {
+        totalLinhas += arr.length;
+      });
+      if (totalLinhas === 0) fonte = 'none';
+    }
+
+    map.forEach((lines, key) => {
+      lines.sort((a: RmSolicitacaoLinha, b: RmSolicitacaoLinha) => {
+        const ta = a.dataISO ? new Date(`${a.dataISO}T12:00:00`).getTime() : 0;
+        const tb = b.dataISO ? new Date(`${b.dataISO}T12:00:00`).getTime() : 0;
+        return tb - ta;
+      });
+      map.set(key, lines);
+    });
+
+    return { solicitacoesLinesByNaturezaKey: map, rmLinhasDetalheFonte: fonte };
+  }, [totvsTotalPagoRes]);
+
   const addenda = ((addendaResponse?.data || []) as ContractAddendumRow[])
     .slice()
     .sort((a, b) => {
@@ -909,7 +1674,11 @@ export default function ContractDetailPage() {
   const valorMaisAditivosTotal = contract ? contract.valuePlusAddenda + totalAddenda : 0;
   const billings = (billingsData?.data || []) as ContractBilling[];
   const allPleitos = (pleitosData?.data || []) as ContractPleito[];
-  const pleitos = allPleitos.filter((p) => !isPleitoHistorico(p));
+  const billingsForOs = billings as BillingForOsCheck[];
+  const pleitos = useMemo(
+    () => allPleitos.filter((p) => !isPleitoHistorico(p) && !isOsConcluida(p, billingsForOs)),
+    [allPleitos, billingsForOs]
+  );
   const productions = ((Array.isArray(productionsData) ? productionsData : (productionsData as { data?: ContractWeeklyProduction[] })?.data) || []) as ContractWeeklyProduction[];
   /** Somente OS / SE cadastradas neste contrato (não usar lista global de todos os contratos). */
   const divSeOptions = useMemo(
@@ -917,46 +1686,95 @@ export default function ContractDetailPage() {
     [pleitos]
   );
 
-  const osSeFiltered = useMemo(
-    () => filterDivSeOptions(divSeOptions, billingForm.serviceOrder),
-    [divSeOptions, billingForm.serviceOrder]
+  const divSeSelectOptions = useMemo(
+    () => divSeOptionsToSelectOptions(divSeOptions),
+    [divSeOptions]
   );
 
-  const osSeEditFiltered = useMemo(
-    () => filterDivSeOptions(divSeOptions, billingEditForm.serviceOrder),
-    [divSeOptions, billingEditForm.serviceOrder]
+  const defaultProductionResponsiblePerson = useMemo(() => {
+    return String(userData?.data?.name ?? '').trim();
+  }, [userData]);
+
+  const billablePleitos = useMemo(
+    () =>
+      allPleitos.filter(
+        (p) =>
+          (isPleitoHistorico(p) || (p.billingRequest != null && Number(p.billingRequest) > 0)) &&
+          isPleitoAptoParaFaturamento(p, billings)
+      ),
+    [allPleitos, billings]
   );
 
-  const productionOsSeFiltered = useMemo(
-    () => filterDivSeOptions(divSeOptions, productionForm.divSe),
-    [divSeOptions, productionForm.divSe]
+  const pleitosForBillingForm = useMemo(() => {
+    const os = billingForm.serviceOrder.trim();
+    if (!os) return billablePleitos;
+    return billablePleitos.filter((p) => (p.divSe || '').trim() === os);
+  }, [billablePleitos, billingForm.serviceOrder]);
+
+  const pleitosForBillingSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        pleitosForBillingForm.map((p) => ({
+          value: p.id,
+          label: formatPleitoBillingOptionLabel(p, billings),
+        }))
+      ),
+    [pleitosForBillingForm, billings]
   );
 
-  const productionOsSeEditFiltered = useMemo(
-    () => filterDivSeOptions(divSeOptions, productionEditForm.divSe),
-    [divSeOptions, productionEditForm.divSe]
+  const selectedBillingPleito = useMemo(
+    () => billablePleitos.find((p) => p.id === billingForm.pleitoId) ?? allPleitos.find((p) => p.id === billingForm.pleitoId) ?? null,
+    [billablePleitos, allPleitos, billingForm.pleitoId]
   );
+
+  const selectedBillingPleitoSaldo = selectedBillingPleito
+    ? getPleitoRemainingBalance(selectedBillingPleito, billings)
+    : null;
 
   const availableYears = useMemo(() => {
     if (!contract) return [];
-    const start = getDateYear(contract.startDate) ?? new Date().getFullYear();
-    const end = getDateYear(contract.endDate) ?? start;
-    const years: number[] = [];
-    for (let y = start; y <= end; y++) {
-      years.push(y);
-    }
-    return years.length > 0 ? years : [start];
+    return buildContractAvailableYears(contract.startDate, contract.endDate);
   }, [contract]);
 
-  /** Valor de cada ano de vigência: (valor + aditivos) ÷ anos da vigência (aniversários a partir da data inicial até o fim). */
+  useEffect(() => {
+    if (!contract || availableYears.length === 0) return;
+    setSelectedYear((prev) => {
+      if (prev === 0) return 0;
+      if (availableYears.includes(prev)) return prev;
+      if (availableYears.includes(currentYear)) return currentYear;
+      return availableYears[0];
+    });
+  }, [contract?.id, availableYears, currentYear]);
+
+  const headerYearSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions([
+        { value: '0', label: 'Todos' },
+        ...availableYears.map((year) => ({ value: String(year), label: String(year) })),
+      ]),
+    [availableYears]
+  );
+
+  const adjYearSelectOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        availableYears.map((year) => ({ value: String(year), label: String(year) }))
+      ),
+    [availableYears]
+  );
+
+  /** Anos / meses de vigência (para labels e rateio proporcional). */
   const contractYearsCount = useMemo(
     () => (contract ? countContractYearsOfVigencia(contract.startDate, contract.endDate) : 0),
     [contract]
   );
-  const valorAnualBase = useMemo(() => {
-    if (!contract || contractYearsCount <= 0) return null;
-    return valorMaisAditivosTotal / contractYearsCount;
-  }, [contract, contractYearsCount, valorMaisAditivosTotal]);
+  const contractVigenciaMonthCount = useMemo(() => {
+    if (!contract) return 0;
+    const start = parseDateSafe(contract.startDate);
+    const end = parseDateSafe(contract.endDate);
+    if (!start || !end) return 0;
+    return listVigenciaMonthKeys(start, end).length;
+  }, [contract]);
 
   const contractVigenciaDates = useMemo(() => {
     if (!contract) return null;
@@ -973,6 +1791,28 @@ export default function ContractDetailPage() {
     : availableYears.includes(selectedYear)
       ? selectedYear
       : availableYears[0] ?? currentYear;
+
+  const contractMonthsInSelectedYear = useMemo(() => {
+    if (!contractVigenciaDates) return 0;
+    return countVigenciaMonthsInRange(
+      safeSelectedYear,
+      1,
+      12,
+      contractVigenciaDates.start,
+      contractVigenciaDates.end
+    );
+  }, [contractVigenciaDates, safeSelectedYear]);
+
+  /** Valor anual do ano selecionado: (valor + aditivos) ÷ meses totais × meses do ano. */
+  const valorAnualBase = useMemo(() => {
+    if (!contract) return null;
+    return getValorAnualBaseDoAno(
+      valorMaisAditivosTotal,
+      contract.startDate,
+      contract.endDate,
+      safeSelectedYear
+    );
+  }, [contract, valorMaisAditivosTotal, safeSelectedYear]);
 
   const annualAdjustByYear = useMemo(() => {
     const rows = annualValuesResponse?.data;
@@ -1002,15 +1842,30 @@ export default function ContractDetailPage() {
       if (!d) return isAllYears && selectedMonth === 0;
 
       if (!isAllYears && d.getFullYear() !== selectedYear) return false;
-      if (selectedMonth === 0) return true;
-      return d.getMonth() + 1 === selectedMonth;
+      if (selectedMonth !== 0 && d.getMonth() + 1 !== selectedMonth) return false;
+
+      const osTerm = filterProductionOsSe.trim().toLowerCase();
+      if (osTerm && !(p.divSe || '').toLowerCase().includes(osTerm)) return false;
+
+      const respTerm = filterProductionResponsible.trim().toLowerCase();
+      if (respTerm && !(p.responsiblePerson || '').toLowerCase().includes(respTerm)) return false;
+
+      return productionMatchesSearchTerm(p, searchTermProduction);
     });
-  }, [productions, isAllYears, selectedYear, selectedMonth]);
+  }, [
+    productions,
+    isAllYears,
+    selectedYear,
+    selectedMonth,
+    filterProductionOsSe,
+    filterProductionResponsible,
+    searchTermProduction,
+  ]);
 
   /**
    * Meta base: Valor + Aditivos (saldo ÷ meses até o fim da vigência).
-   * Ajuste Valor Anual: sobrescreve do mês efetivo até dezembro; saldo antes do ajuste =
-   * valorAnualBase − soma das metas globais nos meses civis anteriores (evita rateio linear 1/12 ignorando aditivos).
+   * Ajuste Valor Anual: do mês efetivo até dezembro, redistribui
+   * (soma das metas já planejadas nesses meses + delta) — não reinicia com valorAnualBase.
    */
   const contractAddendaForMeta = useMemo(() => parseContractAddendaForMeta(addenda), [addenda]);
 
@@ -1031,7 +1886,7 @@ export default function ContractDetailPage() {
 
   const metaSchedule = useMemo(() => {
     const out = new Map(globalMetaSchedule);
-    if (!contractVigenciaDates || !contract || valorAnualBase === null || valorAnualBase <= 0) return out;
+    if (!contractVigenciaDates || !contract) return out;
 
     const { start, end } = contractVigenciaDates;
 
@@ -1039,17 +1894,18 @@ export default function ContractDetailPage() {
       const effMonth = annualAdjustmentEffectiveCivilMonth(r.year, r.effectiveDate);
       if (effMonth === null) continue;
 
-      const allocatedBefore = sumGlobalMetaAllocatedBeforeEffMonth(
-        globalMetaSchedule,
-        r.year,
-        effMonth,
-        start,
-        end
-      );
-      const pool = valorAnualBase - allocatedBefore + r.amount;
       const monthsAfter = countVigenciaMonthsInRange(r.year, effMonth, 12, start, end);
       if (monthsAfter <= 0) continue;
 
+      const plannedRestOfYear = sumGlobalMetaAllocatedInMonthRange(
+        globalMetaSchedule,
+        r.year,
+        effMonth,
+        12,
+        start,
+        end
+      );
+      const pool = plannedRestOfYear + r.amount;
       const metaY = pool / monthsAfter;
       for (let m = effMonth; m <= 12; m++) {
         if (!calendarMonthHasMetaMensalInVigencia(r.year, m, start, end)) continue;
@@ -1058,31 +1914,14 @@ export default function ContractDetailPage() {
     }
 
     return out;
-  }, [globalMetaSchedule, annualBudgetAdjustments, contractVigenciaDates, contract, valorAnualBase]);
-
-  const metaMensalCardInfo = useMemo(() => {
-    const meses = Array.from({ length: 12 }, (_, i) => i + 1)
-      .map((m) => ({ m, key: toYearMonthKey(safeSelectedYear, m), v: metaSchedule.get(toYearMonthKey(safeSelectedYear, m)) ?? null }))
-      .filter((x) => x.v !== null);
-    if (!meses.length) return { kind: 'empty' as const };
-    const firstVal = meses[0].v as number;
-    const change = meses.find((x) => Math.abs((x.v as number) - firstVal) > 0.009);
-    if (!change) return { kind: 'single' as const, value: firstVal };
-    return {
-      kind: 'split' as const,
-      baseMeta: firstVal,
-      metaAfter: change.v as number,
-      ateMesLabel: MESES[Math.max(0, change.m - 2)],
-      deMesLabel: MESES[change.m - 1],
-    };
-  }, [metaSchedule, safeSelectedYear]);
+  }, [globalMetaSchedule, annualBudgetAdjustments, contractVigenciaDates, contract]);
 
   useEffect(() => {
     if (!showValorAnualAdjustModal) return;
     const rows = annualValuesResponse?.data ?? [];
     const row = rows.find((r) => r.year === adjFormYear);
     if (row?.budgetAdjustmentDelta != null && row.budgetAdjustmentEffectiveDate) {
-      setAdjFormDeltaStr(formatCurrencyInput(Number(row.budgetAdjustmentDelta)));
+      setAdjFormDeltaStr(formatAjusteValorInput(Number(row.budgetAdjustmentDelta)));
       setAdjFormDate(toInputDate(row.budgetAdjustmentEffectiveDate));
     } else {
       setAdjFormDeltaStr('');
@@ -1177,6 +2016,370 @@ export default function ContractDetailPage() {
     [producaoPorMes, faturamentoPorMes]
   );
 
+  /** Faturamento (bruto) por mês civil em todo o contrato, chave ano-mês. */
+  const faturamentoPorYmKey = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of billings) {
+      const d = parseDateSafe(b.issueDate);
+      if (!d) continue;
+      const k = toYearMonthKey(d.getFullYear(), d.getMonth() + 1);
+      m.set(k, (m.get(k) || 0) + b.grossValue);
+    }
+    return m;
+  }, [billings]);
+
+  const vigenciaMonthList = useMemo(() => {
+    if (!contractVigenciaDates) return [] as VigenciaMonth[];
+    return listVigenciaMonthKeys(contractVigenciaDates.start, contractVigenciaDates.end);
+  }, [contractVigenciaDates]);
+
+  /**
+   * Meta real: saldo contratual pendente ÷ meses restantes da vigência (aditivos + faturamento).
+   * Ajuste anual: só do mês efetivo até dezembro — pool = metas planejadas restantes do ano + delta
+   * (mesmo da Meta Ideal), reduzindo com o faturamento; não reinicia com valorAnualBase.
+   */
+  const metaRealByScheduleKey = useMemo(() => {
+    const out = new Map<string, number>();
+    if (!vigenciaMonthList.length || !contract) return out;
+
+    const addSumByMonth = new Map<string, number>();
+    for (const a of contractAddendaForMeta) {
+      const y = a.effectiveDate.getFullYear();
+      const m = a.effectiveDate.getMonth() + 1;
+      const k = toYearMonthKey(y, m);
+      addSumByMonth.set(k, (addSumByMonth.get(k) || 0) + a.amount);
+    }
+
+    const firstKey = vigenciaMonthList[0].key;
+    let remaining = Number(contract.valuePlusAddenda) || 0;
+    addSumByMonth.forEach((v, k) => {
+      if (k < firstKey) remaining += v;
+    });
+
+    const n = vigenciaMonthList.length;
+    for (let i = 0; i < n; i++) {
+      const { key } = vigenciaMonthList[i];
+      remaining += addSumByMonth.get(key) || 0;
+
+      const monthsLeft = n - i;
+      out.set(key, monthsLeft > 0 ? Math.max(0, remaining) / monthsLeft : 0);
+
+      remaining -= faturamentoPorYmKey.get(key) || 0;
+    }
+
+    if (contractVigenciaDates && annualBudgetAdjustments.length > 0) {
+      const { start, end } = contractVigenciaDates;
+      for (const r of annualBudgetAdjustments) {
+        const effMonth = annualAdjustmentEffectiveCivilMonth(r.year, r.effectiveDate);
+        if (effMonth === null) continue;
+
+        const monthsAtStart = countVigenciaMonthsInRange(r.year, effMonth, 12, start, end);
+        if (monthsAtStart <= 0) continue;
+
+        let annualRemaining =
+          sumGlobalMetaAllocatedInMonthRange(
+            globalMetaSchedule,
+            r.year,
+            effMonth,
+            12,
+            start,
+            end
+          ) + r.amount;
+
+        for (let m = effMonth; m <= 12; m++) {
+          if (!calendarMonthHasMetaMensalInVigencia(r.year, m, start, end)) continue;
+          const monthsAfter = countVigenciaMonthsInRange(r.year, m, 12, start, end);
+          if (monthsAfter <= 0) continue;
+          out.set(toYearMonthKey(r.year, m), Math.max(0, annualRemaining) / monthsAfter);
+          annualRemaining -= faturamentoPorYmKey.get(toYearMonthKey(r.year, m)) || 0;
+        }
+      }
+    }
+
+    return out;
+  }, [
+    vigenciaMonthList,
+    contract,
+    contractAddendaForMeta,
+    annualBudgetAdjustments,
+    faturamentoPorYmKey,
+    contractVigenciaDates,
+    globalMetaSchedule,
+  ]);
+
+  const metaRealPorMes = useMemo(() => {
+    const year = safeSelectedYear;
+    const result: (number | null)[] = new Array(12).fill(null);
+    for (let i = 0; i < 12; i++) {
+      const key = toYearMonthKey(year, i + 1);
+      if ((metaSchedule.get(key) ?? null) === null) continue;
+      result[i] = metaRealByScheduleKey.get(key) ?? (metaSchedule.get(key) ?? 0);
+    }
+    return result;
+  }, [safeSelectedYear, metaSchedule, metaRealByScheduleKey]);
+
+  /**
+   * Controle Geral — linha Solicitações: TOTVS RM — `solicitacoesByCalendarMonth` (CC + data de pagamento + valor; exclui as mesmas naturezas operacionais que o Total Pago)
+   * com fallback ao `paidByCalendarMonth` em APIs antigas.
+   */
+  const solicitacoesRateioPorMes = useMemo((): (number | null)[] => {
+    const valores: (number | null)[] = new Array(12).fill(null);
+    const year = safeSelectedYear;
+
+    const emVigencia = (mesIdx: number) =>
+      (metaSchedule.get(toYearMonthKey(year, mesIdx + 1)) ?? null) !== null;
+
+    const mesesVigenciaIdx: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      if (emVigencia(i)) mesesVigenciaIdx.push(i);
+    }
+    const nVm = mesesVigenciaIdx.length;
+
+    const t = totvsTotalPagoRes;
+    const api = t?.data;
+    const rmOk = t?.success !== false && Boolean(api?.configured) && nVm > 0;
+
+    if (!rmOk || !api) {
+      return valores;
+    }
+
+    const useSolicitacoesApi =
+      api.solicitacoesCcColumn != null &&
+      api.solicitacoesValueColumn != null &&
+      api.solicitacoesByCalendarMonth !== undefined;
+
+    const paidByCalendarMonth = useSolicitacoesApi
+      ? Array.isArray(api.solicitacoesByCalendarMonth)
+        ? api.solicitacoesByCalendarMonth
+        : []
+      : Array.isArray(api.paidByCalendarMonth)
+        ? api.paidByCalendarMonth
+        : [];
+    const paidUndated = useSolicitacoesApi
+      ? api.solicitacoesUndated !== undefined
+        ? api.solicitacoesUndated
+        : null
+      : api.paidUndated;
+
+    const porMes = new Array(12).fill(0);
+
+    for (const bm of paidByCalendarMonth) {
+      const yBm = Number(bm.year);
+      const moBm = Number(bm.month);
+      if (!Number.isFinite(yBm) || !Number.isFinite(moBm) || yBm !== year || moBm < 1 || moBm > 12) {
+        continue;
+      }
+      const mi = moBm - 1;
+
+      const totalIncluidoBm =
+        typeof bm.total === 'number' && !Number.isNaN(bm.total)
+          ? bm.total
+          : (bm.lines ?? []).reduce(
+              (s, line) =>
+                isNaturezaIncludedInContractPaidTotal(line.natureza)
+                  ? s + (Number(line.valor) || 0)
+                  : s,
+              0
+            );
+
+      if (emVigencia(mi)) {
+        porMes[mi] += totalIncluidoBm;
+      } else if (nVm > 0 && totalIncluidoBm > 0) {
+        const slice = totalIncluidoBm / nVm;
+        for (const vmi of mesesVigenciaIdx) {
+          porMes[vmi] += slice;
+        }
+      }
+    }
+
+    if (paidUndated && nVm > 0) {
+      const undatedIncluido =
+        typeof paidUndated.total === 'number' && !Number.isNaN(paidUndated.total)
+          ? paidUndated.total
+          : (paidUndated.lines ?? []).reduce(
+              (s, line) =>
+                isNaturezaIncludedInContractPaidTotal(line.natureza)
+                  ? s + (Number(line.valor) || 0)
+                  : s,
+              0
+            );
+      if (undatedIncluido > 0) {
+        const sliceTot = undatedIncluido / nVm;
+        for (const vmi of mesesVigenciaIdx) {
+          porMes[vmi] += sliceTot;
+        }
+      }
+    }
+
+    for (let i = 0; i < 12; i++) {
+      if (emVigencia(i)) {
+        valores[i] = porMes[i];
+      }
+    }
+    return valores;
+  }, [totvsTotalPagoRes, safeSelectedYear, metaSchedule]);
+
+  const contractGastosNaturezaRows = useMemo(() => {
+    if (!contract) return [];
+    return filterGastosNaturezaDetailRowsForSystemContract(
+      gastosOperacionaisModuleData?.naturezaDetailRows ?? [],
+      {
+        name: contract.name,
+        costCenter: contract.costCenter
+      }
+    );
+  }, [contract, gastosOperacionaisModuleData?.naturezaDetailRows]);
+
+  const gastosOperacionaisPorMes = useMemo(
+    () => aggregateGastosNaturezaMonthlyTotals(contractGastosNaturezaRows, safeSelectedYear),
+    [contractGastosNaturezaRows, safeSelectedYear]
+  );
+
+  const gastosOperacionaisPorAno = useMemo(
+    () => aggregateGastosNaturezaYearlyTotals(contractGastosNaturezaRows, availableYears),
+    [contractGastosNaturezaRows, availableYears]
+  );
+
+  const tetoOrcamentarioLookup = useMemo(
+    () => buildTetoOrcamentarioLookup(tetoOrcamentarioEntries),
+    [tetoOrcamentarioEntries]
+  );
+
+  const tetoOrcamentarioLabels = useMemo(
+    () => (contract ? tetoLabelsForSystemContract(contract) : []),
+    [contract]
+  );
+
+  const tetoOrcamentarioPorMes = useMemo(
+    () =>
+      resolveMonthlyTetoOrcamentarioForLabels(
+        tetoOrcamentarioLabels,
+        tetoOrcamentarioLookup,
+        safeSelectedYear
+      ),
+    [tetoOrcamentarioLabels, tetoOrcamentarioLookup, safeSelectedYear]
+  );
+
+  const tetoOrcamentarioPorAno = useMemo(
+    () =>
+      resolveYearlyTetoOrcamentarioForLabels(
+        tetoOrcamentarioLabels,
+        tetoOrcamentarioLookup,
+        availableYears
+      ),
+    [tetoOrcamentarioLabels, tetoOrcamentarioLookup, availableYears]
+  );
+
+  const gastosOperacionaisTemDados = contractGastosNaturezaRows.length > 0;
+
+  const gastosResumoModalNaturezaRows = useMemo(() => {
+    if (!gastosResumoModal || !contract) return [];
+    const period =
+      gastosResumoModal.kind === 'month'
+        ? gastosMonthPeriodBounds(safeSelectedYear, gastosResumoModal.mesIdx + 1)
+        : gastosYearPeriodBounds(gastosResumoModal.year);
+    return aggregateGastosNaturezaRows(
+      contractGastosNaturezaRows,
+      period.periodFrom,
+      period.periodTo
+    );
+  }, [gastosResumoModal, contract, contractGastosNaturezaRows, safeSelectedYear]);
+
+  const gastosResumoModalTitle = useMemo(() => {
+    if (!gastosResumoModal || !contract) return 'Gastos';
+    if (gastosResumoModal.kind === 'month') {
+      const mes = MESES[gastosResumoModal.mesIdx] ?? '';
+      return `Gastos — ${mes}/${String(safeSelectedYear).slice(-2)} · ${contract.name}`;
+    }
+    return `Gastos — ${gastosResumoModal.year} · ${contract.name}`;
+  }, [gastosResumoModal, contract, safeSelectedYear]);
+
+  const gastosDetalhePorMes = useMemo(() => {
+    const linesPerMonth: RmPaidLineRow[][] = Array.from({ length: 12 }, () => []);
+    const competenciaPerMonth: string[] = Array.from({ length: 12 }, () => '');
+    const d = totvsTotalPagoRes?.data;
+    const year = safeSelectedYear;
+
+    if (d) {
+      const useSolicitacoesApi =
+        d.solicitacoesCcColumn != null &&
+        d.solicitacoesValueColumn != null &&
+        d.solicitacoesByCalendarMonth !== undefined;
+      const buckets = useSolicitacoesApi
+        ? d.solicitacoesByCalendarMonth ?? []
+        : d.paidByCalendarMonth ?? [];
+
+      for (const bm of buckets) {
+        const yBm = Number(bm.year);
+        const moBm = Number(bm.month);
+        if (!Number.isFinite(yBm) || !Number.isFinite(moBm) || yBm !== year || moBm < 1 || moBm > 12) {
+          continue;
+        }
+        const mi = moBm - 1;
+        competenciaPerMonth[mi] = `${String(moBm).padStart(2, '0')}/${yBm}`;
+        const linhas = bm.lines ?? [];
+        if (linhas.length) {
+          linesPerMonth[mi].push(...linhas);
+        }
+      }
+    }
+
+    const rowsByMonth: RmNaturezaAggRow[][] = [];
+    const linesByMonth: Map<string, RmLinhaComCompetencia[]>[] = [];
+    for (let mi = 0; mi < 12; mi++) {
+      rowsByMonth.push(aggregateGastosNaturezaFromLines(linesPerMonth[mi]));
+      linesByMonth.push(
+        buildGastosLinesMapFromLines(linesPerMonth[mi], competenciaPerMonth[mi] || undefined)
+      );
+    }
+    return { rowsByMonth, linesByMonth };
+  }, [totvsTotalPagoRes, safeSelectedYear]);
+
+  const naturezaModalRowsAtivos = useMemo(() => {
+    if (naturezaModalMesIdx === null) return naturezaModalRows;
+    return gastosDetalhePorMes.rowsByMonth[naturezaModalMesIdx] ?? [];
+  }, [naturezaModalMesIdx, naturezaModalRows, gastosDetalhePorMes]);
+
+  const solicitacoesLinesAtivos = useMemo(() => {
+    if (naturezaModalMesIdx === null) return solicitacoesLinesByNaturezaKey;
+    return gastosDetalhePorMes.linesByMonth[naturezaModalMesIdx] ?? new Map();
+  }, [naturezaModalMesIdx, solicitacoesLinesByNaturezaKey, gastosDetalhePorMes]);
+
+  const naturezaModalTotalAtivo = useMemo(() => {
+    if (naturezaModalMesIdx === null) return paidHeaderTotal;
+    const v = solicitacoesRateioPorMes[naturezaModalMesIdx];
+    return v ?? 0;
+  }, [naturezaModalMesIdx, paidHeaderTotal, solicitacoesRateioPorMes]);
+
+  const naturezaModalTitulo = useMemo(() => {
+    if (naturezaModalMesIdx === null) return 'Totais por natureza (RM)';
+    const mesLabel = MESES_FILTRO[naturezaModalMesIdx + 1]?.label ?? MESES[naturezaModalMesIdx];
+    return `Gastos — ${mesLabel} ${safeSelectedYear}`;
+  }, [naturezaModalMesIdx, safeSelectedYear]);
+
+  const solicitacoesControleTotvsPronto = useMemo(() => {
+    const t = totvsTotalPagoRes;
+    const api = t?.data;
+    return t?.success !== false && Boolean(api?.configured);
+  }, [totvsTotalPagoRes]);
+
+  /** Há linhas RM usadas na linha «Solicitações» (agregação CC+data+valor) ou, em API antiga, matchedRowCount do total pago. */
+  const solicitacoesRmTemLancamentosNoRelatorio = useMemo(() => {
+    const d = totvsTotalPagoRes?.data;
+    if (!d?.configured || totvsTotalPagoRes?.success === false) return false;
+    const solMc = Number(d.solicitacoesMatchedRowCount);
+    if (Number.isFinite(solMc) && solMc > 0) return true;
+    const solUnd = Number(d.solicitacoesUndated?.total) || 0;
+    if (solUnd > 0) return true;
+    if (d.solicitacoesByCalendarMonth !== undefined) {
+      const arr = Array.isArray(d.solicitacoesByCalendarMonth) ? d.solicitacoesByCalendarMonth : [];
+      if (arr.some((x) => Number(x?.total) > 0)) return true;
+    }
+    const mc = Number(d.matchedRowCount) || 0;
+    const und = Number(d.paidUndated?.total) || 0;
+    return mc > 0 || und > 0;
+  }, [totvsTotalPagoRes]);
+
   // Soma dos pleitos por ano (para Metas Anuais)
   const pleitosPorAno = useMemo(() => {
     const result: Record<number, number> = {};
@@ -1203,13 +2406,13 @@ export default function ContractDetailPage() {
     return billings.reduce((acc, b) => acc + b.grossValue, 0);
   }, [billings]);
 
-  // Valor total pendente para faturar (todos os anos)
+  // Pendente contratual = Valor + aditivos − faturamento total (ajuste anual não entra)
   const pendenteParaFaturarTodosAnos = useMemo(() => {
     if (!contract) return null;
     return valorMaisAditivosTotal - faturamentoTotalTodosAnos;
   }, [contract, valorMaisAditivosTotal, faturamentoTotalTodosAnos]);
 
-  // Saldo anual = Valor anual (com ajuste de orçamento, se houver) − Faturamento cadastrado
+  // Pendente anual = Valor anual ajustado − faturamento do ano
   const saldoAnual = useMemo(() => {
     if (valorAnualAjustado === null) return null;
     return valorAnualAjustado - faturamentoAnual;
@@ -1219,15 +2422,21 @@ export default function ContractDetailPage() {
     if (!contract) return {} as Record<number, number | null>;
     const result: Record<number, number | null> = {};
     availableYears.forEach((year) => {
-      if (valorAnualBase === null) {
+      const base = getValorAnualBaseDoAno(
+        valorMaisAditivosTotal,
+        contract.startDate,
+        contract.endDate,
+        year
+      );
+      if (base === null) {
         result[year] = null;
         return;
       }
       const adj = annualAdjustByYear.get(year);
-      result[year] = adj ? valorAnualBase + adj.delta : valorAnualBase;
+      result[year] = adj ? base + adj.delta : base;
     });
     return result;
-  }, [contract, availableYears, valorAnualBase, annualAdjustByYear]);
+  }, [contract, availableYears, valorMaisAditivosTotal, annualAdjustByYear]);
 
   const faturamentoPorAno = useMemo(() => {
     const result: Record<number, number> = {};
@@ -1282,11 +2491,13 @@ export default function ContractDetailPage() {
 
   // Faturamento filtrado por ano e mês (para exibição nas tabelas)
   const filteredBillings = useMemo(() => {
-    return billings.filter((b) => {
+    const rows = billings.filter((b) => {
       const d = parseDateSafe(b.issueDate);
       if (!d) return false;
       if (!isAllYears && d.getFullYear() !== selectedYear) return false;
       if (selectedMonth !== 0 && d.getMonth() + 1 !== selectedMonth) return false; // JS month 0-11
+
+      if (!billingMatchesSearchTerm(b, searchTermBillings)) return false;
 
       const osTerm = filterBillingOsSe.trim().toLowerCase();
       if (osTerm && !(b.serviceOrder || '').toLowerCase().includes(osTerm)) return false;
@@ -1305,15 +2516,30 @@ export default function ContractDetailPage() {
 
       return true;
     });
-  }, [billings, isAllYears, selectedYear, selectedMonth, filterBillingOsSe, filterBillingInvoice, filterBillingGross]);
 
-  // Pleitos filtrados por ano, mês e filtros de status
+    return [...rows].sort((a, b) => {
+      const ta = parseDateSafe(a.issueDate)?.getTime() ?? 0;
+      const tb = parseDateSafe(b.issueDate)?.getTime() ?? 0;
+      if (tb !== ta) return tb - ta;
+      const ca = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const cb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (cb !== ca) return cb - ca;
+      return b.id.localeCompare(a.id);
+    });
+  }, [billings, isAllYears, selectedYear, selectedMonth, searchTermBillings, filterBillingOsSe, filterBillingInvoice, filterBillingGross]);
+
+  // Lista respeita os filtros de status; "Todos" mostra inclusive OS 100% faturadas.
   const filteredPleitos = useMemo(() => {
-    let result = pleitos.filter((p) => {
+    const statusFilterForcesAllYears =
+      filterOsStatusFat === 'Faturado 100%' || filterOsStatus === 'Pleiteado 100%';
+
+    let result = allPleitos.filter((p) => {
+      if (isPleitoHistorico(p)) return false;
+
+      // Filtros 100% varrem todos os anos (igual ao comportamento anterior).
+      if (statusFilterForcesAllYears) return true;
+
       const monthNum = p.creationMonth ? parseInt(String(p.creationMonth).replace(/\D/g, '') || '0', 10) : null;
-      const baseDate = monthNum && p.creationYear
-        ? new Date(p.creationYear, monthNum - 1, 1, 12, 0, 0, 0)
-        : parseDateSafe(p.startDate || p.createdAt || null);
       const year = p.creationYear ?? getDateYear(p.startDate);
       if (!isAllYears && (year === null || year !== selectedYear)) return false;
       if (selectedMonth === 0) return true;
@@ -1321,45 +2547,215 @@ export default function ContractDetailPage() {
       return monthNum === selectedMonth;
     });
 
-    if (filterStatusOrcamento) {
-      result = result.filter((p) => {
-        if (filterStatusOrcamento === '—') return !p.budgetStatus || p.budgetStatus.trim() === '';
-        return (p.budgetStatus || '') === filterStatusOrcamento;
-      });
+    if (filterOsStatus) {
+      result = result.filter(
+        (p) => getOsStatus(p, billingsForOs, allPleitos) === filterOsStatus
+      );
     }
-    if (filterStatusExecucao) {
-      result = result.filter((p) => {
-        if (filterStatusExecucao === '—') return !p.executionStatus || p.executionStatus.trim() === '';
-        return (p.executionStatus || '') === filterStatusExecucao;
-      });
+    if (filterOsStatusFat) {
+      result = result.filter(
+        (p) => getOsStatusFaturamento(p, billingsForOs) === filterOsStatusFat
+      );
     }
-    if (filterStatusFaturamento) {
-      result = result.filter((p) => {
-        const osSe = (p.divSe || '').trim();
-        const acumulado = billings
-          .filter((b) => (b.serviceOrder || '').trim() === osSe)
-          .reduce((sum, b) => sum + b.grossValue, 0);
-        const orcamento = p.budget ? Number(p.budget) : 0;
-        const statusPct = orcamento > 0 ? (acumulado / orcamento) * 100 : null;
 
-        if (filterStatusFaturamento === '0') return statusPct !== null && statusPct === 0;
-        if (filterStatusFaturamento === '1-25') return statusPct !== null && statusPct >= 1 && statusPct <= 25;
-        if (filterStatusFaturamento === '26-50') return statusPct !== null && statusPct >= 26 && statusPct <= 50;
-        if (filterStatusFaturamento === '51-75') return statusPct !== null && statusPct >= 51 && statusPct <= 75;
-        if (filterStatusFaturamento === '76-99') return statusPct !== null && statusPct >= 76 && statusPct < 100;
-        if (filterStatusFaturamento === '100') return statusPct !== null && statusPct >= 100;
-        if (filterStatusFaturamento === 'sem-orcamento') return statusPct === null && orcamento === 0;
-        return true;
+    if (searchTermPleitos.trim()) {
+      const q = searchTermPleitos.trim();
+      result = result.filter((p) => pleitoMatchesSearchTerm(p, q));
+      result = [...result].sort((a, b) => {
+        const ra = osSeSearchRank(a.divSe, q);
+        const rb = osSeSearchRank(b.divSe, q);
+        if (ra !== rb) return ra - rb;
+        return compareOsSeNatural(a.divSe, b.divSe);
       });
     }
+
     return result;
-  }, [pleitos, isAllYears, selectedYear, selectedMonth, filterStatusOrcamento, filterStatusExecucao, filterStatusFaturamento, billings]);
+  }, [
+    allPleitos,
+    billingsForOs,
+    isAllYears,
+    selectedYear,
+    selectedMonth,
+    filterOsStatus,
+    filterOsStatusFat,
+    searchTermPleitos,
+  ]);
 
-  const displayedPleitos = useMemo(() => filteredPleitos.slice(0, LIST_DISPLAY_LIMIT), [filteredPleitos]);
-  const displayedBillings = useMemo(() => filteredBillings.slice(0, LIST_DISPLAY_LIMIT), [filteredBillings]);
+  const hasActivePleitosFilter = Boolean(filterOsStatus || filterOsStatusFat);
+  const hasActiveProductionFilter = Boolean(filterProductionOsSe.trim() || filterProductionResponsible.trim());
+  const hasActiveBillingFilter = Boolean(
+    filterBillingOsSe.trim() || filterBillingInvoice.trim() || filterBillingGross.trim()
+  );
+
+  const osResumoTotals = useMemo(() => {
+    const osRows = allPleitos.filter((p) => !isPleitoHistorico(p));
+    let totalOrcado = 0;
+    let totalPleiteado = 0;
+    let totalFaturado = 0;
+    const seenOs = new Set<string>();
+
+    for (const p of osRows) {
+      totalOrcado += parseBudgetToNumberSafe(p.budget);
+      const key = (p.divSe || '').trim().toLowerCase() || p.id;
+      if (seenOs.has(key)) continue;
+      seenOs.add(key);
+      totalPleiteado += sumOsPleiteadoTotal(allPleitos, p.divSe);
+      totalFaturado += getOsFaturamentoAcumulado(p, billingsForOs);
+    }
+
+    return { totalOrcado, totalPleiteado, totalFaturado };
+  }, [allPleitos, billingsForOs]);
+
+  const clearPleitosFilters = () => {
+    setFilterOsStatus('');
+    setFilterOsStatusFat('');
+  };
+
+  const clearProductionFilters = () => {
+    setFilterProductionOsSe('');
+    setFilterProductionResponsible('');
+  };
+
+  const clearBillingFilters = () => {
+    setFilterBillingOsSe('');
+    setFilterBillingInvoice('');
+    setFilterBillingGross('');
+  };
+
+  useEffect(() => {
+    setPleitosListPage(1);
+  }, [
+    searchTermPleitos,
+    filterOsStatus,
+    filterOsStatusFat,
+    selectedYear,
+    selectedMonth,
+  ]);
+
+  useEffect(() => {
+    setProductionListPage(1);
+  }, [
+    searchTermProduction,
+    filterProductionOsSe,
+    filterProductionResponsible,
+    selectedYear,
+    selectedMonth,
+  ]);
+
+  useEffect(() => {
+    setBillingsListPage(1);
+  }, [
+    searchTermBillings,
+    filterBillingOsSe,
+    filterBillingInvoice,
+    filterBillingGross,
+    selectedYear,
+    selectedMonth,
+  ]);
+
+  const displayedPleitos = useMemo(() => {
+    const start = (pleitosListPage - 1) * LIST_DISPLAY_LIMIT;
+    return filteredPleitos.slice(start, start + LIST_DISPLAY_LIMIT);
+  }, [filteredPleitos, pleitosListPage]);
+
+  const pleitosListRange = useMemo(
+    () => getCadastroListRange(pleitosListPage, LIST_DISPLAY_LIMIT, filteredPleitos.length),
+    [pleitosListPage, filteredPleitos.length]
+  );
+
+  const displayedProductions = useMemo(() => {
+    const start = (productionListPage - 1) * LIST_DISPLAY_LIMIT;
+    return filteredProductions.slice(start, start + LIST_DISPLAY_LIMIT);
+  }, [filteredProductions, productionListPage]);
+
+  const productionListRange = useMemo(
+    () => getCadastroListRange(productionListPage, LIST_DISPLAY_LIMIT, filteredProductions.length),
+    [productionListPage, filteredProductions.length]
+  );
+
+  const displayedBillings = useMemo(() => {
+    const start = (billingsListPage - 1) * LIST_DISPLAY_LIMIT;
+    return filteredBillings.slice(start, start + LIST_DISPLAY_LIMIT);
+  }, [filteredBillings, billingsListPage]);
+
+  const billingsListRange = useMemo(
+    () => getCadastroListRange(billingsListPage, LIST_DISPLAY_LIMIT, filteredBillings.length),
+    [billingsListPage, filteredBillings.length]
+  );
+
+  const generatedPleitosForIds = useMemo(
+    () => allPleitos.filter((p) => isGeneratedPleito(p)),
+    [allPleitos]
+  );
+
+  const pleitoDisplayIds = useMemo(
+    () => buildDisplayIdMap(generatedPleitosForIds),
+    [generatedPleitosForIds]
+  );
+
+  const billingDisplayIds = useMemo(() => buildDisplayIdMap(billings), [billings]);
+  const {
+    rowActionMenu: pleitoRowActionMenu,
+    rowForActionMenu: pleitoRowForActionMenu,
+    toggleRowActionMenu: togglePleitoRowActionMenu,
+    closeRowActionMenu: closePleitoRowActionMenu,
+    isRowMenuOpen: isPleitoRowMenuOpen,
+  } = useRowActionMenu(displayedPleitos);
+  const {
+    rowActionMenu: billingRowActionMenu,
+    rowForActionMenu: billingRowForActionMenu,
+    toggleRowActionMenu: toggleBillingRowActionMenu,
+    closeRowActionMenu: closeBillingRowActionMenu,
+    isRowMenuOpen: isBillingRowMenuOpen,
+  } = useRowActionMenu(displayedBillings);
   const visiblePleitoIds = useMemo(() => displayedPleitos.map((p) => p.id), [displayedPleitos]);
   const allVisibleSelected = visiblePleitoIds.length > 0 && visiblePleitoIds.every((id) => selectedForPleito.has(id));
   const someVisibleSelected = visiblePleitoIds.some((id) => selectedForPleito.has(id));
+
+  const visibleBillingIds = useMemo(() => displayedBillings.map((b) => b.id), [displayedBillings]);
+  const allVisibleBillingsSelected =
+    visibleBillingIds.length > 0 && visibleBillingIds.every((id) => selectedForBilling.has(id));
+  const someVisibleBillingsSelected = visibleBillingIds.some((id) => selectedForBilling.has(id));
+
+  const toggleSelectAllVisibleBillings = (checked: boolean) => {
+    if (checked) {
+      setSelectedForBilling((prev) => {
+        const next = new Set(prev);
+        visibleBillingIds.forEach((id) => next.add(id));
+        return next;
+      });
+      return;
+    }
+    setSelectedForBilling((prev) => {
+      const next = new Set(prev);
+      visibleBillingIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  };
+
+  const toggleBillingSelectionMenu = (button: HTMLButtonElement) => {
+    setBillingSelectionMenu((prev) => {
+      if (prev) return null;
+      const coords = computeRowActionMenuPosition(
+        button.getBoundingClientRect(),
+        ROW_ACTION_MENU_WIDTH_PX
+      );
+      return { rowId: 'billing-selection-toolbar', ...coords };
+    });
+  };
+
+  useEffect(() => {
+    if (selectedForBilling.size === 0) setBillingSelectionMenu(null);
+  }, [selectedForBilling.size]);
+
+  useEffect(() => {
+    if (!billingSelectionMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBillingSelectionMenu(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [billingSelectionMenu]);
 
   const contractTablesRerenderKey = useMemo(
     () => [filteredPleitos, filteredBillings, productions],
@@ -1368,23 +2764,6 @@ export default function ContractDetailPage() {
 
   useContractTableColumnCustomizer(containerRef, 'contracts:detail', contractTablesRerenderKey);
 
-  const andamentoLinkParams = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set('year', String(selectedYear));
-    if (selectedMonth > 0) p.set('month', String(selectedMonth));
-    if (filterStatusOrcamento) p.set('statusOrcamento', filterStatusOrcamento);
-    if (filterStatusExecucao) p.set('statusExecucao', filterStatusExecucao);
-    if (filterStatusFaturamento) p.set('statusFaturamento', filterStatusFaturamento);
-    return p.toString();
-  }, [isAllYears, selectedYear, selectedMonth, filterStatusOrcamento, filterStatusExecucao, filterStatusFaturamento]);
-
-  const faturamentoLinkParams = useMemo(() => {
-    const p = new URLSearchParams();
-    p.set('year', String(selectedYear));
-    if (selectedMonth > 0) p.set('month', String(selectedMonth));
-    return p.toString();
-  }, [isAllYears, selectedYear, selectedMonth]);
-
   const handleBillingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canCreateContrato) {
@@ -1392,19 +2771,34 @@ export default function ContractDetailPage() {
       return;
     }
     const gross = parseCurrencyInput(billingForm.grossValue);
+    const net = parseCurrencyInput(billingForm.netValue);
     if (!billingForm.issueDate || !billingForm.invoiceNumber.trim() || !billingForm.serviceOrder.trim()) {
       toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    if (!billingForm.pleitoId.trim()) {
+      toast.error('Selecione o pleito vinculado ao faturamento');
       return;
     }
     if (gross === 0) {
       toast.error('Valor bruto é obrigatório');
       return;
     }
+    if (net === 0) {
+      toast.error('Valor líquido é obrigatório');
+      return;
+    }
+    if (selectedBillingPleitoSaldo != null && gross > selectedBillingPleitoSaldo + 0.01) {
+      toast.error(`Valor bruto excede o saldo do pleito (${formatCurrency(selectedBillingPleitoSaldo)})`);
+      return;
+    }
     createBillingMutation.mutate({
       issueDate: billingForm.issueDate,
       invoiceNumber: billingForm.invoiceNumber.trim(),
       serviceOrder: billingForm.serviceOrder.trim(),
-      grossValue: gross
+      pleitoId: billingForm.pleitoId.trim(),
+      grossValue: gross,
+      netValue: net
     });
   };
 
@@ -1416,8 +2810,7 @@ export default function ContractDetailPage() {
     }
     if (!selectedBilling) return;
     const gross = parseCurrencyInput(billingEditForm.grossValue);
-    const netRaw = (billingEditForm.netValue || '').trim();
-    const netParsed = netRaw ? parseCurrencyInput(netRaw) : null;
+    const net = parseCurrencyInput(billingEditForm.netValue);
     if (!billingEditForm.issueDate || !billingEditForm.invoiceNumber.trim() || !billingEditForm.serviceOrder.trim()) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
@@ -1426,8 +2819,8 @@ export default function ContractDetailPage() {
       toast.error('Valor bruto é obrigatório');
       return;
     }
-    if (netParsed !== null && netParsed < 0) {
-      toast.error('Valor líquido inválido');
+    if (net === 0) {
+      toast.error('Valor líquido é obrigatório');
       return;
     }
     updateBillingMutation.mutate({
@@ -1437,7 +2830,7 @@ export default function ContractDetailPage() {
         invoiceNumber: billingEditForm.invoiceNumber.trim(),
         serviceOrder: billingEditForm.serviceOrder.trim(),
         grossValue: gross,
-        ...(netParsed !== null ? { netValue: netParsed } : {})
+        netValue: net
       }
     });
   };
@@ -1449,7 +2842,9 @@ export default function ContractDetailPage() {
       return;
     }
     const value = parseCurrencyInput(productionForm.weeklyProductionValue);
-    if (!productionForm.divSe.trim() || !productionForm.responsiblePerson.trim()) {
+    const responsiblePerson =
+      productionForm.responsiblePerson.trim() || defaultProductionResponsiblePerson;
+    if (!productionForm.divSe.trim() || !responsiblePerson) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
@@ -1462,7 +2857,7 @@ export default function ContractDetailPage() {
       fillingDate,
       divSe: productionForm.divSe.trim(),
       weeklyProductionValue: value,
-      responsiblePerson: productionForm.responsiblePerson.trim()
+      responsiblePerson,
     });
   };
 
@@ -1499,7 +2894,7 @@ export default function ContractDetailPage() {
       const creationMonth = String(now.getMonth() + 1).padStart(2, '0');
       const creationYear = now.getFullYear();
       await Promise.all(
-        items.map(async ({ id, billingRequest, generatedByPleitear100 }) => {
+        items.map(async ({ id, billingRequest }) => {
           const source = pleitos.find((p) => p.id === id);
           if (!source) return;
           await api.post(`/contracts/${contractId}/pleitos`, {
@@ -1526,7 +2921,7 @@ export default function ContractDetailPage() {
             budgetAmount4: source.budgetAmount4,
             pv: source.pv,
             ipi: source.ipi,
-            reportsBilling: generatedByPleitear100 ? PLEITO_HISTORY_MARKER_GERADO_100 : PLEITO_HISTORY_MARKER,
+            reportsBilling: PLEITO_HISTORY_MARKER,
             engineer: source.engineer,
             supervisor: source.supervisor
           });
@@ -1546,6 +2941,7 @@ export default function ContractDetailPage() {
       setShowPleitoResumoModal(true);
       setSelectedForPleito(new Set());
       setValorPleiteado({});
+      setPleitoValorInput({});
       toast.success('Pleito gerado com sucesso!');
     },
     onError: (err: { response?: { data?: { message?: string } } }) => {
@@ -1577,8 +2973,8 @@ export default function ContractDetailPage() {
   });
 
   const handleExcluirPleitosSelecionados = () => {
-    if (!canDeleteContrato) {
-      toast.error('Você não tem permissão para excluir no módulo Contratos.');
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
       return;
     }
     const ids = Array.from(selectedForPleito).filter((id) => pleitos.some((p) => p.id === id));
@@ -1596,6 +2992,35 @@ export default function ContractDetailPage() {
     deletePleitosSelecionadosMutation.mutate(ids);
   };
 
+  const toggleOsSelectionMenu = (button: HTMLButtonElement) => {
+    setOsSelectionMenu((prev) => {
+      if (prev) return null;
+      const coords = computeRowActionMenuPosition(
+        button.getBoundingClientRect(),
+        ROW_ACTION_MENU_WIDTH_PX
+      );
+      return { rowId: 'os-selection-toolbar', ...coords };
+    });
+  };
+
+  useEffect(() => {
+    if (selectedForPleito.size === 0) setOsSelectionMenu(null);
+  }, [selectedForPleito.size]);
+
+  useEffect(() => {
+    if (!osSelectionMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOsSelectionMenu(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [osSelectionMenu]);
+
+  const getSelectedOsPleiteadas100 = (ids: string[]): ContractPleito[] =>
+    ids
+      .map((id) => pleitos.find((x) => x.id === id))
+      .filter((p): p is ContractPleito => !!p && isOsPleiteada100(p, allPleitos));
+
   const handleGerarPleito = () => {
     if (!canCreateContrato) {
       toast.error('Você não tem permissão para criar no módulo Contratos.');
@@ -1606,7 +3031,78 @@ export default function ContractDetailPage() {
       toast.error('Selecione ao menos uma ordem de serviço para gerar o pleito.');
       return;
     }
+    const jaPleiteadas = getSelectedOsPleiteadas100(ids);
+    if (jaPleiteadas.length > 0) {
+      const labels = jaPleiteadas.map((p) => p.divSe || p.id).join(', ');
+      toast.error(`OS já pleiteada(s) 100%: ${labels}. Desmarque para continuar.`);
+      return;
+    }
     setShowPleitoValoresModal(true);
+  };
+
+  const handleGerarPleitoParaOs = (pleitoId: string) => {
+    if (!canCreateContrato) {
+      toast.error('Você não tem permissão para criar no módulo Contratos.');
+      return;
+    }
+    if (getSelectedOsPleiteadas100([pleitoId]).length > 0) {
+      toast.error('Esta OS já está 100% pleiteada.');
+      return;
+    }
+    setSelectedForPleito(new Set([pleitoId]));
+    setShowPleitoValoresModal(true);
+  };
+
+  const handleExcluirPleitoOs = (pleito: ContractPleito) => {
+    if (!canDeleteOs) {
+      toast.error('Você não tem permissão para excluir ordem de serviço.');
+      return;
+    }
+    const label = formatOsSePastaOrDash(pleito.divSe, pleito.folderNumber);
+    if (
+      !window.confirm(
+        `Excluir a ordem de serviço ${label}? Esta ação não pode ser desfeita.`
+      )
+    ) {
+      return;
+    }
+    deletePleitosSelecionadosMutation.mutate([pleito.id]);
+  };
+
+  const handleRemoverFaturamento = (billing: ContractBilling) => {
+    closeBillingRowActionMenu();
+    if (!window.confirm('Excluir este faturamento?')) {
+      return;
+    }
+    deleteBillingMutation.mutate(billing.id);
+  };
+
+  const handleRemoverFaturamentosSelecionados = () => {
+    const ids = Array.from(selectedForBilling).filter((id) => billings.some((b) => b.id === id));
+    if (ids.length === 0) {
+      toast.error('Selecione ao menos um faturamento.');
+      return;
+    }
+    if (
+      !window.confirm(
+        ids.length === 1
+          ? 'Excluir o faturamento selecionado?'
+          : `Excluir ${ids.length} faturamentos selecionados?`
+      )
+    ) {
+      return;
+    }
+    setBillingSelectionMenu(null);
+    deleteBillingMutation.mutate(ids);
+  };
+
+  const handleEditarPleitoOs = (pleito: ContractPleito) => {
+    if (!canEditContrato) {
+      toast.error('Você não tem permissão para editar no módulo Contratos.');
+      return;
+    }
+    closePleitoRowActionMenu();
+    setPleitoToEdit({ ...(pleito as unknown as PleitoFormData), id: pleito.id });
   };
 
   const handleVisualizarPleito = () => {
@@ -1615,14 +3111,8 @@ export default function ContractDetailPage() {
       toast.error('Selecione ao menos uma ordem de serviço para visualizar o pleito.');
       return;
     }
-    const p = new URLSearchParams();
-    p.set('year', String(selectedYear));
-    if (selectedMonth > 0) p.set('month', String(selectedMonth));
-    if (filterStatusOrcamento) p.set('statusOrcamento', filterStatusOrcamento);
-    if (filterStatusExecucao) p.set('statusExecucao', filterStatusExecucao);
-    if (filterStatusFaturamento) p.set('statusFaturamento', filterStatusFaturamento);
-    p.set('selectedIds', ids.join(','));
-    router.push(`/ponto/contratos/${contractId}/andamento?${p.toString()}`);
+    setOsSelectionMenu(null);
+    setShowVisualizarPleitoModal(true);
   };
 
   const handleGerarCronogramaMensal = () => {
@@ -1631,14 +3121,79 @@ export default function ContractDetailPage() {
       toast.error('Selecione ao menos uma ordem de serviço para gerar o cronograma.');
       return;
     }
-    const p = new URLSearchParams();
-    p.set('year', String(selectedYear));
-    if (selectedMonth > 0) p.set('month', String(selectedMonth));
-    if (filterStatusOrcamento) p.set('statusOrcamento', filterStatusOrcamento);
-    if (filterStatusExecucao) p.set('statusExecucao', filterStatusExecucao);
-    if (filterStatusFaturamento) p.set('statusFaturamento', filterStatusFaturamento);
-    p.set('selectedIds', ids.join(','));
-    window.open(`/ponto/contratos/${contractId}/cronograma-mensal?${p.toString()}`, '_blank', 'noopener,noreferrer');
+    setOsSelectionMenu(null);
+    setShowCronogramaMensalModal(true);
+  };
+
+  const handleExportOsExcel = () => {
+    if (filteredPleitos.length === 0) {
+      toast.error('Não há ordens de serviço para exportar.');
+      return;
+    }
+    try {
+      const contractSlug = contract?.number?.replace(/[^\w-]+/g, '_') || contractId.slice(0, 8);
+      exportPleitosOsToXlsx(
+        filteredPleitos as PleitoOsExportRow[],
+        billingsForOs,
+        `ordens-servico-${contractSlug}`
+      );
+      toast.success(`${filteredPleitos.length} ordem(ns) exportada(s) para Excel.`);
+      setShowOsExportModal(false);
+    } catch {
+      toast.error('Erro ao exportar para Excel.');
+    }
+  };
+
+  const handleExportFaturamentoExcel = () => {
+    if (filteredBillings.length === 0) {
+      toast.error('Não há faturamentos para exportar.');
+      return;
+    }
+    try {
+      const contractSlug = contract?.number?.replace(/[^\w-]+/g, '_') || contractId.slice(0, 8);
+      exportContractBillingsToXlsx(
+        filteredBillings.map((b) => {
+          const liquidoMissing = isNetValueMissing(b);
+          return {
+            id: b.id,
+            displayId: formatDisplayId(billingDisplayIds, b.id),
+            osSe: formatOsSePastaOrDash(b.serviceOrder, folderForDivSe(allPleitos, b.serviceOrder)),
+            pleitoLabel: b.pleitoId ? formatDisplayId(pleitoDisplayIds, b.pleitoId) : '—',
+            invoiceNumber: (b.invoiceNumber || '').trim() || '—',
+            issueDateLabel: formatDate(b.issueDate),
+            grossValue: Number(b.grossValue) || 0,
+            netValue: liquidoMissing ? null : Number(b.netValue) || 0,
+            status: liquidoMissing ? 'Líquido pendente' : 'Faturado',
+          };
+        }),
+        `faturamento-${contractSlug}`
+      );
+      toast.success(`${filteredBillings.length} registro(s) de faturamento exportado(s).`);
+    } catch {
+      toast.error('Erro ao exportar faturamento para Excel.');
+    }
+  };
+
+  const handleExportOsPdf = async () => {
+    if (filteredPleitos.length === 0) {
+      toast.error('Não há ordens de serviço para exportar.');
+      return;
+    }
+    setExportingOsPdf(true);
+    try {
+      const contractSlug = contract?.number?.replace(/[^\w-]+/g, '_') || contractId.slice(0, 8);
+      await exportHistoricoOsPdf(filteredPleitos as PleitoOsExportRow[], billingsForOs, {
+        contractName: contract?.name,
+        contractNumber: contract?.number,
+        filenamePrefix: `ordens-servico-${contractSlug}`,
+      });
+      toast.success(`PDF gerado com ${filteredPleitos.length} ordem(ns) de serviço.`);
+      setShowOsExportModal(false);
+    } catch {
+      toast.error('Erro ao gerar PDF.');
+    } finally {
+      setExportingOsPdf(false);
+    }
   };
 
   const handleConfirmarPleito = () => {
@@ -1648,7 +3203,7 @@ export default function ContractDetailPage() {
     }
     const ids = Array.from(selectedForPleito);
     const result = buildPleitoGerarItems(ids, pleitos, allPleitos, (id) =>
-      parseCurrencyInput(valorPleiteado[id] || '')
+      getPleitoGerarValorFromDraft(id, pleitos, valorPleiteado, pleitoValorInput)
     );
     if (!result.ok) {
       toast.error(result.message);
@@ -1663,6 +3218,12 @@ export default function ContractDetailPage() {
       toast.error('Selecione ao menos uma ordem de serviço.');
       return;
     }
+    const jaPleiteadas = getSelectedOsPleiteadas100(ids);
+    if (jaPleiteadas.length > 0) {
+      const labels = jaPleiteadas.map((p) => p.divSe || p.id).join(', ');
+      toast.error(`OS já pleiteada(s) 100%: ${labels}. Desmarque para continuar.`);
+      return;
+    }
     if (
       !window.confirm(
         `Gerar pleito a 100% do orçamento para ${ids.length} OS(s) selecionada(s)?`
@@ -1670,7 +3231,13 @@ export default function ContractDetailPage() {
     ) {
       return;
     }
-    const result = buildPleitoGerarItems(ids, pleitos, allPleitos, () => 100);
+    const result = buildPleitoGerarItems(ids, pleitos, allPleitos, (id) => {
+      const p = pleitos.find((x) => x.id === id);
+      if (!p) return 0;
+      const orcamento = p.budget ? Number(p.budget) : 0;
+      const alreadyPleiteado = sumOsPleiteadoTotal(allPleitos, p.divSe);
+      return Math.max(0, orcamento - alreadyPleiteado);
+    });
     if (!result.ok) {
       toast.error(result.message);
       return;
@@ -1690,20 +3257,19 @@ export default function ContractDetailPage() {
         continue;
       }
       const orc = p.budget ? Number(p.budget) : 0;
-      const pct = parseCurrencyInput(valorPleiteado[id] || '');
-      const valor = orc > 0 && pct > 0 ? (orc * pct) / 100 : 0;
+      const valor = getPleitoGerarValorFromDraft(id, pleitos, valorPleiteado, pleitoValorInput);
       const osKey = (p.divSe || '').trim().toLowerCase();
-      const already = sumBillingRequestSameOs(allPleitos, p.divSe);
+      const already = sumOsPleiteadoTotal(allPleitos, p.divSe);
       const batchBefore = pendingByOs.get(osKey) || 0;
-      const excede = orc > 0 && pct > 0 && already + batchBefore + valor > orc + 0.01;
+      const excede = orc > 0 && valor > 0 && already + batchBefore + valor > orc + 0.01;
       byId[id] = excede;
       if (excede) anyExceeds = true;
-      if (orc > 0 && pct > 0) {
+      if (orc > 0 && valor > 0) {
         pendingByOs.set(osKey, batchBefore + valor);
       }
     }
     return { anyExceeds, byId };
-  }, [selectedForPleito, valorPleiteado, pleitos, allPleitos]);
+  }, [selectedForPleito, valorPleiteado, pleitoValorInput, pleitos, allPleitos]);
 
   const toggleSelectAllVisiblePleitos = (checked: boolean) => {
     if (checked) {
@@ -1725,186 +3291,31 @@ export default function ContractDetailPage() {
       visiblePleitoIds.forEach((id) => delete next[id]);
       return next;
     });
-  };
-
-  const generatedPleitos = useMemo(
-    () =>
-      allPleitos.filter((p) =>
-        isPleitoHistorico(p) ||
-        ((p.billingRequest != null ? Number(p.billingRequest) : 0) > 0)
-      ),
-    [allPleitos]
-  );
-  const historicoOsList = useMemo(
-    () => allPleitos.filter((p) => isPleitoHistorico(p)),
-    [allPleitos]
-  );
-  const historicoYears = useMemo(() => {
-    const years = new Set<number>();
-    generatedPleitos.forEach((p) => {
-      const y = p.creationYear ?? getDateYear(p.createdAt as unknown as string);
-      if (y) years.add(y);
-    });
-    return Array.from(years).sort((a, b) => b - a);
-  }, [generatedPleitos]);
-  const filteredHistoricoPleitos = useMemo(() => {
-    const osQuery = histOsFilter.trim().toLowerCase();
-    const pastaQuery = histPastaFilter.trim().toLowerCase();
-    const descricaoQuery = histDescricaoFilter.trim().toLowerCase();
-    return generatedPleitos.filter((p) => {
-      const year = p.creationYear ?? getDateYear(p.createdAt as unknown as string);
-      const monthRaw = p.creationMonth ? parseInt(String(p.creationMonth).replace(/\D/g, '') || '0', 10) : null;
-      const month = monthRaw && monthRaw > 0 ? monthRaw : getDateMonth(p.createdAt as unknown as string);
-
-      if (histYearFilter !== 'all' && year !== Number(histYearFilter)) return false;
-      if (histMonthFilter !== 'all' && month !== Number(histMonthFilter)) return false;
-      if (osQuery && !(p.divSe || '').toLowerCase().includes(osQuery)) return false;
-      if (pastaQuery && !(p.folderNumber || '').toLowerCase().includes(pastaQuery)) return false;
-      if (descricaoQuery && !(p.serviceDescription || '').toLowerCase().includes(descricaoQuery)) return false;
-      if (histEtiquetaFilter === 'gerado-100' && getHistoricoEtiqueta(p) !== HISTORICO_ETIQUETA_GERADO_100) return false;
-      return true;
-    });
-  }, [generatedPleitos, histYearFilter, histMonthFilter, histOsFilter, histPastaFilter, histDescricaoFilter, histEtiquetaFilter]);
-
-  const [isSavingHistoricoPleitos, setIsSavingHistoricoPleitos] = useState(false);
-  useEffect(() => {
-    if (!showHistoricoPleitosModal) return;
-    const nextDrafts: Record<string, { billingStatus: 'pago' | 'nao-pago'; invoiceNumber: string }> = {};
-    generatedPleitos.forEach((p) => {
-      nextDrafts[p.id] = {
-        billingStatus: (p.billingStatus || '').toLowerCase() === 'pago' ? 'pago' : 'nao-pago',
-        invoiceNumber: p.invoiceNumber || ''
-      };
-    });
-    setHistoricoDrafts(nextDrafts);
-    setSelectedHistoricoPleitos(new Set());
-    setShowHistoricoBatchNfModal(false);
-    setHistoricoBatchInvoiceModalValue('');
-  }, [showHistoricoPleitosModal, generatedPleitos]);
-
-  const changedHistoricoPleitoIds = useMemo(() => {
-    return generatedPleitos
-      .filter((p) => {
-        const draft = historicoDrafts[p.id];
-        if (!draft) return false;
-        const currentBillingStatus = (p.billingStatus || '').toLowerCase() === 'pago' ? 'pago' : 'nao-pago';
-        const currentInvoiceNumber = (p.invoiceNumber || '').trim();
-        return currentBillingStatus !== draft.billingStatus || currentInvoiceNumber !== draft.invoiceNumber.trim();
-      })
-      .map((p) => p.id);
-  }, [generatedPleitos, historicoDrafts]);
-
-  const handleSaveAllHistoricoPleitos = async () => {
-    if (changedHistoricoPleitoIds.length === 0) return;
-    setIsSavingHistoricoPleitos(true);
-    try {
-      await Promise.all(
-        changedHistoricoPleitoIds.map(async (pleitoId) => {
-          const draft = historicoDrafts[pleitoId];
-          if (!draft) return;
-          await api.patch(`/pleitos/${pleitoId}`, {
-            billingStatus: draft.billingStatus,
-            invoiceNumber: draft.invoiceNumber.trim() || null
-          });
-        })
-      );
-      await queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
-      toast.success('Histórico de pleitos salvo com sucesso.');
-    } catch {
-      toast.error('Não foi possível salvar as informações do histórico de pleitos.');
-    } finally {
-      setIsSavingHistoricoPleitos(false);
-    }
-  };
-
-  const filteredHistoricoPleitoIds = useMemo(
-    () => filteredHistoricoPleitos.map((p) => p.id),
-    [filteredHistoricoPleitos]
-  );
-  const allFilteredHistoricoSelected = filteredHistoricoPleitoIds.length > 0 &&
-    filteredHistoricoPleitoIds.every((id) => selectedHistoricoPleitos.has(id));
-  const someFilteredHistoricoSelected = filteredHistoricoPleitoIds.some((id) => selectedHistoricoPleitos.has(id));
-
-  const toggleSelectAllFilteredHistoricoPleitos = (checked: boolean) => {
-    setSelectedHistoricoPleitos((prev) => {
-      const next = new Set(prev);
-      if (checked) {
-        filteredHistoricoPleitoIds.forEach((id) => next.add(id));
-      } else {
-        filteredHistoricoPleitoIds.forEach((id) => next.delete(id));
-      }
-      return next;
-    });
-  };
-
-  const handleOpenHistoricoFaturar100Modal = () => {
-    const idsSelecionados = Array.from(selectedHistoricoPleitos).filter((id) =>
-      filteredHistoricoPleitoIds.includes(id)
-    );
-    if (idsSelecionados.length === 0) {
-      toast.error('Selecione ao menos uma OS no histórico de pleitos.');
-      return;
-    }
-    setHistoricoBatchInvoiceModalValue('');
-    setShowHistoricoBatchNfModal(true);
-  };
-
-  const handleConfirmHistoricoFaturar100Selecionadas = () => {
-    const idsSelecionados = Array.from(selectedHistoricoPleitos).filter((id) =>
-      filteredHistoricoPleitoIds.includes(id)
-    );
-    if (idsSelecionados.length === 0) {
-      toast.error('Selecione ao menos uma OS no histórico de pleitos.');
-      return;
-    }
-    const invoice = historicoBatchInvoiceModalValue.trim();
-    if (!invoice) {
-      toast.error('Informe o número da nota fiscal para faturar as OSs selecionadas.');
-      return;
-    }
-    setHistoricoDrafts((prev) => {
+    setPleitoValorInput((prev) => {
       const next = { ...prev };
-      idsSelecionados.forEach((id) => {
-        const current = next[id] || { billingStatus: 'nao-pago' as const, invoiceNumber: '' };
-        next[id] = {
-          ...current,
-          billingStatus: 'pago',
-          invoiceNumber: invoice
-        };
-      });
+      visiblePleitoIds.forEach((id) => delete next[id]);
       return next;
     });
-    setShowHistoricoBatchNfModal(false);
-    setHistoricoBatchInvoiceModalValue('');
-    toast.success(`${idsSelecionados.length} OS(s) marcada(s) como faturada(s) com a NF ${invoice}.`);
   };
 
-  const loadLogoBase64 = (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const c = document.createElement('canvas');
-        c.width = img.width;
-        c.height = img.height;
-        const ctx = c.getContext('2d');
-        if (!ctx) { resolve(null); return; }
-        ctx.drawImage(img, 0, 0);
-        try {
-          resolve(c.toDataURL('image/png'));
-        } catch {
-          resolve(null);
-        }
-      };
-      img.onerror = () => resolve(null);
-      img.src = '/logobranca.png';
-    });
-  };
+  const visualizarPleitos = useMemo(
+    () => pleitos.filter((p) => selectedForPleito.has(p.id)),
+    [pleitos, selectedForPleito]
+  );
 
   const handleExportPleitoPDF = async () => {
     if (pleitoGeradoData.length === 0) return;
     try {
-      const logoBase64 = await loadLogoBase64();
+      const logoBase64 = await loadPdfBrandingLogoDataUrl({
+        contextLabels: [
+          contract?.name,
+          contract?.number,
+          contract?.costCenter?.name,
+          contract?.costCenter?.code,
+        ],
+        maxW: 22,
+        maxH: 20,
+      });
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -2015,7 +3426,13 @@ export default function ContractDetailPage() {
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/contratos" contractId={contractId}>
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   if (loadingContract || !contract) {
@@ -2049,352 +3466,614 @@ export default function ContractDetailPage() {
         <div ref={containerRef} className="space-y-6">
           {/* Header */}
           <div className="space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-              <div className="flex items-start gap-3 min-w-0 flex-1">
-                <Link
-                  href="/ponto/contratos"
-                  className="p-2 -ml-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors shrink-0"
-                  title="Voltar"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </Link>
-                <div className="min-w-0 flex-1">
-                  <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2 break-words">
-                    <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400 shrink-0" />
-                    {contract.name}
-                  </h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                    Contrato nº {contract.number} • {contract.costCenter?.name || contract.costCenter?.code || '-'}
-                  </p>
-                </div>
+            <div className="relative flex min-h-[3.25rem] items-center justify-center py-1">
+              <Link
+                href="/ponto/contratos"
+                aria-label="Voltar para contratos"
+                className="absolute left-0 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-2 rounded-lg px-1 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              >
+                <ArrowLeft className="h-4 w-4 shrink-0" />
+                Voltar
+              </Link>
+              <div className="absolute right-0 top-1/2 z-10 -translate-y-1/2">
+                {EXIBIR_GASTOS_CONTRATO_NA_UI ? (
+                  <div className="text-right">
+                    {paidDisplay.loading || totvsRmCarregando ? (
+                      <div className="inline-flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                        <span className="hidden sm:inline">Carregando…</span>
+                      </div>
+                    ) : paidDisplay.totvsErrorMessage ? (
+                      <span className="text-xs text-amber-600 dark:text-amber-400" title={paidDisplay.totvsErrorMessage}>
+                        RM indisponível
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openPaidNaturezaModal(null)}
+                        className="rounded-lg px-1 py-0.5 text-base font-bold text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300 sm:text-lg"
+                        title="Ver totais por natureza (RM)"
+                      >
+                        {paidHeaderTotal.toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL'
+                        })}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <StringSingleSelectDropdown
+                      value={String(selectedMonth)}
+                      onChange={(v) => setSelectedMonth(Number(v))}
+                      options={MESES_FILTRO_SELECT_OPTIONS}
+                      allowEmpty={false}
+                      disableSearch
+                      menuAlign="end"
+                      matchTriggerWidth
+                      className="min-w-[9.5rem] max-w-[10.5rem]"
+                    />
+                    <StringSingleSelectDropdown
+                      value={String(selectedYear)}
+                      onChange={(v) => setSelectedYear(Number(v))}
+                      options={headerYearSelectOptions}
+                      allowEmpty={false}
+                      disableSearch
+                      menuAlign="end"
+                      matchTriggerWidth
+                      menuMinWidth={152}
+                      className="min-w-[5.25rem]"
+                    />
+                  </div>
+                )}
               </div>
-              <div className="flex flex-wrap items-center gap-3 shrink-0">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">Mês</label>
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="h-9 sm:h-10 min-w-[8rem] sm:min-w-[10rem] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {MESES_FILTRO.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-600 dark:text-gray-400 shrink-0">Ano</label>
-                  <select
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(Number(e.target.value))}
-                    className="h-9 sm:h-10 min-w-[5rem] sm:min-w-[6rem] px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value={0}>Todos os anos</option>
-                    {availableYears.map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className="w-full max-w-3xl px-24 text-center sm:px-32">
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 sm:text-3xl break-words">
+                  {contract.name}
+                </h1>
+                <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
+                  Contrato nº {contract.number}
+                </p>
               </div>
             </div>
 
-            {/* Barra de ações */}
-            <div className="flex flex-wrap items-center gap-3 p-4 sm:p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
-              {canAccessOrdemServicoModulo ? (
-                <button
-                  onClick={() => setShowPleitoModal(true)}
-                  disabled={!canCreateContrato}
-                  className="h-10 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0"
-                >
-                  <ClipboardList className="w-4 h-4 shrink-0" />
-                  Ordem de Serviço
-                </button>
-              ) : null}
-              {canAccessProducaoSemanalModulo ? (
-                <button
-                  onClick={() => {
-                    setProductionForm({ fillingDate: toInputDate(new Date()), divSe: '', weeklyProductionValue: '', responsiblePerson: '' });
-                    setShowProductionModal(true);
-                  }}
-                  disabled={!canCreateContrato}
-                  className="h-10 px-4 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0"
-                >
-                  <BarChart3 className="w-4 h-4 shrink-0" />
-                  Produção Semanal
-                </button>
-              ) : null}
-              {canAccessOrcamento ? (
-                <Link
-                  href={`/ponto/contratos/${contractId}/orcamento`}
-                  className="h-10 px-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0"
-                >
-                  <Calculator className="w-4 h-4 shrink-0" />
-                  Orçamento
-                </Link>
-              ) : null}
-              {canAccessRelatorios ? (
-                <Link
-                  href={`/ponto/contratos/${contractId}/relatorios`}
-                  className="h-10 px-4 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium shrink-0"
-                >
-                  <FileImage className="w-4 h-4 shrink-0" />
-                  Relatórios
-                </Link>
-              ) : null}
-            </div>
+            {!paidDisplay.loading &&
+            !paidDisplay.totvsErrorMessage &&
+            totvsTotalPagoRes?.success !== false &&
+            totvsTotalPagoRes?.data?.configured === false ? (
+              <p className="text-center text-xs text-amber-600 dark:text-amber-400">
+                O servidor não está com o RM habilitado (faltam variáveis TOTVS_RM_* no ambiente do backend).
+                Reinicie a API após alterar o .env.
+              </p>
+            ) : null}
+            {EXIBIR_GASTOS_CONTRATO_NA_UI &&
+            !paidDisplay.loading &&
+            !paidDisplay.totvsErrorMessage &&
+            totvsTotalPagoRes?.data?.configured === true &&
+            paidHeaderTotal === 0 &&
+            (totvsTotalPagoRes?.data?.matchedRowCount ?? 0) === 0 ? (
+              <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                Nenhuma linha do relatório RM (RELATORIOFIN) encontrada para o centro de custo deste contrato.
+              </p>
+            ) : null}
+
           </div>
 
-          {/* Card com resumo do contrato */}
-          <Card>
-            <CardContent className="p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Vigência</p>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {formatDate(contract.startDate)} até {formatDate(contract.endDate)}
-                  </p>
-                </div>
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-gray-500 dark:text-gray-400">Valor + Aditivos</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddendumModal(true)}
-                      className="shrink-0 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-                      title="Cadastrar aditivo"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+          <div className="space-y-8">
+          <div className="space-y-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Contrato</p>
+          {/* Resumo do contrato */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30 sm:p-3">
+                    <CalendarDays className="h-5 w-5 text-indigo-600 dark:text-indigo-400 sm:h-6 sm:w-6" />
                   </div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {formatCurrency(valorMaisAditivosTotal)}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Base: {formatCurrency(contract.valuePlusAddenda)} {totalAddenda !== 0 ? `• Aditivos: ${totalAddenda >= 0 ? '+' : ''}${formatCurrency(totalAddenda)}` : ''}
-                  </p>
-                </div>
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-gray-500 dark:text-gray-400">Valor Anual ({safeSelectedYear})</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdjFormYear(safeSelectedYear);
-                        setShowValorAnualAdjustModal(true);
-                      }}
-                      className="shrink-0 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-                      title="Ajustar valor anual (orçamento do órgão)"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <p className="font-medium text-gray-900 dark:text-gray-100">
-                    {valorAnualAjustado !== null ? formatCurrency(valorAnualAjustado) : '-'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Base: (Valor + aditivos) ÷ {contractYearsCount > 0 ? contractYearsCount : '—'} ano(s)
-                    {valorAnualBase !== null &&
-                      valorAnualAjustado !== null &&
-                      Math.abs(valorAnualAjustado - valorAnualBase) > 0.009 && (
-                        <span className="block mt-0.5">
-                          Ajuste orçamentário: {valorAnualAjustado >= valorAnualBase ? '+' : ''}
-                          {formatCurrency(valorAnualAjustado - valorAnualBase)}
-                        </span>
-                      )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Saldo Anual ({safeSelectedYear})</p>
-                  <p className={`font-medium ${saldoAnual !== null && saldoAnual >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {saldoAnual !== null ? formatCurrency(saldoAnual) : '-'}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Valor anual − Faturamento
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-500 dark:text-gray-400">Meta Mensal ({safeSelectedYear})</p>
-                  {metaMensalCardInfo.kind === 'empty' && (
-                    <p className="font-medium text-green-600 dark:text-green-400">-</p>
-                  )}
-                  {metaMensalCardInfo.kind === 'single' && (
-                    <p className="font-medium text-green-600 dark:text-green-400">
-                      {formatCurrency(metaMensalCardInfo.value)}
+                  <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                    <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                      Vigência
                     </p>
-                  )}
-                  {metaMensalCardInfo.kind === 'split' && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-green-600 dark:text-green-400">
-                        Até {metaMensalCardInfo.ateMesLabel}: {formatCurrency(metaMensalCardInfo.baseMeta)}/mês
+                    <div className="group relative mt-1 w-fit max-w-full">
+                      <p className="cursor-default text-xl font-bold leading-snug text-gray-900 dark:text-gray-100 sm:text-2xl">
+                        {formatDate(contract.startDate)} até {formatDate(contract.endDate)}
                       </p>
-                      <p className="text-xs font-medium text-emerald-500 dark:text-emerald-400">
-                        De {metaMensalCardInfo.deMesLabel}: {formatCurrency(metaMensalCardInfo.metaAfter)}/mês
-                      </p>
+                      <div
+                        role="tooltip"
+                        className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-max max-w-[min(22rem,calc(100vw-2rem))] space-y-1 rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs leading-relaxed text-gray-600 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                      >
+                        <p>Início: {formatDate(contract.startDate)}</p>
+                        <p>Término: {formatDate(contract.endDate)}</p>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">
+                          Duração: {contractYearsCount > 0 ? contractYearsCount : '—'} ano(s) de vigência
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                    Meta = saldo ÷ meses restantes até o fim da vigência. Aditivos em &quot;Valor + Aditivos&quot; recalculam a
-                    partir da data até o fim do contrato. Ajuste no &quot;Valor Anual&quot; (lápis) só altera a meta do mês da
-                    data até dezembro daquele ano civil.
-                  </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* Quadros de faturamento total */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Card>
-              <CardContent className="p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Valor Total Faturado do Ano</p>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {formatCurrency(faturamentoAnual)}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Ano {safeSelectedYear}
-                </p>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                  <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                    <div className="flex-shrink-0 rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 sm:p-3">
+                      <Receipt className="h-5 w-5 text-blue-600 dark:text-blue-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                      <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                        Valor + Aditivos
+                      </p>
+                      <div className="group relative mt-1 w-fit max-w-full">
+                        <p className="cursor-default text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                          {formatCurrency(valorMaisAditivosTotal)}
+                        </p>
+                        <div
+                          role="tooltip"
+                          className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-max max-w-[min(22rem,calc(100vw-2rem))] space-y-1 rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs leading-relaxed text-gray-600 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                        >
+                          <p>Valor contratual: {formatCurrency(contract.valuePlusAddenda)}</p>
+                          {totalAddenda !== 0 ? (
+                            <p>
+                              Aditivos: {totalAddenda >= 0 ? '+' : ''}
+                              {formatCurrency(totalAddenda)}
+                            </p>
+                          ) : (
+                            <p className="text-gray-500 dark:text-gray-400">Sem aditivos</p>
+                          )}
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
+                            Total: {formatCurrency(valorMaisAditivosTotal)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddendumModal(true)}
+                    className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                    title="Cadastrar aditivo"
+                    aria-label="Cadastrar aditivo"
+                  >
+                    <Plus className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                  <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                    <div className="flex-shrink-0 rounded-lg bg-sky-100 p-2 dark:bg-sky-900/30 sm:p-3">
+                      <FileText className="h-5 w-5 text-sky-600 dark:text-sky-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                      <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                        Valor anual
+                      </p>
+                      {isAllYears ? (
+                        <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">—</p>
+                      ) : (
+                        <div className="group relative mt-1 w-fit max-w-full">
+                          <p className="cursor-default text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                            {valorAnualAjustado !== null ? formatCurrency(valorAnualAjustado) : '-'}
+                          </p>
+                          <div
+                            role="tooltip"
+                            className="pointer-events-none absolute left-0 top-full z-50 mt-2 w-max max-w-[min(22rem,calc(100vw-2rem))] space-y-1 rounded-lg border border-gray-200 bg-white p-2.5 text-left text-xs leading-relaxed text-gray-600 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                          >
+                            <p>Valor + aditivos: {formatCurrency(valorMaisAditivosTotal)}</p>
+                            <p>
+                              ÷ {contractVigenciaMonthCount > 0 ? contractVigenciaMonthCount : '—'} mês(es)
+                              {contractVigenciaMonthCount > 0
+                                ? ` = ${formatCurrency(valorMaisAditivosTotal / contractVigenciaMonthCount)}/mês`
+                                : ''}
+                            </p>
+                            <p>
+                              × {contractMonthsInSelectedYear} mês(es) em {safeSelectedYear}
+                              {valorAnualBase !== null ? ` = ${formatCurrency(valorAnualBase)}` : ''}
+                            </p>
+                            {valorAnualBase !== null &&
+                              valorAnualAjustado !== null &&
+                              Math.abs(valorAnualAjustado - valorAnualBase) > 0.009 && (
+                                <>
+                                  <p>
+                                    Ajuste orçamentário ({safeSelectedYear}):{' '}
+                                    {valorAnualAjustado >= valorAnualBase ? '+' : ''}
+                                    {formatCurrency(valorAnualAjustado - valorAnualBase)}
+                                  </p>
+                                  <p className="font-medium text-gray-900 dark:text-gray-100">
+                                    Valor anual: {formatCurrency(valorAnualAjustado)}
+                                  </p>
+                                </>
+                              )}
+                            {valorAnualBase !== null &&
+                              valorAnualAjustado !== null &&
+                              Math.abs(valorAnualAjustado - valorAnualBase) <= 0.009 && (
+                                <p className="font-medium text-gray-900 dark:text-gray-100">
+                                  Valor anual: {formatCurrency(valorAnualBase)}
+                                </p>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isAllYears}
+                    onClick={() => {
+                      setAdjFormYear(safeSelectedYear);
+                      setShowValorAnualAdjustModal(true);
+                    }}
+                    className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                    title="Ajustar valor anual"
+                    aria-label="Ajustar valor anual"
+                  >
+                    <Edit2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Faturamento</p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-4">
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 rounded-lg bg-green-100 p-2 dark:bg-green-900/30 sm:p-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                    <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                      Saldo anual faturado
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                      {formatCurrency(isAllYears ? faturamentoTotalTodosAnos : faturamentoAnual)}
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Valor Total Faturado do Contrato</p>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {formatCurrency(faturamentoTotalTodosAnos)}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Soma de todos os anos
-                </p>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30 sm:p-3">
+                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                    <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                      Saldo anual pendente
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                      {isAllYears ? '—' : saldoAnual !== null ? formatCurrency(saldoAnual) : '-'}
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Valor Total Pendente para Faturar
-                </p>
-                <p
-                  className={`text-xl font-bold mt-1 ${
-                    pendenteParaFaturarTodosAnos !== null && pendenteParaFaturarTodosAnos >= 0
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}
-                >
-                  {pendenteParaFaturarTodosAnos !== null ? formatCurrency(pendenteParaFaturarTodosAnos) : '-'}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Valor + aditivos − faturado total
-                </p>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 rounded-lg bg-green-100 p-2 dark:bg-green-900/30 sm:p-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                    <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                      Saldo contratual faturado
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                      {formatCurrency(faturamentoTotalTodosAnos)}
+                    </p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0 rounded-lg bg-amber-100 p-2 dark:bg-amber-900/30 sm:p-3">
+                    <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                    <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                      Saldo contratual pendente
+                    </p>
+                    <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                      {pendenteParaFaturarTodosAnos !== null
+                        ? formatCurrency(pendenteParaFaturarTodosAnos)
+                        : '-'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          </div>
+
+          {(canAccessOrcamento || canAccessRelatorios || canAccessReunioes) && (
+            <div className="space-y-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Documentos</p>
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {canAccessOrcamento ? (
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                        <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                          <div className="flex-shrink-0 rounded-lg bg-emerald-100 p-2 dark:bg-emerald-900/30 sm:p-3">
+                            <Calculator className="h-5 w-5 text-emerald-600 dark:text-emerald-400 sm:h-6 sm:w-6" />
+                          </div>
+                          <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                            <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                              Orçamentos
+                            </p>
+                            <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                              {loadingOrcamentosCount ? '…' : orcamentosCount}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/ponto/contratos/${contractId}/orcamento`}
+                          className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                          aria-label="Abrir orçamentos"
+                          title="Abrir orçamentos"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+                {canAccessRelatorios ? (
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                        <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                          <div className="flex-shrink-0 rounded-lg bg-rose-100 p-2 dark:bg-rose-900/30 sm:p-3">
+                            <FileImage className="h-5 w-5 text-rose-600 dark:text-rose-400 sm:h-6 sm:w-6" />
+                          </div>
+                          <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                            <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                              Relatórios Fotográficos
+                            </p>
+                            <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                              {loadingRelatoriosCount ? '…' : relatoriosCount}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/ponto/contratos/${contractId}/relatorios`}
+                          className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                          aria-label="Abrir relatórios fotográficos"
+                          title="Abrir relatórios fotográficos"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+                {canAccessReunioes ? (
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                        <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                          <div className="flex-shrink-0 rounded-lg bg-sky-100 p-2 dark:bg-sky-900/30 sm:p-3">
+                            <FileText className="h-5 w-5 text-sky-600 dark:text-sky-400 sm:h-6 sm:w-6" />
+                          </div>
+                          <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                            <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                              Relatório Mensal
+                            </p>
+                            <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                              {loadingMensalCount ? '…' : mensalCount}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/ponto/contratos/${contractId}/acompanhamento-mensal`}
+                          className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                          aria-label="Abrir relatório mensal"
+                          title="Abrir relatório mensal"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+                {canAccessReunioes ? (
+                  <Card>
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between gap-2 sm:items-center sm:gap-3">
+                        <div className="flex min-w-[120px] flex-1 items-center pr-2">
+                          <div className="flex-shrink-0 rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30 sm:p-3">
+                            <Video className="h-5 w-5 text-indigo-600 dark:text-indigo-400 sm:h-6 sm:w-6" />
+                          </div>
+                          <div className="ml-3 min-w-0 flex-1 overflow-hidden sm:ml-4">
+                            <p className="break-normal text-xs font-medium leading-tight text-gray-600 dark:text-gray-400 sm:text-sm">
+                              Reuniões Quinzenais
+                            </p>
+                            <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                              {loadingSemanalCount ? '…' : semanalCount}
+                            </p>
+                          </div>
+                        </div>
+                        <Link
+                          href={`/ponto/contratos/${contractId}/reunioes`}
+                          className="mt-1 flex-shrink-0 rounded-lg p-2 text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100 sm:mt-0 sm:p-2.5"
+                          aria-label="Abrir reuniões quinzenais"
+                          title="Abrir reuniões quinzenais"
+                        >
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
+                        </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
+            </div>
+          )}
+
           </div>
 
           {/* Controle Geral - Metas Mensais ou Metas Anuais conforme filtro */}
           <Card>
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              {isAllYears ? (
-                <>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    Acumulado Anual
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Indicadores anuais por ano
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    Controle Geral - {safeSelectedYear}
-                  </h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    Meta base = saldo ÷ meses restantes até o fim da vigência. Aditivos em &quot;Valor + Aditivos&quot;
-                    recalculam da data do evento até o fim do contrato; ajuste do valor anual recalcula só entre o mês da data
-                    e dezembro do mesmo ano civil. Apenas meses cobertos pela vigência.
-                  </p>
-                </>
-              )}
+            <CardHeader className="border-b-0 pb-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="p-2 sm:p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg shrink-0">
+                    <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      {isAllYears ? 'Acumulado Anual' : `Controle Geral - ${safeSelectedYear}`}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {isAllYears ? 'Indicadores anuais por ano' : 'Indicadores mensais do contrato'}
+                    </p>
+                  </div>
+                </div>
+                {!isAllYears ? (
+                  <div className="relative shrink-0 group">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-300"
+                      aria-label="Como funcionam meta ideal e meta real"
+                    >
+                      <Info className="h-4 w-4 shrink-0" aria-hidden />
+                    </button>
+                    <div
+                      role="tooltip"
+                      className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-gray-200 bg-white p-3 text-left text-xs leading-relaxed text-gray-600 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      {CONTROLE_GERAL_META_AJUDA}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              {EXIBIR_GASTOS_CONTRATO_NA_UI &&
+              !isAllYears &&
+              solicitacoesControleTotvsPronto &&
+              !solicitacoesRmTemLancamentosNoRelatorio &&
+              !totvsRmCarregando ? (
+                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                  <span className="font-medium">Gastos (RM):</span> não há linhas com o centro de custo deste
+                  contrato na consulta de gastos (ou colunas não detectadas). Confira o cadastro do CC,{' '}
+                  <span className="font-mono">TOTVS_RM_SOLICITACOES_PATH</span> (se for outra consulta no RM),{' '}
+                  <span className="font-mono">TOTVS_RM_SOLICITACOES_CC_COLUMN</span>,{' '}
+                  <span className="font-mono">TOTVS_RM_SOLICITACOES_DATE_COLUMN</span>,{' '}
+                  <span className="font-mono">TOTVS_RM_SOLICITACOES_VALUE_COLUMN</span> e movimentos no ano{' '}
+                  {safeSelectedYear}. O filtro de status da linha Gastos é opcional (
+                  <span className="font-mono">TOTVS_RM_SOLICITACOES_USE_STATUS_FILTER</span>).
+                </p>
+              ) : null}
+              {!isAllYears &&
+              !gastosOperacionaisCarregando &&
+              gastosOperacionaisNaoConfigurado ? (
+                <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                  <span className="font-medium">Gastos Operacionais:</span> integração TOTVS RM não
+                  configurada no servidor (
+                  <span className="font-mono">TOTVS_RM_*</span>).
+                </p>
+              ) : null}
+              {!isAllYears &&
+              !gastosOperacionaisCarregando &&
+              !gastosOperacionaisModuleIsError &&
+              Boolean(gastosOperacionaisModuleData) &&
+              !gastosOperacionaisTemDados ? (
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  Nenhum gasto operacional encontrado no RM para este contrato/centro de custo (
+                  {contract.name}
+                  {contract.costCenter?.code ? ` · CC ${contract.costCenter.code}` : ''}).
+                </p>
+              ) : null}
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
+            <CardContent>
+              <div className="table-scroll">
                 {isAllYears ? (
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32">
+                  <table className="w-full" data-cc-skip-column-customizer="1">
+                    <thead className="border-b border-gray-200 dark:border-gray-700">
+                      <tr>
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36 whitespace-nowrap">
                           Indicador
                         </th>
                         {availableYears.map((year) => (
                           <th
                             key={year}
-                            className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[100px]"
+                            className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                           >
                             {year}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700">
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800/50">
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                           Meta Anual
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-gray-900 dark:text-gray-100"
+                            className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-gray-100"
                           >
                             {valorAnualPorAno[year] != null ? formatCurrency(valorAnualPorAno[year]!) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-amber-700 dark:text-amber-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-amber-50/50 dark:bg-amber-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-400">
                           Produção
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-amber-700 dark:text-amber-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-amber-700 dark:text-amber-400"
                           >
                             {producaoPorAno[year] > 0 ? formatCurrency(producaoPorAno[year]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700">
-                        <td className="px-4 py-4 text-sm font-medium text-red-600 dark:text-red-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <td className="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400">
                           Pleitos
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-red-600 dark:text-red-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-red-600 dark:text-red-400"
                           >
                             {pleitosPorAno[year] > 0 ? formatCurrency(pleitosPorAno[year]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-green-50/50 dark:bg-green-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-green-50/50 dark:bg-green-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                           Faturamento
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-green-700 dark:text-green-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-green-700 dark:text-green-400"
                           >
                             {faturamentoPorAno[year] > 0 ? formatCurrency(faturamentoPorAno[year]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-teal-50/50 dark:bg-teal-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-teal-800 dark:text-teal-300 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-teal-50/50 dark:bg-teal-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-teal-800 dark:text-teal-300">
                           Prod. - Fat.
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-teal-700 dark:text-teal-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-teal-700 dark:text-teal-400"
                           >
                             {prodMenosFatPorAno[year] !== 0
                               ? formatCurrency(prodMenosFatPorAno[year])
@@ -2402,55 +4081,130 @@ export default function ContractDetailPage() {
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-sky-50/50 dark:bg-sky-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-sky-700 dark:text-sky-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-sky-50/50 dark:bg-sky-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-sky-700 dark:text-sky-400">
                           Valor Orçado
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-sky-700 dark:text-sky-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-sky-700 dark:text-sky-400"
                           >
                             {valorOrcadoPorAno[year] > 0 ? formatCurrency(valorOrcadoPorAno[year]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-orange-50/50 dark:bg-orange-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-orange-700 dark:text-orange-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-orange-50/50 dark:bg-orange-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-orange-700 dark:text-orange-400">
                           Pendente Faturamento
                         </td>
                         {availableYears.map((year) => (
                           <td
                             key={year}
-                            className="px-3 py-4 text-center text-sm font-medium text-orange-700 dark:text-orange-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-orange-700 dark:text-orange-400"
                           >
                             {pendenteFaturamentoPorAno[year] !== 0 ? formatCurrency(pendenteFaturamentoPorAno[year]) : '-'}
                           </td>
                         ))}
                       </tr>
+                      <tr className="bg-indigo-50/40 dark:bg-indigo-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-indigo-800 dark:text-indigo-300 whitespace-nowrap">
+                          Teto de Gastos
+                          {loadingTetoOrcamentario ? (
+                            <Loader2
+                              className="ml-1.5 inline h-3.5 w-3.5 shrink-0 animate-spin align-[-0.125em] text-indigo-600 dark:text-indigo-400"
+                              aria-label="Carregando teto de gastos"
+                            />
+                          ) : null}
+                        </td>
+                        {availableYears.map((year) => {
+                          const valor = tetoOrcamentarioPorAno[year] ?? 0;
+                          return (
+                            <td
+                              key={year}
+                              className="px-4 py-3 text-center text-sm font-medium text-indigo-800 dark:text-indigo-300"
+                            >
+                              {loadingTetoOrcamentario
+                                ? '…'
+                                : valor > 0
+                                  ? formatCurrency(valor)
+                                  : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-violet-50/40 dark:bg-violet-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-violet-800 dark:text-violet-300">
+                          <div className="flex items-center gap-2">
+                            <span>Gastos</span>
+                            {gastosOperacionaisCarregando ? (
+                              <Loader2
+                                className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400"
+                                aria-label="Carregando gastos"
+                              />
+                            ) : null}
+                          </div>
+                        </td>
+                        {availableYears.map((year) => {
+                          const valor = gastosOperacionaisPorAno[year] ?? 0;
+                          const celulaClicavel =
+                            !gastosOperacionaisCarregando && valor !== 0;
+                          return (
+                          <td
+                            key={year}
+                            role={celulaClicavel ? 'button' : undefined}
+                            tabIndex={celulaClicavel ? 0 : undefined}
+                            onClick={() => {
+                              if (celulaClicavel) {
+                                setGastosResumoModal({ kind: 'year', year });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (!celulaClicavel) return;
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setGastosResumoModal({ kind: 'year', year });
+                              }
+                            }}
+                            title={celulaClicavel ? 'Ver resumo por categoria' : undefined}
+                            className={`px-4 py-3 text-center text-sm font-medium ${signedGastosValueClassName(valor)} ${
+                              celulaClicavel
+                                ? 'cursor-pointer transition-colors hover:bg-violet-100/70 dark:hover:bg-violet-900/35'
+                                : ''
+                            }`}
+                          >
+                            {gastosOperacionaisCarregando
+                              ? '…'
+                              : valor !== 0
+                                ? formatCurrency(Math.abs(valor))
+                                : '-'}
+                          </td>
+                          );
+                        })}
+                      </tr>
                     </tbody>
                   </table>
                 ) : (
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-700">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32">
-                          Mês
+                  <table className="w-full" data-cc-skip-column-customizer="1">
+                    <thead className="border-b border-gray-200 dark:border-gray-700">
+                      <tr>
+                        <th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-36 whitespace-nowrap">
+                          Indicador
                         </th>
                         {MESES.map((mes) => (
                           <th
                             key={mes}
-                            className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider min-w-[100px]"
+                            className="px-3 sm:px-6 py-4 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap"
                           >
                             {mes}/{safeSelectedYear.toString().slice(-2)}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700">
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800/50">
-                          Meta Mensal
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <tr>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
+                          Meta Ideal
                         </td>
                         {MESES.map((mes, i) => {
                           const month = i + 1;
@@ -2458,60 +4212,211 @@ export default function ContractDetailPage() {
                           return (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-gray-900 dark:text-gray-100"
+                            className="px-4 py-3 text-center text-sm font-medium text-gray-900 dark:text-gray-100"
                           >
                             {cellMeta !== null ? formatCurrency(cellMeta) : '-'}
                           </td>
                           );
                         })}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-amber-50/50 dark:bg-amber-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-amber-700 dark:text-amber-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-emerald-50/40 dark:bg-emerald-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-emerald-800 dark:text-emerald-300">
+                          Meta Real
+                        </td>
+                        {MESES.map((mes, i) => {
+                          const v = metaRealPorMes[i];
+                          return (
+                            <td
+                              key={mes}
+                              className="px-4 py-3 text-center text-sm font-medium text-emerald-800 dark:text-emerald-300"
+                            >
+                              {v !== null ? formatCurrency(v) : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-indigo-50/40 dark:bg-indigo-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-indigo-800 dark:text-indigo-300 whitespace-nowrap">
+                          Teto de Gastos
+                          {loadingTetoOrcamentario ? (
+                            <Loader2
+                              className="ml-1.5 inline h-3.5 w-3.5 shrink-0 animate-spin align-[-0.125em] text-indigo-600 dark:text-indigo-400"
+                              aria-label="Carregando teto de gastos"
+                            />
+                          ) : null}
+                        </td>
+                        {MESES.map((mes, i) => {
+                          const v = tetoOrcamentarioPorMes[i];
+                          return (
+                            <td
+                              key={mes}
+                              className="px-4 py-3 text-center text-sm font-medium text-indigo-800 dark:text-indigo-300"
+                            >
+                              {loadingTetoOrcamentario
+                                ? '…'
+                                : v != null && v > 0
+                                  ? formatCurrency(v)
+                                  : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                      {EXIBIR_GASTOS_CONTRATO_NA_UI ? (
+                        <tr className="bg-red-50/40 dark:bg-red-900/15">
+                          <td className="px-4 py-3 text-sm font-medium text-red-800 dark:text-red-300">
+                            <div className="flex items-center gap-2">
+                              <span>
+                                {totvsRmCarregando ? 'Gastos (carregando…)' : 'Gastos'}
+                              </span>
+                              {totvsRmCarregando ? (
+                                <Loader2
+                                  className="h-3.5 w-3.5 shrink-0 animate-spin text-red-600 dark:text-red-400"
+                                  aria-label="Carregando gastos RM"
+                                />
+                              ) : null}
+                            </div>
+                          </td>
+                          {MESES.map((mes, i) => {
+                            const v = solicitacoesRateioPorMes[i];
+                            const semDadoRmSomado =
+                              solicitacoesControleTotvsPronto &&
+                              !solicitacoesRmTemLancamentosNoRelatorio &&
+                              !totvsRmCarregando;
+                            const mostrarZeroComoTraco =
+                              v !== null && semDadoRmSomado && Math.abs(v) < 1e-9;
+                            const textoCelula = totvsRmCarregando
+                              ? '…'
+                              : v === null
+                                ? '-'
+                                : mostrarZeroComoTraco
+                                  ? '-'
+                                  : formatCurrency(v);
+                            const celulaClicavel =
+                              !totvsRmCarregando && v !== null && !mostrarZeroComoTraco;
+                            return (
+                              <td
+                                key={mes}
+                                role={celulaClicavel ? 'button' : undefined}
+                                tabIndex={celulaClicavel ? 0 : undefined}
+                                onClick={() => {
+                                  if (celulaClicavel) openPaidNaturezaModal(i);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (!celulaClicavel) return;
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    openPaidNaturezaModal(i);
+                                  }
+                                }}
+                                title={celulaClicavel ? 'Ver gastos por natureza' : undefined}
+                                className={`px-4 py-3 text-center text-sm font-medium text-red-800 dark:text-red-300 ${
+                                  celulaClicavel
+                                    ? 'cursor-pointer transition-colors hover:bg-red-100/70 hover:underline dark:hover:bg-red-900/35'
+                                    : ''
+                                }`}
+                              >
+                                {textoCelula}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ) : null}
+                      <tr className="bg-violet-50/40 dark:bg-violet-900/15">
+                        <td className="px-4 py-3 text-sm font-medium text-violet-800 dark:text-violet-300">
+                          <div className="flex items-center gap-2">
+                            <span>Gastos</span>
+                            {gastosOperacionaisCarregando ? (
+                              <Loader2
+                                className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400"
+                                aria-label="Carregando gastos"
+                              />
+                            ) : null}
+                          </div>
+                        </td>
+                        {MESES.map((mes, i) => {
+                          const valor = gastosOperacionaisPorMes[i];
+                          const celulaClicavel =
+                            !gastosOperacionaisCarregando && valor !== 0;
+                          return (
+                          <td
+                            key={mes}
+                            role={celulaClicavel ? 'button' : undefined}
+                            tabIndex={celulaClicavel ? 0 : undefined}
+                            onClick={() => {
+                              if (celulaClicavel) {
+                                setGastosResumoModal({ kind: 'month', mesIdx: i });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (!celulaClicavel) return;
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setGastosResumoModal({ kind: 'month', mesIdx: i });
+                              }
+                            }}
+                            title={celulaClicavel ? 'Ver resumo por categoria' : undefined}
+                            className={`px-4 py-3 text-center text-sm font-medium ${signedGastosValueClassName(valor)} ${
+                              celulaClicavel
+                                ? 'cursor-pointer transition-colors hover:bg-violet-100/70 dark:hover:bg-violet-900/35'
+                                : ''
+                            }`}
+                          >
+                            {gastosOperacionaisCarregando
+                              ? '…'
+                              : valor !== 0
+                                ? formatCurrency(Math.abs(valor))
+                                : '-'}
+                          </td>
+                          );
+                        })}
+                      </tr>
+                      <tr className="bg-amber-50/50 dark:bg-amber-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-amber-700 dark:text-amber-400">
                           Produção
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-amber-700 dark:text-amber-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-amber-700 dark:text-amber-400"
                           >
                             {producaoPorMes[i] > 0 ? formatCurrency(producaoPorMes[i]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700">
-                        <td className="px-4 py-4 text-sm font-medium text-red-600 dark:text-red-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr>
+                        <td className="px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400">
                           Pleitos
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-red-600 dark:text-red-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-red-600 dark:text-red-400"
                           >
                             {pleitosPorMes[i] > 0 ? formatCurrency(pleitosPorMes[i]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-green-50/50 dark:bg-green-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-green-50/50 dark:bg-green-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                           Faturamento
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-green-700 dark:text-green-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-green-700 dark:text-green-400"
                           >
                             {faturamentoPorMes[i] > 0 ? formatCurrency(faturamentoPorMes[i]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-teal-50/50 dark:bg-teal-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-teal-800 dark:text-teal-300 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-teal-50/50 dark:bg-teal-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-teal-800 dark:text-teal-300">
                           Prod. - Fat.
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-teal-700 dark:text-teal-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-teal-700 dark:text-teal-400"
                           >
                             {prodMenosFatPorMes[i] !== 0
                               ? formatCurrency(prodMenosFatPorMes[i])
@@ -2519,27 +4424,27 @@ export default function ContractDetailPage() {
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-sky-50/50 dark:bg-sky-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-sky-700 dark:text-sky-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-sky-50/50 dark:bg-sky-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-sky-700 dark:text-sky-400">
                           Valor Orçado
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-sky-700 dark:text-sky-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-sky-700 dark:text-sky-400"
                           >
                             {valorOrcadoPorMes[i] > 0 ? formatCurrency(valorOrcadoPorMes[i]) : '-'}
                           </td>
                         ))}
                       </tr>
-                      <tr className="divide-x divide-gray-200 dark:divide-gray-700 bg-orange-50/50 dark:bg-orange-900/10">
-                        <td className="px-4 py-4 text-sm font-medium text-orange-700 dark:text-orange-400 bg-gray-50 dark:bg-gray-800/50">
+                      <tr className="bg-orange-50/50 dark:bg-orange-900/10">
+                        <td className="px-4 py-3 text-sm font-medium text-orange-700 dark:text-orange-400">
                           Pendente Faturamento
                         </td>
                         {MESES.map((mes, i) => (
                           <td
                             key={mes}
-                            className="px-3 py-4 text-center text-sm font-medium text-orange-700 dark:text-orange-400"
+                            className="px-4 py-3 text-center text-sm font-medium text-orange-700 dark:text-orange-400"
                           >
                             {pendenteFaturamentoPorMes[i] !== 0 ? formatCurrency(pendenteFaturamentoPorMes[i]) : '-'}
                           </td>
@@ -2552,352 +4457,87 @@ export default function ContractDetailPage() {
             </CardContent>
           </Card>
 
-          {canAccessOrdemServicoModulo ? (
-          <>
-          {/* Ordem de Serviço - Lista de pleitos do contrato */}
-          <Card>
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-3 w-full flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <ClipboardList className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Ordem de Serviço
-                      </h3>
-                      <button
-                        onClick={() => setShowPleitoModal(true)}
-                        disabled={!canCreateContrato}
-                        className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                        title="Nova ordem de serviço"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                      {!loadingPleitos && pleitos.length > 0 && (
-                        <>
-                          <button
-                            onClick={handleVisualizarPleito}
-                            className="px-3 py-1.5 rounded-lg bg-yellow-400 hover:bg-yellow-500 text-gray-900 text-sm font-medium transition-colors"
-                          >
-                            Visualizar Pleito
-                          </button>
-                          <button
-                            onClick={handleGerarPleito}
-                            disabled={!canCreateContrato || gerarPleitoMutation.isPending}
-                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-                          >
-                            {gerarPleitoMutation.isPending ? 'Gerando...' : 'Gerar Pleito'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handlePleitar100PorcentoSelecionadas}
-                            disabled={gerarPleitoMutation.isPending || selectedForPleito.size === 0}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-                            title="Gera pleito com 100% do orçamento em cada OS marcada (sem abrir o modal de %)"
-                          >
-                            <Percent className="w-4 h-4 shrink-0" />
-                            {gerarPleitoMutation.isPending ? 'Gerando...' : 'Pleitear 100%'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleGerarCronogramaMensal}
-                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
-                          >
-                            Gerar cronograma mensal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleExcluirPleitosSelecionados}
-                            disabled={!canDeleteContrato || deletePleitosSelecionadosMutation.isPending || selectedForPleito.size === 0}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-                            title="Excluir as ordens de serviço marcadas na tabela"
-                          >
-                            <Trash2 className="w-4 h-4 shrink-0" />
-                            {deletePleitosSelecionadosMutation.isPending ? 'Excluindo...' : 'Excluir selecionadas'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                    {!loadingPleitos && allPleitos.length > 0 && (
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button
-                          onClick={() => setShowHistoricoOsModal(true)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium transition-colors"
-                        >
-                          Histórico de OS
-                        </button>
-                        <button
-                          onClick={() => setShowHistoricoPleitosModal(true)}
-                          className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-700 text-white text-sm font-medium transition-colors"
-                        >
-                          Histórico de Pleitos
-                        </button>
-                      </div>
-                    )}
-                  </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {filteredPleitos.length} {filteredPleitos.length === 1 ? 'ordem de serviço' : 'ordens de serviço'}
-                {selectedMonth > 0 ? ` em ${MESES_FILTRO.find((m) => m.value === selectedMonth)?.label}` : ''}
-                {isAllYears ? ' (todos os anos)' : ` (${selectedYear})`}
-              </p>
-              {!loadingPleitos && pleitos.length > 0 && (
-                <div className="flex flex-nowrap items-center gap-4 mt-3 overflow-x-auto pb-1">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Status Orçamento:</label>
-                    <select
-                      value={filterStatusOrcamento}
-                      onChange={(e) => setFilterStatusOrcamento(e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 w-[160px]"
-                    >
-                      <option value="">Todos</option>
-                      {STATUS_ORCAMENTO_OPCOES.map((op) => (
-                        <option key={op} value={op}>{op}</option>
-                      ))}
-                      <option value="—">— (vazio)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Status Execução:</label>
-                    <select
-                      value={filterStatusExecucao}
-                      onChange={(e) => setFilterStatusExecucao(e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 min-w-[160px]"
-                    >
-                      <option value="">Todos</option>
-                      {STATUS_EXECUCAO_OPCOES.map((op) => (
-                        <option key={op} value={op}>{op}</option>
-                      ))}
-                      <option value="—">— (vazio)</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Status Faturamento (%):</label>
-                    <select
-                      value={filterStatusFaturamento}
-                      onChange={(e) => setFilterStatusFaturamento(e.target.value)}
-                      className="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 w-[160px]"
-                    >
-                      <option value="">Todos</option>
-                      <option value="0">0% (não faturado)</option>
-                      <option value="1-25">1% a 25%</option>
-                      <option value="26-50">26% a 50%</option>
-                      <option value="51-75">51% a 75%</option>
-                      <option value="76-99">76% a 99%</option>
-                      <option value="100">100% ou mais</option>
-                      <option value="sem-orcamento">Sem orçamento</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {loadingPleitos ? (
-                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-                  Carregando ordens de serviço...
-                </div>
-              ) : filteredPleitos.length === 0 ? (
-                <div className="p-8 text-center">
-                  <ClipboardList className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
-                  <p className="text-gray-500 dark:text-gray-400">
-                    {pleitos.length === 0
-                      ? 'Nenhuma ordem de serviço cadastrada para este contrato.'
-                      : `Nenhuma ordem de serviço no período selecionado (${selectedMonth > 0 ? MESES_FILTRO.find((m) => m.value === selectedMonth)?.label + ' ' : ''}${isAllYears ? 'todos os anos' : selectedYear}).`}
-                  </p>
-                  <button
-                    onClick={() => setShowPleitoModal(true)}
-                    disabled={!canCreateContrato}
-                    className="mt-3 text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 disabled:no-underline text-sm font-medium"
-                  >
-                    Cadastrar primeira ordem de serviço
-                  </button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b border-gray-200 dark:border-gray-700">
-                      <tr>
-                        <th data-col-key="select" data-col-lock-first="1" className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleSelected}
-                            ref={(el) => {
-                              if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
-                            }}
-                            onChange={(e) => toggleSelectAllVisiblePleitos(e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label="Selecionar todas as ordens de serviço visíveis"
-                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-red-600 focus:ring-red-500"
-                          />
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OS / SE</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Descrição</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Mês/Ano criação</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Data início</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Data término</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status Orçamento</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status Execução</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orçamento</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Orçamento R01</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Orçamento R02</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Orçamento R03</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Orçamento R04</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status Faturamento (%)</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Período</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Lote</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Local</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Unidade</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">RVI</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">RVF</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Feedback Relatorios</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Engenheiro</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Encarregado</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Preenchimento</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:border-gray-700">
-                      {displayedPleitos.map((p) => {
-                        const osSe = (p.divSe || '').trim();
-                        const acumulado = billings
-                          .filter((b) => (b.serviceOrder || '').trim() === osSe)
-                          .reduce((sum, b) => sum + b.grossValue, 0);
-                        const orcamentoPleito = p.budget ? Number(p.budget) : 0;
-                        const statusFaturamentoPct = orcamentoPleito > 0 ? (acumulado / orcamentoPleito) * 100 : null;
-                        const mesAnoCriacao =
-                          p.creationMonth && p.creationYear
-                            ? `${String(p.creationMonth).padStart(2, '0')}/${p.creationYear}`
-                            : '-';
-                        const isSelected = selectedForPleito.has(p.id);
-                        return (
-                        <tr
-                          key={p.id}
-                          onClick={() => setSelectedPleitoId(p.id)}
-                          className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer ${isSelected ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
-                        >
-                          <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedForPleito((prev) => {
-                                    const next = new Set(prev);
-                                    next.add(p.id);
-                                    return next;
-                                  });
-                                } else {
-                                  setSelectedForPleito((prev) => {
-                                    const next = new Set(prev);
-                                    next.delete(p.id);
-                                    return next;
-                                  });
-                                  setValorPleiteado((prev) => {
-                                    const next = { ...prev };
-                                    delete next[p.id];
-                                    return next;
-                                  });
-                                }
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-red-600 focus:ring-red-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {formatOsSePastaOrDash(p.divSe, p.folderNumber)}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate" title={p.serviceDescription}>{p.serviceDescription || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{mesAnoCriacao}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.startDate ? formatDate(p.startDate) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.endDate ? formatDate(p.endDate) : '-'}</td>
-                          <td className="px-4 py-3 text-sm align-middle">
-                            <span
-                              className={pleitoStatusReadOnlySpanClass('budget', p.budgetStatus)}
-                              title={p.budgetStatus || ''}
-                            >
-                              {p.budgetStatus || '—'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm align-middle">
-                            <span
-                              className={pleitoStatusReadOnlySpanClass('execution', p.executionStatus)}
-                              title={p.executionStatus || ''}
-                            >
-                              {p.executionStatus || '—'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-gray-100">{p.budget ? formatCurrency(Number(p.budget)) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.budgetAmount1 != null && Number(p.budgetAmount1) > 0 ? formatCurrency(Number(p.budgetAmount1)) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.budgetAmount2 != null && Number(p.budgetAmount2) > 0 ? formatCurrency(Number(p.budgetAmount2)) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.budgetAmount3 != null && Number(p.budgetAmount3) > 0 ? formatCurrency(Number(p.budgetAmount3)) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.budgetAmount4 != null && Number(p.budgetAmount4) > 0 ? formatCurrency(Number(p.budgetAmount4)) : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-gray-100">
-                            {statusFaturamentoPct != null ? `${statusFaturamentoPct.toFixed(1)}%` : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                            {p.startDate && p.endDate
-                              ? `${formatDate(p.startDate)} – ${formatDate(p.endDate)}`
-                              : p.creationMonth && p.creationYear
-                                ? `${String(p.creationMonth).padStart(2, '0')}/${p.creationYear}`
-                                : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.lot || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate" title={p.location ?? undefined}>{p.location || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.unit || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.pv || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.ipi || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate" title={p.reportsBilling ?? undefined}>{p.reportsBilling || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.engineer || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">{p.supervisor || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(p.createdAt || '')}</td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {!loadingPleitos && filteredPleitos.length > LIST_DISPLAY_LIMIT && (
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-center">
-                  <Link
-                    href={`/ponto/contratos/${contractId}/andamento${andamentoLinkParams ? `?${andamentoLinkParams}` : ''}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-sm font-medium transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Ver todos os lançamentos ({filteredPleitos.length})
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          </>
-          ) : null}
-
           {canAccessProducaoSemanalModulo ? (
           <>
           {/* Produção Semanal */}
           <Card>
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Produção Semanal
-                </h3>
-                <button
-                  onClick={() => {
-                    setProductionForm({ fillingDate: toInputDate(new Date()), divSe: '', weeklyProductionValue: '', responsiblePerson: '' });
-                    setShowProductionModal(true);
-                  }}
-                  className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-                  title="Nova produção semanal"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className={cadastroListClasses.cardHeaderRow}>
+                <div className={cadastroListClasses.cardHeaderIconRow}>
+                  <div className="rounded-lg bg-amber-100 p-2 sm:p-3 dark:bg-amber-900/30">
+                    <BarChart3 className="h-5 w-5 text-amber-600 dark:text-amber-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
+                      Produção Semanal
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {loadingProductions
+                        ? 'Carregando...'
+                        : filteredProductions.length === 1
+                          ? '1 registro'
+                          : `${filteredProductions.length} registros`}
+                    </p>
+                  </div>
+                </div>
+                <div className={cadastroListClasses.cardToolbar}>
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                    <input
+                      type="search"
+                      value={searchTermProduction}
+                      onChange={(e) => setSearchTermProduction(e.target.value)}
+                      placeholder="Buscar OS, responsável, valor..."
+                      className={`${LIST_SEARCH_INPUT_CLASS} focus:ring-amber-500`}
+                    />
+                    {searchTermProduction ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTermProduction('')}
+                        aria-label="Limpar busca"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductionFilterModal(true)}
+                    className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      hasActiveProductionFilter
+                        ? 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    aria-label="Abrir filtro"
+                    title={hasActiveProductionFilter ? 'Filtro (ativo)' : 'Filtro'}
+                  >
+                    <Filter className="h-4 w-4" />
+                    {hasActiveProductionFilter ? (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-gray-900" />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductionForm({
+                        fillingDate: toInputDate(new Date()),
+                        divSe: '',
+                        weeklyProductionValue: '',
+                        responsiblePerson: defaultProductionResponsiblePerson,
+                      });
+                      setShowProductionModal(true);
+                    }}
+                    disabled={!canCreateContrato}
+                    className="flex h-10 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-900/40 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Nova Produção Semanal</span>
+                  </button>
+                </div>
               </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {filteredProductions.length} {filteredProductions.length === 1 ? 'registro' : 'registros'}
-              </p>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className={cadastroListClasses.cardContent}>
               {loadingProductions ? (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                   Carregando...
@@ -2906,21 +4546,38 @@ export default function ContractDetailPage() {
                 <div className="p-8 text-center">
                   <BarChart3 className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
                   <p className="text-gray-500 dark:text-gray-400">
-                    Nenhuma produção semanal cadastrada.
+                    Nenhuma produção semanal encontrada.
                   </p>
+                  {productions.length === 0 && (
                   <button
                     onClick={() => {
-                    setProductionForm({ fillingDate: toInputDate(new Date()), divSe: '', weeklyProductionValue: '', responsiblePerson: '' });
+                    setProductionForm({
+                      fillingDate: toInputDate(new Date()),
+                      divSe: '',
+                      weeklyProductionValue: '',
+                      responsiblePerson: defaultProductionResponsiblePerson,
+                    });
                     setShowProductionModal(true);
                   }}
                     className="mt-3 text-amber-600 dark:text-amber-400 hover:underline text-sm font-medium"
                   >
-                    Cadastrar primeira produção semanal
+                    Cadastrar produção semanal
                   </button>
+                  )}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <>
+                  <CadastroListSummary
+                    startItem={productionListRange.startItem}
+                    endItem={productionListRange.endItem}
+                    total={filteredProductions.length}
+                    itemLabel="registro"
+                    itemLabelPlural="registros"
+                    currentPage={productionListPage}
+                    totalPages={productionListRange.totalPages}
+                  />
+                <div className="table-scroll">
+                  <table className="w-full" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Data</th>
@@ -2932,7 +4589,7 @@ export default function ContractDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {filteredProductions.map((p) => (
+                      {displayedProductions.map((p) => (
                         <tr
                           key={p.id}
                           className="hover:bg-gray-50 dark:hover:bg-gray-700/30"
@@ -2943,7 +4600,7 @@ export default function ContractDetailPage() {
                           </td>
                           <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-gray-100">{formatCurrency(p.weeklyProductionValue)}</td>
                           <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{p.responsiblePerson}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(p.createdAt || '')}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTimeBr(p.createdAt || '')}</td>
                           <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
                               <button
@@ -2990,53 +4647,618 @@ export default function ContractDetailPage() {
                     </tbody>
                   </table>
                 </div>
+                <ListPagination
+                  currentPage={productionListPage}
+                  totalPages={productionListRange.totalPages}
+                  onPageChange={setProductionListPage}
+                />
+                </>
               )}
             </CardContent>
           </Card>
           </>
           ) : null}
 
+          {canAccessOrdemServicoModulo ? (
+          <>
+          <div className="space-y-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Resumo
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 xl:grid-cols-3">
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 sm:p-3">
+                      <Calculator className="h-5 w-5 text-blue-600 dark:text-blue-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                      <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                        Total Orçado
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                        {formatCurrency(osResumoTotals.totalOrcado)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 rounded-lg bg-indigo-100 p-2 dark:bg-indigo-900/30 sm:p-3">
+                      <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                      <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                        Total Pleiteado
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                        {formatCurrency(osResumoTotals.totalPleiteado)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0 rounded-lg bg-green-100 p-2 dark:bg-green-900/30 sm:p-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="ml-3 min-w-0 flex-1 sm:ml-4">
+                      <p className="whitespace-normal text-xs font-medium text-gray-600 dark:text-gray-400 sm:text-sm">
+                        Total Faturado
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-gray-900 dark:text-gray-100 sm:text-2xl">
+                        {formatCurrency(osResumoTotals.totalFaturado)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Ordem de Serviço - Lista de pleitos do contrato */}
+          <Card>
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className="flex flex-col gap-4">
+                <div className={cadastroListClasses.cardHeaderRow}>
+                  <div className={cadastroListClasses.cardHeaderIconRow}>
+                    <div className="rounded-lg bg-blue-100 p-2 sm:p-3 dark:bg-blue-900/30">
+                      <ClipboardList className="h-5 w-5 text-blue-600 dark:text-blue-400 sm:h-6 sm:w-6" />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
+                        Ordem de Serviço
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {loadingPleitos
+                          ? 'Carregando...'
+                          : filteredPleitos.length === 1
+                            ? '1 ordem de serviço'
+                            : `${filteredPleitos.length} ordens de serviço`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={cadastroListClasses.cardToolbar}>
+                    {!loadingPleitos && pleitos.length > 0 && selectedForPleito.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => toggleOsSelectionMenu(e.currentTarget)}
+                        className={`relative ${rowActionMenuButtonClass(osSelectionMenu !== null)}`}
+                        aria-label="Ações das OS selecionadas"
+                        aria-expanded={osSelectionMenu !== null}
+                        aria-haspopup="menu"
+                        title={`Ações (${selectedForPleito.size} selecionada${selectedForPleito.size === 1 ? '' : 's'})`}
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold leading-none text-white">
+                          {selectedForPleito.size}
+                        </span>
+                      </button>
+                    )}
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                      <input
+                        type="search"
+                        value={searchTermPleitos}
+                        onChange={(e) => setSearchTermPleitos(e.target.value)}
+                        placeholder="Buscar OS, descrição, lote..."
+                        className={LIST_SEARCH_INPUT_CLASS}
+                      />
+                      {searchTermPleitos ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearchTermPleitos('')}
+                          aria-label="Limpar busca"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPleitosFilterModal(true)}
+                      className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                        hasActivePleitosFilter
+                          ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-900/40'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                      aria-label="Abrir filtro"
+                      title={hasActivePleitosFilter ? 'Filtro (ativo)' : 'Filtro'}
+                    >
+                      <Filter className="h-4 w-4" />
+                      {hasActivePleitosFilter ? (
+                        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-blue-500 ring-2 ring-white dark:ring-gray-900" />
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowOsImportModal(true)}
+                      disabled={!canCreateContrato}
+                      className={OS_TOOLBAR_BTN}
+                      title="Importar planilha"
+                      aria-label="Importar planilha"
+                    >
+                      <Upload className="h-4 w-4 shrink-0" />
+                      Importar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowOsExportModal(true)}
+                      disabled={filteredPleitos.length === 0 || exportingOsPdf}
+                      className={OS_TOOLBAR_BTN}
+                      title="Exportar"
+                      aria-label="Exportar"
+                    >
+                      <Download className="h-4 w-4 shrink-0" />
+                      Exportar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPleitoModal(true)}
+                      disabled={!canCreateContrato}
+                      className={OS_TOOLBAR_BTN_PRIMARY}
+                    >
+                      <Plus className="h-4 w-4 shrink-0" />
+                      Nova Ordem de Serviço
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </CardHeader>
+            {osSelectionMenu ? (
+              <RowActionMenuPortal
+                menu={osSelectionMenu}
+                onClose={() => setOsSelectionMenu(null)}
+                onEdit={() => {}}
+                onDelete={() => {}}
+                hideDefaultActions
+                extraItems={[
+                  {
+                    label: 'Visualizar Pleito',
+                    onClick: handleVisualizarPleito,
+                    icon: <Eye className={OS_TOOLBAR_BTN_ICON} />,
+                  },
+                  {
+                    label: gerarPleitoMutation.isPending ? 'Gerando...' : 'Gerar Pleito',
+                    onClick: handleGerarPleito,
+                    disabled: !canCreateContrato || gerarPleitoMutation.isPending,
+                    disabledTitle: gerarPleitoMutation.isPending
+                      ? 'Gerando...'
+                      : 'Sem permissão para gerar pleito',
+                    icon: <FileDown className={OS_TOOLBAR_BTN_ICON} />,
+                  },
+                  {
+                    label: gerarPleitoMutation.isPending ? 'Gerando...' : 'Pleitear 100%',
+                    onClick: handlePleitar100PorcentoSelecionadas,
+                    disabled: gerarPleitoMutation.isPending,
+                    disabledTitle: 'Gerando...',
+                    icon: <CheckCircle2 className={OS_TOOLBAR_BTN_ICON} />,
+                  },
+                  {
+                    label: 'Gerar cronograma mensal',
+                    onClick: handleGerarCronogramaMensal,
+                    icon: <CalendarDays className={OS_TOOLBAR_BTN_ICON} />,
+                  },
+                  {
+                    label: deletePleitosSelecionadosMutation.isPending
+                      ? 'Excluindo...'
+                      : 'Excluir selecionadas',
+                    onClick: handleExcluirPleitosSelecionados,
+                    disabled: !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
+                    disabledTitle: deletePleitosSelecionadosMutation.isPending
+                      ? 'Excluindo...'
+                      : 'Sem permissão para excluir OS',
+                    icon: (
+                      <Trash2
+                        className={`h-4 w-4 shrink-0 ${
+                          !canDeleteOs || deletePleitosSelecionadosMutation.isPending
+                            ? 'text-gray-400 dark:text-gray-500'
+                            : 'text-red-600 dark:text-red-400'
+                        }`}
+                      />
+                    ),
+                  },
+                ]}
+              />
+            ) : null}
+            <CardContent className={cadastroListClasses.cardContent}>
+              {loadingPleitos ? (
+                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  Carregando ordens de serviço...
+                </div>
+              ) : filteredPleitos.length === 0 ? (
+                <div className="p-8 text-center">
+                  <ClipboardList className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Nenhuma ordem de serviço encontrada.
+                  </p>
+                  <button
+                    onClick={() => setShowPleitoModal(true)}
+                    disabled={!canCreateContrato}
+                    className="mt-3 text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 disabled:no-underline text-sm font-medium"
+                  >
+                    Criar ordem de serviço
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <CadastroListSummary
+                    startItem={pleitosListRange.startItem}
+                    endItem={pleitosListRange.endItem}
+                    total={filteredPleitos.length}
+                    itemLabel="ordem de serviço"
+                    itemLabelPlural="ordens de serviço"
+                    currentPage={pleitosListPage}
+                    totalPages={pleitosListRange.totalPages}
+                  />
+                <div className="table-scroll">
+                  <table className="w-full text-sm" data-cc-skip-column-customizer="1">
+                    <thead className="border-b border-gray-200 dark:border-gray-700">
+                      <tr>
+                        <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12 align-middle">
+                          <div className="flex justify-center">
+                            <TableCheckbox
+                              checked={allVisibleSelected}
+                              indeterminate={someVisibleSelected && !allVisibleSelected}
+                              onChange={toggleSelectAllVisiblePleitos}
+                              onClick={(e) => e.stopPropagation()}
+                              ariaLabel="Selecionar todas as ordens de serviço visíveis"
+                            />
+                          </div>
+                        </th>
+                        <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>ID</th>
+                        <th className={`${cadastroListClasses.th} align-middle`}>Descrição</th>
+                        <th className={`${cadastroListClasses.thCenter} align-middle whitespace-nowrap`}>% Pleiteado</th>
+                        <th className={`${cadastroListClasses.thCenter} align-middle whitespace-nowrap`}>Pleito</th>
+                        <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Valor pleiteado</th>
+                        <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Restante a pleitear</th>
+                        <th className={`${cadastroListClasses.thNumeric} align-middle`}>Orçamento</th>
+                        <th className={`${cadastroListClasses.thCenter} align-middle whitespace-nowrap`}>Status Pleito</th>
+                        <th className={`${cadastroListClasses.thCenter} align-middle whitespace-nowrap`}>Status Faturamento</th>
+                        <th className={`${listTableRowClasses.actionTh} align-middle`}>Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                      {displayedPleitos.map((p) => {
+                        const osStatus = getOsStatus(p, billingsForOs, allPleitos);
+                        const osStatusFat = getOsStatusFaturamento(p, billingsForOs);
+                        const pctPleiteado = getOsPleiteadoPct(p, allPleitos);
+                        const restantePleitear = getOsRestantePleitear(p, allPleitos);
+                        const isSelected = selectedForPleito.has(p.id);
+                        const linkedPleitos = getOsLinkedPleitos(allPleitos, p.divSe);
+                        return (
+                        <tr
+                          key={p.id}
+                          onClick={() => setSelectedPleitoId(p.id)}
+                          className={`group cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/30 ${isSelected ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
+                        >
+                          <td className="px-3 py-3 align-middle" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-center">
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={(next) => {
+                                  if (next) {
+                                    setSelectedForPleito((prev) => {
+                                      const nextSet = new Set(prev);
+                                      nextSet.add(p.id);
+                                      return nextSet;
+                                    });
+                                  } else {
+                                    setSelectedForPleito((prev) => {
+                                      const nextSet = new Set(prev);
+                                      nextSet.delete(p.id);
+                                      return nextSet;
+                                    });
+                                    setValorPleiteado((prev) => {
+                                      const nextVal = { ...prev };
+                                      delete nextVal[p.id];
+                                      return nextVal;
+                                    });
+                                    setPleitoValorInput((prev) => {
+                                      const nextVal = { ...prev };
+                                      delete nextVal[p.id];
+                                      return nextVal;
+                                    });
+                                  }
+                                }}
+                                ariaLabel={`Selecionar ordem de serviço ${formatOsSePastaOrDash(p.divSe, p.folderNumber)}`}
+                              />
+                            </div>
+                          </td>
+                          <td className={`${cadastroListClasses.tdMono} align-middle`}>
+                            {formatOsSePastaOrDash(p.divSe, p.folderNumber)}
+                          </td>
+                          <td className={`${cadastroListClasses.tdTruncate} align-middle`} title={p.serviceDescription}>
+                            <span className="block truncate">{p.serviceDescription || '-'}</span>
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle text-gray-900 dark:text-gray-100`}>
+                            {pctPleiteado != null ? `${pctPleiteado.toFixed(1)}%` : '—'}
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle`}>
+                            {linkedPleitos.length === 0 ? (
+                              <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                {linkedPleitos.map((lp) => (
+                                  <span
+                                    key={lp.id}
+                                    className="block font-mono text-xs font-medium text-gray-900 dark:text-gray-100"
+                                    title={`Pleito ${formatDisplayId(pleitoDisplayIds, lp.id)}`}
+                                  >
+                                    {formatDisplayId(pleitoDisplayIds, lp.id)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className={`${cadastroListClasses.tdNumeric} align-middle text-gray-900 dark:text-gray-100`}>
+                            {linkedPleitos.length === 0 ? (
+                              <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                            ) : (
+                              <div className="flex flex-col items-end gap-0.5">
+                                {linkedPleitos.map((lp) => {
+                                  const valorLp = lp.billingRequest != null ? Number(lp.billingRequest) : 0;
+                                  return (
+                                    <span
+                                      key={lp.id}
+                                      className="block whitespace-nowrap text-xs font-medium tabular-nums"
+                                      title={`Pleito ${formatDisplayId(pleitoDisplayIds, lp.id)}`}
+                                    >
+                                      {formatCurrency(Number.isFinite(valorLp) ? valorLp : 0)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                          <td className={`${cadastroListClasses.tdNumeric} align-middle text-gray-900 dark:text-gray-100`}>
+                            {restantePleitear != null ? formatCurrency(restantePleitear) : '—'}
+                          </td>
+                          <td className={`${cadastroListClasses.tdNumeric} align-middle font-medium text-gray-900 dark:text-gray-100`}>
+                            {p.budget ? formatCurrency(Number(p.budget)) : '-'}
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${osStatusBadgeClass(osStatus)}`}
+                            >
+                              {osStatus}
+                            </span>
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${osStatusBadgeClass(osStatusFat)}`}
+                            >
+                              {osStatusFat}
+                            </span>
+                          </td>
+                          <RowActionMenuCell
+                            isOpen={isPleitoRowMenuOpen(p.id)}
+                            onToggle={(e) => togglePleitoRowActionMenu(p.id, e.currentTarget)}
+                          />
+                        </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {pleitoRowActionMenu && pleitoRowForActionMenu ? (
+                    <RowActionMenuPortal
+                      menu={pleitoRowActionMenu}
+                      onClose={closePleitoRowActionMenu}
+                      onEdit={() => {}}
+                      onDelete={() => {}}
+                      hideDefaultActions
+                      extraItems={[
+                        {
+                          label: 'Editar',
+                          onClick: () =>
+                            handleEditarPleitoOs(pleitoRowForActionMenu as ContractPleito),
+                          disabled: !canEditContrato,
+                          disabledTitle: 'Sem permissão para editar',
+                          icon: (
+                            <Edit2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                          ),
+                        },
+                        {
+                          label: 'Gerar pleito',
+                          onClick: () => handleGerarPleitoParaOs(pleitoRowForActionMenu.id),
+                          disabled:
+                            !canCreateContrato ||
+                            gerarPleitoMutation.isPending ||
+                            isOsPleiteada100(pleitoRowForActionMenu, allPleitos),
+                          disabledTitle: gerarPleitoMutation.isPending
+                            ? 'Gerando...'
+                            : isOsPleiteada100(pleitoRowForActionMenu, allPleitos)
+                              ? 'OS já pleiteada 100%'
+                              : 'Sem permissão para gerar pleito',
+                          icon: (
+                            <FileDown className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                          ),
+                        },
+                        {
+                          label: 'Excluir',
+                          onClick: () =>
+                            handleExcluirPleitoOs(pleitoRowForActionMenu as ContractPleito),
+                          disabled:
+                            !canDeleteOs || deletePleitosSelecionadosMutation.isPending,
+                          disabledTitle: deletePleitosSelecionadosMutation.isPending
+                            ? 'Excluindo...'
+                            : 'Sem permissão para excluir OS',
+                          icon: (
+                            <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </div>
+                <ListPagination
+                  currentPage={pleitosListPage}
+                  totalPages={pleitosListRange.totalPages}
+                  onPageChange={setPleitosListPage}
+                />
+                {filteredPleitos.length > LIST_DISPLAY_LIMIT && (
+                  <div className="mt-4 flex justify-center border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <button
+                      type="button"
+                      onClick={() => setShowAndamentoTodosModal(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-100 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ver todos os lançamentos ({filteredPleitos.length})
+                    </button>
+                  </div>
+                )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <ContractHistoricoPleitosPanel contractId={contractId} />
+          </>
+          ) : null}
+
           {/* Faturamento - Lista de notas */}
           <Card>
-            <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Faturamento
-                </h3>
-              </div>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {filteredBillings.length} {filteredBillings.length === 1 ? 'registro' : 'registros'}
-                {selectedMonth > 0 ? ` em ${MESES_FILTRO.find((m) => m.value === selectedMonth)?.label}` : ''}
-                {isAllYears ? ' (todos os anos)' : ` (${selectedYear})`}
-              </p>
-              {!loadingBillings && billings.length > 0 && (
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    value={filterBillingOsSe}
-                    onChange={(e) => setFilterBillingOsSe(e.target.value)}
-                    placeholder="Filtrar OS / SE"
-                    className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
-                  <input
-                    type="text"
-                    value={filterBillingInvoice}
-                    onChange={(e) => setFilterBillingInvoice(e.target.value)}
-                    placeholder="Filtrar Nº nota fiscal"
-                    className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
-                  <input
-                    type="text"
-                    value={filterBillingGross}
-                    onChange={(e) => setFilterBillingGross(e.target.value)}
-                    placeholder="Filtrar valor bruto"
-                    className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className={cadastroListClasses.cardHeaderRow}>
+                <div className={cadastroListClasses.cardHeaderIconRow}>
+                  <div className="rounded-lg bg-green-100 p-2 sm:p-3 dark:bg-green-900/30">
+                    <Receipt className="h-5 w-5 text-green-600 dark:text-green-400 sm:h-6 sm:w-6" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 sm:text-xl">
+                      Faturamento
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {loadingBillings
+                        ? 'Carregando...'
+                        : filteredBillings.length === 1
+                          ? '1 registro'
+                          : `${filteredBillings.length} registros`}
+                    </p>
+                  </div>
                 </div>
-              )}
+                <div className={cadastroListClasses.cardToolbar}>
+                  {selectedForBilling.size > 0 ? (
+                    <button
+                      type="button"
+                      onClick={(e) => toggleBillingSelectionMenu(e.currentTarget)}
+                      className={`relative ${rowActionMenuButtonClass(billingSelectionMenu !== null)}`}
+                      aria-label="Ações dos faturamentos selecionados"
+                      aria-expanded={billingSelectionMenu !== null}
+                      aria-haspopup="menu"
+                      title={`Ações (${selectedForBilling.size} selecionado${selectedForBilling.size === 1 ? '' : 's'})`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                      <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-semibold leading-none text-white">
+                        {selectedForBilling.size}
+                      </span>
+                    </button>
+                  ) : null}
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                    <input
+                      type="search"
+                      value={searchTermBillings}
+                      onChange={(e) => setSearchTermBillings(e.target.value)}
+                      placeholder="Buscar nota, OS, valor..."
+                      className={`${LIST_SEARCH_INPUT_CLASS} focus:ring-green-500`}
+                    />
+                    {searchTermBillings ? (
+                      <button
+                        type="button"
+                        onClick={() => setSearchTermBillings('')}
+                        aria-label="Limpar busca"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBillingFilterModal(true)}
+                    className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                      hasActiveBillingFilter
+                        ? 'border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800/60 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-900/40'
+                        : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                    }`}
+                    aria-label="Abrir filtro"
+                    title={hasActiveBillingFilter ? 'Filtro (ativo)' : 'Filtro'}
+                  >
+                    <Filter className="h-4 w-4" />
+                    {hasActiveBillingFilter ? (
+                      <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-green-500 ring-2 ring-white dark:ring-gray-900" />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportFaturamentoExcel}
+                    disabled={filteredBillings.length === 0}
+                    className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    title="Exportar Excel"
+                    aria-label="Exportar faturamento em Excel"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span className="hidden sm:inline">Exportar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowBillingModal(true)}
+                    disabled={!canCreateContrato}
+                    className="flex h-10 items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 transition-colors hover:bg-green-100 dark:border-green-800/60 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-900/40 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Novo Faturamento</span>
+                  </button>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="p-0">
+            {billingSelectionMenu ? (
+              <RowActionMenuPortal
+                menu={billingSelectionMenu}
+                onClose={() => setBillingSelectionMenu(null)}
+                onEdit={() => {}}
+                onDelete={() => {}}
+                hideDefaultActions
+                extraItems={[
+                  {
+                    label: deleteBillingMutation.isPending ? 'Excluindo...' : 'Excluir',
+                    disabled: deleteBillingMutation.isPending,
+                    disabledTitle: 'Excluindo...',
+                    onClick: handleRemoverFaturamentosSelecionados,
+                    icon: <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />,
+                  },
+                ]}
+              />
+            ) : null}
+            <CardContent className={cadastroListClasses.cardContent}>
               {loadingBillings ? (
                 <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                   Carregando...
@@ -3047,7 +5269,9 @@ export default function ContractDetailPage() {
                   <p className="text-gray-500 dark:text-gray-400">
                     {billings.length === 0
                       ? 'Nenhum faturamento cadastrado.'
-                      : `Nenhum faturamento no período selecionado (${selectedMonth > 0 ? MESES_FILTRO.find((m) => m.value === selectedMonth)?.label + ' ' : ''}${isAllYears ? 'todos os anos' : selectedYear}).`}
+                      : searchTermBillings.trim() || hasActiveBillingFilter
+                        ? 'Nenhum faturamento encontrado com os filtros atuais.'
+                        : `Nenhum faturamento no período selecionado (${selectedMonth > 0 ? MESES_FILTRO.find((m) => m.value === selectedMonth)?.label + ' ' : ''}${isAllYears ? 'todos os anos' : selectedYear}).`}
                   </p>
                   <button
                     onClick={() => setShowBillingModal(true)}
@@ -3058,132 +5282,620 @@ export default function ContractDetailPage() {
                   </button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <>
+                  <CadastroListSummary
+                    startItem={billingsListRange.startItem}
+                    endItem={billingsListRange.endItem}
+                    total={filteredBillings.length}
+                    itemLabel="registro"
+                    itemLabelPlural="registros"
+                    currentPage={billingsListPage}
+                    totalPages={billingsListRange.totalPages}
+                  />
+                <div className="table-scroll">
+                  <table className="w-full text-sm" data-cc-skip-column-customizer="1">
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Data Emissão</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nº Nota Fiscal</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OS / SE</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Valor Bruto</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Preenchimento</th>
-                        {canDeleteContrato && (
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-24">Ações</th>
-                        )}
+                        <th className="w-12 px-3 py-3 text-center text-xs font-medium uppercase text-gray-500 dark:text-gray-400 align-middle">
+                          <div className="flex justify-center">
+                            <TableCheckbox
+                              checked={allVisibleBillingsSelected}
+                              indeterminate={someVisibleBillingsSelected && !allVisibleBillingsSelected}
+                              onChange={toggleSelectAllVisibleBillings}
+                              onClick={(e) => e.stopPropagation()}
+                              ariaLabel="Selecionar faturamentos visíveis"
+                            />
+                          </div>
+                        </th>
+                        <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>ID</th>
+                        <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>OS / SE</th>
+                        <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Pleito</th>
+                        <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>Nº NF</th>
+                        <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Data emissão</th>
+                        <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Valor bruto</th>
+                        <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Valor líquido</th>
+                        <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Status</th>
+                        <th className={`${listTableRowClasses.actionTh} align-middle`}>Ação</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {displayedBillings.map((b) => (
+                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                      {displayedBillings.map((b) => {
+                        const liquidoMissing = isNetValueMissing(b);
+                        const fatStatus = liquidoMissing ? 'Líquido pendente' : 'Faturado';
+                        const isSelected = selectedForBilling.has(b.id);
+                        return (
                         <tr
                           key={b.id}
                           onClick={() => setSelectedBilling(b)}
-                          className="hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer"
+                          className={`${listTableRowClasses.trNavigable} ${isSelected ? 'bg-green-50/50 dark:bg-green-900/10' : ''}`}
                         >
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{formatDate(b.issueDate)}</td>
-                          <td className="px-4 py-3 text-sm font-mono text-gray-900 dark:text-gray-100">{b.invoiceNumber}</td>
-                          <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                            {formatOsSePastaOrDash(b.serviceOrder, folderForDivSe(pleitos, b.serviceOrder))}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-gray-100">
-                            <div className="flex flex-col items-end gap-1">
-                              <span>{formatCurrency(b.grossValue)}</span>
-                              {isNetValueMissing(b) && (
-                                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                                  FAT. LIQUIDO NAO PREENCHIDO
-                                </span>
-                              )}
+                          <td className="px-3 py-3 align-middle" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex justify-center">
+                              <TableCheckbox
+                                checked={isSelected}
+                                onChange={(checked) =>
+                                  setSelectedForBilling((prev) => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(b.id);
+                                    else next.delete(b.id);
+                                    return next;
+                                  })
+                                }
+                                ariaLabel={`Selecionar faturamento ${formatDisplayId(billingDisplayIds, b.id)}`}
+                              />
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(b.createdAt || '')}</td>
-                          {canDeleteContrato && (
-                            <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={() => {
-                                  if (!canDeleteContrato) {
-                                    toast.error('Você não tem permissão para excluir no módulo Contratos.');
-                                    return;
-                                  }
-                                  if (confirm('Excluir este faturamento?')) {
-                                    deleteBillingMutation.mutate(b.id);
-                                  }
-                                }}
-                                disabled={!canDeleteContrato || deleteBillingMutation.isPending}
-                                className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Excluir"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          )}
+                          <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                            {formatDisplayId(billingDisplayIds, b.id)}
+                          </td>
+                          <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                            {formatOsSePastaOrDash(b.serviceOrder, folderForDivSe(allPleitos, b.serviceOrder))}
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                            {b.pleitoId ? (
+                              <span className="font-mono text-xs font-medium text-gray-900 dark:text-gray-100">
+                                {formatDisplayId(pleitoDisplayIds, b.pleitoId)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                            )}
+                          </td>
+                          <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                            {(b.invoiceNumber || '').trim() || '—'}
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap text-gray-900 dark:text-gray-100`}>
+                            {formatDate(b.issueDate)}
+                          </td>
+                          <td className={`${cadastroListClasses.tdNumeric} align-middle font-medium text-gray-900 dark:text-gray-100`}>
+                            {formatCurrency(b.grossValue)}
+                          </td>
+                          <td className={`${cadastroListClasses.tdNumeric} align-middle text-gray-900 dark:text-gray-100`}>
+                            {liquidoMissing ? '—' : formatCurrency(b.netValue)}
+                          </td>
+                          <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                            <span className={billingAndamentoBadgeClass(fatStatus)}>
+                              {fatStatus}
+                            </span>
+                          </td>
+                          <RowActionMenuCell
+                            isOpen={isBillingRowMenuOpen(b.id)}
+                            onToggle={(e) => toggleBillingRowActionMenu(b.id, e.currentTarget)}
+                          />
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
+                  {billingRowActionMenu && billingRowForActionMenu ? (
+                    <RowActionMenuPortal
+                      menu={billingRowActionMenu}
+                      onClose={closeBillingRowActionMenu}
+                      onEdit={() => {}}
+                      onDelete={() => {}}
+                      hideDefaultActions
+                      extraItems={[
+                        {
+                          label: deleteBillingMutation.isPending ? 'Excluindo...' : 'Excluir',
+                          onClick: () => handleRemoverFaturamento(billingRowForActionMenu),
+                          disabled: deleteBillingMutation.isPending,
+                          disabledTitle: 'Excluindo...',
+                          icon: (
+                            <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                          ),
+                        },
+                      ]}
+                    />
+                  ) : null}
                 </div>
-              )}
-              {!loadingBillings && filteredBillings.length > LIST_DISPLAY_LIMIT && (
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-center">
-                  <Link
-                    href={`/ponto/contratos/${contractId}/faturamento${faturamentoLinkParams ? `?${faturamentoLinkParams}` : ''}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 text-sm font-medium transition-colors"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Ver todos os lançamentos ({filteredBillings.length})
-                  </Link>
-                </div>
+                <ListPagination
+                  currentPage={billingsListPage}
+                  totalPages={billingsListRange.totalPages}
+                  onPageChange={setBillingsListPage}
+                />
+                {filteredBillings.length > LIST_DISPLAY_LIMIT && (
+                  <div className="mt-4 flex justify-center border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <button
+                      type="button"
+                      onClick={() => setShowFaturamentoTodosModal(true)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-green-100 px-4 py-2 text-sm font-medium text-green-700 transition-colors hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Ver todos os lançamentos ({filteredBillings.length})
+                    </button>
+                  </div>
+                )}
+                </>
               )}
             </CardContent>
           </Card>
 
+          <ContractGastosResumoModal
+            isOpen={gastosResumoModal != null}
+            onClose={() => setGastosResumoModal(null)}
+            title={gastosResumoModalTitle}
+            naturezaRows={gastosResumoModalNaturezaRows}
+          />
+
+          <Modal
+            isOpen={showPaidNaturezaModal}
+            onClose={() => {
+              setShowPaidNaturezaModal(false);
+              setNaturezaModalMesIdx(null);
+              setExpandedNaturezaKey(null);
+            }}
+            title={naturezaModalTitulo}
+            size="xl"
+          >
+            <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
+              {naturezaModalMesIdx === null
+                ? 'Naturezas que entram no Total Pago deste contrato (centro de custo no relatório RM).'
+                : `Gastos do mês com data de pagamento no RM (${safeSelectedYear}).`}
+            </p>
+            <p className="mb-4 text-xs text-gray-500 dark:text-gray-500">
+              Clique em uma natureza para expandir os lançamentos
+              {rmLinhasDetalheFonte === 'solicitacoes'
+                ? ' (data de pagamento no RM).'
+                : rmLinhasDetalheFonte === 'paid'
+                  ? ' (relatório financeiro RM — detalhe de solicitações indisponível).'
+                  : '.'}
+            </p>
+            {naturezaModalRowsAtivos.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                {naturezaModalMesIdx === null
+                  ? 'Nenhuma natureza com valor no RM para este contrato.'
+                  : 'Nenhuma natureza com lançamento detalhado neste mês.'}
+              </p>
+            ) : (
+              <div className="table-scroll max-h-[70vh]">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Natureza
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Valor
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Lançamentos
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                    {naturezaModalRowsAtivos.map((row) => {
+                      const naturezaKey = normalizeNaturezaLabel(row.natureza);
+                      const isExpanded = expandedNaturezaKey === naturezaKey;
+                      const linhas = solicitacoesLinesAtivos.get(naturezaKey) ?? [];
+                      const linhasTotal = linhas.reduce((s, l) => s + l.valor, 0);
+
+                      return (
+                        <React.Fragment key={row.natureza}>
+                          <tr
+                            role="button"
+                            tabIndex={0}
+                            onClick={() =>
+                              setExpandedNaturezaKey(isExpanded ? null : naturezaKey)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setExpandedNaturezaKey(isExpanded ? null : naturezaKey);
+                              }
+                            }}
+                            className={`cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                              isExpanded ? 'bg-gray-50 dark:bg-gray-800/60' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
+                              <span className="flex items-start gap-2">
+                                <ChevronDown
+                                  className={`mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+                                    isExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                                <span>{row.natureza}</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {row.total.toLocaleString('pt-BR', {
+                                style: 'currency',
+                                currency: 'BRL'
+                              })}
+                            </td>
+                            <td className="px-4 py-3 text-right text-sm text-gray-600 dark:text-gray-400">
+                              {row.count}
+                            </td>
+                          </tr>
+                          {isExpanded ? (
+                            <tr className="bg-gray-50/80 dark:bg-gray-800/40">
+                              <td colSpan={3} className="px-4 py-3">
+                                {linhas.length === 0 ? (
+                                  <p className="py-2 text-center text-sm text-gray-500 dark:text-gray-400">
+                                    Nenhum lançamento detalhado retornado pelo RM para esta natureza.
+                                    Reinicie a API após atualizar o backend se o detalhe ainda não carregar.
+                                  </p>
+                                ) : (
+                                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <table className="min-w-full text-sm">
+                                      <thead className="bg-white dark:bg-gray-900">
+                                        <tr>
+                                          <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                            Data pagamento
+                                          </th>
+                                          <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                            Competência
+                                          </th>
+                                          <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                            Valor
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900">
+                                        {linhas.map((linha, idx) => (
+                                          <tr key={`${linha.dataISO ?? 'nd'}-${linha.valor}-${idx}`}>
+                                            <td className="whitespace-nowrap px-3 py-2 text-gray-800 dark:text-gray-200">
+                                              {linha.dataISO
+                                                ? formatDate(linha.dataISO)
+                                                : '—'}
+                                            </td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-gray-600 dark:text-gray-400">
+                                              {linha.competencia ?? '—'}
+                                            </td>
+                                            <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-gray-900 dark:text-gray-100">
+                                              {linha.valor.toLocaleString('pt-BR', {
+                                                style: 'currency',
+                                                currency: 'BRL'
+                                              })}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                      <tfoot className="border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800">
+                                        <tr>
+                                          <td
+                                            colSpan={2}
+                                            className="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400"
+                                          >
+                                            {linhas.length}{' '}
+                                            {linhas.length === 1 ? 'lançamento' : 'lançamentos'}
+                                            {linhas.length < row.count
+                                              ? ` (amostra; total RM: ${row.count})`
+                                              : ''}
+                                          </td>
+                                          <td className="px-3 py-2 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                            {linhasTotal.toLocaleString('pt-BR', {
+                                              style: 'currency',
+                                              currency: 'BRL'
+                                            })}
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ) : null}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-800">
+                    <tr>
+                      <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        Total
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {naturezaModalTotalAtivo.toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL'
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-600 dark:text-gray-400">
+                        {naturezaModalRowsAtivos.reduce((s, r) => s + r.count, 0)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </Modal>
+
+          {/* Modal filtros — Ordem de Serviço */}
+          <Modal
+            isOpen={showPleitosFilterModal}
+            onClose={() => setShowPleitosFilterModal(false)}
+            title="Filtros — Ordem de Serviço"
+            size="md"
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status Pleito
+                </label>
+                <StringSingleSelectDropdown
+                  value={filterOsStatus}
+                  onChange={setFilterOsStatus}
+                  options={FILTER_OS_STATUS_OPTIONS}
+                  allowEmpty={false}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Status Faturamento
+                </label>
+                <StringSingleSelectDropdown
+                  value={filterOsStatusFat}
+                  onChange={setFilterOsStatusFat}
+                  options={FILTER_OS_STATUS_FATURAMENTO_OPTIONS}
+                  allowEmpty={false}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Button type="button" variant="outline" onClick={clearPleitosFilters}>
+                  Limpar filtros
+                </Button>
+                <Button type="button" onClick={() => setShowPleitosFilterModal(false)}>
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          </Modal>
+
+          {/* Modal exportar — Ordem de Serviço */}
+          <Modal
+            isOpen={showOsExportModal}
+            onClose={() => !exportingOsPdf && setShowOsExportModal(false)}
+            title="Exportar ordens de serviço"
+            size="sm"
+          >
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Escolha o formato de exportação
+                {filteredPleitos.length > 0
+                  ? ` (${filteredPleitos.length} ordem${filteredPleitos.length === 1 ? '' : 'ns'}).`
+                  : '.'}
+              </p>
+              <button
+                type="button"
+                onClick={handleExportOsExcel}
+                disabled={filteredPleitos.length === 0 || exportingOsPdf}
+                className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700/60"
+              >
+                <FileSpreadsheet className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Excel</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Arquivo .xlsx</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportOsPdf}
+                disabled={filteredPleitos.length === 0 || exportingOsPdf}
+                className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:hover:bg-gray-700/60"
+              >
+                <FileDown className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {exportingOsPdf ? 'Gerando PDF…' : 'PDF'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Arquivo .pdf</p>
+                </div>
+              </button>
+              <div className="flex justify-end border-t border-gray-200 pt-3 dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={exportingOsPdf}
+                  onClick={() => setShowOsExportModal(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </Modal>
+
+          <OsPleitoBillingImportModal
+            isOpen={showOsImportModal}
+            onClose={() => setShowOsImportModal(false)}
+            contractId={contractId}
+            existingPleitos={allPleitos}
+            onImported={() => {
+              void queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
+              void queryClient.invalidateQueries({ queryKey: ['contract-billings', contractId] });
+              void queryClient.invalidateQueries({ queryKey: ['pleitos-divse-list'] });
+            }}
+          />
+
+          {/* Modal filtros — Produção Semanal */}
+          <Modal
+            isOpen={showProductionFilterModal}
+            onClose={() => setShowProductionFilterModal(false)}
+            title="Filtros — Produção Semanal"
+            size="md"
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  OS / SE
+                </label>
+                <input
+                  type="text"
+                  value={filterProductionOsSe}
+                  onChange={(e) => setFilterProductionOsSe(e.target.value)}
+                  placeholder="Filtrar por OS / SE"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Responsável
+                </label>
+                <input
+                  type="text"
+                  value={filterProductionResponsible}
+                  onChange={(e) => setFilterProductionResponsible(e.target.value)}
+                  placeholder="Filtrar por responsável"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Button type="button" variant="outline" onClick={clearProductionFilters}>
+                  Limpar filtros
+                </Button>
+                <Button type="button" onClick={() => setShowProductionFilterModal(false)}>
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          </Modal>
+
+          {/* Modal filtros — Faturamento */}
+          <Modal
+            isOpen={showBillingFilterModal}
+            onClose={() => setShowBillingFilterModal(false)}
+            title="Filtros — Faturamento"
+            size="md"
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  OS / SE
+                </label>
+                <input
+                  type="text"
+                  value={filterBillingOsSe}
+                  onChange={(e) => setFilterBillingOsSe(e.target.value)}
+                  placeholder="Filtrar por OS / SE"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Nº Nota Fiscal
+                </label>
+                <input
+                  type="text"
+                  value={filterBillingInvoice}
+                  onChange={(e) => setFilterBillingInvoice(e.target.value)}
+                  placeholder="Filtrar por nota fiscal"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Valor bruto
+                </label>
+                <input
+                  type="text"
+                  value={filterBillingGross}
+                  onChange={(e) => setFilterBillingGross(e.target.value)}
+                  placeholder="Filtrar por valor"
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <Button type="button" variant="outline" onClick={clearBillingFilters}>
+                  Limpar filtros
+                </Button>
+                <Button type="button" onClick={() => setShowBillingFilterModal(false)}>
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          </Modal>
+
           {/* Modal de aditivos do contrato */}
           {showAddendumModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowAddendumModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+              <div className="absolute inset-0" onClick={requestCloseAddendumModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                     <Plus className="w-5 h-5" />
                     Aditivos do contrato
                   </h3>
-                  <button type="button" onClick={() => setShowAddendumModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button type="button" onClick={requestCloseAddendumModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="p-6 space-y-4">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Cada aditivo recalcula a meta mensal a partir da data informada até o fim da vigência.
+                    Cada aditivo recalcula a meta ideal a partir da data informada até o fim da vigência.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <input
-                      type="date"
-                      value={addendumDate}
-                      onChange={(e) => setAddendumDate(e.target.value)}
-                      className="h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Valor (R$)"
-                      value={addendumAmount}
-                      onChange={(e) => setAddendumAmount(e.target.value)}
-                      className="h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    />
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Data *
+                      </label>
+                      <DatePickerField
+                        value={addendumDate}
+                        onChange={setAddendumDate}
+                        placeholder="dd/mm/aaaa"
+                        aria-label="Data do aditivo"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Valor (R$) *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">
+                          R$
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0,00"
+                          value={addendumAmount}
+                          onChange={(e) => setAddendumAmount(maskAjusteValorInput(e.target.value))}
+                          className="h-10 w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-end">
                     <button
                       type="button"
                       onClick={() => {
-                        const amount = parseCurrencyInput(addendumAmount);
+                        const amount = parseAjusteValorInput(addendumAmount);
                         if (!addendumDate) return toast.error('Informe a data do aditivo');
-                        if (Math.abs(amount) < 1e-9) return toast.error('Informe um valor diferente de zero');
+                        if (Number.isNaN(amount) || Math.abs(amount) < 1e-9) {
+                          return toast.error('Informe um valor diferente de zero');
+                        }
                         createAddendumMutation.mutate({
                           effectiveDate: addendumDate,
                           amount,
                           note: addendumNote.trim() || null
                         });
                       }}
-                      className="h-10 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                      className="h-10 w-full px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
                       disabled={createAddendumMutation.isPending}
                     >
                       {createAddendumMutation.isPending ? 'Salvando…' : 'Adicionar'}
                     </button>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -3229,13 +5941,14 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {addendumModalConfirmUi}
 
           {/* Modal ajuste valor anual (orçamento do órgão) */}
           {showValorAnualAdjustModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowValorAnualAdjustModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+              <div className="absolute inset-0" onClick={requestCloseValorAnualAdjustModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -3244,7 +5957,7 @@ export default function ContractDetailPage() {
                   </h3>
                   <button
                     type="button"
-                    onClick={() => setShowValorAnualAdjustModal(false)}
+                    onClick={requestCloseValorAnualAdjustModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -3252,10 +5965,10 @@ export default function ContractDetailPage() {
                 </div>
                 <div className="p-6 space-y-4">
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Informe o <strong>valor</strong> (positivo ou negativo) e a <strong>data</strong>. Esse ajuste altera a meta
-                    mensal apenas do <strong>mês da data até dezembro do ano civil</strong> selecionado (não altera anos
-                    seguintes). Os aditivos cadastrados em &quot;Valor + Aditivos&quot; seguem outra regra e alteram a meta até o
-                    fim da vigência. O quadro &quot;Valor + Aditivos&quot; não é alterado por aqui.
+                    Informe o <strong>ajuste</strong> (positivo ou negativo) e a <strong>data</strong>. Só o valor do ajuste
+                    é redistribuído nas metas do <strong>mês da data até dezembro daquele ano</strong> — a meta mensal
+                    não é recalculada pela fatia anual inteira. Anos seguintes e o quadro &quot;Valor + Aditivos&quot; não mudam.
+                    Aditivos em &quot;Valor + Aditivos&quot; seguem outra regra e alteram a meta até o fim da vigência.
                   </p>
                   {valorAnualBase !== null && (
                     <p className="text-sm text-gray-700 dark:text-gray-300">
@@ -3264,20 +5977,15 @@ export default function ContractDetailPage() {
                   )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ano civil</label>
-                    <select
-                      value={adjFormYear}
-                      onChange={(e) => setAdjFormYear(Number(e.target.value))}
-                      className="w-full h-10 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
-                    >
-                      {availableYears.map((y) => (
-                        <option key={y} value={y}>
-                          {y}
-                        </option>
-                      ))}
-                    </select>
+                    <StringSingleSelectDropdown
+                      value={String(adjFormYear)}
+                      onChange={(v) => setAdjFormYear(Number(v))}
+                      options={adjYearSelectOptions}
+                      allowEmpty={false}
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Ajuste (R$){' '}
                       <span className="font-normal text-gray-500">positivo soma, negativo retira</span>
                     </label>
@@ -3285,46 +5993,59 @@ export default function ContractDetailPage() {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
                       <input
                         type="text"
+                        inputMode="decimal"
                         value={adjFormDeltaStr}
-                        onChange={(e) => setAdjFormDeltaStr(e.target.value)}
+                        onChange={(e) => setAdjFormDeltaStr(maskAjusteValorInput(e.target.value))}
                         placeholder="0,00"
-                        className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        className="w-full h-10 pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Data do aditivo *
                     </label>
-                    <input
-                      type="date"
+                    <DatePickerField
                       value={adjFormDate}
-                      onChange={(e) => setAdjFormDate(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      onChange={setAdjFormDate}
+                      placeholder="dd/mm/aaaa"
+                      aria-label="Data do aditivo"
                     />
                   </div>
                   {valorAnualBase !== null && (
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       Referência (base + aditivo no ano):{' '}
                       <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {formatCurrency(valorAnualBase + parseCurrencyInput(adjFormDeltaStr || '0'))}
+                        {formatCurrency(
+                          valorAnualBase + (parseAjusteValorInput(adjFormDeltaStr || '0') || 0)
+                        )}
                       </span>
                       <span className="block mt-1 text-xs">
-                        A meta mensal pós-aditivo não é esse valor ÷ 12; use a tabela Controle Geral para ver o rateio.
+                        A meta ideal pós-aditivo não é esse valor ÷ 12; use a tabela Controle Geral para ver o rateio.
                       </span>
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                     <button
                       type="button"
                       disabled={saveAnnualAdjustmentMutation.isPending || clearAnnualAdjustmentMutation.isPending}
                       onClick={() => {
-                        const delta = parseCurrencyInput(adjFormDeltaStr || '0');
+                        clearAnnualAdjustmentMutation.mutate(adjFormYear);
+                      }}
+                      className="h-10 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 text-sm font-medium"
+                    >
+                      {clearAnnualAdjustmentMutation.isPending ? 'Removendo…' : 'Remover ajuste'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saveAnnualAdjustmentMutation.isPending || clearAnnualAdjustmentMutation.isPending}
+                      onClick={() => {
+                        const delta = parseAjusteValorInput(adjFormDeltaStr || '0');
                         if (!adjFormDate.trim()) {
                           toast.error('Informe a data do aditivo');
                           return;
                         }
-                        if (Math.abs(delta) < 1e-9) {
+                        if (Number.isNaN(delta) || Math.abs(delta) < 1e-9) {
                           toast.error('Informe um valor de ajuste diferente de zero ou use Remover ajuste');
                           return;
                         }
@@ -3334,37 +6055,21 @@ export default function ContractDetailPage() {
                           budgetAdjustmentEffectiveDate: adjFormDate
                         });
                       }}
-                      className="flex-1 min-w-[8rem] h-10 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                      className="h-10 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
                     >
                       {saveAnnualAdjustmentMutation.isPending ? 'Salvando…' : 'Salvar'}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={saveAnnualAdjustmentMutation.isPending || clearAnnualAdjustmentMutation.isPending}
-                      onClick={() => {
-                        clearAnnualAdjustmentMutation.mutate(adjFormYear);
-                      }}
-                      className="flex-1 min-w-[8rem] h-10 px-4 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-800 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 text-sm font-medium"
-                    >
-                      {clearAnnualAdjustmentMutation.isPending ? 'Removendo…' : 'Remover ajuste'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowValorAnualAdjustModal(false)}
-                      className="flex-1 min-w-[8rem] h-10 px-4 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm"
-                    >
-                      Cancelar
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {valorAnualAdjustModalConfirmUi}
 
           {/* Modal Cadastrar Produção Semanal */}
           {showProductionModal && !editingProduction && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setShowProductionModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+              <div className="absolute inset-0" onClick={requestCloseProductionModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -3372,7 +6077,7 @@ export default function ContractDetailPage() {
                     Cadastrar Produção Semanal
                   </h3>
                   <button
-                    onClick={() => setShowProductionModal(false)}
+                    onClick={requestCloseProductionModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -3380,60 +6085,31 @@ export default function ContractDetailPage() {
                 </div>
                 <form onSubmit={handleProductionSubmit} className="p-6 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data</label>
-                    <input
-                      type="date"
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label>
+                    <DatePickerField
                       value={productionForm.fillingDate || toInputDate(new Date())}
-                      onChange={(e) => setProductionForm({ ...productionForm, fillingDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      onChange={(fillingDate) => setProductionForm({ ...productionForm, fillingDate })}
+                      placeholder="dd/mm/aaaa"
+                      aria-label="Data do preenchimento"
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Data em que o preenchimento está sendo realizado</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Data em que o preenchimento está sendo realizado
+                    </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Contrato</label>
-                    <div className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100">
-                      {contract ? `${contract.number} – ${contract.name}` : '-'}
-                    </div>
-                  </div>
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OS / SE *</label>
-                    <input
-                      type="text"
-                      required
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">OS / SE *</label>
+                    <StringSingleSelectDropdown
                       value={productionForm.divSe}
-                      onChange={(e) => {
-                        setProductionForm({ ...productionForm, divSe: e.target.value });
-                        setProductionOsSeDropdownOpen(true);
-                      }}
-                      onFocus={() => setProductionOsSeDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setProductionOsSeDropdownOpen(false), 150)}
-                      placeholder="Digite para buscar ou selecionar"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      onChange={(divSe) => setProductionForm({ ...productionForm, divSe })}
+                      options={divSeSelectOptions}
+                      allowEmpty={false}
+                      placeholder="Selecionar OS / SE"
+                      searchPlaceholder="Pesquisar OS / SE..."
+                      emptyOptionsMessage="Nenhuma OS cadastrada neste contrato."
+                      className="w-full"
                     />
-                    {productionOsSeDropdownOpen && (
-                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg">
-                        {productionOsSeFiltered.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">Nenhuma OS encontrada</div>
-                        ) : (
-                          productionOsSeFiltered.map((opt) => (
-                            <button
-                              key={`${opt.divSe}-${opt.folderNumber ?? ''}`}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setProductionForm({ ...productionForm, divSe: opt.divSe });
-                                setProductionOsSeDropdownOpen(false);
-                              }}
-                              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                            >
-                              {formatOsSePasta(opt.divSe, opt.folderNumber)}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
                     {divSeOptions.length === 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                         Nenhuma OS cadastrada em Ordem de Serviço. Cadastre uma ordem de serviço com o campo OS / SE.
                       </p>
                     )}
@@ -3455,21 +6131,10 @@ export default function ContractDetailPage() {
                       />
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Responsável pelo Preenchimento *</label>
-                    <input
-                      type="text"
-                      required
-                      value={productionForm.responsiblePerson}
-                      onChange={(e) => setProductionForm({ ...productionForm, responsiblePerson: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                      placeholder="Nome do responsável"
-                    />
-                  </div>
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setShowProductionModal(false)}
+                      onClick={requestCloseProductionModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -3484,13 +6149,14 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {productionModalConfirmUi}
 
           {/* Modal Editar Produção Semanal */}
           {editingProduction && selectedProduction && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setEditingProduction(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+              <div className="absolute inset-0" onClick={requestCloseEditingProduction} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -3498,7 +6164,7 @@ export default function ContractDetailPage() {
                     Editar Produção Semanal
                   </h3>
                   <button
-                    onClick={() => setEditingProduction(false)}
+                    onClick={requestCloseEditingProduction}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -3506,58 +6172,32 @@ export default function ContractDetailPage() {
                 </div>
                 <form onSubmit={handleProductionEditSubmit} className="p-6 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data</label>
-                    <input
-                      type="date"
-                      value={productionEditForm.fillingDate || (selectedProduction?.fillingDate ? toInputDate(selectedProduction.fillingDate) : '')}
-                      onChange={(e) => setProductionEditForm({ ...productionEditForm, fillingDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data</label>
+                    <DatePickerField
+                      value={
+                        productionEditForm.fillingDate ||
+                        (selectedProduction?.fillingDate ? toInputDate(selectedProduction.fillingDate) : '')
+                      }
+                      onChange={(fillingDate) => setProductionEditForm({ ...productionEditForm, fillingDate })}
+                      placeholder="dd/mm/aaaa"
+                      aria-label="Data do preenchimento"
                     />
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Data em que o preenchimento foi realizado</p>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Data em que o preenchimento foi realizado
+                    </p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Contrato</label>
-                    <div className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-900 dark:text-gray-100">
-                      {contract ? `${contract.number} – ${contract.name}` : '-'}
-                    </div>
-                  </div>
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OS / SE *</label>
-                    <input
-                      type="text"
-                      required
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">OS / SE *</label>
+                    <StringSingleSelectDropdown
                       value={productionEditForm.divSe}
-                      onChange={(e) => {
-                        setProductionEditForm({ ...productionEditForm, divSe: e.target.value });
-                        setProductionOsSeEditDropdownOpen(true);
-                      }}
-                      onFocus={() => setProductionOsSeEditDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setProductionOsSeEditDropdownOpen(false), 150)}
-                      placeholder="Digite para buscar ou selecionar"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      onChange={(divSe) => setProductionEditForm({ ...productionEditForm, divSe })}
+                      options={divSeSelectOptions}
+                      allowEmpty={false}
+                      placeholder="Selecionar OS / SE"
+                      searchPlaceholder="Pesquisar OS / SE..."
+                      emptyOptionsMessage="Nenhuma OS cadastrada neste contrato."
+                      className="w-full"
                     />
-                    {productionOsSeEditDropdownOpen && (
-                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg">
-                        {productionOsSeEditFiltered.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">Nenhuma OS encontrada</div>
-                        ) : (
-                          productionOsSeEditFiltered.map((opt) => (
-                            <button
-                              key={`${opt.divSe}-${opt.folderNumber ?? ''}`}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setProductionEditForm({ ...productionEditForm, divSe: opt.divSe });
-                                setProductionOsSeEditDropdownOpen(false);
-                              }}
-                              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                            >
-                              {formatOsSePasta(opt.divSe, opt.folderNumber)}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Valor da Produção Semanal *</label>
@@ -3590,7 +6230,7 @@ export default function ContractDetailPage() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setEditingProduction(false)}
+                      onClick={requestCloseEditingProduction}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -3605,13 +6245,14 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {editingProductionConfirmUi}
 
           {/* Modal Cadastrar Faturamento */}
           {showBillingModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-              <div className="absolute inset-0" onClick={() => setShowBillingModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50">
+              <div className="absolute inset-0" onClick={requestCloseBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -3619,7 +6260,7 @@ export default function ContractDetailPage() {
                     Cadastrar Faturamento
                   </h3>
                   <button
-                    onClick={() => setShowBillingModal(false)}
+                    onClick={requestCloseBillingModal}
                     className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
                   >
                     <X className="w-5 h-5" />
@@ -3627,68 +6268,82 @@ export default function ContractDetailPage() {
                 </div>
                 <form onSubmit={handleBillingSubmit} className="p-6 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data de Emissão *</label>
-                    <input
-                      type="date"
-                      required
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data de Emissão *</label>
+                    <DatePickerField
                       value={billingForm.issueDate}
-                      onChange={(e) => setBillingForm({ ...billingForm, issueDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      onChange={(issueDate) => setBillingForm({ ...billingForm, issueDate })}
+                      placeholder="dd/mm/aaaa"
+                      aria-label="Data de emissão"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Número da Nota Fiscal *</label>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Número da Nota Fiscal *</label>
                     <input
                       type="text"
                       required
                       value={billingForm.invoiceNumber}
                       onChange={(e) => setBillingForm({ ...billingForm, invoiceNumber: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       placeholder="Ex: 000123"
                     />
                   </div>
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OS / SE *</label>
-                    <input
-                      type="text"
-                      required
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">OS / SE *</label>
+                    <StringSingleSelectDropdown
                       value={billingForm.serviceOrder}
-                      onChange={(e) => {
-                        setBillingForm({ ...billingForm, serviceOrder: e.target.value });
-                        setOsSeDropdownOpen(true);
+                      onChange={(serviceOrder) => {
+                        setBillingForm((prev) => {
+                          const osTrimmed = serviceOrder.trim();
+                          const pleito = allPleitos.find((p) => p.id === prev.pleitoId);
+                          const pleitoStillValid =
+                            !!pleito && (!osTrimmed || (pleito.divSe || '').trim() === osTrimmed);
+                          return {
+                            ...prev,
+                            serviceOrder,
+                            pleitoId: pleitoStillValid ? prev.pleitoId : '',
+                          };
+                        });
                       }}
-                      onFocus={() => setOsSeDropdownOpen(true)}
-                      onBlur={() => setTimeout(() => setOsSeDropdownOpen(false), 150)}
-                      placeholder="Digite para buscar ou selecionar"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      options={divSeSelectOptions}
+                      allowEmpty={false}
+                      placeholder="Selecionar OS / SE"
+                      searchPlaceholder="Pesquisar OS / SE..."
+                      emptyOptionsMessage="Nenhuma OS cadastrada neste contrato."
+                      className="w-full"
                     />
-                    {osSeDropdownOpen && (
-                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg">
-                        {osSeFiltered.length === 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                            Nenhuma OS encontrada
-                          </div>
-                        ) : (
-                          osSeFiltered.map((opt) => (
-                            <button
-                              key={`${opt.divSe}-${opt.folderNumber ?? ''}`}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setBillingForm({ ...billingForm, serviceOrder: opt.divSe });
-                                setOsSeDropdownOpen(false);
-                              }}
-                              className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                            >
-                              {formatOsSePasta(opt.divSe, opt.folderNumber)}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
                     {divSeOptions.length === 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
                         Nenhuma OS cadastrada em Ordem de Serviço. Cadastre uma ordem de serviço com o campo OS / SE.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Pleito vinculado *</label>
+                    <StringSingleSelectDropdown
+                      value={billingForm.pleitoId}
+                      onChange={(pleitoId) => {
+                        const pleito = pleitosForBillingForm.find((p) => p.id === pleitoId);
+                        setBillingForm((prev) => ({
+                          ...prev,
+                          pleitoId,
+                          serviceOrder: pleito?.divSe?.trim() || prev.serviceOrder,
+                        }));
+                      }}
+                      options={pleitosForBillingSelectOptions}
+                      allowEmpty={false}
+                      placeholder="Selecionar pleito"
+                      searchPlaceholder="Pesquisar pleito..."
+                      emptyOptionsMessage="Nenhum pleito apto para faturamento."
+                      className="w-full"
+                    />
+                    {billingForm.serviceOrder.trim() && pleitosForBillingForm.length === 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        Nenhum pleito apto para faturamento nesta OS. Gere o pleito no histórico antes de lançar o faturamento.
+                      </p>
+                    )}
+                    {selectedBillingPleitoSaldo != null && billingForm.pleitoId && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Saldo disponível do pleito: {formatCurrency(selectedBillingPleitoSaldo)}
                       </p>
                     )}
                   </div>
@@ -3701,9 +6356,34 @@ export default function ContractDetailPage() {
                         required
                         value={billingForm.grossValue}
                         onChange={(e) => {
+                          const formatted = formatBillingCurrencyFromDigits(
+                            e.target.value.replace(/\D/g, '')
+                          );
+                          setBillingForm({
+                            ...billingForm,
+                            grossValue: formatted,
+                            ...(usesUnbBillingNetFactor
+                              ? { netValue: calcBillingNetFromGrossFormatted(formatted) }
+                              : {})
+                          });
+                        }}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        placeholder="0,00"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Líquido *</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
+                      <input
+                        type="text"
+                        required
+                        value={billingForm.netValue}
+                        onChange={(e) => {
                           const v = e.target.value.replace(/\D/g, '');
                           const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                          setBillingForm({ ...billingForm, grossValue: formatted });
+                          setBillingForm({ ...billingForm, netValue: formatted });
                         }}
                         className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                         placeholder="0,00"
@@ -3713,7 +6393,7 @@ export default function ContractDetailPage() {
                   <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                     <button
                       type="button"
-                      onClick={() => setShowBillingModal(false)}
+                      onClick={requestCloseBillingModal}
                       className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
                     >
                       Cancelar
@@ -3728,14 +6408,14 @@ export default function ContractDetailPage() {
                   </div>
                 </form>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {billingModalConfirmUi}
 
           {/* Modal Novo Ordem de Serviço */}
           {showPleitoModal && !pleitoToEdit && (
             <PleitoFormModal
               contractId={contractId}
-              contractDisplay={contract ? `${contract.name} - nº ${contract.number}` : undefined}
               onClose={() => setShowPleitoModal(false)}
               onSuccess={() => {
                 queryClient.invalidateQueries({ queryKey: ['contract-pleitos', contractId] });
@@ -3747,7 +6427,6 @@ export default function ContractDetailPage() {
           {pleitoToEdit && (
             <PleitoFormModal
               contractId={contractId}
-              contractDisplay={contract ? `${contract.name} - nº ${contract.number}` : undefined}
               pleitoToEdit={pleitoToEdit}
               onClose={() => setPleitoToEdit(null)}
               onSuccess={() => {
@@ -3759,26 +6438,34 @@ export default function ContractDetailPage() {
 
           {/* Modal Informar Valores do Pleito */}
           {showPleitoValoresModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoValoresModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+              <div className="absolute inset-0" onClick={requestClosePleitoValoresModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informar valores do pleito</h3>
-                  <button onClick={() => setShowPleitoValoresModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                  <button onClick={requestClosePleitoValoresModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="p-6 space-y-4">
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Informe a % do orçamento para cada OS selecionada:</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Informe a % do orçamento ou o valor em R$ para cada OS selecionada:
+                  </p>
                   {Array.from(selectedForPleito).map((id) => {
                     const p = pleitos.find((x) => x.id === id);
                     if (!p) return null;
                     const orc = p.budget ? Number(p.budget) : 0;
-                    const pctNum = parseCurrencyInput(valorPleiteado[id] || '');
-                    const valorCalculado = orc > 0 && pctNum > 0 ? (orc * pctNum) / 100 : null;
-                    const alreadyPleiteado = sumBillingRequestSameOs(allPleitos, p.divSe);
-                    const restanteParaFaturar = orc > 0 ? Math.max(0, orc - alreadyPleiteado) : null;
-                    const excedeOrcamento = pleitoModalExcedeState.byId[id] === true;
+                    const selectedIds = Array.from(selectedForPleito);
+                    const alreadyPleiteado = sumOsPleiteadoTotal(allPleitos, p.divSe);
+                    const maxValor = getMaxPleitoValorForOs(
+                      id,
+                      pleitos,
+                      allPleitos,
+                      selectedIds,
+                      valorPleiteado,
+                      pleitoValorInput
+                    );
+                    const restantePleitear = orc > 0 ? maxValor : null;
                     return (
                       <div key={id} className="p-3 border border-gray-200 dark:border-gray-600 rounded-lg space-y-2">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -3787,31 +6474,64 @@ export default function ContractDetailPage() {
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">Orçamento: {p.budget ? formatCurrency(Number(p.budget)) : '-'}</p>
                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                          Restante para faturar:{' '}
-                          {restanteParaFaturar != null ? formatCurrency(restanteParaFaturar) : '—'}
+                          Restante a pleitear:{' '}
+                          {restantePleitear != null ? formatCurrency(restantePleitear) : '—'}
                         </p>
-                        {excedeOrcamento && (
-                          <p className="text-xs font-medium text-red-600 dark:text-red-400">valor faturado acima do permitido</p>
-                        )}
                         <div className="flex gap-4 items-end">
                           <div className="flex-1">
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">% Orçamento</label>
-                            <input
-                              type="text"
-                              value={valorPleiteado[id] || ''}
-                              onChange={(e) => {
-                                const v = e.target.value.replace(/\D/g, '');
-                                const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                                setValorPleiteado((prev) => ({ ...prev, [id]: formatted }));
-                              }}
-                              placeholder="0,00"
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                            />
+                            <div className="relative">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={valorPleiteado[id] || ''}
+                                onChange={(e) => {
+                                  const digits = e.target.value.replace(/\D/g, '');
+                                  const formatted = digits
+                                    ? (Number(digits) / 100).toLocaleString('pt-BR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })
+                                    : '';
+                                  const pct = parseCurrencyInput(formatted);
+                                  const draft = pleitoDraftFromPct(pct, orc, maxValor);
+                                  setValorPleiteado((prev) => ({ ...prev, [id]: draft.pct }));
+                                  setPleitoValorInput((prev) => ({ ...prev, [id]: draft.valor }));
+                                }}
+                                placeholder="0,00"
+                                className="w-full px-3 py-2 pr-8 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                              />
+                              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+                                %
+                              </span>
+                            </div>
                           </div>
-                          <div className="w-40">
+                          <div className="flex-1">
                             <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Valor pleiteado</label>
-                            <div className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300">
-                              {valorCalculado != null ? formatCurrency(valorCalculado) : '—'}
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                                R$
+                              </span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={pleitoValorInput[id] || ''}
+                                onChange={(e) => {
+                                  const digits = e.target.value.replace(/\D/g, '');
+                                  const formatted = digits
+                                    ? (Number(digits) / 100).toLocaleString('pt-BR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })
+                                    : '';
+                                  const valor = parseCurrencyInput(formatted);
+                                  const draft = pleitoDraftFromValor(valor, orc, maxValor);
+                                  setPleitoValorInput((prev) => ({ ...prev, [id]: draft.valor }));
+                                  setValorPleiteado((prev) => ({ ...prev, [id]: draft.pct }));
+                                }}
+                                placeholder="0,00"
+                                className="w-full py-2 pl-10 pr-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                              />
                             </div>
                           </div>
                         </div>
@@ -3820,7 +6540,7 @@ export default function ContractDetailPage() {
                   })}
                 </div>
                 <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                  <button onClick={() => setShowPleitoValoresModal(false)} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
+                  <button onClick={requestClosePleitoValoresModal} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600">
                     Cancelar
                   </button>
                   <button
@@ -3832,339 +6552,14 @@ export default function ContractDetailPage() {
                   </button>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
-
-          {showHistoricoPleitosModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowHistoricoPleitosModal(false)} />
-              <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-[95vw] w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Histórico de Pleitos</h3>
-                  <button onClick={() => setShowHistoricoPleitosModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-6">
-                  {generatedPleitos.length === 0 ? (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Nenhum pleito gerado até o momento.</div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-                        <select
-                          value={histMonthFilter}
-                          onChange={(e) => setHistMonthFilter(e.target.value)}
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="all">Mês: Todos</option>
-                          {MESES_FILTRO.filter((m) => m.value > 0).map((m) => (
-                            <option key={m.value} value={String(m.value)}>{m.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={histYearFilter}
-                          onChange={(e) => setHistYearFilter(e.target.value)}
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="all">Ano: Todos</option>
-                          {historicoYears.map((y) => (
-                            <option key={y} value={String(y)}>{y}</option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          value={histOsFilter}
-                          onChange={(e) => setHistOsFilter(e.target.value)}
-                          placeholder="OS / SE"
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        />
-                        <input
-                          type="text"
-                          value={histPastaFilter}
-                          onChange={(e) => setHistPastaFilter(e.target.value)}
-                          placeholder="Nº Pasta"
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        />
-                        <input
-                          type="text"
-                          value={histDescricaoFilter}
-                          onChange={(e) => setHistDescricaoFilter(e.target.value)}
-                          placeholder="Descrição"
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        />
-                        <select
-                          value={histEtiquetaFilter}
-                          onChange={(e) => setHistEtiquetaFilter(e.target.value)}
-                          className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="all">Etiqueta: Todas</option>
-                          <option value="gerado-100">{HISTORICO_ETIQUETA_GERADO_100}</option>
-                        </select>
-                      </div>
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={handleOpenHistoricoFaturar100Modal}
-                            disabled={isSavingHistoricoPleitos || selectedHistoricoPleitos.size === 0}
-                            className="px-4 py-2 text-sm font-medium rounded-lg bg-rose-700 text-white hover:bg-rose-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                          >
-                            Faturar 100% selecionadas
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleSaveAllHistoricoPleitos}
-                          disabled={isSavingHistoricoPleitos || changedHistoricoPleitoIds.length === 0}
-                          className="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isSavingHistoricoPleitos
-                            ? 'Salvando...'
-                            : `Salvar alterações${changedHistoricoPleitoIds.length > 0 ? ` (${changedHistoricoPleitoIds.length})` : ''}`}
-                        </button>
-                      </div>
-                      <div className="overflow-x-auto">
-                      <table className="w-full min-w-[1500px]">
-                        <thead className="border-b border-gray-200 dark:border-gray-700">
-                          <tr>
-                            <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-12">
-                              <input
-                                type="checkbox"
-                                checked={allFilteredHistoricoSelected}
-                                ref={(el) => {
-                                  if (el) el.indeterminate = someFilteredHistoricoSelected && !allFilteredHistoricoSelected;
-                                }}
-                                onChange={(e) => toggleSelectAllFilteredHistoricoPleitos(e.target.checked)}
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label="Selecionar OSs filtradas no histórico de pleitos"
-                                className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-red-600 focus:ring-red-500"
-                              />
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Pago pelo cliente</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Nº NF</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Etiqueta</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OS / SE</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Descrição</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orçamento</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Valor pleiteado</th>
-                            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">% Orçamento</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preenchimento</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:border-gray-700">
-                          {filteredHistoricoPleitos.map((p) => {
-                            const orc = p.budget ? Number(p.budget) : 0;
-                            const valorPleito = p.billingRequest ? Number(p.billingRequest) : 0;
-                            const pct = orc > 0 ? (valorPleito / orc) * 100 : null;
-                            const rowDraft = historicoDrafts[p.id] || {
-                              billingStatus: ((p.billingStatus || '').toLowerCase() === 'pago' ? 'pago' : 'nao-pago') as 'pago' | 'nao-pago',
-                              invoiceNumber: p.invoiceNumber || ''
-                            };
-                            const etiqueta = getHistoricoEtiqueta(p);
-                            const isSelectedHistorico = selectedHistoricoPleitos.has(p.id);
-                            return (
-                              <tr
-                                key={p.id}
-                                onClick={() => setSelectedPleitoId(p.id)}
-                                className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 cursor-pointer ${isSelectedHistorico ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
-                              >
-                                <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelectedHistorico}
-                                    onChange={(e) =>
-                                      setSelectedHistoricoPleitos((prev) => {
-                                        const next = new Set(prev);
-                                        if (e.target.checked) {
-                                          next.add(p.id);
-                                        } else {
-                                          next.delete(p.id);
-                                        }
-                                        return next;
-                                      })
-                                    }
-                                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-red-600 focus:ring-red-500"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100" onClick={(e) => e.stopPropagation()}>
-                                  <select
-                                    value={rowDraft.billingStatus}
-                                    disabled={isSavingHistoricoPleitos}
-                                    onChange={(e) =>
-                                      setHistoricoDrafts((prev) => ({
-                                        ...prev,
-                                        [p.id]: {
-                                          ...rowDraft,
-                                          billingStatus: e.target.value === 'pago' ? 'pago' : 'nao-pago'
-                                        }
-                                      }))
-                                    }
-                                    className="w-full bg-transparent border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm text-gray-900 dark:text-gray-100 disabled:opacity-60"
-                                  >
-                                    <option value="nao-pago">Não pago</option>
-                                    <option value="pago">Pago</option>
-                                  </select>
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                                  <input
-                                    type="text"
-                                    value={rowDraft.invoiceNumber}
-                                    placeholder="Informar Nº NF"
-                                    disabled={isSavingHistoricoPleitos}
-                                    onChange={(e) =>
-                                      setHistoricoDrafts((prev) => ({
-                                        ...prev,
-                                        [p.id]: {
-                                          ...rowDraft,
-                                          invoiceNumber: e.target.value
-                                        }
-                                      }))
-                                    }
-                                    className="w-full min-w-[140px] bg-transparent border border-gray-200 dark:border-gray-700 rounded px-2 py-1 text-sm font-mono text-gray-900 dark:text-gray-100 placeholder:text-gray-400 disabled:opacity-60"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                                  {etiqueta ? (
-                                    <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                                      {etiqueta}
-                                    </span>
-                                  ) : '-'}
-                                </td>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {formatOsSePastaOrDash(p.divSe, p.folderNumber)}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate" title={p.serviceDescription}>{p.serviceDescription || '-'}</td>
-                                <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{p.budget ? formatCurrency(Number(p.budget)) : '-'}</td>
-                                <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">{formatCurrency(valorPleito)}</td>
-                                <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-gray-100">{pct != null ? `${pct.toFixed(1)}%` : '-'}</td>
-                                <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDateTime(p.createdAt || '')}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {showHistoricoOsModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowHistoricoOsModal(false)} />
-              <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-[95vw] w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Histórico de OS</h3>
-                  <button onClick={() => setShowHistoricoOsModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="p-6">
-                  {historicoOsList.length === 0 ? (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Nenhuma OS movida para histórico até o momento.</div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[900px]">
-                        <thead className="border-b border-gray-200 dark:border-gray-700">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Etiqueta</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">OS / SE</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Descrição</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Orçamento</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Valor pleiteado</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase whitespace-nowrap">Preenchimento</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 dark:border-gray-700">
-                          {historicoOsList.map((p) => {
-                            const etiqueta = getHistoricoEtiqueta(p);
-                            const valorPleito = p.billingRequest ? Number(p.billingRequest) : 0;
-                            return (
-                              <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap">
-                                  {etiqueta ? (
-                                    <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 text-xs font-medium">
-                                      {etiqueta}
-                                    </span>
-                                  ) : '-'}
-                                </td>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {formatOsSePastaOrDash(p.divSe, p.folderNumber)}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100 max-w-xs truncate" title={p.serviceDescription}>
-                                  {p.serviceDescription || '-'}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
-                                  {p.budget ? formatCurrency(Number(p.budget)) : '-'}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-gray-100">
-                                  {formatCurrency(valorPleito)}
-                                </td>
-                                <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                  {formatDateTime(p.createdAt || '')}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          {showHistoricoBatchNfModal && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowHistoricoBatchNfModal(false)} />
-              <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
-                <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Faturar 100% das OSs selecionadas</h3>
-                  <button
-                    onClick={() => setShowHistoricoBatchNfModal(false)}
-                    className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="px-5 py-4 space-y-3">
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Informe o número da nota fiscal uma única vez para aplicar em todas as OSs selecionadas.
-                  </p>
-                  <input
-                    type="text"
-                    value={historicoBatchInvoiceModalValue}
-                    onChange={(e) => setHistoricoBatchInvoiceModalValue(e.target.value)}
-                    placeholder="Número da Nota Fiscal"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    autoFocus
-                  />
-                </div>
-                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowHistoricoBatchNfModal(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleConfirmHistoricoFaturar100Selecionadas}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-rose-700 text-white hover:bg-rose-800"
-                  >
-                    Aplicar nas selecionadas
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {pleitoValoresModalConfirmUi}
 
           {/* Modal Resumo do Pleito */}
           {showPleitoResumoModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setShowPleitoResumoModal(false)} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+              <div className="absolute inset-0" onClick={requestClosePleitoResumoModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Resumo do Pleito</h3>
@@ -4176,7 +6571,7 @@ export default function ContractDetailPage() {
                       <FileDown className="w-4 h-4" />
                       Exportar PDF
                     </button>
-                    <button onClick={() => setShowPleitoResumoModal(false)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button onClick={requestClosePleitoResumoModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -4185,7 +6580,7 @@ export default function ContractDetailPage() {
                   {contract && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{contract.name} - nº {contract.number}</p>
                   )}
-                  <div className="overflow-x-auto">
+                  <div className="table-scroll">
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -4220,13 +6615,14 @@ export default function ContractDetailPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {pleitoResumoModalConfirmUi}
 
           {/* Modal Detalhes do Faturamento */}
           {selectedBilling && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => { setSelectedBilling(null); setEditingBilling(false); }} />
+            <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 p-2">
+              <div className="absolute inset-0" onClick={requestCloseSelectedBillingModal} />
               <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -4252,7 +6648,7 @@ export default function ContractDetailPage() {
                         Editar
                       </button>
                     )}
-                    <button onClick={() => { setSelectedBilling(null); setEditingBilling(false); }} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
+                    <button onClick={requestCloseSelectedBillingModal} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -4260,63 +6656,39 @@ export default function ContractDetailPage() {
                 {editingBilling ? (
                   <form onSubmit={handleBillingEditSubmit} className="p-6 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Data de Emissão *</label>
-                      <input
-                        type="date"
-                        required
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Data de Emissão *</label>
+                      <DatePickerField
                         value={billingEditForm.issueDate}
-                        onChange={(e) => setBillingEditForm({ ...billingEditForm, issueDate: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        onChange={(issueDate) => setBillingEditForm({ ...billingEditForm, issueDate })}
+                        placeholder="dd/mm/aaaa"
+                        aria-label="Data de emissão"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Número da Nota Fiscal *</label>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">Número da Nota Fiscal *</label>
                       <input
                         type="text"
                         required
                         value={billingEditForm.invoiceNumber}
                         onChange={(e) => setBillingEditForm({ ...billingEditForm, invoiceNumber: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                         placeholder="Ex: 000123"
                       />
                     </div>
-                    <div className="relative">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OS / SE *</label>
-                      <input
-                        type="text"
-                        required
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">OS / SE *</label>
+                      <StringSingleSelectDropdown
                         value={billingEditForm.serviceOrder}
-                        onChange={(e) => {
-                          setBillingEditForm({ ...billingEditForm, serviceOrder: e.target.value });
-                          setOsSeEditDropdownOpen(true);
-                        }}
-                        onFocus={() => setOsSeEditDropdownOpen(true)}
-                        onBlur={() => setTimeout(() => setOsSeEditDropdownOpen(false), 150)}
-                        placeholder="Digite para buscar ou selecionar"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        onChange={(serviceOrder) =>
+                          setBillingEditForm({ ...billingEditForm, serviceOrder })
+                        }
+                        options={divSeSelectOptions}
+                        allowEmpty={false}
+                        placeholder="Selecionar OS / SE"
+                        searchPlaceholder="Pesquisar OS / SE..."
+                        emptyOptionsMessage="Nenhuma OS cadastrada neste contrato."
+                        className="w-full"
                       />
-                      {osSeEditDropdownOpen && (
-                        <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg">
-                          {osSeEditFiltered.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">Nenhuma OS encontrada</div>
-                          ) : (
-                            osSeEditFiltered.map((opt) => (
-                              <button
-                                key={`${opt.divSe}-${opt.folderNumber ?? ''}`}
-                                type="button"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setBillingEditForm({ ...billingEditForm, serviceOrder: opt.divSe });
-                                  setOsSeEditDropdownOpen(false);
-                                }}
-                                className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
-                              >
-                                {formatOsSePasta(opt.divSe, opt.folderNumber)}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Bruto *</label>
@@ -4327,9 +6699,16 @@ export default function ContractDetailPage() {
                           required
                           value={billingEditForm.grossValue}
                           onChange={(e) => {
-                            const v = e.target.value.replace(/\D/g, '');
-                            const formatted = v ? (Number(v) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                            setBillingEditForm({ ...billingEditForm, grossValue: formatted });
+                            const formatted = formatBillingCurrencyFromDigits(
+                              e.target.value.replace(/\D/g, '')
+                            );
+                            setBillingEditForm({
+                              ...billingEditForm,
+                              grossValue: formatted,
+                              ...(usesUnbBillingNetFactor
+                                ? { netValue: calcBillingNetFromGrossFormatted(formatted) }
+                                : {})
+                            });
                           }}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                           placeholder="0,00"
@@ -4337,11 +6716,12 @@ export default function ContractDetailPage() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Líquido</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Valor Líquido *</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
                         <input
                           type="text"
+                          required
                           value={billingEditForm.netValue}
                           onChange={(e) => {
                             const v = e.target.value.replace(/\D/g, '');
@@ -4354,7 +6734,7 @@ export default function ContractDetailPage() {
                             setBillingEditForm({ ...billingEditForm, netValue: formatted });
                           }}
                           className="w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                          placeholder="Se vazio, será 0,00"
+                          placeholder="0,00"
                         />
                       </div>
                     </div>
@@ -4410,101 +6790,130 @@ export default function ContractDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </AppModalOverlay>
           )}
+          {selectedBillingModalConfirmUi}
 
-          {/* Modal Detalhes do Ordem de Serviço */}
-          {selectedPleitoId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2">
-              <div className="absolute inset-0" onClick={() => setSelectedPleitoId(null)} />
-              <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <ClipboardList className="w-5 h-5" />
-                    Detalhes do Ordem de Serviço
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    {pleitoDetailData?.data && (
-                      <button
-                        onClick={() => {
-                          setPleitoToEdit({
-                            ...(pleitoDetailData.data as PleitoFormData),
-                            id: pleitoDetailData.data.id
-                          });
-                          setSelectedPleitoId(null);
-                        }}
-                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                        Editar
-                      </button>
-                    )}
-                    <button onClick={() => setSelectedPleitoId(null)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400">
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="p-6">
-                  {loadingPleitoDetail ? (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Carregando...</div>
-                  ) : pleitoDetailData?.data ? (() => {
-                    const pleito = pleitoDetailData.data;
-                    const osSe = pleito.divSe || '';
-                    const acumuladoFaturado = billings
-                      .filter((b) => (b.serviceOrder || '').trim() === osSe.trim())
-                      .reduce((sum, b) => sum + b.grossValue, 0);
-                    const orcamento = pleito.budget ? Number(pleito.budget) : 0;
-                    const statusFaturamentoPct = orcamento > 0 ? (acumuladoFaturado / orcamento) * 100 : null;
-                    const pendenteFaturamento = orcamento - acumuladoFaturado;
+          <ContractOsDetailModal
+            isOpen={!!selectedPleitoId}
+            onClose={requestCloseSelectedPleitoModal}
+            loading={loadingPleitoDetail}
+            pleito={pleitoDetailData?.data ?? null}
+            contract={contract}
+            allPleitos={allPleitos}
+            billings={billings}
+          />
+          {selectedPleitoModalConfirmUi}
+
+          <Modal
+            isOpen={showVisualizarPleitoModal}
+            onClose={() => setShowVisualizarPleitoModal(false)}
+            title="Visualizar Pleito"
+            size="xl"
+          >
+            <ContractOsPleitoListPanel
+              pleitos={visualizarPleitos}
+              billings={billingsForOs}
+              emptyMessage="Nenhuma ordem selecionada."
+            />
+          </Modal>
+
+          <Modal
+            isOpen={showAndamentoTodosModal}
+            onClose={() => setShowAndamentoTodosModal(false)}
+            title="Todas as ordens de serviço"
+            size="full"
+          >
+            <ContractOsPleitoListPanel pleitos={filteredPleitos} billings={billingsForOs} />
+          </Modal>
+
+          <Modal
+            isOpen={showCronogramaMensalModal}
+            onClose={() => setShowCronogramaMensalModal(false)}
+            title="Cronograma mensal"
+            size="full"
+          >
+            <ContractCronogramaMensalPanel
+              contractId={contractId}
+              selectedIds={Array.from(selectedForPleito)}
+            />
+          </Modal>
+
+          <Modal
+            isOpen={showFaturamentoTodosModal}
+            onClose={() => setShowFaturamentoTodosModal(false)}
+            title="Todos os faturamentos"
+            size="xl"
+          >
+            <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
+              <table className="w-full text-sm" data-cc-skip-column-customizer="1">
+                <thead className="border-b border-gray-200 dark:border-gray-700">
+                  <tr>
+                    <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>ID</th>
+                    <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>OS / SE</th>
+                    <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Pleito</th>
+                    <th className={`${cadastroListClasses.th} whitespace-nowrap align-middle`}>Nº NF</th>
+                    <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Data emissão</th>
+                    <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Valor bruto</th>
+                    <th className={`${cadastroListClasses.thNumeric} align-middle whitespace-nowrap`}>Valor líquido</th>
+                    <th className={`${cadastroListClasses.thCenter} whitespace-nowrap align-middle`}>Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                  {filteredBillings.map((b) => {
+                    const liquidoMissing = isNetValueMissing(b);
+                    const fatStatus = liquidoMissing ? 'Líquido pendente' : 'Faturado';
                     return (
-                    <div className="space-y-4">
-                      {contract && (
-                        <div className="pb-4 border-b border-gray-200 dark:border-gray-700">
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Contrato</p>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mt-0.5">{contract.name} - nº {contract.number}</p>
-                        </div>
-                      )}
-                      {([
-                        ['OS / SE', formatOsSePasta(pleito.divSe, pleito.folderNumber)],
-                        ['Descrição do serviço', pleito.serviceDescription],
-                        ['Lote', pleito.lot],
-                        ['Local', pleito.location],
-                        ['Unidade', pleito.unit],
-                        ['Status Orçamento', pleito.budgetStatus],
-                        ['Status Execução', pleito.executionStatus],
-                        ['Orçamento', pleito.budget ? formatCurrency(Number(pleito.budget)) : null],
-                        ['Orçamento R01', pleito.budgetAmount1 ? formatCurrency(Number(pleito.budgetAmount1)) : null],
-                        ['Orçamento R02', pleito.budgetAmount2 ? formatCurrency(Number(pleito.budgetAmount2)) : null],
-                        ['Orçamento R03', pleito.budgetAmount3 ? formatCurrency(Number(pleito.budgetAmount3)) : null],
-                        ['Orçamento R04', pleito.budgetAmount4 ? formatCurrency(Number(pleito.budgetAmount4)) : null],
-                        ['Acumulado faturado', formatCurrency(acumuladoFaturado)],
-                        ['Status Faturamento (%)', statusFaturamentoPct != null ? `${statusFaturamentoPct.toFixed(1)}%` : '-'],
-                        ['Pendente faturamento', formatCurrency(pendenteFaturamento)],
-                        ['Data início', pleito.startDate ? formatDate(pleito.startDate) : null],
-                        ['Data término', pleito.endDate ? formatDate(pleito.endDate) : null],
-                        ['Mês/Ano criação', pleito.creationMonth && pleito.creationYear ? `${String(pleito.creationMonth).padStart(2, '0')}/${pleito.creationYear}` : null],
-                        ['Engenheiro', pleito.engineer],
-                        ['Encarregado', pleito.supervisor],
-                        ['RVI', pleito.pv],
-                        ['RVF', pleito.ipi],
-                        ['Feedback Relatorios', pleito.reportsBilling]
-                      ] as [string, string | number | null | undefined][]).map(([label, value]) =>
-                        value != null && value !== '' ? (
-                          <div key={label}>
-                            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">{label}</p>
-                            <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">{String(value)}</p>
-                          </div>
-                        ) : null
-                      )}
-                    </div>
+                      <tr
+                        key={b.id}
+                        className={listTableRowClasses.tr}
+                        onClick={() => {
+                          setShowFaturamentoTodosModal(false);
+                          setSelectedBilling(b);
+                        }}
+                      >
+                        <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                          {formatDisplayId(billingDisplayIds, b.id)}
+                        </td>
+                        <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                          {formatOsSePastaOrDash(b.serviceOrder, folderForDivSe(allPleitos, b.serviceOrder))}
+                        </td>
+                        <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                          {b.pleitoId ? (
+                            <span className="font-mono text-xs font-medium text-gray-900 dark:text-gray-100">
+                              {formatDisplayId(pleitoDisplayIds, b.pleitoId)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                          )}
+                        </td>
+                        <td className={`${cadastroListClasses.tdMono} align-middle whitespace-nowrap`}>
+                          {(b.invoiceNumber || '').trim() || '—'}
+                        </td>
+                        <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                          {formatDate(b.issueDate)}
+                        </td>
+                        <td className={`${cadastroListClasses.tdNumeric} align-middle font-medium`}>
+                          {formatCurrency(b.grossValue)}
+                        </td>
+                        <td className={`${cadastroListClasses.tdNumeric} align-middle`}>
+                          {liquidoMissing ? '—' : formatCurrency(b.netValue)}
+                        </td>
+                        <td className={`${cadastroListClasses.tdCenter} align-middle whitespace-nowrap`}>
+                          <span className={billingAndamentoBadgeClass(fatStatus)}>
+                            {fatStatus}
+                          </span>
+                        </td>
+                      </tr>
                     );
-                  })() : (
-                    <div className="py-8 text-center text-gray-500 dark:text-gray-400">Andamento não encontrado.</div>
-                  )}
-                </div>
-              </div>
+                  })}
+                </tbody>
+              </table>
+              <p className="border-t border-gray-200 px-4 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                {filteredBillings.length} registro(s)
+              </p>
             </div>
-          )}
+          </Modal>
 
         </div>
       </MainLayout>

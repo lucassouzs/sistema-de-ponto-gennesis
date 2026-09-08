@@ -1,18 +1,54 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { metaWhatsApp } from './MetaWhatsAppService';
+import {
+  isWhatsAppFuelFlowStatus,
+  processWhatsAppFuelFlow,
+} from './WhatsAppFuelFlowHandler';
+import { processWhatsAppFuelRefuelReportFlow } from './WhatsAppFuelRefuelReportFlowHandler';
+import { processWhatsAppSupportFlow } from './WhatsAppSupportFlowHandler';
+import * as fs from 'fs';
+import * as path from 'path';
 
 type FlowStatus =
   | 'MENU'
   | 'FAQ_TOPIC_SELECT'
   | 'FAQ_QUESTION_SELECT'
-  | 'ATESTADO_ASK_REQUESTER_NAME'
+  | 'ATESTADO_ASK_CPF'
   | 'ATESTADO_ASK_START_DATE'
   | 'ATESTADO_ASK_END_DATE'
   | 'ATESTADO_ASK_DAYS'
   | 'ATESTADO_ASK_FILE'
   | 'ATESTADO_COMPLETE'
-  | 'ATENDANT_ASK_NAME';
+  | 'ATENDANT_ASK_NAME'
+  | 'FUEL_ASK_REFUEL_DATE'
+  | 'FUEL_ASK_ROUTE'
+  | 'FUEL_ASK_DRIVER_CPF'
+  | 'FUEL_SELECT_CONTRACT'
+  | 'FUEL_ASK_PLATE_SUFFIX'
+  | 'FUEL_SELECT_VEHICLE'
+  | 'FUEL_ASK_VEHICLE_MANUAL'
+  | 'FUEL_ASK_VEHICLE'
+  | 'FUEL_ASK_VEHICLE_TYPE'
+  | 'FUEL_ASK_DASHBOARD_PHOTO'
+  | 'FUEL_ASK_OBSERVATIONS'
+  | 'FUEL_CONFIRM'
+  | 'FUEL_COMPLETE'
+  | 'FUEL_REPORT_SELECT_REQUEST'
+  | 'FUEL_REPORT_ASK_ODOMETER'
+  | 'FUEL_REPORT_ASK_TANK'
+  | 'FUEL_REPORT_ASK_LITERS'
+  | 'FUEL_REPORT_ASK_PRICE'
+  | 'FUEL_REPORT_ASK_RECEIPT'
+  | 'FUEL_REPORT_ASK_OBSERVATIONS'
+  | 'FUEL_REPORT_CONFIRM'
+  | 'FUEL_REPORT_COMPLETE'
+  | 'SUPPORT_ASK_CATEGORY'
+  | 'SUPPORT_ASK_DESCRIPTION'
+  | 'SUPPORT_ASK_NAME'
+  | 'SUPPORT_ASK_CPF'
+  | 'SUPPORT_CONFIRM'
+  | 'SUPPORT_COMPLETE';
 
 type FaqItem = { id: string; question: string; answer: string; label?: string };
 type FaqTopic = { id: string; title: string; items: FaqItem[]; label?: string };
@@ -222,6 +258,34 @@ const FAQ_TOPICS: FaqTopic[] = [
     ]
   },
   {
+    id: 'SISTEMA',
+    title: 'Dúvidas sobre o sistema',
+    label: 'Sistema / login',
+    items: [
+      {
+        id: 'ESQUECI_SENHA',
+        question: 'Esqueci minha senha, o que fazer?',
+        label: 'Esqueci a senha',
+        answer:
+          'A recuperação automática está desativada. Solicite reset pelo WhatsApp (opção Suporte do sistema) ou fale com o DP/TI. Informe seu CPF completo.',
+      },
+      {
+        id: 'SEM_PERMISSAO',
+        question: 'Não vejo um menu ou módulo',
+        label: 'Sem permissão',
+        answer:
+          'O acesso é liberado pelo gestor em Controle → Permissões. Peça ao responsável do seu setor ou abra um chamado em Suporte do sistema.',
+      },
+      {
+        id: 'ERRO_SISTEMA',
+        question: 'Deu erro na tela',
+        label: 'Erro no sistema',
+        answer:
+          'Anote o que estava fazendo, tire um print se possível e abra Suporte do sistema no WhatsApp ou fale com a Gennecy no chat interno (opção 5).',
+      },
+    ],
+  },
+  {
     id: 'RESCISAO',
     title: 'Dúvidas sobre rescisão',
     label: 'Rescisão',
@@ -253,7 +317,37 @@ type SendAction =
       sections: Array<{ title: string; rows: Array<{ id: string; title: string }> }>;
     };
 
+export type { SendAction };
+
 export type MediaInfo = { mediaId: string; mimeType?: string; filename?: string };
+
+/** `false` = oculta "Enviar atestado" no menu da Gennecy (WhatsApp); fluxo e código permanecem. Para reativar, use `true`. */
+const SHOW_GENNECY_ATESTADO_BUTTON = false;
+
+const GENNECY_MAIN_MENU_ROWS: Array<{ id: string; title: string }> = [
+  { id: 'ATESTADO', title: 'Enviar atestado' },
+  { id: 'COMBUSTIVEL', title: 'Solicitar combustível' },
+  { id: 'INFORMAR_ABASTECIMENTO', title: 'Informar abastecimento' },
+  { id: 'SUPORTE_SISTEMA', title: 'Suporte do sistema' },
+  { id: 'ATENDENTE', title: 'Falar com atendente' },
+  { id: 'DUVIDAS', title: 'Dúvidas' },
+  { id: 'END', title: 'Encerrar' },
+];
+
+function gennecyMainMenuRows(): Array<{ id: string; title: string }> {
+  if (SHOW_GENNECY_ATESTADO_BUTTON) return GENNECY_MAIN_MENU_ROWS;
+  return GENNECY_MAIN_MENU_ROWS.filter((row) => row.id !== 'ATESTADO');
+}
+
+const GENNECY_ATESTADO_COMPLETE_BUTTONS: Array<{ id: string; title: string }> = [
+  { id: 'ATESTADO', title: 'Enviar outro' },
+  { id: 'FINALIZE', title: 'Finalizar' },
+];
+
+function gennecyAtestadoCompleteButtons(): Array<{ id: string; title: string }> {
+  if (SHOW_GENNECY_ATESTADO_BUTTON) return GENNECY_ATESTADO_COMPLETE_BUTTONS;
+  return GENNECY_ATESTADO_COMPLETE_BUTTONS.filter((btn) => btn.id !== 'ATESTADO');
+}
 
 export class WhatsAppBotService {
   /**
@@ -438,6 +532,142 @@ export class WhatsAppBotService {
     this.inactivityTimers.set(conversationId, endTimer);
   }
 
+  private onlyDigits(value: string): string {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  private isValidCpf(cpfRaw: string): boolean {
+    const cpf = this.onlyDigits(cpfRaw);
+    if (cpf.length !== 11) return false;
+    if (/^(\d)\1{10}$/.test(cpf)) return false;
+    const calcDigit = (base: string, factorStart: number) => {
+      let sum = 0;
+      for (let i = 0; i < base.length; i++) sum += Number(base[i]) * (factorStart - i);
+      const remainder = (sum * 10) % 11;
+      return remainder === 10 ? 0 : remainder;
+    };
+    const d1 = calcDigit(cpf.slice(0, 9), 10);
+    const d2 = calcDigit(cpf.slice(0, 10), 11);
+    return d1 === Number(cpf[9]) && d2 === Number(cpf[10]);
+  }
+
+  private maskCpf(cpfRaw: string): string {
+    const cpf = this.onlyDigits(cpfRaw).padStart(11, '0').slice(-11);
+    return `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
+  }
+
+  private async getAttachmentBase64FromSavedMedia(savedMedia: { fileUrl: string; fileName: string; fileKey?: string }) {
+    if (savedMedia.fileKey) {
+      const got = await metaWhatsApp.getObjectBuffer(savedMedia.fileKey);
+      if (got?.buffer) {
+        return {
+          mimeType: got.contentType || 'application/octet-stream',
+          dataBase64: got.buffer.toString('base64')
+        };
+      }
+    }
+
+    const marker = '/uploads/whatsapp-media/';
+    const url = savedMedia.fileUrl || '';
+    if (!url.includes(marker)) return null;
+    const after = url.split(marker)[1]?.split('?')[0];
+    if (!after) return null;
+    const baseName = path.basename(after);
+    const filePath = path.join(process.cwd(), 'apps', 'backend', 'uploads', 'whatsapp-media', baseName);
+    if (!fs.existsSync(filePath)) return null;
+    const buff = fs.readFileSync(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    const byExt: Record<string, string> = {
+      '.pdf': 'application/pdf',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif'
+    };
+    return {
+      mimeType: byExt[ext] || 'application/octet-stream',
+      dataBase64: buff.toString('base64')
+    };
+  }
+
+  private async createDpRequestFromWhatsappAtestado(args: {
+    employee: {
+      id: string;
+      department: string;
+      costCenter: string | null;
+      company: string | null;
+      polo: string | null;
+      user: { id: string; name: string; email: string; cpf: string };
+    };
+    payload: Record<string, unknown>;
+    savedMedia: { fileUrl: string; fileName: string; fileKey?: string } | null;
+    mediaMimeType?: string;
+  }) {
+    if (!args.savedMedia) throw new Error('Arquivo do atestado ausente para solicitação DP');
+    const attachment = await this.getAttachmentBase64FromSavedMedia(args.savedMedia);
+    if (!attachment) throw new Error('Não foi possível carregar o arquivo do atestado para solicitação DP');
+
+    const dataInicial = String(args.payload.dataInicio || '').trim();
+    const dataFinal = String(args.payload.dataFim || '').trim();
+    const numeroDias = String(args.payload.numeroDias || '').trim();
+    if (!dataInicial || !dataFinal || !numeroDias) {
+      throw new Error('Dados do atestado incompletos para solicitação DP');
+    }
+
+    const details = {
+      employeeId: args.employee.id,
+      costCenter: args.employee.costCenter || '',
+      dataInicial,
+      dataFinal,
+      numeroDias,
+      anexoAtestado: {
+        fileName: args.savedMedia.fileName || 'atestado_enviado',
+        mimeType: args.mediaMimeType || attachment.mimeType,
+        dataBase64: attachment.dataBase64,
+        fileUrl: args.savedMedia.fileUrl || null
+      }
+    };
+
+    const now = new Date();
+    const prazoFim = new Date(now);
+    prazoFim.setDate(prazoFim.getDate() + 1);
+    const lock = 91827364;
+    const createdAtIso = now.toISOString();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${lock})`);
+      const agg = await tx.dpRequest.aggregate({ _max: { displayNumber: true } });
+      const nextDisplay = (agg._max.displayNumber ?? 0) + 1;
+      await tx.dpRequest.create({
+        data: {
+          displayNumber: nextDisplay,
+          employeeId: args.employee.id,
+          urgency: 'MEDIUM',
+          requestType: 'ATESTADO_MEDICO',
+          title: 'Solicitação DP · Atestado médico',
+          sectorSolicitante: args.employee.department,
+          solicitanteNome: args.employee.user.name,
+          solicitanteEmail: args.employee.user.email,
+          prazoInicio: now,
+          prazoFim,
+          details: details as Prisma.InputJsonValue,
+          contractId: null,
+          company: args.employee.company || null,
+          polo: args.employee.polo || null,
+          status: 'WAITING_MANAGER',
+          statusHistory: [
+            {
+              at: createdAtIso,
+              status: 'WAITING_MANAGER',
+              actorName: 'Gennecy (WhatsApp Bot)'
+            }
+          ] as Prisma.InputJsonValue
+        } as any
+      });
+    });
+  }
+
   async processMessage(
     phone: string,
     text: string,
@@ -445,8 +675,13 @@ export class WhatsAppBotService {
     mediaInfo?: MediaInfo,
     opts?: { whatsappProfileName?: string }
   ): Promise<void> {
+    // Cada novo contato após encerramento deve abrir um atendimento novo.
+    // Reaproveitamos apenas conversa ainda pendente.
     let conversation = await prisma.whatsAppConversation.findFirst({
-      where: { phone },
+      where: {
+        phone,
+        status: 'PENDING'
+      },
       orderBy: { updatedAt: 'desc' }
     });
 
@@ -476,7 +711,7 @@ export class WhatsAppBotService {
 
     const payload = (conversation.payload as Record<string, unknown>) || {};
     const flowStatus = (conversation.flowStatus || 'MENU') as FlowStatus;
-    const normalizedFlowStatus = (String(flowStatus).startsWith('ATESTADO') ? 'MENU' : flowStatus) as FlowStatus;
+    const normalizedFlowStatus = flowStatus as FlowStatus;
 
     // Baixar e salvar mídia (S3 ou local)
     let savedMedia: { fileUrl: string; fileName: string; fileKey?: string } | null = null;
@@ -512,7 +747,7 @@ export class WhatsAppBotService {
     let newStatus = flowStatus;
     type ConversationStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED';
     let newConversationStatus: ConversationStatus = ((conversation as any).status as ConversationStatus) || 'PENDING';
-    const newPayload = { ...payload };
+    let newPayload: Record<string, unknown> = { ...payload };
 
     if (opts?.whatsappProfileName?.trim()) {
       (newPayload as any).waProfileName = opts.whatsappProfileName.trim().slice(0, 120);
@@ -526,13 +761,8 @@ export class WhatsAppBotService {
     // Se o usuário pedir atendimento humano, não queremos que o idle timeout feche a conversa.
     let skipInactivityTimeout = false;
 
-    // Se estava CANCELLED (por encerramento manual ou por inatividade), a próxima mensagem deve reativar.
-    if (newConversationStatus === 'CANCELLED' && !isEndRequest()) {
-      newConversationStatus = 'PENDING';
-    }
-
     /**
-     * Atendimento humano (ou fila após nome): não rodar o fluxo da Luna em cada mensagem —
+     * Atendimento humano (ou fila após nome): não rodar o fluxo da Gennecy em cada mensagem —
      * senão o default do MENU cai em `menu()` e sorteia de novo "Oi! Tudo bem?...".
      * A mensagem do usuário já foi salva acima; só atualizamos updatedAt.
      */
@@ -586,21 +816,18 @@ export class WhatsAppBotService {
 
     const menu = (): SendAction => ({
       type: 'list',
-      body: pick([
-        'Olá! 😊 Eu sou a Luna, assistente virtual da Gennesis.\nEstou por aqui pra te ajudar — como posso te atender hoje?',
-        'Oi! Tudo bem? 😊\nSou a Luna, da Gennesis. Me conta como posso te ajudar!',
-        'Olá! Seja bem-vindo(a) à Gennesis.\nEu sou a Luna, assistente virtual, e estou à disposição para ajudar no que precisar.'
-      ]),
+      body:
+        pick([
+          'Olá! 😊 Eu sou a Gennecy, assistente virtual da Gennesis.\nEstou por aqui pra te ajudar — como posso te atender hoje?',
+          'Oi! Tudo bem? 😊\nSou a Gennecy, da Gennesis. Me conta como posso te ajudar!',
+          'Olá! Seja bem-vindo(a) à Gennesis.\nEu sou a Gennecy, assistente virtual, e estou à disposição para ajudar no que precisar.',
+        ]) +
+        '\n\n⏰ Combustível: atendimento 7h–8h30 e 13h–14h30. Após 14h30 → dia seguinte. Urgências: contate o setor.',
       buttonText: 'Escolher opção',
       sections: [
         {
           title: 'Atendimento',
-          rows: [
-            { id: 'ATESTADO', title: 'Enviar atestado' },
-            { id: 'ATENDENTE', title: 'Falar com atendente' },
-            { id: 'DUVIDAS', title: 'Dúvidas' },
-            { id: 'END', title: 'Encerrar' }
-          ]
+          rows: gennecyMainMenuRows(),
         }
       ]
     });
@@ -662,9 +889,9 @@ export class WhatsAppBotService {
       ]
     });
 
-    const askRequesterName = (): SendAction => ({
+    const askRequesterCpf = (): SendAction => ({
       type: 'buttons',
-      body: 'Pode me informar seu nome completo?',
+      body: 'Para localizar seu cadastro, me informe seu CPF (somente números).',
       buttons: [
         { id: 'MENU', title: 'Voltar' },
         { id: 'END', title: 'Encerrar' }
@@ -731,10 +958,17 @@ export class WhatsAppBotService {
         typeof (newPayload as any).waProfileName === 'string'
           ? String((newPayload as any).waProfileName).trim().slice(0, 120)
           : '';
+      const hadHumanHandoff =
+        (newPayload as any).attendantHandoffEver === true ||
+        (newPayload as any).attendantRequested === true ||
+        (newPayload as any).attendantInProgress === true ||
+        (typeof (newPayload as any).attendantRequestedAt === 'string' &&
+          String((newPayload as any).attendantRequestedAt).length > 0);
       clearPayload();
       if (nameKeep) (newPayload as any).name = nameKeep;
       if (requesterKeep) (newPayload as any).requesterName = requesterKeep;
       if (waKeep) (newPayload as any).waProfileName = waKeep;
+      if (hadHumanHandoff) (newPayload as any).attendantHandoffEver = true;
       newStatus = 'MENU';
       newConversationStatus = 'CANCELLED';
       return {
@@ -808,7 +1042,88 @@ export class WhatsAppBotService {
       };
     };
 
-    switch (normalizedFlowStatus) {
+    const fuelReportResult = await processWhatsAppFuelRefuelReportFlow({
+      phone,
+      textRaw,
+      content,
+      flowStatus: normalizedFlowStatus,
+      payload: newPayload,
+      hasMedia,
+      savedMedia,
+      isMenuRequest,
+      isEndRequest,
+      resetToMenu,
+      endConversation,
+    });
+
+    let skipDefaultSwitch = false;
+    if (fuelReportResult) {
+      sendAction = fuelReportResult.sendAction;
+      newStatus = fuelReportResult.newStatus as FlowStatus;
+      newPayload = fuelReportResult.newPayload;
+      if (fuelReportResult.newConversationStatus) {
+        newConversationStatus = fuelReportResult.newConversationStatus;
+      }
+      if (fuelReportResult.clearPayload) {
+        Object.keys(newPayload).forEach((k) => delete newPayload[k]);
+      }
+      skipDefaultSwitch = true;
+    } else {
+      const supportResult = await processWhatsAppSupportFlow({
+        phone,
+        textRaw,
+        content,
+        flowStatus: normalizedFlowStatus,
+        payload: newPayload,
+        conversationId: conversation.id,
+        isMenuRequest,
+        isEndRequest,
+        resetToMenu,
+        endConversation,
+      });
+
+      if (supportResult) {
+        sendAction = supportResult.sendAction;
+        newStatus = supportResult.newStatus as FlowStatus;
+        newPayload = supportResult.newPayload;
+        if (supportResult.newConversationStatus) {
+          newConversationStatus = supportResult.newConversationStatus;
+        }
+        if (supportResult.clearPayload) {
+          Object.keys(newPayload).forEach((k) => delete newPayload[k]);
+        }
+        skipDefaultSwitch = true;
+      } else {
+        const fuelResult = await processWhatsAppFuelFlow({
+          phone,
+          textRaw,
+          content,
+          flowStatus: normalizedFlowStatus,
+          payload: newPayload,
+          hasMedia,
+          savedMedia,
+          isMenuRequest,
+          isEndRequest,
+          resetToMenu,
+          endConversation,
+        });
+
+        if (fuelResult) {
+          sendAction = fuelResult.sendAction;
+          newStatus = fuelResult.newStatus as FlowStatus;
+          newPayload = fuelResult.newPayload;
+          if (fuelResult.newConversationStatus) {
+            newConversationStatus = fuelResult.newConversationStatus;
+          }
+          if (fuelResult.clearPayload) {
+            Object.keys(newPayload).forEach((k) => delete newPayload[k]);
+          }
+          skipDefaultSwitch = true;
+        }
+      }
+    }
+
+    if (!skipDefaultSwitch) switch (normalizedFlowStatus) {
       case 'MENU': {
         if (isEndRequest()) {
           sendAction = endConversation();
@@ -845,9 +1160,9 @@ export class WhatsAppBotService {
           content.includes('atestados') ||
           content.includes('atest')
         ) {
-          newStatus = 'ATESTADO_ASK_REQUESTER_NAME';
+          newStatus = 'ATESTADO_ASK_CPF';
           newPayload.flow = 'ATESTADO';
-          sendAction = askRequesterName();
+          sendAction = askRequesterCpf();
         } else {
           sendAction = menu();
         }
@@ -993,7 +1308,7 @@ export class WhatsAppBotService {
         break;
       }
 
-      case 'ATESTADO_ASK_REQUESTER_NAME': {
+      case 'ATESTADO_ASK_CPF': {
         if (isEndRequest()) {
           sendAction = endConversation();
           break;
@@ -1003,10 +1318,11 @@ export class WhatsAppBotService {
           break;
         }
 
-        if (!textRaw) {
+        const cpfDigits = this.onlyDigits(textRaw);
+        if (!cpfDigits) {
           sendAction = {
             type: 'buttons',
-            body: 'Não recebi o nome. Qual é o nome completo da pessoa que está solicitando?',
+            body: 'Não recebi o CPF. Envie o CPF com 11 dígitos (somente números).',
             buttons: [
               { id: 'MENU', title: 'Voltar' },
               { id: 'END', title: 'Encerrar' }
@@ -1015,10 +1331,60 @@ export class WhatsAppBotService {
           break;
         }
 
-        newPayload.requesterName = textRaw;
-        newPayload.name = textRaw;
+        if (!this.isValidCpf(cpfDigits)) {
+          sendAction = {
+            type: 'buttons',
+            body: 'CPF inválido. Confira e envie novamente os 11 dígitos do CPF.',
+            buttons: [
+              { id: 'MENU', title: 'Voltar' },
+              { id: 'END', title: 'Encerrar' }
+            ]
+          };
+          break;
+        }
+
+        // Banco pode ter CPF salvo com máscara ou só dígitos; tentamos ambos.
+        const cpfMasked = this.maskCpf(cpfDigits);
+        const user = await prisma.user.findFirst({
+          where: {
+            OR: [{ cpf: cpfDigits }, { cpf: cpfMasked }]
+          },
+          include: { employee: true }
+        });
+
+        if (!user?.employee) {
+          sendAction = {
+            type: 'buttons',
+            body: 'Não encontrei colaborador ativo para esse CPF. Verifique o CPF ou fale com atendente.',
+            buttons: [
+              { id: 'ATENDENTE', title: 'Falar atendente' },
+              { id: 'MENU', title: 'Menu' },
+              { id: 'END', title: 'Encerrar' }
+            ]
+          };
+          break;
+        }
+
+        newPayload.cpf = cpfDigits;
+        newPayload.cpfMasked = this.maskCpf(cpfDigits);
+        newPayload.employeeId = user.employee.id;
+        newPayload.requesterName = user.name;
+        newPayload.name = user.name;
+        newPayload.employeeDepartment = user.employee.department;
+        newPayload.costCenter = user.employee.costCenter || null;
+        newPayload.company = user.employee.company || null;
+        newPayload.polo = user.employee.polo || null;
         newStatus = 'ATESTADO_ASK_START_DATE';
-        sendAction = askDateByTyping('inicio');
+        sendAction = {
+          type: 'buttons',
+          body:
+            `Identifiquei *${user.name}* (CPF ${this.maskCpf(cpfDigits)}).\n` +
+            'Agora me informe a data de início do atestado no formato *DD/MM/AAAA*.',
+          buttons: [
+            { id: 'MENU', title: 'Voltar' },
+            { id: 'END', title: 'Encerrar' }
+          ]
+        };
         break;
       }
 
@@ -1164,15 +1530,46 @@ export class WhatsAppBotService {
             }
           });
 
+          const employeeId = String(newPayload.employeeId || '').trim();
+          if (employeeId && savedMedia) {
+            try {
+              const employee = await prisma.employee.findUnique({
+                where: { id: employeeId },
+                include: {
+                  user: { select: { id: true, name: true, email: true, cpf: true } }
+                }
+              });
+              if (employee?.user) {
+                await this.createDpRequestFromWhatsappAtestado({
+                  employee: {
+                    id: employee.id,
+                    department: employee.department,
+                    costCenter: employee.costCenter || null,
+                    user: {
+                      id: employee.user.id,
+                      name: employee.user.name,
+                      email: employee.user.email,
+                      cpf: employee.user.cpf
+                    },
+                    company: employee.company || null,
+                    polo: employee.polo || null
+                  },
+                  payload: newPayload,
+                  savedMedia,
+                  mediaMimeType: mediaInfo?.mimeType
+                });
+              }
+            } catch (e) {
+              console.error('[WhatsAppBotService] Falha ao criar solicitação DP de atestado:', e);
+            }
+          }
+
           newStatus = 'ATESTADO_COMPLETE';
           newConversationStatus = 'COMPLETED';
           sendAction = {
             type: 'buttons',
             body: '✅ Atestado recebido! Já registramos suas informações. O DP vai analisar e te dar retorno.',
-            buttons: [
-              { id: 'ATESTADO', title: 'Enviar outro' },
-              { id: 'FINALIZE', title: 'Finalizar' }
-            ]
+            buttons: gennecyAtestadoCompleteButtons(),
           };
           clearPayload();
         } else {
@@ -1203,9 +1600,9 @@ export class WhatsAppBotService {
         }
 
         if (content.includes('atestado') || content === 'atestados' || content === 'atestato') {
-          newStatus = 'ATESTADO_ASK_REQUESTER_NAME';
+          newStatus = 'ATESTADO_ASK_CPF';
           newPayload.flow = 'ATESTADO';
-          sendAction = askRequesterName();
+          sendAction = askRequesterCpf();
           break;
         }
 

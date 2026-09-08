@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Calendar, User, Building, DollarSign, Clock, AlertTriangle, CreditCard, Moon, Save } from 'lucide-react';
 import { PayrollEmployee } from '@/types';
 import api from '@/lib/api';
 import { useCostCenters } from '@/hooks/useCostCenters';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PayrollDetailModalProps {
   employee: PayrollEmployee;
@@ -502,11 +505,19 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
   const totalProventosComAcrescimos = totalProventos + (employee.totalAdjustments || 0);
   const liquidoComAcrescimos = liquidoReceber + (employee.totalAdjustments || 0);
 
+  const closeModal = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeModal, { isParentOpen: isOpen });
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000] p-4">
+      <div className="absolute inset-0" onClick={requestClose} aria-hidden />
+      <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700 rounded-t-lg">
           <div className="flex items-center justify-between">
@@ -529,7 +540,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               </div>
             </div>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
@@ -602,30 +613,19 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                   <span className="text-sm text-gray-600 dark:text-gray-400">Alocação Final:</span>
                   {editingField === 'alocacaoFinal' ? (
                     <div className="flex items-center justify-end gap-2">
-                      <select
+                      <StringSingleSelectDropdown
                         value={alocacaoFinal || ''}
-                        onChange={(e) => setAlocacaoFinal(e.target.value || null)}
-                        className="text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-gray-100 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
-                            handleCancelEdit();
-                          }
-                        }}
-                      >
-                        <option value="">Selecione um centro de custo</option>
-                        {loadingCostCenters ? (
-                          <option disabled>Carregando centros de custo...</option>
-                        ) : costCentersList.length === 0 ? (
-                          <option disabled>Nenhum centro de custo disponível</option>
-                        ) : (
-                          costCentersList.map((center) => (
-                            <option key={center} value={center}>
-                              {center}
-                            </option>
-                          ))
-                        )}
-                      </select>
+                        onChange={(value) => setAlocacaoFinal(value || null)}
+                        options={costCentersList}
+                        disabled={loadingCostCenters}
+                        placeholder={
+                          loadingCostCenters
+                            ? 'Carregando centros de custo...'
+                            : 'Selecione um centro de custo'
+                        }
+                        emptyOptionsMessage="Nenhum centro de custo disponível"
+                        className="w-64"
+                      />
                       <button
                         onClick={handleSaveManualValues}
                         disabled={isSaving}
@@ -713,7 +713,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               Detalhamento da Folha
             </h3>
             
-            <div className="overflow-x-auto shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg">
+            <div className="table-scroll shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg">
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
@@ -1100,7 +1100,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               const value = e.target.value.replace(/[^0-9.,]/g, '');
                               setHorasExtrasValue(value ? parseFloat(value.replace(',', '.')) : null);
                             }}
-                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -1205,7 +1205,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               const value = e.target.value.replace(/[^0-9.,]/g, '');
                               setDsrHEValue(value ? parseFloat(value.replace(',', '.')) : null);
                             }}
-                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -1349,7 +1349,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               const value = e.target.value.replace(/[^0-9.,]/g, '');
                               setDescontoPorFaltas(value ? parseFloat(value.replace(',', '.')) : null);
                             }}
-                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -1451,7 +1451,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               const value = e.target.value.replace(/[^0-9.,]/g, '');
                               setDsrPorFalta(value ? parseFloat(value.replace(',', '.')) : null);
                             }}
-                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                            className="w-24 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -1916,7 +1916,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               setInssRescisao(parseFloat(value.replace(',', '.')) || 0);
                             }}
                             disabled={isPayrollFinalized}
-                            className="w-20 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-20 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -2001,7 +2001,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
                               setInss13(parseFloat(value.replace(',', '.')) || 0);
                             }}
                             disabled={isPayrollFinalized}
-                            className="w-20 px-2 py-1 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-20 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             placeholder="0"
                             onClick={(e) => e.stopPropagation()}
                             autoFocus
@@ -2565,7 +2565,7 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
               Gênnesis Engenharia - Folha de Pagamento de {monthName} de {year}
             </p>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="px-4 py-2 bg-red-600 dark:bg-red-700 text-white rounded-lg hover:bg-red-700 dark:hover:bg-red-800 transition-colors"
             >
               Fechar
@@ -2573,6 +2573,8 @@ export function PayrollDetailModal({ employee, month, year, isOpen, onClose, onE
           </div>
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>
   );
 }

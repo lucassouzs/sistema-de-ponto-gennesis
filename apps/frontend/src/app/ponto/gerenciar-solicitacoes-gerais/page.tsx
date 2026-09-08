@@ -1,1 +1,5 @@
-export { GerenciarSolicitacoesGeraisPage as default } from '../gerenciar-solicitacoes-dp/page';
+import { GerenciarSolicitacoesGeraisPage } from '../gerenciar-solicitacoes-dp/page';
+
+export default function GerenciarSolicitacoesGeraisRoutePage() {
+  return <GerenciarSolicitacoesGeraisPage scope="DP" />;
+}

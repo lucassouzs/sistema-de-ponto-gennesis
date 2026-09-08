@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { Info, Plus, Trash2 } from 'lucide-react';
 import {
   ROTULO_COLUNA_MEDICAO_OPCOES,
@@ -17,6 +16,8 @@ import {
   inputGradeCls,
   selectGradeHeaderMemorialCls
 } from './orcamentoGradeCellClasses';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
 
 /** Painel de medições (C, L, H, N, %, A, V) — aba Memorial de cálculo (layout em tabela, padrão das demais abas). */
 type Props = {
@@ -278,19 +279,16 @@ export function OrcamentoMedicaoPainel({
           <span className="sr-only">
             Coluna {col === 'pct' ? '%' : col}, rótulo {valorAtual}
           </span>
-          <select
-            className={selectGradeHeaderMemorialCls}
+          <StringSingleSelectDropdown
+            className="h-full w-full"
+            triggerClassName={selectGradeHeaderMemorialCls}
+            hideChevron
             value={valorAtual}
             disabled={!updateRotuloColunaMedicao}
-            onChange={e => updateRotuloColunaMedicao?.(col, e.target.value)}
-            aria-label={`Lista suspensa: rótulo da coluna de ${ariaDim}`}
-          >
-            {lista.map(o => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => updateRotuloColunaMedicao?.(col, value)}
+            options={lista}
+            allowEmpty={false}
+          />
         </label>
       </Tag>
     );
@@ -624,65 +622,59 @@ export function OrcamentoMedicaoPainel({
     );
   };
 
-  const portalMenuCtxMedicao =
-    menuCtxMedicao &&
-    typeof document !== 'undefined' &&
-    createPortal(
-      <>
-        <div className="fixed inset-0 z-[200]" aria-hidden onClick={() => setMenuCtxMedicao(null)} />
-        <div
-          role="menu"
-          className="fixed z-[201] min-w-[12rem] overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800"
-          style={{ left: menuCtxMedicao.left, top: menuCtxMedicao.top }}
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/80"
-            onClick={() => {
-              addLinhaMedicao(rowKey, menuCtxMedicao.idx);
-              setMenuCtxMedicao(null);
-            }}
-          >
-            <Plus className="h-4 w-4 shrink-0" aria-hidden />
-            Adicionar linha abaixo
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/80"
-            onClick={() => {
-              addLinhaCabecalhoSecaoMedicao(rowKey, menuCtxMedicao.idx);
-              setMenuCtxMedicao(null);
-            }}
-          >
-            <Plus className="h-4 w-4 shrink-0" aria-hidden />
-            Adicionar linha de cabeçalho abaixo
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-red-700 hover:bg-red-50 dark:border-gray-700 dark:text-red-400 dark:hover:bg-red-950/40"
-            onClick={() => {
-              removeLinhaMedicao(rowKey, menuCtxMedicao.idx);
-              setMenuCtxMedicao(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-            Excluir linha
-          </button>
-        </div>
-      </>,
-      document.body
-    );
+  const portalMenuCtxMedicao = menuCtxMedicao ? (
+    <ActionMenuOverlay
+      open
+      onClose={() => setMenuCtxMedicao(null)}
+      top={menuCtxMedicao.top}
+      left={menuCtxMedicao.left}
+      panelClassName="min-w-[12rem] py-1"
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/80"
+        onClick={() => {
+          addLinhaMedicao(rowKey, menuCtxMedicao.idx);
+          setMenuCtxMedicao(null);
+        }}
+      >
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        Adicionar linha abaixo
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/80"
+        onClick={() => {
+          addLinhaCabecalhoSecaoMedicao(rowKey, menuCtxMedicao.idx);
+          setMenuCtxMedicao(null);
+        }}
+      >
+        <Plus className="h-4 w-4 shrink-0" aria-hidden />
+        Adicionar linha de cabeçalho abaixo
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-red-700 hover:bg-red-50 dark:border-gray-700 dark:text-red-400 dark:hover:bg-red-950/40"
+        onClick={() => {
+          removeLinhaMedicao(rowKey, menuCtxMedicao.idx);
+          setMenuCtxMedicao(null);
+        }}
+      >
+        <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+        Excluir linha
+      </button>
+    </ActionMenuOverlay>
+  ) : null;
 
   /** Evita borda “dupla” grossa: o contêiner já tem borda; última linha/coluna não repetem border-b/border-r. */
   const gradeTabelaMemorialBordaCls =
     '[&_tbody_tr:last-child_td]:!border-b-0 [&_td:last-child]:!border-r-0 [&_thead_th:last-child]:!border-r-0';
 
   const tabelaEnvoltorio = (children: React.ReactNode) => (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
+    <div className="table-scroll rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
       <table
         className={`w-full min-w-[56rem] table-fixed border-collapse text-sm ${gradeTableCls} ${gradeTabelaMemorialBordaCls}`}
       >

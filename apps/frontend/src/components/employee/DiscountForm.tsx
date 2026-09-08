@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { SalaryDiscount, CreateDiscountData, UpdateDiscountData, DiscountType, DiscountTypeOption } from '@/types';
 import { X } from 'lucide-react';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions, selectTriggerErrorCls } from '@/lib/selectOptionBuilders';
 
 interface DiscountFormProps {
   employeeId: string;
@@ -14,6 +16,10 @@ const discountTypeOptions: DiscountTypeOption[] = [
   { value: 'CONSIGNED', label: 'Consignado', color: 'text-orange-600' },
   { value: 'OTHER', label: 'Outros', color: 'text-gray-600' }
 ];
+
+const discountTypeSelectOptions = labeledToSelectOptions(
+  discountTypeOptions.map(({ value, label }) => ({ value, label }))
+);
 
 export function DiscountForm({ employeeId, discount, onSave, onCancel }: DiscountFormProps) {
   const [formData, setFormData] = useState({
@@ -103,19 +109,15 @@ export function DiscountForm({ employeeId, discount, onSave, onCancel }: Discoun
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Tipo de Desconto *
           </label>
-          <select
+          <StringSingleSelectDropdown
             value={formData.type}
-            onChange={(e) => handleInputChange('type', e.target.value as DiscountType)}
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
-              errors.type ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
-            }`}
-          >
-            {discountTypeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            onChange={(type) => handleInputChange('type', type as DiscountType)}
+            options={discountTypeSelectOptions}
+            placeholder="Selecione o tipo"
+            searchPlaceholder="Pesquisar tipo..."
+            allowEmpty={false}
+            className={selectTriggerErrorCls(Boolean(errors.type))}
+          />
           {errors.type && (
             <p className="text-red-500 dark:text-red-400 text-xs mt-1 flex items-center">
               {errors.type}
@@ -132,7 +134,7 @@ export function DiscountForm({ employeeId, discount, onSave, onCancel }: Discoun
             onChange={(e) => handleInputChange('description', e.target.value)}
             placeholder="Descreva o motivo do desconto..."
             rows={3}
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
+            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
               errors.description ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
             }`}
           />
@@ -154,7 +156,7 @@ export function DiscountForm({ employeeId, discount, onSave, onCancel }: Discoun
             value={formData.amount}
             onChange={(e) => handleInputChange('amount', e.target.value)}
             placeholder="0,00"
-            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
+            className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
               errors.amount ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
             }`}
           />
@@ -169,7 +171,7 @@ export function DiscountForm({ employeeId, discount, onSave, onCancel }: Discoun
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors bg-white dark:bg-gray-700"
+            className="px-4 py-2 text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors bg-white dark:bg-gray-800"
           >
             Cancelar
           </button>

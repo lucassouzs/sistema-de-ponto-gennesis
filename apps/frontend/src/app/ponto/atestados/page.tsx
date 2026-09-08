@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { MedicalCertificateCard } from '@/components/medical-certificate/MedicalCertificateCard';
 import { MedicalCertificateList } from '@/components/medical-certificate/MedicalCertificateList';
@@ -9,9 +10,10 @@ import { List, Plus, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Loading } from '@/components/ui/Loading';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 
-export default function AtestadosPage() {
+function AtestadosPageContent() {
   const [activeTab, setActiveTab] = useState<'list' | 'send'>('list');
 
   // Buscar dados do usuário
@@ -32,20 +34,20 @@ export default function AtestadosPage() {
     setActiveTab('list');
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando atestados..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+    );
+  }
+
+  
 
   return (
     <MainLayout 
@@ -61,32 +63,24 @@ export default function AtestadosPage() {
         </div>
 
         {/* Navegação no topo */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('list')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'list'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <List className="w-4 h-4" />
-              Meus Registros
-            </button>
-            <button
-              onClick={() => setActiveTab('send')}
-              className={`flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'send'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <Plus className="w-4 h-4" />
-              Registrar Ausência
-            </button>
-          </nav>
-        </div>
+        <AppUnderlineTabList aria-label="Seções de ausências" centered={false}>
+          <AppUnderlineTabButton
+            active={activeTab === 'list'}
+            onClick={() => setActiveTab('list')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
+          >
+            <List className="w-4 h-4" />
+            Meus Registros
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
+            active={activeTab === 'send'}
+            onClick={() => setActiveTab('send')}
+            className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Registrar Ausência
+          </AppUnderlineTabButton>
+        </AppUnderlineTabList>
 
         {/* Conteúdo principal */}
         <Card>
@@ -117,5 +111,13 @@ export default function AtestadosPage() {
         </Card>
       </div>
     </MainLayout>
+  );
+}
+
+export default function AtestadosPage() {
+  return (
+    <ProtectedRoute route="/ponto/atestados">
+      <AtestadosPageContent />
+    </ProtectedRoute>
   );
 }

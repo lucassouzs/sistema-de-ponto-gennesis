@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, Image, Animated, Platform } from 'react-native';
+import { View, Platform, Animated, Easing, InteractionManager } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
 import { NavigationContainer } from '@react-navigation/native';
@@ -8,108 +8,181 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
-// Screens
 import LoginScreen from './src/screens/LoginScreen';
 import PunchScreen from './src/screens/PunchScreen';
 import TimeRecordsScreen from './src/screens/TimeRecordsScreen';
+import FuelRequestsScreen from './src/screens/FuelRequestsScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import PncpLicitacoesScreen from './src/screens/PncpLicitacoesScreen';
+import AgendaScreen from './src/screens/AgendaScreen';
+import KanbanBoardsScreen from './src/screens/kanban/KanbanBoardsScreen';
+import KanbanBoardScreen from './src/screens/kanban/KanbanBoardScreen';
+import KanbanCardScreen from './src/screens/kanban/KanbanCardScreen';
+import DpRequestsScreen from './src/screens/DpRequestsScreen';
+import GestaoOsListScreen from './src/screens/GestaoOsListScreen';
+import GestaoOsDetailScreen from './src/screens/GestaoOsDetailScreen';
+import GestaoOsQrScreen from './src/screens/GestaoOsQrScreen';
+import AuthBrandSplash, { SPLASH_BG } from './src/components/AuthBrandSplash';
+import ThemeBackground from './src/components/ThemeBackground';
 
-// Navigation
 import BottomTabNavigator from './src/navigation/BottomTabNavigator';
 
-// Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { NotificationsProvider } from './src/notifications/NotificationsContext';
+import NotificationsSheet from './src/components/NotificationsSheet';
 
-// Tipagem opcional para o Stack
 export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   Punch: undefined;
   TimeRecords: undefined;
+  FuelRequests: undefined;
+  Profile: undefined;
+  Pncp: undefined;
+  Agenda: { mode?: 'agenda' | 'tasks' } | undefined;
+  KanbanBoards: undefined;
+  KanbanBoard: { departmentKey?: string; title?: string };
+  KanbanCard: { cardId: string; departmentKey?: string };
+  DpRequests: undefined;
+  GestaoOs: undefined;
+  GestaoOsDetail: { id: string };
+  GestaoOsQr: { token: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const queryClient = new QueryClient();
 
+const MIN_SPLASH_MS = 1600;
+
 function AppNavigator() {
   const { isAuthenticated, loading } = useAuth();
-  const { colors, isDark } = useTheme();
-  const [showSplash, setShowSplash] = React.useState(true);
-  const fadeAnim = React.useRef(new Animated.Value(1)).current;
-  const scaleAnim = React.useRef(new Animated.Value(1)).current;
+  const [minSplashDone, setMinSplashDone] = React.useState(false);
+  const [bootFade] = React.useState(() => new Animated.Value(1));
+  const [showBootSplash, setShowBootSplash] = React.useState(true);
 
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      // Inicia animação de scale + fade out
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1.5, // Aumenta 20%
-          duration: 500,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setShowSplash(false);
-      });
-    }, 2000);
+    const t = setTimeout(() => setMinSplashDone(true), MIN_SPLASH_MS);
+    return () => clearTimeout(t);
+  }, []);
 
-    return () => clearTimeout(timer);
-  }, [fadeAnim, scaleAnim]);
+  const bootReady = minSplashDone && !loading;
 
-  if (showSplash || loading) {
+  React.useEffect(() => {
+    if (!bootReady || !showBootSplash) return;
+
+    if (isAuthenticated) {
+      Animated.timing(bootFade, {
+        toValue: 0,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => setShowBootSplash(false));
+      return;
+    }
+
+    // Login: tira o splash sem fade (o Login já começa com a mesma frame).
+    // Assim a logo não “pula” na passagem.
+    setShowBootSplash(false);
+  }, [bootReady, bootFade, isAuthenticated, showBootSplash]);
+
+  if (showBootSplash && !bootReady) {
+    return <AuthBrandSplash />;
+  }
+
+  // Autenticado ainda com splash sumindo
+  if (showBootSplash && isAuthenticated) {
     return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: isDark ? colors.background : colors.headerBackground
-      }}>
-        <Animated.View style={{ 
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }]
-        }}>
-          <Image 
-            source={require('./assets/logobranca.png')} 
-            style={{ width: 200, height: 100 }}
-            resizeMode="contain"
-          />
-        </Animated.View>
-      </View>
+      <ThemeBackground>
+        <View style={{ flex: 1 }}>
+          <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Main" component={BottomTabNavigator} />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              opacity: bootFade,
+              zIndex: 50,
+            }}
+          >
+            <AuthBrandSplash />
+          </Animated.View>
+        </View>
+      </ThemeBackground>
     );
   }
 
-  return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <>
-            <Stack.Screen name="Main" component={BottomTabNavigator} />
-            <Stack.Screen name="Punch" component={PunchScreen} />
-            <Stack.Screen name="TimeRecords" component={TimeRecordsScreen} />
-          </>
-        ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+  const shell = (
+    <View style={{ flex: 1, backgroundColor: isAuthenticated ? 'transparent' : SPLASH_BG }}>
+      <NavigationContainer>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: isAuthenticated ? 'transparent' : SPLASH_BG,
+            },
+            animation: 'slide_from_right',
+          }}
+        >
+          {isAuthenticated ? (
+            <>
+              <Stack.Screen name="Main" component={BottomTabNavigator} />
+              <Stack.Screen name="Punch" component={PunchScreen} />
+              <Stack.Screen name="TimeRecords" component={TimeRecordsScreen} />
+              <Stack.Screen name="FuelRequests" component={FuelRequestsScreen} />
+              <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="Pncp" component={PncpLicitacoesScreen} />
+              <Stack.Screen name="Agenda" component={AgendaScreen} />
+              <Stack.Screen name="KanbanBoards" component={KanbanBoardsScreen} />
+              <Stack.Screen name="KanbanBoard" component={KanbanBoardScreen} />
+              <Stack.Screen name="KanbanCard" component={KanbanCardScreen} />
+              <Stack.Screen name="DpRequests" component={DpRequestsScreen} />
+              <Stack.Screen name="GestaoOs" component={GestaoOsListScreen} />
+              <Stack.Screen name="GestaoOsDetail" component={GestaoOsDetailScreen} />
+              <Stack.Screen name="GestaoOsQr" component={GestaoOsQrScreen} />
+            </>
+          ) : (
+            <Stack.Screen name="Login">
+              {() => <LoginScreen fromBootSplash />}
+            </Stack.Screen>
+          )}
+        </Stack.Navigator>
+        {isAuthenticated ? <NotificationsSheet /> : null}
+      </NavigationContainer>
+    </View>
   );
+
+  if (isAuthenticated) {
+    return <ThemeBackground>{shell}</ThemeBackground>;
+  }
+
+  return shell;
 }
 
 function StatusBarComponent() {
-  const { isDark, colors } = useTheme();
+  const { isDark } = useTheme();
+  const { isAuthenticated, loading } = useAuth();
+  const onAuthSurface = !loading && !isAuthenticated;
+  const barStyle = onAuthSurface || isDark ? 'light' : 'dark';
 
   React.useEffect(() => {
-    if (Platform.OS === 'android') {
-      // Removido setBackgroundColorAsync devido ao edge-to-edge
-      NavigationBar.setButtonStyleAsync(isDark ? 'light' : 'dark');
-    }
-  }, [isDark]);
+    if (Platform.OS !== 'android') return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      void NavigationBar.setButtonStyleAsync(barStyle === 'light' ? 'light' : 'dark').catch(
+        () => undefined,
+      );
+    });
+    return () => task.cancel();
+  }, [barStyle]);
 
-  return <StatusBar style={isDark ? 'light' : 'dark'} />;
+  return <StatusBar style={barStyle} />;
 }
 
 export default function App() {
@@ -118,9 +191,11 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
-            <AppNavigator />
-            <StatusBarComponent />
-            <Toast />
+            <NotificationsProvider>
+              <AppNavigator />
+              <StatusBarComponent />
+              <Toast />
+            </NotificationsProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

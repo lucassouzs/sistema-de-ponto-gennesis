@@ -11,6 +11,8 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useWebcam } from '@/hooks/useWebcam';
 import { TimeRecordType } from '@/types';
 import api from '@/lib/api';
+import { APP_TITLE } from '@/lib/pageTitle';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PunchCardProps {
   onSuccess?: () => void;
@@ -339,7 +341,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
         ctx.fillStyle = '#9CA3AF';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Gennesis Attendance - Sistema de Controle de Ponto', width / 2, height - 30);
+        ctx.fillText(`${APP_TITLE} - Sistema de Controle de Ponto`, width / 2, height - 30);
 
         // Converter para imagem e fazer download
         canvas.toBlob((blob) => {
@@ -665,7 +667,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
                 value={observation}
                 onChange={(e) => setObservation(e.target.value)}
                 placeholder="Digite uma observação..."
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 rows={2}
                 maxLength={500}
               />
@@ -704,7 +706,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
 
       {/* Modal de Confirmação de Ponto Batido - Renderizado via Portal */}
       {showSuccessModal && punchData && typeof window !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50">
           <div className="relative w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow-2xl">
             <div className="p-6 space-y-4">
               {/* Ícone de sucesso */}
@@ -776,7 +778,7 @@ export const PunchCard: React.FC<PunchCardProps> = ({ onSuccess, showCloseButton
               </div>
             </div>
           </div>
-        </div>,
+        </AppModalOverlay>,
         document.body
       )}
     </div>

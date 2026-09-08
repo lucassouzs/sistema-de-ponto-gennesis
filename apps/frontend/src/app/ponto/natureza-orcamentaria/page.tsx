@@ -1,9 +1,12 @@
  'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Plus, Upload, Search, X, Edit, Trash2, Download, BookPlus, FileSpreadsheet, CheckCircle, Loader2 } from 'lucide-react';
+import { Plus, Upload, Search, X, Download, BookPlus, FileSpreadsheet, CheckCircle, Loader2 } from 'lucide-react';
+import { CadastroListEmpty, CadastroListLoading, CadastroListSummary, formatCadastroListId } from '@/components/ui/CadastroListSummary';
+import { RowActionMenuCell, RowActionMenuPortal, cadastroListClasses, listTableRowClasses } from '@/components/ui/RowActionMenu';
+import { useRowActionMenu } from '@/hooks/useRowActionMenu';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
@@ -11,6 +14,8 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface BudgetNature {
   id: string;
@@ -164,6 +169,28 @@ export default function NaturezaOrcamentariaPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [result, setResult] = useState<any>(null);
 
+  const closeFormModal = useCallback(() => {
+    setShowForm(false);
+    setEditingItem(null);
+  }, []);
+
+  const { requestClose: requestCloseForm, confirmUi: formConfirmUi } = useModalCloseConfirm(
+    closeFormModal,
+    { isParentOpen: showForm }
+  );
+
+  const closeImportModal = useCallback(() => {
+    setIsImportOpen(false);
+    setFile(null);
+    setParsedRows([]);
+    setResult(null);
+  }, []);
+
+  const { requestClose: requestCloseImport, confirmUi: importConfirmUi } = useModalCloseConfirm(
+    closeImportModal,
+    { isParentOpen: isImportOpen }
+  );
+
   const parseSpreadsheet = async () => {
     if (!file) {
       toast.error('Selecione um arquivo');
@@ -230,9 +257,26 @@ export default function NaturezaOrcamentariaPage() {
   };
 
   const items: BudgetNature[] = listData?.data || [];
+
+  const {
+    rowActionMenu,
+    rowForActionMenu,
+    toggleRowActionMenu,
+    closeRowActionMenu,
+    isRowMenuOpen
+  } = useRowActionMenu(items);
+
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
-  if (loadingUser) return <Loading message="Carregando..." fullScreen size="lg" />;
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/natureza-orcamentaria">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/natureza-orcamentaria">
@@ -243,86 +287,108 @@ export default function NaturezaOrcamentariaPage() {
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">Cadastre as naturezas orçamentárias</p>
           </div>
 
-          <Card>
-            <CardHeader className="border-b-0">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center">
-                  <div className="p-2 sm:p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                    <BookPlus className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          <Card className={cadastroListClasses.card}>
+            <CardHeader className={cadastroListClasses.cardHeader}>
+              <div className={cadastroListClasses.cardHeaderRow}>
+                <div className={cadastroListClasses.cardHeaderIconRow}>
+                  <div className="rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-900/30">
+                    <BookPlus className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" />
                   </div>
-                  <div className="ml-3 sm:ml-4 min-w-0">
+                  <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Naturezas</h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">{items.length} cadastrado(s)</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <div className="relative flex-1 sm:flex-initial sm:min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <div className={cadastroListClasses.cardToolbar}>
+                  <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
-                      placeholder="Buscar por código ou natureza..."
+                      placeholder="Buscar por ID ou natureza..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-9 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     />
                   </div>
                   <button
+                    type="button"
                     onClick={() => setIsImportOpen(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+                    className="flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-800 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
                   >
-                    <Upload className="w-4 h-4" />
-                    Importar
+                    <Upload className="h-4 w-4 shrink-0" />
+                    <span>Importar</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => { setShowForm(true); setEditingItem(null); setFormData({ code: '', name: '' }); }}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm whitespace-nowrap"
+                    className="flex h-10 items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   >
-                    <Plus className="w-4 h-4" />
-                    Cadastrar
+                    <Plus className="h-4 w-4 shrink-0" />
+                    <span>Nova Natureza</span>
                   </button>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className={cadastroListClasses.cardContent}>
               {isLoading ? (
-                <div className="px-6 py-12 text-center">
-                  <Loading message="Carregando..." />
-                </div>
+                <CadastroListLoading message="Carregando naturezas..." />
+              ) : items.length === 0 ? (
+                <CadastroListEmpty
+                  icon={BookPlus}
+                  title="Nenhuma natureza orçamentária encontrada"
+                  hint={
+                    searchTerm.trim()
+                      ? 'Tente ajustar a busca'
+                      : 'Cadastre uma nova natureza para começar'
+                  }
+                />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <>
+                  <CadastroListSummary
+                    startItem={1}
+                    endItem={items.length}
+                    total={items.length}
+                    itemLabel="natureza orçamentária"
+                    itemLabelPlural="naturezas orçamentárias"
+                  />
+                <div className="table-scroll">
+                  <table className={cadastroListClasses.table}>
                     <thead className="border-b border-gray-200 dark:border-gray-700">
                       <tr>
-                        <th className="px-3 sm:px-6 py-4 text-left align-middle text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Código</th>
-                        <th className="px-3 sm:px-6 py-4 text-left align-middle text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Natureza Orçamentária</th>
-                        <th className="px-3 sm:px-6 py-4 text-right align-middle text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ações</th>
+                        <th className={cadastroListClasses.th}>ID</th>
+                        <th className={cadastroListClasses.th}>Natureza Orçamentária</th>
+                        <th className={cadastroListClasses.thRight}>Ação</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                      {items.map((it) => (
-                        <tr key={it.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                          <td className="px-3 sm:px-6 py-4 align-middle text-sm font-mono text-gray-900 dark:text-gray-100">{it.code || '-'}</td>
-                          <td className="px-3 sm:px-6 py-4 align-middle text-sm text-gray-900 dark:text-gray-100">{it.name}</td>
-                          <td className="px-3 sm:px-6 py-4 align-middle text-right">
-                            <button onClick={() => handleEdit(it)} className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title="Editar">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => setShowDeleteId(it.id)} className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors ml-1" title="Excluir">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                    <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                      {items.map((it, index) => (
+                        <tr key={it.id} className={listTableRowClasses.tr}>
+                          <td className={cadastroListClasses.tdMono}>
+                            {formatCadastroListId(it.code, index + 1)}
                           </td>
+                          <td className="px-3 py-4 sm:px-6">
+                            <span className="text-sm text-gray-900 dark:text-gray-100">{it.name}</span>
+                          </td>
+                          <RowActionMenuCell
+                            isOpen={isRowMenuOpen(it.id)}
+                            onToggle={(e) =>
+                              toggleRowActionMenu(it.id, e.currentTarget as HTMLButtonElement)
+                            }
+                          />
                         </tr>
                       ))}
-                      {items.length === 0 && (
-                        <tr>
-                          <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
-                            Nenhuma natureza orçamentária cadastrada.
-                          </td>
-                        </tr>
-                      )}
                     </tbody>
                   </table>
                 </div>
+                </>
+              )}
+              {rowActionMenu && rowForActionMenu && (
+                <RowActionMenuPortal
+                  menu={rowActionMenu}
+                  onClose={closeRowActionMenu}
+                  onEdit={() => handleEdit(rowForActionMenu)}
+                  onDelete={() => setShowDeleteId(rowForActionMenu.id)}
+                />
               )}
             </CardContent>
           </Card>
@@ -330,18 +396,18 @@ export default function NaturezaOrcamentariaPage() {
 
         {/* Form Modal */}
         {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/50" onClick={() => { setShowForm(false); setEditingItem(null); }} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/50" onClick={requestCloseForm} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
               <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingItem ? 'Editar Natureza' : 'Nova Natureza'}</h2>
-                <button onClick={() => { setShowForm(false); setEditingItem(null); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400">
+                <button onClick={requestCloseForm} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Código</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ID</label>
                   <input type="text" value={formData.code} onChange={(e) => setFormData({ ...formData, code: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
                 <div>
@@ -349,22 +415,22 @@ export default function NaturezaOrcamentariaPage() {
                   <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
                 </div>
                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button type="button" onClick={() => { setShowForm(false); setEditingItem(null); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                  <button type="button" onClick={requestCloseForm} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                   <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{editingItem ? 'Atualizar' : 'Criar'}</button>
                 </div>
               </form>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Import Modal (novo: mesma estrutura do modal de Centros de Custo) */}
         {isImportOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="absolute inset-0" onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
+            <div className="absolute inset-0" onClick={requestCloseImport} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Importar Naturezas</h3>
-                <button onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400" aria-label="Fechar">
+                <button onClick={requestCloseImport} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400" aria-label="Fechar">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -466,7 +532,7 @@ export default function NaturezaOrcamentariaPage() {
                           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{parsedRows.filter(r => r.isValid).length} válido(s) de {parsedRows.length} total</p>
                         </div>
                       </div>
-                      <div className="overflow-x-auto max-h-[400px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg">
+                      <div className="table-scroll max-h-[400px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg">
                         <table className="w-full text-sm">
                           <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
                             <tr>
@@ -509,7 +575,7 @@ export default function NaturezaOrcamentariaPage() {
 
                     {/* Botões Cancelar / Importar */}
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-                      <button onClick={() => { setIsImportOpen(false); setFile(null); setParsedRows([]); setResult(null); }} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
+                      <button onClick={requestCloseImport} className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">Cancelar</button>
                       <button onClick={handleImport} disabled={isUploading || parsedRows.filter(r => r.isValid).length === 0} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors">
                         {isUploading ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Importando...</span></>) : (<><Upload className="w-4 h-4" /><span>Importar {parsedRows.filter(r => r.isValid).length} natureza(s)</span></>)}
                       </button>
@@ -518,12 +584,12 @@ export default function NaturezaOrcamentariaPage() {
                 )}
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Delete confirmation */}
         {showDeleteId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/50" onClick={() => setShowDeleteId(null)} />
             <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Excluir registro?</h3>
@@ -533,8 +599,11 @@ export default function NaturezaOrcamentariaPage() {
                 <button onClick={() => deleteMutation.mutate(showDeleteId!)} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Excluir</button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
+
+        {formConfirmUi}
+        {importConfirmUi}
 
       </MainLayout>
     </ProtectedRoute>

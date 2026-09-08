@@ -66,7 +66,8 @@ export class CompanyController {
         maxDistanceMeters,
         defaultLatitude,
         defaultLongitude,
-        vacationDaysPerYear
+        vacationDaysPerYear,
+        fuelSuppliesSlaHours,
       } = req.body;
 
       // Validar CNPJ se fornecido
@@ -128,7 +129,10 @@ export class CompanyController {
             ...(maxDistanceMeters !== undefined && { maxDistanceMeters }),
             ...(defaultLatitude !== undefined && { defaultLatitude }),
             ...(defaultLongitude !== undefined && { defaultLongitude }),
-            ...(vacationDaysPerYear !== undefined && { vacationDaysPerYear })
+            ...(vacationDaysPerYear !== undefined && { vacationDaysPerYear }),
+            ...(fuelSuppliesSlaHours !== undefined && {
+              fuelSuppliesSlaHours: Math.max(1, Number(fuelSuppliesSlaHours) || 24),
+            }),
           }
         });
       } else {
@@ -149,7 +153,8 @@ export class CompanyController {
             maxDistanceMeters: maxDistanceMeters || 1000,
             defaultLatitude: defaultLatitude || -23.5505,
             defaultLongitude: defaultLongitude || -46.6333,
-            vacationDaysPerYear: vacationDaysPerYear || 30
+            vacationDaysPerYear: vacationDaysPerYear || 30,
+            fuelSuppliesSlaHours: Math.max(1, Number(fuelSuppliesSlaHours) || 24),
           }
         });
       }

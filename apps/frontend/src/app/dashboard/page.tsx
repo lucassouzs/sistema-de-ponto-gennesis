@@ -1,7 +1,6 @@
 'use client';
 
 // Desabilitar prerendering
-export const dynamic = 'force-dynamic';
 
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -37,8 +36,8 @@ export default function DashboardPage() {
   if (loadingUser || !userData) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
+        <div className="text-center">
+          <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
           <p className="text-gray-600">Carregando...</p>
         </div>
       </div>
@@ -54,9 +53,9 @@ export default function DashboardPage() {
   console.log('User object:', user);
   console.log('User role:', user.role);
 
-  // Redirecionar para a tela de registrar ponto
-  console.log('Redirecting to /ponto');
-  router.push('/ponto');
+  // Redireciona para a Home (página de boas-vindas — padrão para todos os usuários).
+  console.log('Redirecting to /ponto/home');
+  router.push('/ponto/home');
   return null;
 
   return (

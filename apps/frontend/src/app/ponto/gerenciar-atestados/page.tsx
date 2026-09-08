@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
@@ -12,6 +12,20 @@ import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
 import { DEPARTMENTS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
 import { CARGOS_LIST } from '@/constants/cargos';
+
+const CERTIFICATE_TYPE_FILTER_OPTIONS = labeledToSelectOptions([
+  { value: 'all', label: 'Todos' },
+  { value: 'MEDICAL', label: 'Atestado Médico' },
+  { value: 'DENTAL', label: 'Atestado Odontológico' },
+  { value: 'PREVENTIVE', label: 'Exame Preventivo' },
+  { value: 'ACCIDENT', label: 'Acidente de Trabalho' },
+  { value: 'COVID', label: 'COVID-19' },
+  { value: 'MATERNITY', label: 'Maternidade' },
+  { value: 'PATERNITY', label: 'Paternidade' },
+  { value: 'OTHER', label: 'Outros' },
+]);
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions, filterOptionsWithAll } from '@/lib/selectOptionBuilders';
 
 export default function AtestadosPage() {
   const [isFiltersMinimized, setIsFiltersMinimized] = useState(true);
@@ -79,33 +93,47 @@ export default function AtestadosPage() {
 
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  const monthFilterSelectOptions = useMemo(
+    () => [
+      { value: '0', label: 'Todos os meses', searchText: 'Todos os meses' },
+      ...monthOptions.map((m) => ({ value: String(m.value), label: m.label })),
+    ],
+    []
+  );
+  const yearFilterSelectOptions = useMemo(
+    () => [
+      { value: '0', label: 'Todos os anos', searchText: 'Todos os anos' },
+      ...yearOptions.map((y) => ({ value: String(y), label: String(y) })),
+    ],
+    [yearOptions]
+  );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters({ ...filters, search: e.target.value });
   };
 
-  const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, type: e.target.value });
+  const handleTypeChange = (value: string) => {
+    setFilters({ ...filters, type: value });
   };
 
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, month: parseInt(e.target.value) });
+  const handleMonthChange = (value: string) => {
+    setFilters({ ...filters, month: parseInt(value) });
   };
 
-  const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, year: parseInt(e.target.value) });
+  const handleYearChange = (value: string) => {
+    setFilters({ ...filters, year: parseInt(value) });
   };
 
-  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, department: e.target.value });
+  const handleDepartmentChange = (value: string) => {
+    setFilters({ ...filters, department: value });
   };
 
-  const handlePositionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, position: e.target.value });
+  const handlePositionChange = (value: string) => {
+    setFilters({ ...filters, position: value });
   };
 
-  const handleCompanyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, company: e.target.value });
+  const handleCompanyChange = (value: string) => {
+    setFilters({ ...filters, company: value });
   };
 
   const clearFilters = () => {
@@ -120,20 +148,22 @@ export default function AtestadosPage() {
     });
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando atestados..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/gerenciar-atestados">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   return (
     <ProtectedRoute route="/ponto/gerenciar-atestados">
@@ -283,7 +313,7 @@ export default function AtestadosPage() {
                       value={filters.search}
                       onChange={handleSearchChange}
                       placeholder="Digite nome, email ou CPF do funcionário..."
-                      className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                     />
                   </div>
                 </div>
@@ -300,21 +330,12 @@ export default function AtestadosPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Tipo
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.type}
                           onChange={handleTypeChange}
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="all">Todos</option>
-                          <option value="MEDICAL">Atestado Médico</option>
-                          <option value="DENTAL">Atestado Odontológico</option>
-                          <option value="PREVENTIVE">Exame Preventivo</option>
-                          <option value="ACCIDENT">Acidente de Trabalho</option>
-                          <option value="COVID">COVID-19</option>
-                          <option value="MATERNITY">Maternidade</option>
-                          <option value="PATERNITY">Paternidade</option>
-                          <option value="OTHER">Outros</option>
-                        </select>
+                          options={CERTIFICATE_TYPE_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
@@ -323,18 +344,12 @@ export default function AtestadosPage() {
                         </label>
                         <div className="relative">
                           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
+                          <StringSingleSelectDropdown
                             value={filters.department}
                             onChange={handleDepartmentChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os setores</option>
-                            {DEPARTMENTS_LIST.map(dept => (
-                              <option key={dept} value={dept}>
-                                {dept}
-                              </option>
-                            ))}
-                          </select>
+                            options={DEPARTMENTS_LIST}
+                            emptyOptionLabel="Todos os setores"
+                          />
                         </div>
                       </div>
 
@@ -342,36 +357,24 @@ export default function AtestadosPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Cargo
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.position}
                           onChange={handlePositionChange}
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Todos os cargos</option>
-                          {CARGOS_LIST.map(cargo => (
-                            <option key={cargo} value={cargo}>
-                              {cargo}
-                            </option>
-                          ))}
-                        </select>
+                          options={CARGOS_LIST}
+                          emptyOptionLabel="Todos os cargos"
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Empresa
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.company}
                           onChange={handleCompanyChange}
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Todas as empresas</option>
-                          {COMPANIES_LIST.map(company => (
-                            <option key={company} value={company}>
-                              {company}
-                            </option>
-                          ))}
-                        </select>
+                          options={COMPANIES_LIST}
+                          emptyOptionLabel="Todas as empresas"
+                        />
                       </div>
 
                       <div>
@@ -380,18 +383,12 @@ export default function AtestadosPage() {
                         </label>
                         <div className="relative">
                           <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.month}
+                          <StringSingleSelectDropdown
+                            value={String(filters.month)}
                             onChange={handleMonthChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value={0}>Todos os meses</option>
-                            {monthOptions.map(month => (
-                              <option key={month.value} value={month.value}>
-                                {month.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={monthFilterSelectOptions}
+                            allowEmpty={false}
+                          />
                         </div>
                       </div>
 
@@ -401,18 +398,12 @@ export default function AtestadosPage() {
                         </label>
                         <div className="relative">
                           <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.year}
+                          <StringSingleSelectDropdown
+                            value={String(filters.year)}
                             onChange={handleYearChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value={0}>Todos os anos</option>
-                            {yearOptions.map(year => (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            ))}
-                          </select>
+                            options={yearFilterSelectOptions}
+                            allowEmpty={false}
+                          />
                         </div>
                       </div>
                     </div>

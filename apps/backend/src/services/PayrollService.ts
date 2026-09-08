@@ -2,6 +2,7 @@ import moment from 'moment';
 import { HoursExtrasService } from './HoursExtrasService';
 import { prisma } from '../lib/prisma';
 import { cache } from '../lib/cache';
+import { findEmployeeIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 const hoursExtrasService = new HoursExtrasService();
 
@@ -72,6 +73,8 @@ export interface PayrollEmployee {
   client: string | null;
   alocacaoFinal: string | null; // Centro de custo mais frequente nos pontos
   cpf: string;
+  profilePhotoUrl?: string | null;
+  birthDate: string | null;
   bank: string | null;
   accountType: string | null;
   agency: string | null;
@@ -698,25 +701,9 @@ export class PayrollService {
       shouldFilterManually = searchNumbers.length > 0;
       
       if (!shouldFilterManually) {
-        // Se não tem números, usar busca normal do Prisma
-        where.OR = [
-          { user: { name: { contains: search, mode: 'insensitive' } } },
-          { user: { cpf: { contains: search, mode: 'insensitive' } } },
-          { user: { email: { contains: search, mode: 'insensitive' } } },
-          { employeeId: { contains: search, mode: 'insensitive' } },
-          { department: { contains: search, mode: 'insensitive' } },
-          { position: { contains: search, mode: 'insensitive' } },
-          { company: { contains: search, mode: 'insensitive' } },
-          { costCenter: { contains: search, mode: 'insensitive' } },
-          { client: { contains: search, mode: 'insensitive' } },
-          { modality: { contains: search, mode: 'insensitive' } },
-          { bank: { contains: search, mode: 'insensitive' } },
-          { accountType: { contains: search, mode: 'insensitive' } },
-          { agency: { contains: search, mode: 'insensitive' } },
-          { account: { contains: search, mode: 'insensitive' } },
-          { pixKeyType: { contains: search, mode: 'insensitive' } },
-          { pixKey: { contains: search, mode: 'insensitive' } }
-        ];
+        // Sem acento: "antonio" encontra "Antônio"
+        const matchedIds = await findEmployeeIdsMatchingSearch(search);
+        where.id = { in: matchedIds.length > 0 ? matchedIds : ['__none__'] };
       }
     }
 
@@ -804,7 +791,8 @@ export class PayrollService {
           select: {
             id: true,
             name: true,
-            cpf: true
+            cpf: true,
+            profilePhotoUrl: true
           }
         }
       },
@@ -1286,6 +1274,8 @@ export class PayrollService {
           client: employee.client,
           alocacaoFinal: alocacaoFinal,
           cpf: employee.user.cpf,
+          profilePhotoUrl: employee.user.profilePhotoUrl ?? null,
+          birthDate: employee.birthDate ? employee.birthDate.toISOString().slice(0, 10) : null,
           bank: employee.bank,
           accountType: employee.accountType,
           agency: employee.agency,
@@ -1618,7 +1608,8 @@ export class PayrollService {
           select: {
             id: true,
             name: true,
-            cpf: true
+            cpf: true,
+            profilePhotoUrl: true
           }
         }
       }
@@ -1847,6 +1838,8 @@ export class PayrollService {
       client: employee.client,
       alocacaoFinal: alocacaoFinal,
       cpf: employee.user.cpf,
+      profilePhotoUrl: employee.user.profilePhotoUrl ?? null,
+      birthDate: employee.birthDate ? employee.birthDate.toISOString().slice(0, 10) : null,
       bank: employee.bank,
       accountType: employee.accountType,
       agency: employee.agency,

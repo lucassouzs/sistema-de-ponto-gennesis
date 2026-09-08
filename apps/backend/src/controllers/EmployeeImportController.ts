@@ -1,8 +1,13 @@
 import { Request, Response } from 'express';
 import * as XLSX from 'xlsx';
-import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
+import { hashPassword } from '../lib/passwordHash';
 import { createError } from '../middleware/errorHandler';
+import {
+  cpfMatchVariants,
+  releaseInactiveUsersHoldingIdentity,
+} from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
 
 interface ImportRow {
   Nome: string;
@@ -115,16 +120,22 @@ export const importEmployeesPreview = async (req: Request, res: Response) => {
         errors.push(`CPF inválido: ${row.CPF}`);
       }
 
-      // Verificar duplicatas
-      const existingEmail = await prisma.user.findUnique({
-        where: { email: row.Email }
+      // Verificar duplicatas (só ativos — desligados não bloqueiam)
+      const existingEmail = await prisma.user.findFirst({
+        where: {
+          isActive: true,
+          email: { equals: row.Email, mode: 'insensitive' },
+        },
       });
       if (existingEmail) {
         errors.push(`Email ${row.Email} já está cadastrado`);
       }
 
-      const existingCpf = await prisma.user.findUnique({
-        where: { cpf: cleanCpf }
+      const existingCpf = await prisma.user.findFirst({
+        where: {
+          isActive: true,
+          OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
+        },
       });
       if (existingCpf) {
         errors.push(`CPF ${row.CPF} já está cadastrado`);
@@ -264,9 +275,12 @@ export const importEmployees = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe email
-        const existingEmail = await prisma.user.findUnique({
-          where: { email: row.Email }
+        // Verificar se já existe email (só ativos — desligados liberam o e-mail)
+        const existingEmail = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            email: { equals: row.Email, mode: 'insensitive' },
+          },
         });
 
         if (existingEmail) {
@@ -278,9 +292,12 @@ export const importEmployees = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe CPF
-        const existingCpf = await prisma.user.findUnique({
-          where: { cpf: cleanCpf }
+        // Verificar se já existe CPF (só ativos)
+        const existingCpf = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
+          },
         });
 
         if (existingCpf) {
@@ -291,6 +308,9 @@ export const importEmployees = async (req: Request, res: Response) => {
           });
           continue;
         }
+
+        // Libera CPF/e-mail de usuários já desligados que ainda ocupavam a identidade
+        await releaseInactiveUsersHoldingIdentity(cleanCpf, row.Email);
 
         // Gerar matrícula automaticamente (sempre)
         const employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`; // Ex: 24001, 24002, etc.
@@ -363,7 +383,7 @@ export const importEmployees = async (req: Request, res: Response) => {
         const requiresTimeClock = row['Precisa Bater Ponto']?.toLowerCase() === 'sim' || row['Precisa Bater Ponto']?.toLowerCase() === 's' || !row['Precisa Bater Ponto'];
 
         // Criar usuário e funcionário
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        const hashedPassword = await hashPassword(defaultPassword, 10);
 
         const result = await prisma.$transaction(async (tx: any) => {
           const user = await tx.user.create({
@@ -432,6 +452,8 @@ export const importEmployees = async (req: Request, res: Response) => {
 
           return { user, employee };
         });
+
+        await ensureDefaultEmployeeAccessPermissions([result.user.id]);
 
         successes.push({
           linha: lineNumber,
@@ -528,9 +550,12 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe email
-        const existingEmail = await prisma.user.findUnique({
-          where: { email: emp.Email }
+        // Verificar se já existe email (só ativos)
+        const existingEmail = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            email: { equals: emp.Email, mode: 'insensitive' },
+          },
         });
 
         if (existingEmail) {
@@ -542,9 +567,13 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Verificar se já existe CPF
-        const existingCpf = await prisma.user.findUnique({
-          where: { cpf: cleanCpf }
+        // Verificar se já existe CPF (só ativos)
+        const existingCpf = await prisma.user.findFirst({
+          where: {
+            isActive: true,
+            OR: cpfMatchVariants(cleanCpf).map((c) => ({ cpf: c })),
+          },
+          select: { id: true }
         });
 
         if (existingCpf) {
@@ -556,22 +585,33 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
           continue;
         }
 
-        // Usar matrícula gerada ou gerar nova
-        let employeeId = emp.matriculaGerada;
-        if (!employeeId) {
-          employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
-        }
+        // Libera CPF/e-mail de desligados que ainda ocupavam a identidade
+        await releaseInactiveUsersHoldingIdentity(cleanCpf, emp.Email);
+
+        // Sempre gerar matrícula no servidor (ignora matriculaGerada do client)
+        let employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
         nextSequence++;
 
-        const existingEmployee = await prisma.employee.findUnique({
-          where: { employeeId: employeeId }
-        });
+        // Se colidir (ex.: import concorrente), tenta as próximas sequências
+        for (let attempt = 0; attempt < 50; attempt++) {
+          const existingEmployee = await prisma.employee.findUnique({
+            where: { employeeId },
+            select: { id: true }
+          });
+          if (!existingEmployee) break;
+          employeeId = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
+          nextSequence++;
+        }
 
-        if (existingEmployee) {
+        const stillTaken = await prisma.employee.findUnique({
+          where: { employeeId },
+          select: { id: true }
+        });
+        if (stillTaken) {
           errors.push({
             linha: lineNumber,
             nome: emp.Nome,
-            erro: `Matrícula ${employeeId} já cadastrada`
+            erro: `Não foi possível gerar matrícula livre (última tentativa: ${employeeId})`
           });
           continue;
         }
@@ -630,7 +670,7 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
         const requiresTimeClock = emp['Precisa Bater Ponto']?.toLowerCase() === 'sim' || emp['Precisa Bater Ponto']?.toLowerCase() === 's' || !emp['Precisa Bater Ponto'];
 
         // Criar usuário e funcionário
-        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+        const hashedPassword = await hashPassword(defaultPassword, 10);
 
         const result = await prisma.$transaction(async (tx: any) => {
           const user = await tx.user.create({
@@ -699,6 +739,8 @@ export const importEmployeesBulk = async (req: Request, res: Response) => {
 
           return { user, employee };
         });
+
+        await ensureDefaultEmployeeAccessPermissions([result.user.id]);
 
         successes.push({
           linha: lineNumber,

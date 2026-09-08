@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { usePermissions, useRoutePermission } from '@/hooks/usePermissions';
+import { useRoutePermission } from '@/hooks/usePermissions';
 import { Shield, AlertTriangle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
@@ -15,17 +15,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, route, contractId, fallback }: ProtectedRouteProps) {
-  const { hasAccess, isLoading } = useRoutePermission(route);
-  const { canAccessContract, isLoading: loadingUserPerms } = usePermissions();
+  const { hasAccess, isLoading, canAccessContract } = useRoutePermission(route);
 
-  if (isLoading || loadingUserPerms) {
-    return (
-      <Loading 
-        message="Verificando permissões..."
-        fullScreen
-        size="lg"
-      />
-    );
+  if (isLoading) {
+    return <Loading message="Verificando permissões..." fullScreen size="lg" />;
   }
 
   if (contractId && hasAccess && !canAccessContract(contractId)) {

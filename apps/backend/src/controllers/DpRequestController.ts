@@ -5,15 +5,24 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { createError } from '../middleware/errorHandler';
 import {
+  assertCanAttachCostCenterToDpRequest,
   assertCanAttachContractToDpRequest,
-  assertManagerCanActOnDpContract,
-  getDpFormContractWhere,
-  getManagerDpApprovalContractScope,
+  assertManagerCanApproveDpRequest,
+  getDpManagerApprovalVisibilityWhere,
+  getDpRequestViewCostCenterIds,
+  isSensitiveDpRequestType,
   userMayCreateSensitiveDpRequest,
 } from '../lib/dpApprovalAccess';
 import { parseDpRequestDetails } from '../lib/dpRequestDetails';
-
-const SENSITIVE_MANAGER_ONLY_DP_TYPES = ['RESCISAO', 'ALTERACAO_FUNCAO_SALARIO'] as const;
+import {
+  isAdmTstDpRequestType,
+  isDepartamentoPessoalSector,
+  admTstManagerApprovalExclusionWhere,
+  admTstOnlyWhere,
+  ADM_TST_FEEDBACK_NEXT_STATUSES,
+  ADM_TST_MAY_ACT_STATUSES,
+} from '../lib/dpRequestAdmTst';
+import { assertUserCanManageDpRequest } from '../lib/dpApprovalAccess';
 
 const DP_REQUEST_TYPES = [
   'ADMISSAO',
@@ -26,6 +35,13 @@ const DP_REQUEST_TYPES = [
   'OUTRAS_SOLICITACOES',
   'RESCISAO',
   'RETIFICACAO_ALOCACAO',
+  'ADM_VIAGENS',
+  'ADM_EPI_FARDAMENTO',
+  'ADM_MANUTENCAO_ESCRITORIO',
+  'ADM_MATERIAL_ESCRITORIO',
+  'ADM_INFORMATICA',
+  'ADM_TREINAMENTOS_NR',
+  'ADM_ASOS',
 ] as const;
 
 const createDpRequestSchema = z.object({
@@ -35,20 +51,38 @@ const createDpRequestSchema = z.object({
   /** Prazo desejado para retorno/acompanhamento pelo DP (independe das datas de período em férias, atestado etc.). */
   prazoInicio: z.string().min(1).optional(),
   prazoFim: z.string().min(1).optional(),
-  contractId: z.string().min(1),
+  contractId: z.string().min(1).optional(),
+  costCenterId: z.string().min(1).optional(),
 
-  // Persistimos para histórico (mesmo que possamos derivar do contrato depois).
+  // Persistimos para histórico (mesmo que possamos derivar do centro de custo depois).
   company: z.string().min(1).optional(),
   polo: z.string().min(1).optional(),
 
   details: z.unknown().optional(),
+}).refine((data) => Boolean(data.costCenterId || data.contractId), {
+  message: 'Selecione o contrato',
+  path: ['costCenterId'],
 });
 
 const approveDpRequestSchema = z.object({
-  /** Vazio é permitido (aprovação/rejeição sem observação). */
+  /** Vazio é permitido (aprovação sem observação). */
   comment: z.string().optional().transform((s) => (typeof s === 'string' ? s.trim() : '')),
   isInternal: z.boolean().default(false), // Mantemos por compatibilidade futura.
 });
+
+const rejectDpRequestSchema = z
+  .object({
+    cancellationReason: z.string().optional(),
+    /** Compatibilidade: aceita `comment` legado como motivo. */
+    comment: z.string().optional(),
+  })
+  .transform((data) => ({
+    cancellationReason: (data.cancellationReason ?? data.comment ?? '').trim(),
+  }))
+  .refine((data) => data.cancellationReason.length > 0, {
+    message: 'Informe o motivo do cancelamento',
+    path: ['cancellationReason'],
+  });
 
 const DP_FEEDBACK_NEXT_STATUSES = [
   'IN_REVIEW_DP',
@@ -61,13 +95,31 @@ const DP_FEEDBACK_NEXT_STATUSES = [
   'CANCELLED',
 ] as const;
 
-const feedbackDpRequestSchema = z.object({
-  feedback: z.string().min(1),
-  nextStatus: z.enum(DP_FEEDBACK_NEXT_STATUSES),
-  /** Texto extra ao concluir (se vazio, usa `feedback` como comentário de conclusão). */
-  conclusionComment: z.string().optional(),
-  responsibleNote: z.string().optional(),
-});
+const FEEDBACK_NEXT_STATUSES = [
+  ...DP_FEEDBACK_NEXT_STATUSES,
+  ...ADM_TST_FEEDBACK_NEXT_STATUSES.filter(
+    (status) => !(DP_FEEDBACK_NEXT_STATUSES as readonly string[]).includes(status)
+  ),
+] as const;
+
+const feedbackDpRequestSchema = z
+  .object({
+    feedback: z.string().min(1),
+    nextStatus: z.enum(FEEDBACK_NEXT_STATUSES),
+    /** Texto extra ao concluir (se vazio, usa `feedback` como comentário de conclusão). */
+    conclusionComment: z.string().optional(),
+    responsibleNote: z.string().optional(),
+    cancellationReason: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.nextStatus === 'CANCELLED' && !(data.cancellationReason || '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Informe o motivo do cancelamento',
+        path: ['cancellationReason'],
+      });
+    }
+  });
 
 const requesterReturnSchema = z.object({
   comment: z.string().min(1, 'Informe o retorno para o DP'),
@@ -167,49 +219,159 @@ function appendStatusTransition(
 }
 
 type DpContractSummary = { id: string; number: string; name: string };
+type DpCostCenterSummary = {
+  id: string;
+  name: string;
+  code: string;
+  company: string | null;
+  polo: string | null;
+};
 
-async function attachDpContractSummaries<T extends { contractId: string | null }>(
-  rows: T[]
-): Promise<(T & { contract: DpContractSummary | null })[]> {
-  const ids = [...new Set(rows.map((r) => r.contractId).filter((id): id is string => !!id))];
-  if (ids.length === 0) {
-    return rows.map((r) => ({ ...r, contract: null }));
-  }
-  const contracts = await prisma.contract.findMany({
-    where: { id: { in: ids } },
-    select: { id: true, number: true, name: true },
+async function attachDpContractSummaries<
+  T extends { contractId: string | null; costCenterId?: string | null },
+>(rows: T[]): Promise<(T & { contract: DpContractSummary | null; costCenter: DpCostCenterSummary | null })[]> {
+  const contractIds = [...new Set(rows.map((r) => r.contractId).filter((id): id is string => !!id))];
+  const costCenterIds = [
+    ...new Set(rows.map((r) => r.costCenterId).filter((id): id is string => !!id)),
+  ];
+
+  const [contracts, costCenters] = await Promise.all([
+    contractIds.length
+      ? prisma.contract.findMany({
+          where: { id: { in: contractIds } },
+          select: { id: true, number: true, name: true, costCenterId: true },
+        })
+      : Promise.resolve([]),
+    costCenterIds.length
+      ? prisma.costCenter.findMany({
+          where: { id: { in: costCenterIds } },
+          select: { id: true, name: true, code: true, company: true, polo: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const contractById = new Map(contracts.map((c) => [c.id, c]));
+  const extraCcIds = contracts
+    .map((c) => c.costCenterId)
+    .filter((id): id is string => !!id && !costCenterIds.includes(id));
+  const extraCenters =
+    extraCcIds.length > 0
+      ? await prisma.costCenter.findMany({
+          where: { id: { in: extraCcIds } },
+          select: { id: true, name: true, code: true, company: true, polo: true },
+        })
+      : [];
+  const centerById = new Map(
+    [...costCenters, ...extraCenters].map((c) => [
+      c.id,
+      {
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        company: c.company ?? null,
+        polo: c.polo ?? null,
+      },
+    ])
+  );
+
+  return rows.map((r) => {
+    const contract = r.contractId
+      ? contractById.get(r.contractId)
+        ? {
+            id: contractById.get(r.contractId)!.id,
+            number: contractById.get(r.contractId)!.number,
+            name: contractById.get(r.contractId)!.name,
+          }
+        : null
+      : null;
+    const ccId = r.costCenterId || (r.contractId ? contractById.get(r.contractId)?.costCenterId : null);
+    return {
+      ...r,
+      contract,
+      costCenter: ccId ? centerById.get(ccId) ?? null : null,
+    };
   });
-  const byId = new Map(contracts.map((c) => [c.id, c]));
-  return rows.map((r) => ({
-    ...r,
-    contract: r.contractId ? byId.get(r.contractId) ?? null : null,
-  }));
 }
 
 export class DpRequestController {
-  /** Lista enxuta de contratos para o formulário (inclui escopo de «aprovar DP» sem módulo Contratos). */
+  /** Contratos ativos (via centro de custo) para o formulário de solicitação geral. */
   async getEligibleContracts(req: AuthRequest, res: Response) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
-      const where = await getDpFormContractWhere(req.user.id, req.user.isAdmin);
+
       const contracts = await prisma.contract.findMany({
-        where,
+        where: { costCenter: { isActive: true } },
         select: {
           id: true,
           name: true,
           number: true,
-          costCenter: { select: { company: true, polo: true } },
+          costCenterId: true,
+          costCenter: {
+            select: { company: true, polo: true, name: true, code: true },
+          },
         },
         orderBy: { name: 'asc' },
-        take: 500,
+        take: 2000,
       });
-      return res.json({ success: true, data: contracts });
+
+      const data = contracts.map((c) => ({
+        id: c.id,
+        name: c.name.trim() || c.number,
+        number: c.number,
+        costCenterId: c.costCenterId,
+        costCenter: {
+          company: c.costCenter.company ?? null,
+          polo: c.costCenter.polo ?? null,
+          name: c.costCenter.name ?? null,
+          code: c.costCenter.code ?? null,
+        },
+      }));
+
+      return res.json({ success: true, data });
     } catch (e: unknown) {
       const err = e as { statusCode?: number; message?: string };
       if (err?.statusCode && typeof err.statusCode === 'number') {
         return res.status(err.statusCode).json({ error: err.message || 'Erro' });
       }
       return res.status(500).json({ error: 'Erro ao listar contratos' });
+    }
+  }
+
+  /** Centros de custo ativos para o campo «Contrato» das solicitações internas. */
+  async getEligibleCostCenters(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+
+      const centers = await prisma.costCenter.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          company: true,
+          polo: true,
+          contracts: { select: { id: true } },
+        },
+        orderBy: { name: 'asc' },
+        take: 2000,
+      });
+
+      const data = centers.map((c) => ({
+        id: c.id,
+        name: c.name.trim() || c.code,
+        code: c.code,
+        company: c.company ?? null,
+        polo: c.polo ?? null,
+        contractIds: c.contracts.map((x) => x.id),
+      }));
+
+      return res.json({ success: true, data });
+    } catch (e: unknown) {
+      const err = e as { statusCode?: number; message?: string };
+      if (err?.statusCode && typeof err.statusCode === 'number') {
+        return res.status(err.statusCode).json({ error: err.message || 'Erro' });
+      }
+      return res.status(500).json({ error: 'Erro ao listar centros de custo' });
     }
   }
 
@@ -225,10 +387,18 @@ export class DpRequestController {
       if (!employee) throw createError('Funcionário não encontrado', 404);
 
       const { status } = req.query;
+      const viewCostCenterIds = await getDpRequestViewCostCenterIds(req.user.id);
 
-      const where: any = { employeeId: employee.id };
+      const where: Prisma.DpRequestWhereInput = {
+        OR: [
+          { employeeId: employee.id },
+          ...(viewCostCenterIds.length > 0
+            ? [{ costCenterId: { in: viewCostCenterIds } }]
+            : []),
+        ],
+      };
       if (status && typeof status === 'string' && status !== 'all') {
-        where.status = status;
+        where.status = status as Prisma.DpRequestWhereInput['status'];
       }
 
       const requests = await prisma.dpRequest.findMany({
@@ -257,6 +427,13 @@ export class DpRequestController {
 
       const validated = createDpRequestSchema.parse(req.body);
 
+      if (
+        validated.requestType === 'ADM_ASOS' &&
+        !isDepartamentoPessoalSector(employee.department)
+      ) {
+        throw createError("ASO's disponível apenas para o setor Departamento Pessoal", 403);
+      }
+
       let parsedDetails: Record<string, unknown>;
       try {
         parsedDetails = parseDpRequestDetails(validated.requestType, validated.details);
@@ -265,16 +442,59 @@ export class DpRequestController {
         return res.status(400).json({ error: msg });
       }
 
-      await assertCanAttachContractToDpRequest(req, validated.contractId);
+      let costCenter: {
+        id: string;
+        company: string | null;
+        polo: string | null;
+        isActive: boolean;
+      } | null = null;
+      let contract: { id: string } | null = null;
 
-      const isSensitiveType = (SENSITIVE_MANAGER_ONLY_DP_TYPES as readonly string[]).includes(
-        validated.requestType
-      );
-      if (isSensitiveType) {
+      if (validated.costCenterId) {
+        await assertCanAttachCostCenterToDpRequest(req, validated.costCenterId);
+        costCenter = await prisma.costCenter.findFirst({
+          where: { id: validated.costCenterId, isActive: true },
+          select: { id: true, company: true, polo: true, isActive: true },
+        });
+        if (!costCenter) throw createError('Centro de custo não encontrado', 404);
+
+        if (validated.contractId) {
+          const linked = await prisma.contract.findUnique({
+            where: { id: validated.contractId },
+            select: { id: true, costCenterId: true },
+          });
+          if (!linked || linked.costCenterId !== costCenter.id) {
+            throw createError('Contrato não pertence ao centro de custo selecionado', 400);
+          }
+          contract = { id: linked.id };
+        } else {
+          const first = await prisma.contract.findFirst({
+            where: { costCenterId: costCenter.id },
+            select: { id: true },
+          });
+          contract = first;
+        }
+      } else if (validated.contractId) {
+        await assertCanAttachContractToDpRequest(req, validated.contractId);
+        const found = await prisma.contract.findUnique({
+          where: { id: validated.contractId },
+          include: { costCenter: true },
+        });
+        if (!found || !found.costCenter?.isActive) {
+          throw createError('Contrato não encontrado', 404);
+        }
+        contract = { id: found.id };
+        costCenter = found.costCenter;
+      }
+
+      if (!costCenter) throw createError('Selecione o contrato', 400);
+
+      if (isSensitiveDpRequestType(validated.requestType)) {
         const ok = await userMayCreateSensitiveDpRequest(
           actorUserId,
           req.user.isAdmin,
-          validated.contractId
+          contract?.id ?? null,
+          costCenter.id
         );
         if (!ok) {
           throw createError(
@@ -284,15 +504,12 @@ export class DpRequestController {
         }
       }
 
-      const contract = await prisma.contract.findUnique({
-        where: { id: validated.contractId },
-        include: { costCenter: true },
-      });
-
-      if (!contract) throw createError('Contrato não encontrado', 404);
-
-      const company = validated.company ?? contract.costCenter.company ?? '';
-      const polo = validated.polo ?? contract.costCenter.polo ?? '';
+      const company = validated.company ?? costCenter.company ?? '';
+      const polo = validated.polo ?? costCenter.polo ?? '';
+      const sectorSolicitante = (employee.department ?? '').trim();
+      if (!sectorSolicitante) {
+        throw createError('Setor do solicitante não cadastrado no perfil do funcionário', 400);
+      }
 
       const typeLabel: Record<string, string> = {
         ADMISSAO: 'Admissão',
@@ -305,13 +522,24 @@ export class DpRequestController {
         HORA_EXTRA: 'Hora extra',
         BENEFICIOS_VIAGEM: 'Benefícios de viagem',
         OUTRAS_SOLICITACOES: 'Outras solicitações',
+        ADM_VIAGENS: 'Viagens',
+        ADM_EPI_FARDAMENTO: "EPI's e fardamento",
+        ADM_MANUTENCAO_ESCRITORIO: 'Manutenção do escritório',
+        ADM_MATERIAL_ESCRITORIO: 'Material de escritório',
+        ADM_INFORMATICA: 'Informática',
+        ADM_TREINAMENTOS_NR: "Treinamentos e NR's",
+        ADM_ASOS: "ASO's",
       };
-      const title = `Solicitação DP · ${typeLabel[validated.requestType] ?? validated.requestType.replace(/_/g, ' ')}`;
+      const isAdmRequest = isAdmTstDpRequestType(validated.requestType);
+      const titlePrefix = isAdmRequest ? 'Solicitação ADM/TST' : 'Solicitação DP';
+      const title = `${titlePrefix} · ${typeLabel[validated.requestType] ?? validated.requestType.replace(/_/g, ' ')}`;
 
       const { prazoInicio, prazoFim } = computePrazos(validated.prazoInicio, validated.prazoFim);
 
       const DP_DISPLAY_NUMBER_ADVISORY_LOCK = 91827364;
       const createdAtIso = new Date().toISOString();
+      const actorName = (employee.user?.name || employee.user?.email || '').trim() || undefined;
+      const initialStatus = isAdmRequest ? 'IN_REVIEW_DP' : 'WAITING_MANAGER';
 
       const created = await prisma.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${DP_DISPLAY_NUMBER_ADVISORY_LOCK})`);
@@ -324,22 +552,26 @@ export class DpRequestController {
             urgency: validated.urgency,
             requestType: validated.requestType,
             title,
-            sectorSolicitante: employee.department,
+            sectorSolicitante,
             solicitanteNome: employee.user?.name ?? '',
             solicitanteEmail: employee.user?.email ?? actorEmail,
             prazoInicio,
             prazoFim,
             details: parsedDetails as Prisma.InputJsonValue,
-            contractId: contract.id,
+            contractId: contract?.id ?? null,
+            costCenterId: costCenter.id,
             company: company || null,
             polo: polo || null,
-            status: 'WAITING_MANAGER',
+            status: initialStatus,
             statusHistory: [
               {
                 at: createdAtIso,
-                status: 'WAITING_MANAGER',
+                status: initialStatus,
                 actorUserId: actorUserId,
-                actorName: (employee.user?.name || employee.user?.email || '').trim() || undefined,
+                actorName,
+                ...(isAdmRequest
+                  ? { note: 'Encaminhada para ADM/TST (sem aprovação do gestor)' }
+                  : {}),
               },
             ] as Prisma.InputJsonValue,
           },
@@ -359,50 +591,108 @@ export class DpRequestController {
     }
   }
 
-  async getForApproval(req: AuthRequest, res: Response) {
-    try {
-      if (!req.user) throw createError('Usuário não autenticado', 401);
+  private async listManageQueue(req: AuthRequest, res: Response, scope: 'DP' | 'ADM_TST') {
+    if (!req.user) throw createError('Usuário não autenticado', 401);
 
-      const { status } = req.query;
-      const where: any = {};
-      if (status && typeof status === 'string' && status !== 'all') {
-        where.status = status;
-      }
+    const { status } = req.query;
+    const where: Prisma.DpRequestWhereInput = {
+      ...(scope === 'ADM_TST' ? admTstOnlyWhere() : admTstManagerApprovalExclusionWhere()),
+    };
+    if (status && typeof status === 'string' && status !== 'all') {
+      where.status = status as Prisma.EnumDpRequestStatusFilter['equals'];
+    }
 
-      const requests = await prisma.dpRequest.findMany({
-        where,
-        include: {
-          employee: {
-            select: {
-              user: { select: { name: true, email: true } },
-            },
+    const requests = await prisma.dpRequest.findMany({
+      where,
+      include: {
+        employee: {
+          select: {
+            costCenter: true,
+            user: { select: { name: true, email: true } },
           },
         },
-        orderBy: { createdAt: 'desc' },
-      });
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-      const data = await attachDpContractSummaries(requests);
+    const data = await attachDpContractSummaries(requests);
+    return res.json({ success: true, data });
+  }
 
-      return res.json({ success: true, data });
+  /** Fila de gerenciamento do Departamento Pessoal (sem solicitações ADM/TST). */
+  async getForApproval(req: AuthRequest, res: Response) {
+    try {
+      return await this.listManageQueue(req, res, 'DP');
     } catch (e) {
-      return res.status(500).json({ error: 'Erro ao buscar solicitações DP para aprovação' });
+      const err = e as { statusCode?: number; message?: string };
+      if (err?.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message || 'Erro' });
+      }
+      return res.status(500).json({ error: 'Erro ao buscar solicitações para gerenciamento' });
     }
   }
 
+  /** Fila de gerenciamento ADM/TST. */
+  async getForAdmTstManagement(req: AuthRequest, res: Response) {
+    try {
+      return await this.listManageQueue(req, res, 'ADM_TST');
+    } catch (e) {
+      const err = e as { statusCode?: number; message?: string };
+      if (err?.statusCode) {
+        return res.status(err.statusCode).json({ error: err.message || 'Erro' });
+      }
+      return res.status(500).json({ error: 'Erro ao buscar solicitações ADM/TST' });
+    }
+  }
+
+  /**
+   * Lista solicitações DP que o gestor pode visualizar, filtradas pela fase:
+   *  - `PENDING` (padrão): aguardando decisão do gestor (`WAITING_MANAGER`).
+   *  - `APPROVED`: já aprovadas pelo gestor (`managerApprovedAt` preenchido).
+   *  - `REJECTED`: reprovadas pelo gestor (`managerRejectionReason` preenchido).
+   *  - `ALL`: união das três fases acima.
+   * O escopo (contratos visíveis ao gestor) é aplicado em todas as fases.
+   */
   async getWaitingManagerApprovals(req: AuthRequest, res: Response) {
     try {
       if (!req.user) throw createError('Usuário não autenticado', 401);
 
-      const scope = await getManagerDpApprovalContractScope(req.user.id, req.user.isAdmin);
-      if (scope === null) {
+      const visibility = await getDpManagerApprovalVisibilityWhere(req.user.id, req.user.isAdmin);
+      if (visibility === null) {
         return res.json({ success: true, data: [] });
       }
 
+      const rawPhase = String(req.query.phase ?? 'PENDING').toUpperCase();
+      type Phase = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL';
+      const phase: Phase = (['PENDING', 'APPROVED', 'REJECTED', 'ALL'] as const).includes(
+        rawPhase as Phase
+      )
+        ? (rawPhase as Phase)
+        : 'PENDING';
+
+      const phaseFilter: Prisma.DpRequestWhereInput =
+        phase === 'PENDING'
+          ? { status: 'WAITING_MANAGER' as const }
+          : phase === 'APPROVED'
+            ? { managerApprovedAt: { not: null } }
+            : phase === 'REJECTED'
+              ? { managerRejectionReason: { not: null } }
+              : {
+                  OR: [
+                    { status: 'WAITING_MANAGER' as const },
+                    { managerApprovedAt: { not: null } },
+                    { managerRejectionReason: { not: null } },
+                  ],
+                };
+
       const requests = await prisma.dpRequest.findMany({
-        where: { status: 'WAITING_MANAGER', ...scope },
+        where: {
+          AND: [phaseFilter, visibility as Prisma.DpRequestWhereInput, admTstManagerApprovalExclusionWhere()],
+        },
         include: {
           employee: {
             select: {
+              costCenter: true,
               user: { select: { name: true, email: true } },
             },
           },
@@ -429,8 +719,17 @@ export class DpRequestController {
       if (dpRequest.status !== 'WAITING_MANAGER') {
         throw createError('A solicitação não está aguardando aprovação do gestor', 400);
       }
+      if (isAdmTstDpRequestType(dpRequest.requestType)) {
+        throw createError('Solicitações ADM/TST não passam por aprovação do gestor', 400);
+      }
 
-      await assertManagerCanActOnDpContract(req.user.id, req.user.isAdmin, dpRequest.contractId);
+      await assertManagerCanApproveDpRequest(
+        req.user.id,
+        req.user.isAdmin,
+        dpRequest.requestType,
+        dpRequest.contractId,
+        dpRequest.costCenterId
+      );
 
       const payload = approveDpRequestSchema.parse(req.body);
       const approverName = await getUserDisplayName(req.user.id);
@@ -483,11 +782,20 @@ export class DpRequestController {
       if (dpRequest.status !== 'WAITING_MANAGER') {
         throw createError('A solicitação não está aguardando aprovação do gestor', 400);
       }
+      if (isAdmTstDpRequestType(dpRequest.requestType)) {
+        throw createError('Solicitações ADM/TST não passam por aprovação do gestor', 400);
+      }
 
-      await assertManagerCanActOnDpContract(req.user.id, req.user.isAdmin, dpRequest.contractId);
+      await assertManagerCanApproveDpRequest(
+        req.user.id,
+        req.user.isAdmin,
+        dpRequest.requestType,
+        dpRequest.contractId,
+        dpRequest.costCenterId
+      );
 
-      const payload = approveDpRequestSchema.parse(req.body);
-      const rejectionReason = (payload.comment || 'Rejeitada pelo gestor').trim();
+      const payload = rejectDpRequestSchema.parse(req.body);
+      const rejectionReason = payload.cancellationReason;
       const rejecterName = await getUserDisplayName(req.user.id);
 
       const updated = await prisma.dpRequest.update({
@@ -498,7 +806,7 @@ export class DpRequestController {
           managerApprovedAt: null,
           managerApprovalComment: null,
           managerRejectionReason: rejectionReason,
-          managerRejectionComment: payload.comment || null,
+          managerRejectionComment: null,
           statusHistory: appendStatusTransition(
             {
               createdAt: dpRequest.createdAt,
@@ -519,6 +827,9 @@ export class DpRequestController {
 
       return res.json({ success: true, data: updated });
     } catch (e: unknown) {
+      if (e instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Dados inválidos', details: e.issues });
+      }
       const err = e as { statusCode?: number; message?: string };
       if (err?.statusCode && typeof err.statusCode === 'number') {
         return res.status(err.statusCode).json({ error: err.message || 'Erro' });
@@ -536,28 +847,54 @@ export class DpRequestController {
       const dpRequest = await prisma.dpRequest.findUnique({ where: { id: requestId } });
       if (!dpRequest) throw createError('Solicitação DP não encontrada', 404);
 
+      await assertUserCanManageDpRequest(
+        req.user.id,
+        req.user.isAdmin,
+        dpRequest.requestType
+      );
+
       const payload = feedbackDpRequestSchema.parse(req.body);
 
       const current = dpRequest.status;
-      const dpMayAct: string[] = [
-        'IN_REVIEW_DP',
-        'IN_FINANCEIRO',
-        'WAITING_RETURN',
-        'WAITING_RETURN_ACCOUNTING',
-        'WAITING_RETURN_ADM_TST',
-        'WAITING_RETURN_ENGINEERING',
-      ];
-      if (!dpMayAct.includes(current)) {
-        throw createError('A solicitação não está na etapa correta para feedback do DP', 400);
+      const isAdmTst = isAdmTstDpRequestType(dpRequest.requestType);
+
+      if (isAdmTst) {
+        if (!(ADM_TST_MAY_ACT_STATUSES as readonly string[]).includes(current)) {
+          throw createError('A solicitação não está na etapa correta para feedback ADM/TST', 400);
+        }
+      } else {
+        const dpMayAct: string[] = [
+          'IN_REVIEW_DP',
+          'IN_FINANCEIRO',
+          'WAITING_RETURN',
+          'WAITING_RETURN_ACCOUNTING',
+          'WAITING_RETURN_ADM_TST',
+          'WAITING_RETURN_ENGINEERING',
+        ];
+        if (!dpMayAct.includes(current)) {
+          throw createError('A solicitação não está na etapa correta para feedback do DP', 400);
+        }
       }
 
       const next = payload.nextStatus;
+      if (isAdmTst && !(ADM_TST_FEEDBACK_NEXT_STATUSES as readonly string[]).includes(next)) {
+        throw createError('Etapa inválida para solicitação ADM/TST', 400);
+      }
       const responsible = (payload.responsibleNote || '').trim();
       const dpActorName = await getUserDisplayName(req.user.id);
+      const cancellationReason = (payload.cancellationReason || '').trim();
       const historyNote =
         next === 'CONCLUDED'
           ? (payload.conclusionComment || payload.feedback).trim()
-          : [payload.feedback.trim(), responsible ? `Responsável: ${responsible}` : ''].filter(Boolean).join('\n');
+          : next === 'CANCELLED'
+            ? [
+                `Motivo do cancelamento: ${cancellationReason}`,
+                payload.feedback.trim(),
+                responsible ? `Responsável: ${responsible}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n')
+            : [payload.feedback.trim(), responsible ? `Responsável: ${responsible}` : ''].filter(Boolean).join('\n');
 
       const data: Prisma.DpRequestUpdateInput = {
         dpFeedback: payload.feedback.trim(),
@@ -587,6 +924,10 @@ export class DpRequestController {
         data.dpConclusionComment = (payload.conclusionComment || payload.feedback).trim();
       } else {
         data.dpConcludedAt = null;
+      }
+
+      if (next === 'CANCELLED') {
+        data.dpCancellationReason = cancellationReason;
       }
 
       const updated = await prisma.dpRequest.update({

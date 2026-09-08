@@ -188,7 +188,7 @@ export function buildDpRequestTimeline(
       const at = Number.isNaN(concludedMs) ? tCur : concludedMs;
       steps.push({
         key: `st-${i}-CONCLUDED-${cur.at}`,
-        title: statusLabels.CONCLUDED ?? 'Concluída',
+        title: statusLabels.CONCLUDED ?? 'Finalizada',
         from: at,
         to: at,
         done: true,

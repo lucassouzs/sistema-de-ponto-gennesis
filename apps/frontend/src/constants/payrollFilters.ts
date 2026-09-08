@@ -8,7 +8,10 @@ export const DEPARTMENTS_LIST = [
   'Departamento Pessoal',
   'Engenharia',
   'Administrativo',
-  'Financeiro'
+  'Financeiro',
+  'Operacional',
+  'Segurança do Trabalho',
+  'Sócios',
 ];
 
 export const COMPANIES_LIST = [
@@ -68,10 +71,11 @@ export const COST_CENTERS_LIST = [
   'DIRETOR'
 ];
 
-// Lista de polos
+// Lista de polos (siglas de todos os estados do Brasil)
 export const POLOS_LIST = [
-  'BRASÍLIA',
-  'GOIÁS'
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
+  'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN',
+  'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'
 ];
 
 // Lista de tomadores corretos (usando a lista existente)

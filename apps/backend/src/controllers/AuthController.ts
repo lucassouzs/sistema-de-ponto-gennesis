@@ -1,12 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt, { SignOptions } from 'jsonwebtoken';
+import type { SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { v4 as uuidv4 } from 'uuid';
-import { emailService } from '../services/EmailService';
+import { comparePassword, hashPassword } from '../lib/passwordHash';
 import { ChatService } from '../services/ChatService';
+import { findUserByLoginIdentifier, normalizeLoginIdentifier } from '../lib/loginIdentifier';
+import { recordSuccessfulLogin, recordSuccessfulLogout } from './UserActivityController';
+import { recordAuditEvent } from '../lib/auditLog';
+import { getRequestContext } from '../lib/requestContext';
+import { encodeImpersonationSource } from '../lib/impersonationLoginEvents';
 
 const chatUploadService = new ChatService();
 
@@ -20,10 +24,78 @@ const userMeSelect = {
   isFirstLogin: true,
   profilePhotoUrl: true,
   profilePhotoKey: true,
+  lastLoginAt: true,
+  lastSeenAt: true,
+  lastActivityPath: true,
+  lastActivityLabel: true,
   createdAt: true,
   updatedAt: true,
   employee: true,
 } as const;
+
+type SignSessionUser = {
+  id: string;
+  email: string;
+  role: string;
+};
+
+function signSessionToken(
+  user: SignSessionUser,
+  opts?: { impersonating?: boolean; originalAdminId?: string; expiresIn?: SignOptions['expiresIn'] }
+) {
+  const payload: Record<string, unknown> = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+  };
+  if (opts?.impersonating && opts.originalAdminId) {
+    payload.impersonating = true;
+    payload.originalAdminId = opts.originalAdminId;
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET as string, {
+    expiresIn: opts?.expiresIn ?? '7d',
+  });
+}
+
+async function recordImpersonationLoginEvent(
+  req: Request,
+  opts: {
+    userId: string;
+    type: 'impersonate' | 'stop_impersonate' | 'impersonated_by';
+    targetUserId?: string;
+    targetName?: string;
+    adminUserId?: string;
+    adminName?: string;
+  }
+) {
+  const ctx = getRequestContext();
+  const forwarded = req.headers['x-forwarded-for'];
+  const ipAddress =
+    ctx?.ipAddress ||
+    (typeof forwarded === 'string' && forwarded.split(',')[0]?.trim()) ||
+    req.ip ||
+    null;
+  const userAgent =
+    ctx?.userAgent ||
+    (typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null);
+
+  await prisma.userLoginEvent.create({
+    data: {
+      userId: opts.userId,
+      type: opts.type,
+      success: true,
+      source: encodeImpersonationSource({
+        channel: 'web',
+        targetUserId: opts.targetUserId,
+        targetName: opts.targetName,
+        adminUserId: opts.adminUserId,
+        adminName: opts.adminName,
+      }),
+      ipAddress,
+      userAgent,
+    },
+  });
+}
 
 export class AuthController {
   async register(req: Request, res: Response, next: NextFunction) {
@@ -45,7 +117,7 @@ export class AuthController {
       }
 
       // Criptografar senha
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await hashPassword(password);
 
       // Criar usuário
       const user = await prisma.user.create({
@@ -65,18 +137,11 @@ export class AuthController {
         }
       });
 
-      // Gerar token
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '7d' }
-      );
-
+      // Não emite token de sessão: registro é administrativo (ver rota protegida)
       return res.status(201).json({
         success: true,
         data: {
           user,
-          token,
         },
         message: 'Usuário criado com sucesso'
       });
@@ -87,11 +152,11 @@ export class AuthController {
 
   async login(req: Request, res: Response, next: NextFunction) {
     try {
-      const { email, password } = req.body;
+      const identifier = normalizeLoginIdentifier(req.body?.identifier ?? req.body?.email);
+      const { password } = req.body;
 
-      // Validar campos obrigatórios
-      if (!email || !password) {
-        throw createError('Email e senha são obrigatórios', 400);
+      if (!identifier || !password) {
+        throw createError('E-mail/CPF e senha são obrigatórios', 400);
       }
 
       // Verificar se JWT_SECRET está configurado
@@ -100,13 +165,7 @@ export class AuthController {
         throw createError('Erro de configuração do servidor', 500);
       }
 
-      // Buscar usuário
-      const user = await prisma.user.findUnique({
-        where: { email: email.toLowerCase().trim() },
-        include: {
-          employee: true,
-        }
-      });
+      const user = await findUserByLoginIdentifier(identifier);
 
       if (!user) {
         throw createError('Credenciais inválidas', 401);
@@ -121,17 +180,23 @@ export class AuthController {
         throw createError('Credenciais inválidas', 401);
       }
 
-      const isPasswordValid = await bcrypt.compare(password, user.password);
+      const isPasswordValid = await comparePassword(password, user.password);
       if (!isPasswordValid) {
         throw createError('Credenciais inválidas', 401);
       }
 
       // Gerar token
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      const token = signSessionToken({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
+
+      try {
+        await recordSuccessfulLogin(req, user.id, req.body?.source);
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar histórico de login:', trackErr);
+      }
 
       // Remover senha da resposta
       const { password: _, ...userWithoutPassword } = user;
@@ -139,7 +204,11 @@ export class AuthController {
       return res.json({
         success: true,
         data: {
-          user: userWithoutPassword,
+          user: {
+            ...userWithoutPassword,
+            lastLoginAt: new Date(),
+            lastSeenAt: new Date(),
+          },
           token,
           isFirstLogin: user.isFirstLogin,
         },
@@ -167,12 +236,214 @@ export class AuthController {
         throw createError('Usuário não encontrado', 404);
       }
 
+      // Evita 304 no browser/Axios (tratado como erro no cliente)
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+
       return res.json({
         success: true,
-        data: user,
+        data: {
+          ...user,
+          impersonation: req.user?.impersonating
+            ? {
+                active: true,
+                originalAdminId: req.user.originalAdminId || null,
+              }
+            : null,
+        },
       });
     } catch (error: any) {
       console.error('Erro ao buscar perfil do usuário:', error);
+      return next(error);
+    }
+  }
+
+  /** Administrador entra na sessão de outro usuário (sem senha dele). */
+  async startImpersonation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!process.env.JWT_SECRET) {
+        throw createError('Erro de configuração do servidor', 500);
+      }
+      if (!req.user?.isAdmin) {
+        throw createError('Acesso permitido apenas para Administrador', 403);
+      }
+      if (req.user.impersonating) {
+        throw createError('Encerre a sessão atual antes de entrar como outro usuário', 400);
+      }
+
+      const targetUserId = String(req.params.userId || '').trim();
+      if (!targetUserId) {
+        throw createError('Usuário alvo é obrigatório', 400);
+      }
+      if (targetUserId === req.user.id) {
+        throw createError('Você já está na sua própria conta', 400);
+      }
+
+      const target = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: userMeSelect,
+      });
+
+      if (!target) {
+        throw createError('Usuário não encontrado', 404);
+      }
+      if (!target.isActive) {
+        throw createError('Não é possível entrar como um usuário inativo', 400);
+      }
+
+      const targetIsAdmin =
+        (target.employee?.position || '').toLowerCase() === 'administrador';
+      if (targetIsAdmin) {
+        throw createError('Não é permitido entrar como outro Administrador', 403);
+      }
+
+      const token = signSessionToken(
+        { id: target.id, email: target.email, role: target.role },
+        {
+          impersonating: true,
+          originalAdminId: req.user.id,
+          expiresIn: '2h',
+        }
+      );
+
+      try {
+        const adminName =
+          (
+            await prisma.user.findUnique({
+              where: { id: req.user.id },
+              select: { name: true },
+            })
+          )?.name?.trim() || req.user.email;
+
+        await recordImpersonationLoginEvent(req, {
+          userId: req.user.id,
+          type: 'impersonate',
+          targetUserId: target.id,
+          targetName: target.name,
+          adminUserId: req.user.id,
+          adminName,
+        });
+        await recordImpersonationLoginEvent(req, {
+          userId: target.id,
+          type: 'impersonated_by',
+          targetUserId: target.id,
+          targetName: target.name,
+          adminUserId: req.user.id,
+          adminName,
+        });
+        recordAuditEvent({
+          action: 'CREATE',
+          entity: 'User',
+          entityId: target.id,
+          userId: req.user.id,
+          summary: `Impersonação iniciada: ${adminName} → ${target.name} (${target.email})`,
+          newData: {
+            type: 'impersonate',
+            adminUserId: req.user.id,
+            adminName,
+            targetUserId: target.id,
+            targetName: target.name,
+          },
+        });
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar impersonação:', trackErr);
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          user: target,
+          token,
+          impersonation: {
+            active: true,
+            originalAdminId: req.user.id,
+            targetUserId: target.id,
+            targetName: target.name,
+          },
+        },
+        message: `Sessão iniciada como ${target.name}`,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /** Volta da impersonação para a conta do administrador. */
+  async stopImpersonation(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!process.env.JWT_SECRET) {
+        throw createError('Erro de configuração do servidor', 500);
+      }
+      if (!req.user?.impersonating || !req.user.originalAdminId) {
+        throw createError('Nenhuma sessão de impersonação ativa', 400);
+      }
+
+      const admin = await prisma.user.findUnique({
+        where: { id: req.user.originalAdminId },
+        select: userMeSelect,
+      });
+
+      if (!admin || !admin.isActive) {
+        throw createError('Administrador original não encontrado ou inativo. Faça login novamente.', 401);
+      }
+
+      const adminIsAdmin =
+        (admin.employee?.position || '').toLowerCase() === 'administrador';
+      if (!adminIsAdmin) {
+        throw createError('Conta original não é mais Administrador. Faça login novamente.', 403);
+      }
+
+      const token = signSessionToken({
+        id: admin.id,
+        email: admin.email,
+        role: admin.role,
+      });
+
+      try {
+        const targetName =
+          (
+            await prisma.user.findUnique({
+              where: { id: req.user.id },
+              select: { name: true },
+            })
+          )?.name?.trim() || req.user.email;
+
+        await recordImpersonationLoginEvent(req, {
+          userId: admin.id,
+          type: 'stop_impersonate',
+          targetUserId: req.user.id,
+          targetName,
+          adminUserId: admin.id,
+          adminName: admin.name,
+        });
+        recordAuditEvent({
+          action: 'CREATE',
+          entity: 'User',
+          entityId: req.user.id,
+          userId: admin.id,
+          summary: `Impersonação encerrada: ${admin.name} voltou de ${targetName}`,
+          newData: {
+            type: 'stop_impersonate',
+            adminUserId: admin.id,
+            adminName: admin.name,
+            targetUserId: req.user.id,
+            targetName,
+          },
+        });
+      } catch (trackErr) {
+        console.error('[Auth] Falha ao registrar fim da impersonação:', trackErr);
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          user: admin,
+          token,
+          impersonation: null,
+        },
+        message: 'Sessão de administrador restaurada',
+      });
+    } catch (error) {
       return next(error);
     }
   }
@@ -225,7 +496,13 @@ export class AuthController {
 
   async logout(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // Em uma implementação completa, poderíamos invalidar o token (blacklist)
+      if (req.user?.id) {
+        try {
+          await recordSuccessfulLogout(req, req.user.id, req.body?.source);
+        } catch (trackError) {
+          console.error('Falha ao registrar logout:', trackError);
+        }
+      }
       return res.json({
         success: true,
         message: 'Logout realizado com sucesso'
@@ -235,167 +512,16 @@ export class AuthController {
     }
   }
 
-  async forgotPassword(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { email } = req.body;
-
-      if (!email) {
-        throw createError('Email é obrigatório', 400);
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { email }
-      });
-
-      if (!user) {
-        // Por segurança, não revelar se o email existe ou não
-        return res.json({
-          success: true,
-          message: 'Se o email existir, você receberá instruções para redefinir sua senha'
-        });
-      }
-
-      // Invalidar tokens anteriores não utilizados
-      await prisma.passwordResetToken.updateMany({
-        where: {
-          userId: user.id,
-          used: false,
-          expiresAt: { gt: new Date() }
-        },
-        data: {
-          used: true
-        }
-      });
-
-      // Gerar novo token de reset
-      const token = uuidv4();
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 1); // Token válido por 1 hora
-
-      await prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          token,
-          expiresAt
-        }
-      });
-
-      // Construir URL de reset
-      const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000';
-      const resetUrl = `${frontendUrl}/auth/reset-password?token=${token}`;
-
-      // Enviar email
-      try {
-        await emailService.sendPasswordResetEmail(user.email, user.name, token, resetUrl);
-        console.log(`✅ Email de recuperação de senha enviado para: ${user.email}`);
-      } catch (emailError: any) {
-        console.error('❌ Erro ao enviar email de reset:', emailError);
-        console.error('Detalhes do erro:', {
-          message: emailError?.message,
-          code: emailError?.code,
-          stack: emailError?.stack
-        });
-        
-        // Se for erro de configuração SMTP, logar aviso mais claro
-        if (emailError?.message?.includes('Transporter') || !process.env.SMTP_HOST) {
-          console.error('⚠️ ATENÇÃO: Configurações SMTP não encontradas ou inválidas!');
-          console.error('Variáveis necessárias: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS');
-          console.error('Verifique as variáveis de ambiente em produção.');
-        }
-        
-        // Não falhar a requisição se o email falhar, apenas logar o erro
-        // Mas em produção, isso deve ser monitorado
-      }
-
-      return res.json({
-        success: true,
-        message: 'Se o email existir, você receberá instruções para redefinir sua senha'
-      });
-    } catch (error) {
-      return next(error);
-    }
-  }
-
-  async resetPassword(req: Request, res: Response, next: NextFunction) {
-    try {
-      const { token, newPassword } = req.body;
-
-      if (!token || !newPassword) {
-        throw createError('Token e nova senha são obrigatórios', 400);
-      }
-
-      if (newPassword.length < 6) {
-        throw createError('A senha deve ter no mínimo 6 caracteres', 400);
-      }
-
-      // Buscar token de reset
-      const resetToken = await prisma.passwordResetToken.findUnique({
-        where: { token },
-        include: { user: true }
-      });
-
-      if (!resetToken) {
-        throw createError('Token inválido ou expirado', 400);
-      }
-
-      if (resetToken.used) {
-        throw createError('Este token já foi utilizado', 400);
-      }
-
-      if (resetToken.expiresAt < new Date()) {
-        throw createError('Token expirado', 400);
-      }
-
-      // Hash da nova senha
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-      // Atualizar senha do usuário
-      await prisma.user.update({
-        where: { id: resetToken.userId },
-        data: {
-          password: hashedPassword,
-          isFirstLogin: false // Marcar que não é mais primeiro login
-        }
-      });
-
-      // Marcar token como usado
-      await prisma.passwordResetToken.update({
-        where: { id: resetToken.id },
-        data: { used: true }
-      });
-
-      return res.json({
-        success: true,
-        message: 'Senha redefinida com sucesso'
-      });
-    } catch (error) {
-      return next(error);
-    }
-  }
-
   async refreshToken(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      // authenticate já validou usuário ativo em req.user
+      const { id, email, role, impersonating, originalAdminId } = req.user!;
 
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          isActive: true,
-        }
-      });
-
-      if (!user || !user.isActive) {
-        throw createError('Usuário não encontrado ou inativo', 401);
-      }
-
-      // Gerar novo token
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '7d' }
+      const token = signSessionToken(
+        { id, email, role },
+        impersonating && originalAdminId
+          ? { impersonating: true, originalAdminId, expiresIn: '2h' }
+          : { expiresIn: '7d' }
       );
 
       return res.json({
@@ -408,31 +534,16 @@ export class AuthController {
     }
   }
 
-  // Método público para refresh que aceita tokens expirados
+  // Refresh via authenticateForRefresh (já validou usuário ativo)
   async publicRefreshToken(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      // O middleware authenticateForRefresh já validou e populou req.user
-      const userId = req.user!.id;
+      const { id, email, role, impersonating, originalAdminId } = req.user!;
 
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          role: true,
-          isActive: true,
-        }
-      });
-
-      if (!user || !user.isActive) {
-        throw createError('Usuário não encontrado ou inativo', 401);
-      }
-
-      // Gerar novo token
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
-        process.env.JWT_SECRET as string,
-        { expiresIn: '7d' }
+      const token = signSessionToken(
+        { id, email, role },
+        impersonating && originalAdminId
+          ? { impersonating: true, originalAdminId, expiresIn: '2h' }
+          : { expiresIn: '7d' }
       );
 
       return res.json({
@@ -447,6 +558,12 @@ export class AuthController {
 
   async changePassword(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      if (req.user?.impersonating) {
+        throw createError(
+          'Não é possível alterar senha durante impersonação. Volte à sua conta de administrador.',
+          403
+        );
+      }
       const { currentPassword, newPassword } = req.body;
       const userId = req.user!.id;
 
@@ -460,13 +577,13 @@ export class AuthController {
       }
 
       // Verificar senha atual
-      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      const isCurrentPasswordValid = await comparePassword(currentPassword, user.password);
       if (!isCurrentPasswordValid) {
         throw createError('Senha atual incorreta', 400);
       }
 
       // Criptografar nova senha
-      const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+      const hashedNewPassword = await hashPassword(newPassword);
 
       // Atualizar senha e marcar como não é mais primeiro login
       await prisma.user.update({

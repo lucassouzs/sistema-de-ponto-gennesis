@@ -1,4 +1,5 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
@@ -6,11 +7,73 @@ import { parseDateInput } from '../utils/dateInput';
 import {
   assertContractAccess,
   assertUserCanCreateContract,
-  getContractAccessForUser
+  assertUserCanDeleteContract,
+  assertUserCanEditContract,
+  getContractAccessForUser,
+  userCanAccessGastosOperacionais
 } from '../lib/contractAccess';
+import { getTotvsRmRelatorioFinService } from '../services/TotvsRmRelatorioFinService';
+import { totvsRmContractLookupCodes } from '../lib/totvsRmContractCostCenterCode';
+import { fetchControleGeralFinancialSummary } from '../services/ControleGeralFinancialService';
+import { fetchBaseGastosSummary } from '../services/BaseGastosSheetsService';
+import {
+  normalizeCentroCustoName,
+  resolveGastosPoloForContract
+} from '../lib/gastosOperacionaisPolo';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 /** Igual ao filtro da tela do contrato: não somar pleitos gerados para histórico. */
 const PLEITO_HISTORICO_MARKER = '__PLEITO_HISTORICO__';
+
+type GastosOperacionaisDetailRow = {
+  contract: string;
+  dateISO: string;
+  month: number;
+  year: number;
+  total: number;
+  polo?: string | null;
+};
+
+type GastosOperacionaisNaturezaDetailRow = {
+  contract: string;
+  dateISO: string;
+  month: number;
+  year: number;
+  natureza: string;
+  total: number;
+};
+
+function normalizeGastosCcLookupKey(value: string): string {
+  return normalizeCentroCustoName(value);
+}
+
+async function enrichGastosPoloFromCostCenters(
+  detailRows: GastosOperacionaisDetailRow[]
+): Promise<GastosOperacionaisDetailRow[]> {
+  const costCenters = await prisma.costCenter.findMany({
+    where: { isActive: true },
+    select: { name: true, code: true, polo: true }
+  });
+
+  const poloByName = new Map<string, string>();
+  const poloByCode = new Map<string, string>();
+  for (const cc of costCenters) {
+    const polo = cc.polo?.trim();
+    if (!polo) continue;
+    poloByName.set(normalizeGastosCcLookupKey(cc.name), polo);
+    poloByCode.set(normalizeGastosCcLookupKey(cc.code), polo);
+  }
+
+  return detailRows.map((row) => {
+    const key = normalizeGastosCcLookupKey(row.contract);
+    const costCenterPolo = poloByName.get(key) || poloByCode.get(key) || null;
+    const polo = resolveGastosPoloForContract(row.contract, {
+      costCenterPolo,
+      totvsPolo: row.polo
+    });
+    return { ...row, polo };
+  });
+}
 
 /** Igual ao frontend: só pleitos com status de orçamento Aprovado ou Faturado entram em "Valor orçado". */
 function isBudgetStatusInValorOrcadoSum(budgetStatus: string | null | undefined): boolean {
@@ -59,10 +122,19 @@ export class ContractController {
       }
 
       if (search) {
-        where.OR = [
-          { name: { contains: search as string, mode: 'insensitive' } },
-          { number: { contains: search as string, mode: 'insensitive' } },
-        ];
+        const ids = await findIdsByUnaccentSearch({
+          from: Prisma.sql`contracts`,
+          columns: ['name', 'number'],
+          search: String(search),
+        });
+        const matched = ids && ids.length > 0 ? ids : ['__none__'];
+        if (where.id?.in) {
+          const allowed = new Set(where.id.in as string[]);
+          where.id = { in: matched.filter((id) => allowed.has(id)) };
+          if ((where.id.in as string[]).length === 0) where.id = { in: ['__none__'] };
+        } else {
+          where.id = { in: matched };
+        }
       }
 
       const limitNum = Math.min(Number(limit) || 20, 200);
@@ -249,6 +321,8 @@ export class ContractController {
   async updateContract(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      await assertUserCanEditContract(req.user.id, !!req.user.isAdmin);
       await assertContractAccess(req, id);
 
       const { name, number, startDate, endDate, costCenterId, valuePlusAddenda } = req.body;
@@ -328,6 +402,8 @@ export class ContractController {
 
       const { year } = req.query;
       const filterYear = year ? Number(year) : new Date().getFullYear();
+      const skipAvailableYears =
+        req.query.skipAvailableYears === '1' || req.query.skipAvailableYears === 'true';
 
       const overviewWhere =
         access.filter === 'ids' ? { id: { in: access.ids } } : {};
@@ -368,8 +444,12 @@ export class ContractController {
           }
         }
       }),
-        prisma.contractBilling.findMany({ select: { issueDate: true } }),
-        prisma.contractWeeklyProduction.findMany({ select: { fillingDate: true } })
+        skipAvailableYears
+          ? Promise.resolve([] as Array<{ issueDate: Date }>)
+          : prisma.contractBilling.findMany({ select: { issueDate: true } }),
+        skipAvailableYears
+          ? Promise.resolve([] as Array<{ fillingDate: Date }>)
+          : prisma.contractWeeklyProduction.findMany({ select: { fillingDate: true } })
       ]);
 
       const yearParam = year != null && String(year).trim() !== '' ? Number(year) : null;
@@ -394,9 +474,10 @@ export class ContractController {
             0
           ) ?? 0;
         const pleitosAll =
-          c.pleitos?.filter(
-            (p) => (p.reportsBilling || '').trim() !== PLEITO_HISTORICO_MARKER
-          ) ?? [];
+          c.pleitos?.filter((p) => {
+            const marker = (p.reportsBilling || '').trim();
+            return !marker.startsWith(PLEITO_HISTORICO_MARKER);
+          }) ?? [];
         const pleitosNoAno = yearValid
           ? pleitosAll.filter((p) => p.creationYear === yearParam)
           : pleitosAll;
@@ -424,23 +505,386 @@ export class ContractController {
         };
       });
 
-      const availableYears = Array.from(
-        new Set<number>([
-          ...allBillingsDates.map((b) => new Date(b.issueDate).getFullYear()),
-          ...allProductionsDates.map((p) => new Date(p.fillingDate).getFullYear()),
-          new Date().getFullYear(),
-          ...(yearValid ? [yearParam] : [])
-        ])
-      )
-        .filter((y) => Number.isFinite(y))
-        .sort((a, b) => b - a);
+      const availableYears = skipAvailableYears
+        ? [new Date().getFullYear(), ...(yearValid ? [yearParam as number] : [])].filter(
+            (y, index, arr) => Number.isFinite(y) && arr.indexOf(y) === index
+          )
+        : Array.from(
+            new Set<number>([
+              ...allBillingsDates.map((b) => new Date(b.issueDate).getFullYear()),
+              ...allProductionsDates.map((p) => new Date(p.fillingDate).getFullYear()),
+              new Date().getFullYear(),
+              ...(yearValid ? [yearParam as number] : [])
+            ])
+          )
+            .filter((y) => Number.isFinite(y))
+            .sort((a, b) => b - a);
+
+      const includeGastosOperacionais =
+        req.query.includeGastosOperacionais === '1' ||
+        req.query.includeGastosOperacionais === 'true';
+
+      let gastosOperacionais:
+        | {
+            rows: Array<{
+              rowKey: string;
+              label: string;
+              gastosAcumulado: number;
+              isLotRow: boolean;
+            }>;
+            fetchedAt: string;
+          }
+        | undefined;
+
+      if (includeGastosOperacionais) {
+        const forceRefresh =
+          req.query.refresh === '1' ||
+          req.query.refresh === 'true' ||
+          req.query.gastosRefresh === '1' ||
+          req.query.gastosRefresh === 'true';
+        const gastosSummary = await fetchBaseGastosSummary(undefined, forceRefresh);
+        gastosOperacionais = {
+          rows: gastosSummary.byQueryContract.map((item) => ({
+            rowKey: item.contract,
+            label: item.contract,
+            contract: item.contract,
+            mesesApuracao: item.mesesApuracao,
+            anoMin: item.anoMin,
+            anoMax: item.anoMax,
+            totalAcumulado: item.totalAcumulado,
+            gastosAcumulado: item.totalAcumulado,
+            isLotRow: false
+          })),
+          fetchedAt: gastosSummary.fetchedAt
+        };
+      }
 
       res.json({
         success: true,
         data: overview,
         filterYear: year ? filterYear : null,
-        availableYears
+        availableYears,
+        ...(gastosOperacionais ? { gastosOperacionais } : {})
       });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao carregar controle geral.';
+      if (message.includes('Base de Gastos') || message.includes('planilha')) {
+        res.status(503).json({ success: false, message });
+        return;
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * Gastos operacionais por centro de custo (TOTVS RM — RELATORIOFIN).
+   * Lista todos os CC presentes no relatório, sem depender de contratos cadastrados.
+   */
+  async getGastosOperacionais(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const svc = getTotvsRmRelatorioFinService();
+      if (!svc.isConfigured()) {
+        res.json({
+          success: true,
+          data: {
+            configured: false,
+            detailRows: [] as GastosOperacionaisDetailRow[],
+            naturezaDetailRows: [] as GastosOperacionaisNaturezaDetailRow[],
+            totvsNaturezaCatalog: [] as Array<{
+              label: string;
+              total: number;
+              totalAbs: number;
+              isConfigured: boolean;
+              byContract: Array<{ contract: string; total: number }>;
+            }>,
+            fetchedAt: new Date().toISOString(),
+            message:
+              'Integração TOTVS RM não configurada. Defina TOTVS_RM_BASE_URL e TOTVS_RM_USER + TOTVS_RM_PASSWORD (Basic) ou TOTVS_RM_BEARER_TOKEN.'
+          }
+        });
+        return;
+      }
+
+      try {
+        const result = await svc.listGastosOperacionaisDetailRows();
+        const detailRows = await enrichGastosPoloFromCostCenters(result.detailRows);
+        res.json({
+          success: true,
+          data: {
+            configured: true,
+            detailRows,
+            naturezaDetailRows: result.naturezaDetailRows,
+            totvsNaturezaCatalog: result.totvsNaturezaCatalog,
+            fetchedAt: new Date().toISOString(),
+            costCenterCount: result.costCenterCount,
+            totalRowCount: result.totalRowCount,
+            ccColumn: result.ccColumn,
+            valueColumn: result.valueColumn,
+            dateColumn: result.dateColumn,
+            poloColumn: result.poloColumn
+          }
+        });
+      } catch (err) {
+        const message = svc.formatAxiosError(err);
+        console.warn(`[TOTVS RM GASTOS OPERACIONAIS]: ${message}`);
+        res.json({
+          success: false,
+          message,
+          data: {
+            configured: true,
+            detailRows: [] as GastosOperacionaisDetailRow[],
+            naturezaDetailRows: [] as GastosOperacionaisNaturezaDetailRow[],
+            totvsNaturezaCatalog: [] as Array<{
+              label: string;
+              total: number;
+              totalAbs: number;
+              isConfigured: boolean;
+              byContract: Array<{ contract: string; total: number }>;
+            }>,
+            fetchedAt: new Date().toISOString()
+          }
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Catálogo editável de naturezas (mappings / unlinked) usado nos totais TOTVS. */
+  async getGastosOperacionaisNaturezasConfig(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const {
+        loadGastosNaturezasConfigStore
+      } = await import('../services/gastosOperacionaisNaturezasConfigStore');
+
+      res.json({
+        success: true,
+        data: loadGastosNaturezasConfigStore()
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async putGastosOperacionaisNaturezasConfig(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const {
+        saveGastosNaturezasConfigStore
+      } = await import('../services/gastosOperacionaisNaturezasConfigStore');
+
+      const saved = saveGastosNaturezasConfigStore(req.body ?? {});
+      res.json({
+        success: true,
+        data: saved
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** Solicitações RM de uma natureza (drill-down do modal Gastos Operacionais). */
+  async getGastosOperacionaisNaturezaSolicitacoes(
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const canAccess = await userCanAccessGastosOperacionais(req.user.id, req.user.isAdmin);
+      if (!canAccess) {
+        throw createError('Sem permissão para acessar gastos operacionais', 403);
+      }
+
+      const contract = String(req.query.contract ?? '').trim();
+      const natureza = String(req.query.natureza ?? '').trim();
+      const periodFrom = String(req.query.periodFrom ?? '').trim();
+      const periodTo = String(req.query.periodTo ?? '').trim();
+
+      if (!contract || !natureza) {
+        throw createError('Informe contract e natureza.', 400);
+      }
+
+      const svc = getTotvsRmRelatorioFinService();
+      if (!svc.isConfigured()) {
+        res.json({
+          success: true,
+          data: {
+            configured: false,
+            solicitacoes: [],
+            message:
+              'Integração TOTVS RM não configurada. Defina TOTVS_RM_BASE_URL e TOTVS_RM_USER + TOTVS_RM_PASSWORD (Basic) ou TOTVS_RM_BEARER_TOKEN.'
+          }
+        });
+        return;
+      }
+
+      try {
+        const solicitacoes = await svc.listGastosOperacionaisNaturezaSolicitacoes({
+          contract,
+          canonicalNatureza: natureza,
+          periodFrom,
+          periodTo
+        });
+        res.json({
+          success: true,
+          data: {
+            configured: true,
+            solicitacoes
+          }
+        });
+      } catch (err) {
+        const message = svc.formatAxiosError(err);
+        console.warn(`[TOTVS RM GASTOS OPERACIONAIS SOLICITACOES]: ${message}`);
+        res.json({
+          success: false,
+          message,
+          data: {
+            configured: true,
+            solicitacoes: []
+          }
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Resumo financeiro por contrato (planilha): gastos da Base de Gastos + faturamento do Controle de NF's.
+   */
+  async getSheetsFinancialSummary(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw createError('Não autenticado', 401);
+      const access = await getContractAccessForUser(req.user.id, req.user.isAdmin);
+      if (access.filter === 'none') {
+        throw createError('Sem permissão para acessar contratos', 403);
+      }
+
+      const { year, refresh } = req.query;
+      const yearParam = year != null && String(year).trim() !== '' ? Number(year) : null;
+      const filterYear = yearParam != null && Number.isFinite(yearParam) ? yearParam : undefined;
+      const forceRefresh = refresh === '1' || refresh === 'true';
+
+      const summary = await fetchControleGeralFinancialSummary(filterYear, forceRefresh);
+
+      res.json({
+        success: true,
+        data: summary
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Total pago (TOTVS RM) — soma linhas do RELATORIOFIN cujo centro de custo bate com o do contrato.
+   */
+  async getTotvsTotalPago(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { contractId } = req.params;
+
+      await assertContractAccess(req, contractId);
+
+      const contract = await prisma.contract.findUnique({
+        where: { id: contractId },
+        include: {
+          costCenter: { select: { code: true, name: true } }
+        }
+      });
+      if (!contract) {
+        throw createError('Contrato não encontrado', 404);
+      }
+
+      const svc = getTotvsRmRelatorioFinService();
+      if (!svc.isConfigured()) {
+        res.json({
+          success: true,
+          data: {
+            configured: false,
+            total: null as number | null,
+            message:
+              'Integração TOTVS RM não configurada. Defina TOTVS_RM_BASE_URL e TOTVS_RM_USER + TOTVS_RM_PASSWORD (Basic) ou TOTVS_RM_BEARER_TOKEN.'
+          }
+        });
+        return;
+      }
+
+      try {
+        const ccCode = contract.costCenter.code;
+        const ccName = contract.costCenter.name;
+        const lookupCandidates = totvsRmContractLookupCodes(ccCode, ccName);
+        const { result: sum, lookupCodeUsed: rmLookupCode } =
+          await svc.sumForCostCenterCodesAsync(lookupCandidates, ccName, { omitLines: false });
+        res.json({
+          success: true,
+          data: {
+            configured: true,
+            total: sum.total,
+            matchedRowCount: sum.matchedRowCount,
+            totalRowCount: sum.totalRowCount,
+            ccColumn: sum.ccColumn,
+            valueColumn: sum.valueColumn,
+            naturezaColumn: sum.naturezaColumn,
+            dateColumn: sum.dateColumn,
+            totalsByNatureza: sum.totalsByNatureza,
+            sampleCcValuesMatched: sum.sampleCcValuesMatched,
+            paidByCalendarMonth: sum.paidByCalendarMonth,
+            paidUndated: sum.paidUndated,
+            solicitacoesByCalendarMonth: sum.solicitacoesByCalendarMonth,
+            solicitacoesUndated: sum.solicitacoesUndated,
+            solicitacoesMatchedRowCount: sum.solicitacoesMatchedRowCount,
+            solicitacoesDateColumn: sum.solicitacoesDateColumn,
+            solicitacoesValueColumn: sum.solicitacoesValueColumn,
+            solicitacoesCcColumn: sum.solicitacoesCcColumn,
+            costCenterCode: ccCode,
+            costCenterName: ccName,
+            costCenterCodeRm: rmLookupCode !== ccCode ? rmLookupCode : undefined
+          }
+        });
+      } catch (err) {
+        const message = svc.formatAxiosError(err);
+        const ccCode = contract.costCenter.code;
+        const rmTried = totvsRmContractLookupCodes(ccCode, contract.costCenter.name).join(' | ');
+        console.warn(
+          `[TOTVS RM RELATORIOFIN] contrato=${contractId} cc=${ccCode} rm=[${rmTried}]: ${message}`
+        );
+        res.json({
+          success: false,
+          message,
+          data: {
+            configured: true,
+            total: null as number | null,
+            costCenterCode: contract.costCenter.code,
+            costCenterName: contract.costCenter.name
+          }
+        });
+      }
     } catch (error) {
       next(error);
     }
@@ -452,7 +896,8 @@ export class ContractController {
   async deleteContract(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-
+      if (!req.user) throw createError('Usuário não autenticado', 401);
+      await assertUserCanDeleteContract(req.user.id, !!req.user.isAdmin);
       await assertContractAccess(req, id);
 
       const existing = await prisma.contract.findUnique({

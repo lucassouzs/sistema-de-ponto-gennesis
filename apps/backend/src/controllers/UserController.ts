@@ -1,8 +1,12 @@
 import { Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { hashPassword } from '../lib/passwordHash';
+import { gennecyBotUserWhereExclude } from '../lib/gennecyBotUser';
+import { releaseUserIdentity, buildReleasedIdentity } from '../lib/userIdentityRelease';
+import { ensureDefaultEmployeeAccessPermissions } from '../lib/permissionRegistrySync';
+import { findUserIdsMatchingSearch } from '../lib/normalizeSearchText';
 
 export class UserController {
   async updateUserPassword(req: AuthRequest, res: Response, next: NextFunction) {
@@ -28,7 +32,7 @@ export class UserController {
         throw createError('Usuário não encontrado', 404);
       }
 
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await hashPassword(password);
 
       await prisma.user.update({
         where: { id },
@@ -49,12 +53,26 @@ export class UserController {
 
   async getAllUsers(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { page = 1, limit = 10, search, role, department, status } = req.query;
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        role,
+        department,
+        position,
+        status,
+        light,
+        excludeAdmin,
+      } = req.query;
       // Limitar o máximo de registros por página para evitar sobrecarga
       const limitNum = Math.min(Number(limit), 1000); // Máximo de 1000 registros por página
       const skip = (Number(page) - 1) * limitNum;
+      const isLight = light === '1' || light === 'true';
+      const shouldExcludeAdmin = excludeAdmin === '1' || excludeAdmin === 'true';
 
-      const where: any = {};
+      const where: any = {
+        ...gennecyBotUserWhereExclude(),
+      };
 
       // Filtro de status (ativo/inativo)
       if (status === 'inactive') {
@@ -74,36 +92,69 @@ export class UserController {
         where.role = role;
       }
 
-      // Construir condições de busca
-      const searchConditions: any[] = [];
+      // Construir condições de busca (usuário + campos do vínculo employee)
+      // Sem acento: "antonio" encontra "Antônio"
       if (search) {
-        searchConditions.push(
-          { name: { contains: search as string, mode: 'insensitive' } },
-          { email: { contains: search as string, mode: 'insensitive' } },
-          { cpf: { contains: search as string } }
-        );
-      }
-
-      // Se houver busca, adicionar OR ao where
-      if (searchConditions.length > 0) {
-        where.OR = searchConditions;
-      }
-
-      // Filtro de departamento - precisa ser combinado corretamente com OR
-      if (department) {
-        if (where.OR) {
-          // Se já existe OR, precisamos combinar com AND
-          where.AND = [
-            { OR: where.OR },
-            { employee: { department: { contains: department as string, mode: 'insensitive' } } }
-          ];
-          delete where.OR;
+        const matchedIds = await findUserIdsMatchingSearch(String(search));
+        if (matchedIds.length === 0) {
+          where.id = { in: [] };
         } else {
-          where.employee = {
-            department: { contains: department as string, mode: 'insensitive' }
-          };
+          where.id = { in: matchedIds };
         }
       }
+
+      const employeeFilters: Record<string, unknown> = {};
+      if (department) {
+        employeeFilters.department = { contains: department as string, mode: 'insensitive' };
+      }
+      if (position) {
+        employeeFilters.position = { contains: position as string, mode: 'insensitive' };
+      }
+      if (shouldExcludeAdmin) {
+        employeeFilters.NOT = {
+          position: { equals: 'Administrador', mode: 'insensitive' },
+        };
+      }
+
+      if (Object.keys(employeeFilters).length > 0) {
+        where.employee = employeeFilters;
+      }
+
+      const employeeSelectLight = {
+        id: true,
+        employeeId: true,
+        department: true,
+        position: true,
+        hireDate: true,
+        birthDate: true,
+        isRemote: true,
+        costCenter: true,
+        client: true,
+        company: true,
+        polo: true,
+        categoriaFinanceira: true,
+        modality: true,
+        requiresTimeClock: true,
+      } as const;
+
+      const employeeSelectFull = {
+        ...employeeSelectLight,
+        salary: true,
+        workSchedule: true,
+        bank: true,
+        accountType: true,
+        agency: true,
+        operation: true,
+        account: true,
+        digit: true,
+        pixKeyType: true,
+        pixKey: true,
+        dailyFoodVoucher: true,
+        dailyTransportVoucher: true,
+        familySalary: true,
+        dangerPay: true,
+        unhealthyPay: true,
+      } as const;
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
@@ -112,45 +163,12 @@ export class UserController {
           take: limitNum,
           include: {
             employee: {
-              select: {
-                id: true,
-                employeeId: true,
-                department: true,
-                position: true,
-                hireDate: true,
-                birthDate: true,
-                salary: true,
-                isRemote: true,
-                workSchedule: true,
-                costCenter: true,
-                client: true,
-                // Novos campos
-                company: true,
-                bank: true,
-                accountType: true,
-                agency: true,
-                operation: true,
-                account: true,
-                digit: true,
-                pixKeyType: true,
-                pixKey: true,
-                dailyFoodVoucher: true,
-                dailyTransportVoucher: true,
-                modality: true,
-                familySalary: true,
-                dangerPay: true,
-                unhealthyPay: true,
-                // Novos campos - Polo e Categoria Financeira
-                polo: true,
-                categoriaFinanceira: true,
-                // Campo para controlar se precisa bater ponto
-                requiresTimeClock: true,
-              }
-            }
+              select: isLight ? employeeSelectLight : employeeSelectFull,
+            },
           },
-          orderBy: { createdAt: 'desc' }
+          orderBy: { name: 'asc' },
         }),
-        prisma.user.count({ where })
+        prisma.user.count({ where }),
       ]);
 
       res.json({
@@ -160,8 +178,8 @@ export class UserController {
           page: Number(page),
           limit: limitNum,
           total,
-          totalPages: Math.ceil(total / limitNum)
-        }
+          totalPages: Math.ceil(total / limitNum),
+        },
       });
     } catch (error: any) {
       console.error('Erro ao buscar usuários:', error);
@@ -222,7 +240,7 @@ export class UserController {
       }
 
       // Criptografar senha
-      const hashedPassword = await bcrypt.hash(password, 12);
+      const hashedPassword = await hashPassword(password);
 
       // Criar usuário e funcionário em transação
       const result = await prisma.$transaction(async (tx: any) => {
@@ -314,6 +332,8 @@ export class UserController {
         return user;
       });
 
+      await ensureDefaultEmployeeAccessPermissions([result.id]);
+
       const newUser = await prisma.user.findUnique({
         where: { id: result.id },
         select: {
@@ -382,17 +402,33 @@ export class UserController {
       }
 
       const result = await prisma.$transaction(async (tx: any) => {
+        const deactivating =
+          isActive === false && existingUser.isActive !== false;
+
         // Atualizar usuário
-        const user = await tx.user.update({
-          where: { id },
-          data: {
-            ...(name && { name }),
-            ...(email && { email }),
-            ...(cpf && { cpf }),
-            ...(role && { role }),
-            ...(isActive !== undefined && { isActive })
-          }
-        });
+        const user = deactivating
+          ? await tx.user.update({
+              where: { id },
+              data: {
+                isActive: false,
+                ...(() => {
+                  const identity = buildReleasedIdentity(id);
+                  return { email: identity.email, cpf: identity.cpf };
+                })(),
+                ...(name && { name }),
+                ...(role && { role }),
+              },
+            })
+          : await tx.user.update({
+              where: { id },
+              data: {
+                ...(name && { name }),
+                ...(email && { email }),
+                ...(cpf && { cpf }),
+                ...(role && { role }),
+                ...(isActive !== undefined && { isActive }),
+              },
+            });
 
         // Atualizar dados do funcionário se fornecidos
         if (employeeData && existingUser.employee) {
@@ -472,11 +508,8 @@ export class UserController {
         throw createError('Usuário não encontrado', 404);
       }
 
-      // Soft delete - apenas desativar
-      await prisma.user.update({
-        where: { id },
-        data: { isActive: false }
-      });
+      // Desliga e libera CPF/e-mail para permitir novo cadastro com os mesmos dados
+      await releaseUserIdentity(id);
 
       res.json({
         success: true,
@@ -572,6 +605,7 @@ export class UserController {
       const [users, total] = await Promise.all([
         prisma.user.findMany({
           where: {
+            ...gennecyBotUserWhereExclude(),
             isActive: true,
             employee: {
               department: { contains: department, mode: 'insensitive' }
@@ -593,6 +627,7 @@ export class UserController {
         }),
         prisma.user.count({
           where: {
+            ...gennecyBotUserWhereExclude(),
             isActive: true,
             employee: {
               department: { contains: department, mode: 'insensitive' }
@@ -644,6 +679,7 @@ export class UserController {
       
       const existingUser = await prisma.user.findFirst({
         where: {
+          isActive: true,
           OR: [
             { cpf: cpfNumbers },
             { cpf: cpfFormatted }
@@ -652,9 +688,10 @@ export class UserController {
         select: { id: true, name: true }
       });
 
-      // Se não encontrou, fazer uma busca mais ampla normalizando CPFs
+      // Se não encontrou, fazer uma busca mais ampla normalizando CPFs (só ativos)
       if (!existingUser) {
         const allUsers = await prisma.user.findMany({
+          where: { isActive: true },
           select: { id: true, name: true, cpf: true }
         });
 
@@ -700,9 +737,10 @@ export class UserController {
         });
       }
 
-      // Buscar email no banco (case-insensitive)
+      // Buscar email no banco (case-insensitive) — só ativos
       const existingUser = await prisma.user.findFirst({
         where: {
+          isActive: true,
           email: {
             equals: email,
             mode: 'insensitive'

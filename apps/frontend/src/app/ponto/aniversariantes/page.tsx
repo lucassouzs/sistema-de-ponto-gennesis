@@ -6,10 +6,12 @@ import { useRouter } from 'next/navigation';
 import { Cake, Search, Calendar, Users, Mail, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 interface BirthdayEmployee {
   id: string;
@@ -40,6 +42,16 @@ interface BirthdayResponse {
   year: number;
 }
 
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const MONTH_FILTER_OPTIONS = labeledToSelectOptions([
+  { value: 'all', label: 'Todos' },
+  ...MONTH_NAMES.map((month, index) => ({ value: String(index + 1), label: month })),
+]);
+
 export default function AniversariantesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -56,7 +68,6 @@ export default function AniversariantesPage() {
   const selectedYear = new Date().getFullYear(); // Sempre o ano atual
   const [searchTerm, setSearchTerm] = useState<string>('');
   const showAllBirthdays = true; // Sempre true para mostrar todos os aniversários do mês
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [isFiltersMinimized, setIsFiltersMinimized] = useState(true);
 
   const handleLogout = () => {
@@ -64,19 +75,6 @@ export default function AniversariantesPage() {
     sessionStorage.removeItem('token');
     router.push('/auth/login');
   };
-
-  // Listener para abrir modal de alterar senha via sidebar
-  useEffect(() => {
-    const handleOpenChangePasswordModal = () => {
-      setIsChangePasswordOpen(true);
-    };
-
-    window.addEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    
-    return () => {
-      window.removeEventListener('openChangePasswordModal', handleOpenChangePasswordModal);
-    };
-  }, []);
 
   // Query para buscar aniversariantes
   const { data: birthdayData, isLoading: loadingBirthdays, error } = useQuery({
@@ -95,21 +93,23 @@ export default function AniversariantesPage() {
     enabled: !!userData?.data
   });
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando aniversariantes..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     cpf: '000.000.000-00',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/aniversariantes">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
+
+  
 
   const birthdayResponse: BirthdayResponse = birthdayData?.data || {
     employees: [],
@@ -118,10 +118,7 @@ export default function AniversariantesPage() {
     year: selectedYear
   };
 
-  const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
+  const months = MONTH_NAMES;
 
 
   const getAgeText = (age: number) => {
@@ -260,7 +257,7 @@ export default function AniversariantesPage() {
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         placeholder="Digite o nome do funcionário ou o setor..."
-                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       />
                     </div>
                   </div>
@@ -269,21 +266,15 @@ export default function AniversariantesPage() {
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Mês
                     </label>
-                    <select
-                      value={selectedMonth}
-                      onChange={(e) => {
-                        const value = e.target.value;
+                    <StringSingleSelectDropdown
+                      value={String(selectedMonth)}
+                      onChange={(value) => {
                         setSelectedMonth(value === 'all' ? 'all' : parseInt(value));
                       }}
-                      className="w-full px-3 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100 text-sm"
-                    >
-                      <option value="all">Todos</option>
-                      {months.map((month, index) => (
-                        <option key={index} value={index + 1}>
-                          {month}
-                        </option>
-                      ))}
-                    </select>
+                      options={MONTH_FILTER_OPTIONS}
+                      allowEmpty={false}
+                      className="w-full"
+                    />
                   </div>
                 </div>
               </div>
@@ -295,10 +286,7 @@ export default function AniversariantesPage() {
         <Card>
           <CardContent className="p-6">
             {loadingBirthdays ? (
-              <div className="text-center py-8">
-                <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                <p className="text-gray-600 dark:text-gray-400">Carregando aniversariantes...</p>
-              </div>
+              <CadastroListLoading message="Carregando aniversariantes..." />
             ) : error ? (
               <div className="text-center py-8">
                 <p className="text-red-600 dark:text-red-400">Erro ao carregar aniversariantes</p>
@@ -499,12 +487,6 @@ export default function AniversariantesPage() {
         </Card>
       </div>
 
-        {/* Modal de alterar senha */}
-        <ChangePasswordModal
-          isOpen={isChangePasswordOpen}
-          onClose={() => setIsChangePasswordOpen(false)}
-          onSuccess={() => setIsChangePasswordOpen(false)}
-        />
       </MainLayout>
     </ProtectedRoute>
   );

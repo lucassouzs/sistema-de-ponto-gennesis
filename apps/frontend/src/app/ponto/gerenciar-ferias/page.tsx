@@ -3,11 +3,14 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { 
@@ -24,8 +27,10 @@ import {
   Search
 } from 'lucide-react';
 import { Vacation, ComplianceReport } from '@/types';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 
-export default function FeriasPage() {
+function GerenciarFeriasPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedTab, setSelectedTab] = useState<'pending' | 'all' | 'compliance'>('pending');
@@ -166,20 +171,27 @@ export default function FeriasPage() {
     }
   };
 
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <MainLayout
+        userRole={user.role}
+        userName={user.name}
+        onLogout={() => {
+          localStorage.removeItem('token');
+          router.push('/auth/login');
+        }}
+      >
+        <Loading message="Carregando..." fullScreen size="lg" />
+      </MainLayout>
+    );
+  }
+
+  
 
   const pendingVacationsList: Vacation[] = pendingVacations?.data || [];
   const allVacationsList: Vacation[] = allVacations?.data || [];
@@ -294,40 +306,29 @@ export default function FeriasPage() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-gray-200 dark:border-gray-700">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setSelectedTab('pending')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'pending'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Pendentes ({pendingVacationsList.length})
-            </button>
-            <button
-              onClick={() => setSelectedTab('all')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'all'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Todas ({allVacationsList.length})
-            </button>
-            <button
-              onClick={() => setSelectedTab('compliance')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                selectedTab === 'compliance'
-                  ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              Conformidade
-            </button>
-          </nav>
-        </div>
+        <AppUnderlineTabList aria-label="Abas de férias" centered={false}>
+          <AppUnderlineTabButton
+            active={selectedTab === 'pending'}
+            onClick={() => setSelectedTab('pending')}
+            className="whitespace-nowrap px-3 py-2 text-sm"
+          >
+            Pendentes ({pendingVacationsList.length})
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
+            active={selectedTab === 'all'}
+            onClick={() => setSelectedTab('all')}
+            className="whitespace-nowrap px-3 py-2 text-sm"
+          >
+            Todas ({allVacationsList.length})
+          </AppUnderlineTabButton>
+          <AppUnderlineTabButton
+            active={selectedTab === 'compliance'}
+            onClick={() => setSelectedTab('compliance')}
+            className="whitespace-nowrap px-3 py-2 text-sm"
+          >
+            Conformidade
+          </AppUnderlineTabButton>
+        </AppUnderlineTabList>
 
         {/* Conteúdo das Tabs */}
         {selectedTab === 'pending' && (
@@ -337,10 +338,7 @@ export default function FeriasPage() {
             </CardHeader>
             <CardContent>
               {loadingPending ? (
-                <div className="text-center py-8">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">Carregando solicitações...</p>
-                </div>
+                <CadastroListLoading message="Carregando solicitações..." />
               ) : pendingVacationsList.length === 0 ? (
                 <div className="text-center py-8">
                   <CheckCircle className="w-12 h-12 text-green-400 dark:text-green-500 mx-auto mb-4" />
@@ -409,10 +407,7 @@ export default function FeriasPage() {
             </CardHeader>
             <CardContent>
               {loadingAll ? (
-                <div className="text-center py-8">
-                  <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">Carregando férias...</p>
-                </div>
+                <CadastroListLoading message="Carregando férias..." />
               ) : allVacationsList.length === 0 ? (
                 <div className="text-center py-8">
                   <Calendar className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -470,10 +465,7 @@ export default function FeriasPage() {
               </CardHeader>
               <CardContent>
                 {loadingCompliance ? (
-                  <div className="text-center py-8">
-                    <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-                    <p className="text-gray-600 dark:text-gray-400">Carregando relatório...</p>
-                  </div>
+                  <CadastroListLoading message="Carregando relatório..." />
                 ) : compliance ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
@@ -532,7 +524,7 @@ export default function FeriasPage() {
 
       {/* Modal de Funcionários com Férias Vencendo */}
       {showExpiringModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => {
             setShowExpiringModal(false);
             setSearchExpiring('');
@@ -561,7 +553,7 @@ export default function FeriasPage() {
                   placeholder="Pesquisar por nome, departamento..."
                   value={searchExpiring}
                   onChange={(e) => setSearchExpiring(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
             </div>
@@ -569,10 +561,9 @@ export default function FeriasPage() {
               {(() => {
                 const filtered = expiringList.filter((item: any) => {
                   if (!searchExpiring.trim()) return true;
-                  const searchLower = searchExpiring.toLowerCase();
                   return (
-                    item.employeeName?.toLowerCase().includes(searchLower) ||
-                    item.department?.toLowerCase().includes(searchLower)
+                    textMatchesSearch(item.employeeName, searchExpiring) ||
+                    textMatchesSearch(item.department, searchExpiring)
                   );
                 });
                 
@@ -608,12 +599,12 @@ export default function FeriasPage() {
               })()}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
 
       {/* Modal de Funcionários com Férias Vencidas */}
       {showExpiredModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => {
             setShowExpiredModal(false);
             setSearchExpired('');
@@ -642,7 +633,7 @@ export default function FeriasPage() {
                   placeholder="Pesquisar por nome, departamento..."
                   value={searchExpired}
                   onChange={(e) => setSearchExpired(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-400 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                 />
               </div>
             </div>
@@ -651,12 +642,11 @@ export default function FeriasPage() {
                 const expiredList = compliance?.expiredVacations || [];
                 const filtered = expiredList.filter((item: any) => {
                   if (!searchExpired.trim()) return true;
-                  const searchLower = searchExpired.toLowerCase();
                   return (
-                    item.employeeName?.toLowerCase().includes(searchLower) ||
-                    item.employee?.name?.toLowerCase().includes(searchLower) ||
-                    item.department?.toLowerCase().includes(searchLower) ||
-                    item.employee?.department?.toLowerCase().includes(searchLower)
+                    textMatchesSearch(item.employeeName, searchExpired) ||
+                    textMatchesSearch(item.employee?.name, searchExpired) ||
+                    textMatchesSearch(item.department, searchExpired) ||
+                    textMatchesSearch(item.employee?.department, searchExpired)
                   );
                 });
                 
@@ -701,8 +691,16 @@ export default function FeriasPage() {
               })()}
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </MainLayout>
+  );
+}
+
+export default function GerenciarFeriasPage() {
+  return (
+    <ProtectedRoute route="/ponto/gerenciar-ferias">
+      <GerenciarFeriasPageContent />
+    </ProtectedRoute>
   );
 }

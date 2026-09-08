@@ -3,11 +3,12 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import { buildApiUrl } from '../config/api';
+import { serializeLoginIdentifier } from '../lib/cpf';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
 }
@@ -54,9 +55,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const token = await storage.getItem('token');
       const userData = await storage.getItem('user');
-      
+
       if (token && userData) {
         setUser(JSON.parse(userData));
+        // Atualiza perfil (inclui foto) em background
+        try {
+          const res = await fetch(buildApiUrl('/api/auth/me'), {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const json = await res.json();
+            const fresh = (json?.data ?? json) as User;
+            if (fresh?.id) {
+              setUser(fresh);
+              await storage.setItem('user', JSON.stringify(fresh));
+            }
+          }
+        } catch {
+          // mantém usuário do storage
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados de autenticação:', error);
@@ -65,13 +82,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     try {
       console.log('🔐 Tentando fazer login...');
-      console.log('📧 Email:', email);
       console.log('🌐 URL:', buildApiUrl('/api/auth/login'));
       
-      // Adicionar timeout de 10 segundos
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
@@ -80,7 +95,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          identifier: serializeLoginIdentifier(identifier),
+          password,
+          source: 'mobile',
+        }),
         signal: controller.signal,
       });
       

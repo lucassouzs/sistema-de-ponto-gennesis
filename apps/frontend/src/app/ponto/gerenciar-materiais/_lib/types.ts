@@ -15,11 +15,35 @@ export type FluxTab =
   | 'oc_ATTACH_NF'
   | 'oc_FINALIZADAS';
 
+export interface MaterialRequestContractRef {
+  id: string;
+  name: string;
+  number: string;
+}
+
+export interface MaterialRequestServiceOrderRef {
+  id: string;
+  numero: number;
+  ano: number;
+  pleitos?: Array<{
+    divSe?: string | null;
+    folderNumber?: string | null;
+    reportsBilling?: string | null;
+    updatedContract?: MaterialRequestContractRef | null;
+  }>;
+}
+
 export interface MaterialRequest {
   id: string;
   requestNumber?: string;
+  serviceOrderId?: string | null;
   serviceOrder?: string | null;
+  service_orders?: MaterialRequestServiceOrderRef | null;
   description: string;
+  demandSheet?: string | null;
+  demandSheetAttachmentUrl?: string | null;
+  demandSheetAttachmentName?: string | null;
+  demandSheetAttachments?: Array<{ url?: string; name?: string }> | null;
   status: 'PENDING' | 'IN_REVIEW' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
   createdAt: string;
@@ -47,11 +71,15 @@ export interface MaterialRequest {
     id: string;
     quantity: number;
     unit: string;
+    status?: string;
     observation?: string;
     notes?: string;
+    bankDetails?: string | null;
+    productKind?: 'Materiais' | 'Serviços' | null;
     attachmentUrl?: string;
     attachmentName?: string;
     unitPrice?: number;
+    totalPrice?: number;
     material: {
       id: string;
       name?: string | null;
@@ -59,7 +87,11 @@ export interface MaterialRequest {
       sinapiCode?: string;
       description?: string;
       medianPrice?: number;
+      /** Média ponderada das últimas 10 compras efetivas (referência). */
+      avgPaidUnitPrice?: number | null;
     };
+    /** Espelho da média no item (API de detalhe da RM). */
+    avgPaidUnitPrice?: number | null;
   }>;
   approvedBy?: {
     id: string;
@@ -69,7 +101,13 @@ export interface MaterialRequest {
     id: string;
     name: string;
   };
+  rejecter?: {
+    id: string;
+    name: string;
+  };
   rejectionReason?: string;
+  /** Derivado na API: Materiais e/ou Serviços conforme productType dos itens. */
+  itemProductKinds?: Array<'Materiais' | 'Serviços'>;
 }
 
 export type GerenciarStats = {

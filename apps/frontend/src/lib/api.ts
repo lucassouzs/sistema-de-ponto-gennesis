@@ -1,50 +1,140 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from './apiBaseUrl';
+import { forceAuthRedirect, notifyAuthTokenRefreshed } from './authSession';
 
 export { API_BASE_URL } from './apiBaseUrl';
 
-// Configurar axios
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
-  // Removendo Content-Type fixo para permitir multipart/form-data
 });
 
-// Instância separada do axios para refresh (sem interceptors que causam loop)
+/** Sem interceptors — evita loop em refresh. */
 const refreshApi = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
 });
 
-// Flag para evitar loops infinitos de refresh
-let isRefreshing = false;
+type RetryConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
 let failedQueue: Array<{
-  resolve: (value?: any) => void;
-  reject: (reason?: any) => void;
+  resolve: (token: string | null) => void;
+  reject: (reason?: unknown) => void;
 }> = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+let refreshPromise: Promise<string | null> | null = null;
+
+const processQueue = (error: unknown, token: string | null = null) => {
   failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
+    if (error) prom.reject(error);
+    else prom.resolve(token);
   });
-  
   failedQueue = [];
 };
 
-// Interceptor para adicionar token de autenticação e configurar Content-Type
+function getStoredToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('token') || sessionStorage.getItem('token');
+}
+
+function storeToken(newToken: string) {
+  if (localStorage.getItem('token')) {
+    localStorage.setItem('token', newToken);
+  } else {
+    sessionStorage.setItem('token', newToken);
+  }
+}
+
+function parseJwtExpMs(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(normalized)) as { exp?: number };
+    return typeof json.exp === 'number' ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** true se o JWT já expirou ou expira em menos de `skewMs`. */
+function tokenNeedsRefresh(token: string, skewMs = 90_000): boolean {
+  const expMs = parseJwtExpMs(token);
+  if (expMs == null) return false;
+  return expMs <= Date.now() + skewMs;
+}
+
+function isRefreshRequest(config?: InternalAxiosRequestConfig): boolean {
+  const url = String(config?.url || '');
+  return url.includes('/auth/refresh-token');
+}
+
+/**
+ * Renova o access token (single-flight). Retorna o novo token ou null se falhar.
+ * Não redireciona — quem chama decide.
+ * Libera a fila do interceptor de resposta quando o refresh termina.
+ */
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const token = getStoredToken();
+    if (!token) {
+      processQueue(new Error('Sem token para renovar'), null);
+      return null;
+    }
+
+    try {
+      const refreshResponse = await refreshApi.post(
+        '/auth/refresh-token',
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const newToken = refreshResponse.data?.data?.token as string | undefined;
+      if (!newToken) {
+        processQueue(new Error('Token não recebido na renovação'), null);
+        return null;
+      }
+      storeToken(newToken);
+      notifyAuthTokenRefreshed();
+      processQueue(null, newToken);
+      return newToken;
+    } catch (err) {
+      processQueue(err, null);
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+/**
+ * Garante token válido antes de rajadas de requests (ex.: detalhe do contrato).
+ * Renova se estiver expirado ou perto de expirar.
+ */
+export async function ensureValidAuthToken(skewMs = 90_000): Promise<string | null> {
+  const token = getStoredToken();
+  if (!token) return null;
+  if (!tokenNeedsRefresh(token, skewMs)) return token;
+  return (await refreshAccessToken()) || getStoredToken();
+}
+
 api.interceptors.request.use(
-  (config) => {
-    // Buscar token tanto do localStorage quanto do sessionStorage
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  async (config) => {
+    if (!isRefreshRequest(config)) {
+      const current = getStoredToken();
+      if (current && tokenNeedsRefresh(current)) {
+        await refreshAccessToken();
+      }
+    }
+
+    const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // FormData: o browser/axios precisa adicionar `multipart/form-data; boundary=...`
+
     if (config.data instanceof FormData) {
       const h = config.headers;
       if (h && typeof (h as { delete?: (k: string) => void }).delete === 'function') {
@@ -55,112 +145,56 @@ api.interceptors.request.use(
         delete (h as Record<string, unknown>)['content-type'];
       }
     } else {
-      // Para outros tipos, usar application/json
       config.headers['Content-Type'] = 'application/json';
     }
-    
+
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Interceptor para tratar respostas e fazer refresh automático de token
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as RetryConfig | undefined;
+    if (!originalRequest) return Promise.reject(error);
 
-    // Se for erro 401 e não for a rota de refresh e ainda não tentou refresh
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      // Se já está tentando refresh, adiciona à fila
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-            }
-            return api(originalRequest);
-          })
-          .catch((err) => {
-            return Promise.reject(err);
-          });
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      // Buscar token tanto do localStorage quanto do sessionStorage
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-
-      // Se não tem token, redireciona para login
-      if (!token) {
-        isRefreshing = false;
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
-        window.location.href = '/auth/login';
-        return Promise.reject(error);
-      }
-
-      try {
-        // Tentar fazer refresh do token usando instância separada (sem interceptors)
-        const refreshResponse = await refreshApi.post(
-          '/auth/refresh-token',
-          {},
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const newToken = refreshResponse.data?.data?.token;
-
-        if (newToken) {
-          // Atualizar token no mesmo storage onde estava (localStorage ou sessionStorage)
-          const currentToken = localStorage.getItem('token') || sessionStorage.getItem('token');
-          if (localStorage.getItem('token')) {
-            localStorage.setItem('token', newToken);
-          } else {
-            sessionStorage.setItem('token', newToken);
-          }
-
-          // Atualizar header da requisição original
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          }
-
-          // Processar fila de requisições pendentes
-          processQueue(null, newToken);
-
-          isRefreshing = false;
-
-          // Retentar a requisição original
-          return api(originalRequest);
-        } else {
-          throw new Error('Token não recebido na resposta de refresh');
-        }
-      } catch (refreshError) {
-        // Se falhar o refresh, processar fila com erro e redirecionar
-        processQueue(refreshError, null);
-        isRefreshing = false;
-
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        sessionStorage.removeItem('token');
-        sessionStorage.removeItem('user');
-        window.location.href = '/auth/login';
-        return Promise.reject(refreshError);
-      }
+    if (error.response?.status !== 401 || originalRequest._retry || isRefreshRequest(originalRequest)) {
+      return Promise.reject(error);
     }
 
+    if (refreshPromise) {
+      return new Promise<string | null>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then((token) => {
+          if (!token) return Promise.reject(error);
+          originalRequest._retry = true;
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+          }
+          return api(originalRequest);
+        })
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+
+    const token = getStoredToken();
+    if (!token) {
+      forceAuthRedirect();
+      return Promise.reject(error);
+    }
+
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      if (originalRequest.headers) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      }
+      return api(originalRequest);
+    }
+
+    forceAuthRedirect();
     return Promise.reject(error);
   }
 );

@@ -1,7 +1,10 @@
 import { Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { getUserUnbCostCenterScope } from '../lib/unbCostCenterScope';
+import { findIdsByUnaccentSearch } from '../lib/normalizeSearchText';
 
 /**
  * Gera um código automático para o centro de custo no formato CC-YYYY-XXX
@@ -72,15 +75,31 @@ export class CostCenterController {
       const where: any = {};
 
       if (search) {
-        where.OR = [
-          { code: { contains: search as string, mode: 'insensitive' } },
-          { name: { contains: search as string, mode: 'insensitive' } },
-          { description: { contains: search as string, mode: 'insensitive' } }
-        ];
+        const ids = await findIdsByUnaccentSearch({
+          from: Prisma.sql`cost_centers`,
+          columns: ['code', 'name', 'description'],
+          search: String(search),
+        });
+        where.id = { in: ids && ids.length > 0 ? ids : ['__none__'] };
       }
 
       if (isActive !== undefined) {
         where.isActive = isActive === 'true';
+      }
+
+      const unbScope = req.user?.id
+        ? await getUserUnbCostCenterScope(req.user.id, !!req.user.isAdmin)
+        : null;
+      if (unbScope !== null) {
+        const allowed = new Set(unbScope);
+        if (where.id?.in) {
+          where.id = {
+            in: (where.id.in as string[]).filter((id) => allowed.has(id)),
+          };
+          if ((where.id.in as string[]).length === 0) where.id = { in: ['__none__'] };
+        } else {
+          where.id = { in: unbScope.length > 0 ? unbScope : ['__none__'] };
+        }
       }
 
       // Limitar o máximo de registros por página (até 2000 para listagens completas, ex.: análise de extrato)

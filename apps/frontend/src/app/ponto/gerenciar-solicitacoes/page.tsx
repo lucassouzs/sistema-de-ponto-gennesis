@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { 
@@ -28,12 +28,19 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
 import api from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { DEPARTMENTS_LIST, COMPANIES_LIST } from '@/constants/payrollFilters';
 import { CARGOS_LIST } from '@/constants/cargos';
+import { getListTableRowClassName, ListRowNavigableLabel } from '@/components/ui/listTableUi';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions, filterOptionsWithAll } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface PointCorrectionRequest {
   id: string;
@@ -183,12 +190,11 @@ export default function GerenciarSolicitacoesPage() {
       if (request.status !== activeStatusTab) return false;
     }
 
-    // Filtro de busca
+    // Filtro de busca (sem acento/caixa)
     if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      const matchesName = request.employee.user.name.toLowerCase().includes(searchLower);
-      const matchesTitle = request.title.toLowerCase().includes(searchLower);
-      const matchesJustification = request.justification.toLowerCase().includes(searchLower);
+      const matchesName = textMatchesSearch(request.employee.user.name, filters.search);
+      const matchesTitle = textMatchesSearch(request.title, filters.search);
+      const matchesJustification = textMatchesSearch(request.justification, filters.search);
       if (!matchesName && !matchesTitle && !matchesJustification) return false;
     }
 
@@ -248,29 +254,37 @@ export default function GerenciarSolicitacoesPage() {
 
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  const monthFilterSelectOptions = useMemo(
+    () => monthOptions.map((m) => ({ value: String(m.value), label: m.label })),
+    []
+  );
+  const yearFilterSelectOptions = useMemo(
+    () => yearOptions.map((y) => ({ value: String(y), label: String(y) })),
+    [yearOptions]
+  );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters({ ...filters, search: e.target.value });
   };
 
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, month: parseInt(e.target.value) });
+  const handleMonthChange = (value: string) => {
+    setFilters({ ...filters, month: parseInt(value) });
   };
 
-  const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, year: parseInt(e.target.value) });
+  const handleYearChange = (value: string) => {
+    setFilters({ ...filters, year: parseInt(value) });
   };
 
-  const handleDepartmentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, department: e.target.value });
+  const handleDepartmentChange = (value: string) => {
+    setFilters({ ...filters, department: value });
   };
 
-  const handlePositionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, position: e.target.value });
+  const handlePositionChange = (value: string) => {
+    setFilters({ ...filters, position: value });
   };
 
-  const handleCompanyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, company: e.target.value });
+  const handleCompanyChange = (value: string) => {
+    setFilters({ ...filters, company: value });
   };
 
   const clearFilters = () => {
@@ -361,20 +375,24 @@ export default function GerenciarSolicitacoesPage() {
     });
   };
 
-  if (loadingUser || loadingRequests) {
-    return (
-      <Loading 
-        message="Carregando solicitações..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/gerenciar-solicitacoes">
+        <MainLayout
+          userRole={user.role}
+          userName={user.name}
+          onLogout={handleLogout}
+        >
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/gerenciar-solicitacoes">
@@ -386,7 +404,7 @@ export default function GerenciarSolicitacoesPage() {
         <div className="space-y-6">
         {/* Cabeçalho */}
         <div className="text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Gerenciar alterações de ponto</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Gerenciar Alterações de Ponto</h1>
           <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">Aprove ou rejeite solicitações de correção de ponto</p>
         </div>
 
@@ -505,7 +523,7 @@ export default function GerenciarSolicitacoesPage() {
                       value={filters.search}
                       onChange={handleSearchChange}
                       placeholder="Digite nome, título ou justificativa..."
-                      className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                     />
                   </div>
                 </div>
@@ -524,16 +542,12 @@ export default function GerenciarSolicitacoesPage() {
                         </label>
                         <div className="relative">
                           <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.department}
                           onChange={handleDepartmentChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                            <option value="">Todos os setores</option>
-                          {DEPARTMENTS_LIST.map(dept => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
-                        </select>
+                          options={DEPARTMENTS_LIST}
+                          emptyOptionLabel="Todos os setores"
+                        />
                         </div>
                       </div>
 
@@ -541,32 +555,24 @@ export default function GerenciarSolicitacoesPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Cargo
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.position}
                           onChange={handlePositionChange}
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Todos os cargos</option>
-                          {CARGOS_LIST.map(cargo => (
-                            <option key={cargo} value={cargo}>{cargo}</option>
-                          ))}
-                        </select>
+                          options={CARGOS_LIST}
+                          emptyOptionLabel="Todos os cargos"
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Empresa
                         </label>
-                        <select
+                        <StringSingleSelectDropdown
                           value={filters.company}
                           onChange={handleCompanyChange}
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                        >
-                          <option value="">Todas as empresas</option>
-                          {COMPANIES_LIST.map(company => (
-                            <option key={company} value={company}>{company}</option>
-                          ))}
-                        </select>
+                          options={COMPANIES_LIST}
+                          emptyOptionLabel="Todas as empresas"
+                        />
                       </div>
 
                       <div>
@@ -575,17 +581,12 @@ export default function GerenciarSolicitacoesPage() {
                         </label>
                         <div className="relative">
                           <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.month}
+                          <StringSingleSelectDropdown
+                            value={String(filters.month)}
                             onChange={handleMonthChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            {monthOptions.map(month => (
-                              <option key={month.value} value={month.value}>
-                                {month.label}
-                              </option>
-                            ))}
-                          </select>
+                            options={monthFilterSelectOptions}
+                            allowEmpty={false}
+                          />
                         </div>
                       </div>
 
@@ -595,17 +596,12 @@ export default function GerenciarSolicitacoesPage() {
                         </label>
                         <div className="relative">
                           <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.year}
+                          <StringSingleSelectDropdown
+                            value={String(filters.year)}
                             onChange={handleYearChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            {yearOptions.map(year => (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            ))}
-                          </select>
+                            options={yearFilterSelectOptions}
+                            allowEmpty={false}
+                          />
                         </div>
                       </div>
                     </div>
@@ -634,64 +630,32 @@ export default function GerenciarSolicitacoesPage() {
           <CardContent>
             <div className="space-y-4">
               {/* Tabs de Status */}
-              <div className="border-b border-gray-200 dark:border-gray-700">
-                <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
-                  <button
-                    onClick={() => setActiveStatusTab('PENDING')}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      activeStatusTab === 'PENDING'
-                        ? 'border-yellow-500 dark:border-yellow-400 text-yellow-600 dark:text-yellow-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
+              <AppUnderlineTabList aria-label="Status das solicitações" centered={false}>
+                {(
+                  [
+                    { id: 'PENDING' as const, label: `Pendentes (${statusCounts.PENDING})` },
+                    { id: 'APPROVED' as const, label: `Aprovados (${statusCounts.APPROVED})` },
+                    { id: 'REJECTED' as const, label: `Rejeitados (${statusCounts.REJECTED})` },
+                    { id: 'CANCELLED' as const, label: `Cancelados (${statusCounts.CANCELLED})` },
+                    { id: 'all' as const, label: `Todas (${statusCounts.all})` },
+                  ] as const
+                ).map((tab) => (
+                  <AppUnderlineTabButton
+                    key={tab.id}
+                    active={activeStatusTab === tab.id}
+                    onClick={() => setActiveStatusTab(tab.id)}
+                    className="flex items-center gap-2 whitespace-nowrap px-3 py-2 text-sm"
                   >
-                    Pendentes ({statusCounts.PENDING})
-                  </button>
-                  <button
-                    onClick={() => setActiveStatusTab('APPROVED')}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      activeStatusTab === 'APPROVED'
-                        ? 'border-green-500 dark:border-green-400 text-green-600 dark:text-green-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    Aprovados ({statusCounts.APPROVED})
-                  </button>
-                  <button
-                    onClick={() => setActiveStatusTab('REJECTED')}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      activeStatusTab === 'REJECTED'
-                        ? 'border-red-500 dark:border-red-400 text-red-600 dark:text-red-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    Rejeitados ({statusCounts.REJECTED})
-                  </button>
-                  <button
-                    onClick={() => setActiveStatusTab('CANCELLED')}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      activeStatusTab === 'CANCELLED'
-                        ? 'border-gray-500 dark:border-gray-400 text-gray-600 dark:text-gray-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    Cancelados ({statusCounts.CANCELLED})
-                  </button>
-                  <button
-                    onClick={() => setActiveStatusTab('all')}
-                    className={`flex items-center gap-2 py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      activeStatusTab === 'all'
-                        ? 'border-blue-500 dark:border-blue-400 text-blue-600 dark:text-blue-400'
-                        : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-                    }`}
-                  >
-                    Todas ({statusCounts.all})
-                  </button>
-                </nav>
-              </div>
+                    {tab.label}
+                  </AppUnderlineTabButton>
+                ))}
+              </AppUnderlineTabList>
 
               {/* Lista de solicitações */}
               <div className="space-y-3">
-              {filteredRequests.length === 0 ? (
+              {loadingRequests ? (
+                <CadastroListLoading message="Carregando solicitações..." />
+              ) : filteredRequests.length === 0 ? (
                 <Card>
                   <CardContent className="p-6 text-center">
                   <FileText className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
@@ -713,15 +677,28 @@ export default function GerenciarSolicitacoesPage() {
                   const StatusIcon = statusInfo.icon;
 
                   return (
-                    <Card key={request.id} className="hover:shadow-md transition-all duration-200">
+                    <div
+                      key={request.id}
+                      onClick={() => setSelectedRequest(request)}
+                      className={`${getListTableRowClassName(true)} rounded-lg`}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedRequest(request);
+                        }
+                      }}
+                    >
+                    <Card className="hover:shadow-md transition-all duration-200 h-full">
                       <CardContent className="p-4">
                         {/* Header compacto */}
                         <div className="flex items-start justify-between gap-3 mb-3">
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                              <h4 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
+                              <ListRowNavigableLabel className="truncate text-base font-semibold">
                                   {request.title}
-                              </h4>
+                              </ListRowNavigableLabel>
                               <Badge className={`${statusInfo.color} shrink-0 text-xs`}>
                                   <StatusIcon className="w-3 h-3 mr-1" />
                                   {statusInfo.label}
@@ -737,7 +714,7 @@ export default function GerenciarSolicitacoesPage() {
                               </p>
                             )}
                                 </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
+                          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                             {request.status === 'PENDING' && (
                               <>
                                 <Button
@@ -836,6 +813,7 @@ export default function GerenciarSolicitacoesPage() {
                         )}
                       </CardContent>
                     </Card>
+                    </div>
                   );
                 })
               )}
@@ -846,7 +824,7 @@ export default function GerenciarSolicitacoesPage() {
 
         {/* Modal de detalhes */}
         {selectedRequest && !showApprovalModal && !showRejectionModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedRequest(null)} />
             <div className="relative w-full max-w-3xl bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden max-h-[90vh]">
               <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -918,12 +896,12 @@ export default function GerenciarSolicitacoesPage() {
                 )}
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de aprovação */}
         {showApprovalModal && selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => {
               setShowApprovalModal(false);
               setSelectedRequest(null);
@@ -942,7 +920,7 @@ export default function GerenciarSolicitacoesPage() {
                     value={approvalComment}
                     onChange={(e) => setApprovalComment(e.target.value)}
                     placeholder="Digite um comentário sobre a aprovação..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                     rows={3}
                   />
                 </div>
@@ -967,12 +945,12 @@ export default function GerenciarSolicitacoesPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
 
         {/* Modal de rejeição */}
         {showRejectionModal && selectedRequest && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40" onClick={() => {
               setShowRejectionModal(false);
               setSelectedRequest(null);
@@ -1002,7 +980,7 @@ export default function GerenciarSolicitacoesPage() {
                     value={rejectionComment}
                     onChange={(e) => setRejectionComment(e.target.value)}
                     placeholder="Explique o motivo da rejeição..."
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                     rows={3}
                   />
                 </div>
@@ -1027,7 +1005,7 @@ export default function GerenciarSolicitacoesPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </AppModalOverlay>
         )}
       </div>
     </MainLayout>

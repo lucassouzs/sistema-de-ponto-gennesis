@@ -62,20 +62,26 @@ router.put('/:id/quotes', async (req: AuthRequest, res: Response, next: NextFunc
 router.post('/:id/generate', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
-    const { generateSupplierIds, paymentBySupplier, itemQuantities } = req.body as {
-      generateSupplierIds?: string[];
-      itemQuantities?: Record<string, number>;
-      paymentBySupplier?: Array<{
-        supplierId: string;
-        paymentType: string;
-        paymentCondition: string;
-        paymentDetails?: string;
-        observations?: string;
-        amountToPay?: number;
-        boletoAttachmentUrl?: string;
-        boletoAttachmentName?: string;
-      }>;
-    };
+    const { generateSupplierIds, paymentBySupplier, itemQuantities, itemNotesBySupplierItem } =
+      req.body as {
+        generateSupplierIds?: string[];
+        itemQuantities?: Record<string, number>;
+        /** Chave `supplierId:materialRequestItemId` → detalhe/nome do item no fornecedor (notes do item da OC). */
+        itemNotesBySupplierItem?: Record<string, string>;
+        paymentBySupplier?: Array<{
+          supplierId: string;
+          paymentType: string;
+          paymentCondition: string;
+          paymentDetails?: string;
+          pixKeyType?: string;
+          pixKey?: string;
+          observations?: string;
+          amountToPay?: number;
+          boletoAttachmentUrl?: string;
+          boletoAttachmentName?: string;
+          attachments?: Array<{ url: string; name: string }>;
+        }>;
+      };
 
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
     if (!generateSupplierIds || !Array.isArray(generateSupplierIds) || generateSupplierIds.length === 0) {
@@ -88,24 +94,63 @@ router.post('/:id/generate', async (req: AuthRequest, res: Response, next: NextF
     const result = await service.generatePurchaseOrders(id, req.user.id, {
       generateSupplierIds,
       paymentBySupplier,
-      itemQuantities
+      itemQuantities,
+      itemNotesBySupplierItem,
     });
 
     res.json({ success: true, data: result });
   } catch (error) {
+    const err = error as { name?: string; message?: string; statusCode?: number };
+    if (
+      error instanceof Error &&
+      !err.statusCode &&
+      err.name !== 'PrismaClientValidationError' &&
+      err.name !== 'PrismaClientKnownRequestError'
+    ) {
+      next(createError(error.message, 400));
+      return;
+    }
     next(error);
   }
 });
-
 // Baixar snapshot PDF do mapa (gera sob demanda se não existir)
 router.get('/:id/snapshot-pdf', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     if (!req.user?.id) throw createError('Usuário não autenticado', 401);
 
-    const absPath = await service.getOrCreateSnapshotPdfPath(id);
+    const purchaseOrderId =
+      typeof req.query.purchaseOrderId === 'string' && req.query.purchaseOrderId.trim()
+        ? req.query.purchaseOrderId.trim()
+        : undefined;
+
+    const absPath = await service.getOrCreateSnapshotPdfPath(id, purchaseOrderId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="mapa-cotacao-${id}.pdf"`);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="mapa-cotacao-${purchaseOrderId || id}.pdf"`
+    );
+    res.sendFile(absPath);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PDF comparativo: todas as cotações + ganhadora (arquivo separado do PDF da OC)
+// Com purchaseOrderId: compara só o contexto daquela OC (não mistura outra OC da mesma RM).
+router.get('/:id/comparison-pdf', async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const purchaseOrderId =
+      typeof req.query.purchaseOrderId === 'string' ? req.query.purchaseOrderId.trim() : '';
+    if (!req.user?.id) throw createError('Usuário não autenticado', 401);
+
+    const absPath = await service.getOrCreateComparisonPdfPath(id, purchaseOrderId || undefined);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="mapa-cotacao-comparativo-${purchaseOrderId || id}.pdf"`
+    );
     res.sendFile(absPath);
   } catch (error) {
     next(error);

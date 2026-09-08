@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Gennesis Attendance",
+    "name": "Gennesis Conecta",
     "slug": "sistema-ponto-engenharia",
-    "version": "1.0.3",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
     "userInterfaceStyle": "automatic",
@@ -28,12 +28,13 @@
       }
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/favicon.png",
         "backgroundColor": "#111827"
       },
       "package": "com.engenharia.sistemaponto",
+      "usesCleartextTraffic": true,
       "navigationBar": {
         "visible": "leanback",
         "backgroundColor": "#374151"
@@ -45,17 +46,43 @@
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.RECORD_AUDIO",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "@react-native-community/datetimepicker",
+        {
+          "android": {
+            "datePicker": {
+              "colorAccent": { "light": "#ce3736", "dark": "#ef4444" },
+              "colorControlActivated": { "light": "#ce3736", "dark": "#ef4444" }
+            },
+            "timePicker": {
+              "headerBackground": { "light": "#ce3736", "dark": "#ef4444" },
+              "numbersSelectorColor": { "light": "#ce3736", "dark": "#ef4444" }
+            }
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/favicon.png",
+          "color": "#ce3736",
+          "defaultChannel": "gennesis-activity"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "208f8118-e466-4554-97db-2e26271dd4fa"
-      },
-      "EXPO_PUBLIC_API_URL": "https://sistema-pontobackend-production.up.railway.app"
+      }
     },
     "owner": "lucassouzss"
   }

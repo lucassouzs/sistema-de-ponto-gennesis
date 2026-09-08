@@ -4,6 +4,21 @@ import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { parseDateInput } from '../utils/dateInput';
 import { assertContractAccess } from '../lib/contractAccess';
+import {
+  assertPleitoBillingAmount,
+  syncPleitoFromBillings
+} from '../utils/contractBillingPleitoSync';
+
+function parseRequiredMoney(value: unknown, fieldLabel: string): number {
+  if (value === undefined || value === null || value === '') {
+    throw createError(`${fieldLabel} é obrigatório`, 400);
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num) || num <= 0) {
+    throw createError(`${fieldLabel} inválido`, 400);
+  }
+  return num;
+}
 
 export class ContractBillingController {
   /**
@@ -50,7 +65,7 @@ export class ContractBillingController {
       const { contractId } = req.params;
       await assertContractAccess(req, contractId);
 
-      const { issueDate, invoiceNumber, serviceOrder, grossValue, netValue } = req.body;
+      const { issueDate, invoiceNumber, serviceOrder, grossValue, netValue, pleitoId } = req.body;
 
       if (!issueDate) {
         throw createError('Data de emissão é obrigatória', 400);
@@ -61,9 +76,12 @@ export class ContractBillingController {
       if (!serviceOrder?.trim()) {
         throw createError('Ordem de serviço é obrigatória', 400);
       }
-      if (grossValue === undefined || grossValue === null || grossValue === '') {
-        throw createError('Valor bruto é obrigatório', 400);
+      if (!pleitoId?.trim()) {
+        throw createError('Selecione o pleito vinculado ao faturamento', 400);
       }
+
+      const gross = parseRequiredMoney(grossValue, 'Valor bruto');
+      const net = parseRequiredMoney(netValue, 'Valor líquido');
 
       const contract = await prisma.contract.findUnique({
         where: { id: contractId }
@@ -72,17 +90,44 @@ export class ContractBillingController {
         throw createError('Contrato não encontrado', 404);
       }
 
-      const billing = await prisma.contractBilling.create({
-        data: {
-          contractId,
-          issueDate: parseDateInput(issueDate),
-          invoiceNumber: String(invoiceNumber).trim(),
-          serviceOrder: String(serviceOrder).trim(),
-          grossValue: Number(grossValue) || 0,
-          netValue: netValue === undefined || netValue === null || netValue === ''
-            ? 0
-            : Number(netValue) || 0
+      const pleito = await prisma.pleito.findUnique({ where: { id: String(pleitoId).trim() } });
+      if (!pleito) {
+        throw createError('Pleito não encontrado', 404);
+      }
+
+      const serviceOrderTrimmed = String(serviceOrder).trim();
+      const pleitoOs = (pleito.divSe || '').trim();
+      if (pleitoOs && pleitoOs !== serviceOrderTrimmed) {
+        throw createError('A OS/SE informada não corresponde ao pleito selecionado', 400);
+      }
+
+      const billing = await prisma.$transaction(async (tx) => {
+        await assertPleitoBillingAmount(tx, pleito, contractId, gross);
+
+        const created = await tx.contractBilling.create({
+          data: {
+            contractId,
+            pleitoId: pleito.id,
+            issueDate: parseDateInput(issueDate),
+            invoiceNumber: String(invoiceNumber).trim(),
+            serviceOrder: serviceOrderTrimmed,
+            divSe: serviceOrderTrimmed,
+            grossValue: gross,
+            netValue: net
+          }
+        });
+
+        await syncPleitoFromBillings(tx, pleito.id);
+
+        const invoiceTrimmed = String(invoiceNumber).trim();
+        if (invoiceTrimmed) {
+          await tx.pleito.update({
+            where: { id: pleito.id },
+            data: { invoiceNumber: invoiceTrimmed }
+          });
         }
+
+        return created;
       });
 
       res.status(201).json({
@@ -116,21 +161,46 @@ export class ContractBillingController {
         throw createError('Faturamento não encontrado', 404);
       }
 
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       if (issueDate !== undefined) updateData.issueDate = parseDateInput(issueDate);
       if (invoiceNumber !== undefined) updateData.invoiceNumber = String(invoiceNumber).trim();
-      if (serviceOrder !== undefined) updateData.serviceOrder = String(serviceOrder).trim();
-      if (grossValue !== undefined) updateData.grossValue = Number(grossValue) || 0;
+      if (serviceOrder !== undefined) {
+        const so = String(serviceOrder).trim();
+        updateData.serviceOrder = so;
+        updateData.divSe = so;
+      }
+      if (grossValue !== undefined) updateData.grossValue = parseRequiredMoney(grossValue, 'Valor bruto');
       if (netValue !== undefined) {
-        updateData.netValue = Number(netValue) || 0;
+        updateData.netValue = parseRequiredMoney(netValue, 'Valor líquido');
       } else if (grossValue !== undefined) {
-        // Quando o usuário não informa líquido, manter como "não preenchido".
-        updateData.netValue = 0;
+        throw createError('Valor líquido é obrigatório', 400);
       }
 
-      const billing = await prisma.contractBilling.update({
-        where: { id },
-        data: updateData
+      const billing = await prisma.$transaction(async (tx) => {
+        const pleitoId = existing.pleitoId;
+        if (pleitoId && grossValue !== undefined) {
+          const pleito = await tx.pleito.findUnique({ where: { id: pleitoId } });
+          if (pleito) {
+            await assertPleitoBillingAmount(
+              tx,
+              pleito,
+              contractId,
+              Number(updateData.grossValue),
+              id
+            );
+          }
+        }
+
+        const updated = await tx.contractBilling.update({
+          where: { id },
+          data: updateData
+        });
+
+        if (pleitoId) {
+          await syncPleitoFromBillings(tx, pleitoId);
+        }
+
+        return updated;
       });
 
       res.json({
@@ -162,8 +232,13 @@ export class ContractBillingController {
         throw createError('Faturamento não encontrado', 404);
       }
 
-      await prisma.contractBilling.delete({
-        where: { id }
+      const pleitoId = existing.pleitoId;
+
+      await prisma.$transaction(async (tx) => {
+        await tx.contractBilling.delete({ where: { id } });
+        if (pleitoId) {
+          await syncPleitoFromBillings(tx, pleitoId);
+        }
       });
 
       res.json({

@@ -5,14 +5,17 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, FileImage, Trash2, Pencil, Search, MoreVertical, Eye, Calculator, ChevronDown } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+import { ActionMenuOverlay } from '@/components/ui/ActionMenuOverlay';
+import { textMatchesSearch } from '@/lib/normalizeSearchText';
+import { getListTableRowClassName, ListRowNavigableLabel, rowActionMenuButtonClass } from '@/components/ui/listTableUi';
 
 interface RelatorioEntry {
   id: string;
@@ -150,15 +153,15 @@ export default function ContratoRelatoriosPage() {
   }, [employeesData]);
 
   const filteredNovoSolicitantes = useMemo(() => {
-    const q = novoSolicitanteSearch.trim().toLowerCase();
+    const q = novoSolicitanteSearch.trim();
     if (!q) return employeeOptions;
-    return employeeOptions.filter((u) => u.name.toLowerCase().includes(q));
+    return employeeOptions.filter((u) => textMatchesSearch(u.name, q));
   }, [employeeOptions, novoSolicitanteSearch]);
 
   const filteredEditarSolicitantes = useMemo(() => {
-    const q = editarSolicitanteSearch.trim().toLowerCase();
+    const q = editarSolicitanteSearch.trim();
     if (!q) return employeeOptions;
-    return employeeOptions.filter((u) => u.name.toLowerCase().includes(q));
+    return employeeOptions.filter((u) => textMatchesSearch(u.name, q));
   }, [employeeOptions, editarSolicitanteSearch]);
 
   const criarMutation = useMutation({
@@ -225,7 +228,7 @@ export default function ContratoRelatoriosPage() {
   const contract = contractData?.data as Contract | undefined;
   const relatorios: RelatorioEntry[] = relatoriosData?.data ?? [];
   const relatoriosFiltrados = relatorios.filter((r) =>
-    r.titulo.toLowerCase().includes(searchTerm.trim().toLowerCase())
+    textMatchesSearch(r.titulo, searchTerm)
   );
 
   useEffect(() => {
@@ -342,7 +345,7 @@ export default function ContratoRelatoriosPage() {
                 </div>
                 <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {!loadingRelatorios && relatorios.length > 0 && (
-                    <div className="relative min-w-[240px] flex-1 sm:w-[280px] sm:flex-none">
+                    <div className="relative min-w-0 w-full flex-1 basis-full sm:basis-auto sm:min-w-[240px] sm:w-[280px] sm:flex-none">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
                         type="text"
@@ -378,7 +381,7 @@ export default function ContratoRelatoriosPage() {
 
               {loadingRelatorios ? (
                 <div className="mt-4">
-                  <Loading message="Carregando relatórios..." size="md" />
+                  <CadastroListLoading message="Carregando relatórios..." />
                 </div>
               ) : relatoriosFiltrados.length === 0 ? (
                 <div className="mt-4 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 py-12 text-center text-gray-500 dark:text-gray-400">
@@ -387,7 +390,7 @@ export default function ContratoRelatoriosPage() {
                     : 'Nenhum relatório encontrado para esta busca.'}
                 </div>
               ) : (
-                <div className="mt-3 overflow-x-auto">
+                <div className="mt-3 table-scroll">
                   <table className="w-full min-w-[720px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -404,21 +407,25 @@ export default function ContratoRelatoriosPage() {
                     </thead>
                     <tbody>
                       {relatoriosFiltrados.map((r) => (
-                        <tr key={r.id} className="border-b border-gray-100 dark:border-gray-800/80 last:border-0">
+                        <tr
+                          key={r.id}
+                          onClick={() => router.push(`/ponto/contratos/${contractId}/relatorios/${r.id}`)}
+                          className={`border-b border-gray-100 dark:border-gray-800/80 last:border-0 ${getListTableRowClassName(true)}`}
+                        >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-md bg-red-50 dark:bg-red-900/20 flex items-center justify-center shrink-0">
                                 <FileImage className="w-4 h-4 text-red-600 dark:text-red-400" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="font-medium text-gray-900 dark:text-gray-100 truncate">{r.titulo}</p>
+                                <ListRowNavigableLabel className="font-medium truncate">{r.titulo}</ListRowNavigableLabel>
                               </div>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
                             {formatDate(r.updatedAt)}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end">
                                 <button
                                   type="button"
@@ -435,7 +442,7 @@ export default function ContratoRelatoriosPage() {
                                       return { relatorioId: r.id, titulo: r.titulo, top: bounds.bottom + 4, left };
                                     });
                                   }}
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                  className={rowActionMenuButtonClass(relatorioActionMenu?.relatorioId === r.id)}
                                   aria-label="Menu de ações"
                                   aria-expanded={relatorioActionMenu?.relatorioId === r.id}
                                   aria-haspopup="menu"
@@ -450,68 +457,59 @@ export default function ContratoRelatoriosPage() {
                   </table>
                 </div>
               )}
-              {relatorioActionMenu &&
-                typeof document !== 'undefined' &&
-                createPortal(
-                  <>
-                    <div
-                      className="fixed inset-0 z-[200]"
-                      aria-hidden
-                      onClick={() => setRelatorioActionMenu(null)}
-                    />
-                    <div
-                      role="menu"
-                      className="fixed z-[201] w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
-                      style={{ top: relatorioActionMenu.top, left: relatorioActionMenu.left }}
-                    >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const id = relatorioActionMenu.relatorioId;
-                          setRelatorioActionMenu(null);
-                          router.push(`/ponto/contratos/${contractId}/relatorios/${id}`);
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-                      >
-                        <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-                        <span>Ver detalhes</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const { relatorioId, titulo } = relatorioActionMenu;
-                          setRelatorioActionMenu(null);
-                          abrirModalEdicao(relatorioId, titulo);
-                        }}
-                        className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
-                      >
-                        <Pencil className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-300" />
-                        <span>Editar</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const { relatorioId, titulo } = relatorioActionMenu;
-                          setRelatorioActionMenu(null);
-                          if (confirm(`Excluir "${titulo}"? Esta ação não pode ser desfeita.`)) {
-                            deleteMutation.mutate(relatorioId);
-                          }
-                        }}
-                        className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
-                      >
-                        <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-                        <span>Excluir</span>
-                      </button>
-                    </div>
-                  </>,
-                  document.body
-                )}
+              {relatorioActionMenu && (
+                <ActionMenuOverlay
+                  open
+                  onClose={() => setRelatorioActionMenu(null)}
+                  top={relatorioActionMenu.top}
+                  left={relatorioActionMenu.left}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const id = relatorioActionMenu.relatorioId;
+                      setRelatorioActionMenu(null);
+                      router.push(`/ponto/contratos/${contractId}/relatorios/${id}`);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <Eye className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                    <span>Ver detalhes</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const { relatorioId, titulo } = relatorioActionMenu;
+                      setRelatorioActionMenu(null);
+                      abrirModalEdicao(relatorioId, titulo);
+                    }}
+                    className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <Pencil className="h-4 w-4 shrink-0 text-gray-600 dark:text-gray-300" />
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const { relatorioId, titulo } = relatorioActionMenu;
+                      setRelatorioActionMenu(null);
+                      if (confirm(`Excluir "${titulo}"? Esta ação não pode ser desfeita.`)) {
+                        deleteMutation.mutate(relatorioId);
+                      }
+                    }}
+                    className="flex w-full items-center gap-2 border-t border-gray-200 px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    <Trash2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                    <span>Excluir</span>
+                  </button>
+                </ActionMenuOverlay>
+              )}
             </CardContent>
           </Card>
         </div>

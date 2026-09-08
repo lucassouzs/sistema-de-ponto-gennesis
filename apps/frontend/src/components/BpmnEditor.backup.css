@@ -1,0 +1,126 @@
+/*
+ * Backup dos estilos do editor BPMN (Flow) — gerado em 2026-07-01
+ *
+ * Origem: não existe BpmnEditor.css dedicado neste projeto.
+ * Estes estilos estavam inline em:
+ *   apps/frontend/src/components/flow/FlowEditor.tsx  (<style jsx global>)
+ *
+ * CSS do bpmn-js (export/import oculto) permanece em node_modules via:
+ *   apps/frontend/src/lib/flowBpmnModelerExport.ts
+ *   - bpmn-js/dist/assets/diagram-js.css
+ *   - bpmn-js/dist/assets/bpmn-js.css
+ *   - bpmn-js/dist/assets/bpmn-font/css/bpmn.css
+ *   - bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css
+ */
+
+.flow-editor-canvas .flow-append-preview-node {
+  opacity: 0.38;
+  pointer-events: none;
+  filter: saturate(0.85);
+}
+
+.flow-editor-canvas .flow-append-preview-node .react-flow__handle {
+  opacity: 0;
+}
+
+.flow-editor-canvas .react-flow__controls {
+  display: none;
+}
+
+.flow-editor-canvas .react-flow__attribution {
+  display: none;
+}
+
+.flow-editor-canvas .react-flow__edge-path {
+  stroke: #475569 !important;
+  stroke-width: 2px !important;
+  stroke-linecap: square;
+  marker-end: url(#flow-sequenceflow-end) !important;
+}
+
+.flow-editor-canvas .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #2563eb !important;
+}
+
+.flow-editor-canvas .react-flow__edgeupdater,
+.flow-editor-canvas .react-flow__edgeupdater-source,
+.flow-editor-canvas .react-flow__edgeupdater-target {
+  cursor: grab;
+  width: 14px !important;
+  height: 14px !important;
+  border-radius: 9999px;
+  border: 2px solid #2563eb !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+}
+
+:is(.dark) .flow-editor-canvas .react-flow__edgeupdater,
+:is(.dark) .flow-editor-canvas .react-flow__edgeupdater-source,
+:is(.dark) .flow-editor-canvas .react-flow__edgeupdater-target {
+  background: #0f172a !important;
+  border-color: #60a5fa !important;
+}
+
+.flow-editor-canvas .react-flow__edgeupdater:active {
+  cursor: grabbing;
+}
+
+.flow-editor-canvas .react-flow__viewport svg {
+  overflow: visible;
+}
+
+:is(.dark) .flow-editor-canvas .react-flow__edge-path {
+  stroke: #e2e8f0 !important;
+  stroke-width: 2px !important;
+}
+
+.flow-editor-canvas .flow-sequenceflow-end-marker {
+  fill: #333333 !important;
+  stroke: #333333 !important;
+  stroke-width: 1px !important;
+}
+
+:is(.dark) .flow-editor-canvas .flow-sequenceflow-end-marker {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+.flow-editor-canvas .react-flow__edge.selected .flow-sequenceflow-end-marker {
+  fill: #2563eb !important;
+  stroke: #2563eb !important;
+}
+
+.flow-editor-canvas .flow-append-preview-edge path {
+  stroke-dasharray: 6 4;
+}
+
+.flow-editor-canvas .react-flow__arrowhead polyline,
+.flow-editor-canvas .react-flow__arrowhead polygon,
+.flow-editor-canvas .react-flow__arrowhead path {
+  fill: #333333;
+  stroke: #333333;
+}
+
+:is(.dark) .flow-editor-canvas .react-flow__arrowhead polyline,
+:is(.dark) .flow-editor-canvas .react-flow__arrowhead polygon,
+:is(.dark) .flow-editor-canvas .react-flow__arrowhead path {
+  fill: #ffffff;
+  stroke: #ffffff;
+}
+
+.flow-editor-canvas.flow-hand-tool-active .react-flow__pane,
+.flow-editor-canvas.flow-hand-tool-active .react-flow__pane:active {
+  cursor: grabbing !important;
+}
+
+.flow-editor-canvas.flow-hand-tool-active .react-flow__node,
+.flow-editor-canvas.flow-hand-tool-active .react-flow__edge,
+.flow-editor-canvas.flow-hand-tool-active .react-flow__edge-labels,
+.flow-editor-canvas.flow-hand-tool-active .react-flow__nodesselection,
+.flow-editor-canvas.flow-hand-tool-active .react-flow__edgeupdater {
+  pointer-events: none !important;
+}
+
+.flow-editor-canvas.flow-hand-tool-active .react-flow__pane {
+  cursor: grab !important;
+}

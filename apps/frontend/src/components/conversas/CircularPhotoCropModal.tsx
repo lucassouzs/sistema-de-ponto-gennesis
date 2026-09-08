@@ -6,6 +6,7 @@ import Cropper, { type Area } from 'react-easy-crop';
 import { X, RotateCcw, Plus, Minus, Check, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { getCroppedImageBlob } from '@/lib/getCroppedImg';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 /** Sidebar e página Conversas podem cada uma ter um modal; usa contagem para não “liberar” o FAB antes da hora. */
 let cropModalsFabSuppressionDepth = 0;
@@ -91,8 +92,8 @@ export function CircularPhotoCropModal({
   if (typeof document === 'undefined' || !open) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[200050] flex min-h-[100vh] flex-col bg-black/80 backdrop-blur-sm"
+    <AppModalOverlay
+      className="app-modal-overlay fixed inset-0 z-[200050] flex min-h-[100vh] flex-col bg-black/80 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="crop-photo-title"
@@ -182,7 +183,7 @@ export function CircularPhotoCropModal({
           )}
         </button>
       </div>
-    </div>,
+    </AppModalOverlay>,
     document.body
   );
 }

@@ -1,9 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import * as XLSX from 'xlsx';
-import { uploadImport } from '../middleware/upload';
+import {
+  ensureUnaccentExtension,
+  textMatchesSearch,
+  unaccentIlikeOr,
+} from '../lib/normalizeSearchText';
 
 async function generateBudgetNatureCode(): Promise<string> {
   const currentYear = new Date().getFullYear();
@@ -24,24 +29,79 @@ export class BudgetNatureController {
   async getAll(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { search, page = 1, limit = 100, isActive } = req.query;
-      const where: any = {};
-      if (search) {
-        where.OR = [
-          { code: { contains: search as string, mode: 'insensitive' } },
-          { name: { contains: search as string, mode: 'insensitive' } }
-        ];
-      }
-      if (isActive !== undefined) where.isActive = isActive === 'true';
       const limitNum = Math.min(Number(limit), 500);
       const skip = (Number(page) - 1) * limitNum;
+      const searchTerm = typeof search === 'string' ? search.trim() : '';
+      const searchPred = searchTerm
+        ? unaccentIlikeOr(['code', 'name'], searchTerm)
+        : null;
+
+      if (searchPred) {
+        await ensureUnaccentExtension();
+        const filters: Prisma.Sql[] = [Prisma.sql`(${searchPred})`];
+        if (isActive !== undefined) {
+          filters.push(Prisma.sql`"isActive" = ${isActive === 'true'}`);
+        }
+        const whereSql = Prisma.join(filters, ' AND ');
+
+        const [items, countRows] = await Promise.all([
+          prisma.$queryRaw<
+            Array<{
+              id: string;
+              code: string | null;
+              name: string;
+              isActive: boolean;
+              createdAt: Date;
+              updatedAt: Date;
+            }>
+          >`
+            SELECT id, code, name, "isActive", "createdAt", "updatedAt"
+            FROM budget_natures
+            WHERE ${whereSql}
+            ORDER BY name ASC
+            LIMIT ${limitNum} OFFSET ${skip}
+          `,
+          prisma.$queryRaw<Array<{ total: bigint | number }>>`
+            SELECT COUNT(*)::int AS total
+            FROM budget_natures
+            WHERE ${whereSql}
+          `,
+        ]);
+
+        const total = Number(countRows[0]?.total ?? 0);
+        res.json({
+          success: true,
+          data: items,
+          pagination: {
+            page: Number(page),
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum) || 1,
+          },
+        });
+        return;
+      }
+
+      const where: Prisma.BudgetNatureWhereInput = {};
+      if (isActive !== undefined) where.isActive = isActive === 'true';
       const [items, total] = await Promise.all([
-        prisma.budgetNature.findMany({ where, skip, take: limitNum, orderBy: { name: 'asc' } }),
-        prisma.budgetNature.count({ where })
+        prisma.budgetNature.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { name: 'asc' },
+        }),
+        prisma.budgetNature.count({ where }),
       ]);
       res.json({
         success: true,
         data: items,
-        pagination: { page: Number(page), limit: limitNum, total, totalPages: Math.ceil(total / limitNum) }
+        pagination: {
+          page: Number(page),
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum) || 1,
+        },
       });
     } catch (error) {
       next(error);
@@ -112,8 +172,6 @@ export class BudgetNatureController {
     try {
       if (!req.file) throw createError('Arquivo não enviado', 400);
       const file = req.file;
-      const isExcel = file.originalname.endsWith('.xlsx') || file.originalname.endsWith('.xls');
-      // For simplicity accept CSV as well, but use XLSX utils which handles CSV too
       const workbook = XLSX.read(file.buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
@@ -129,7 +187,6 @@ export class BudgetNatureController {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const line = i + 2;
-        // Accept columns 'Código' or 'Code' and 'Natureza' or 'Name'
         const code = (row['Código'] || row['Code'] || row['codigo'] || row['code'] || '').toString().trim();
         const name = (row['Natureza'] || row['Nome'] || row['Name'] || row['name'] || '').toString().trim();
 
@@ -138,14 +195,15 @@ export class BudgetNatureController {
           continue;
         }
 
-        // Check duplicates by code or name
         let exists = null;
         if (code) {
           exists = await prisma.budgetNature.findUnique({ where: { code } });
         }
         if (!exists) {
-          const existingByName = await prisma.budgetNature.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } });
-          if (existingByName) exists = existingByName;
+          const all = await prisma.budgetNature.findMany({
+            select: { id: true, code: true, name: true },
+          });
+          exists = all.find((n) => textMatchesSearch(n.name, name)) ?? null;
         }
 
         if (exists) {
@@ -180,4 +238,3 @@ export class BudgetNatureController {
     }
   }
 }
-

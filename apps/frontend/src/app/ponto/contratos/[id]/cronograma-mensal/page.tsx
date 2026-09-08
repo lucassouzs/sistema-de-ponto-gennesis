@@ -10,10 +10,13 @@ import { ArrowLeft, FileDown, FileSpreadsheet } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
 import api from '@/lib/api';
 import { formatOsSePasta, formatOsSePastaOrDash } from '@/lib/formatOsSePasta';
 import { pleitoStatusReadOnlySpanClass } from '@/lib/pleitoStatusStyles';
+import { loadPdfBrandingLogoDataUrl } from '@/lib/loadPdfBrandingLogo';
 import toast from 'react-hot-toast';
+import { formatDateTimeBr } from '@/lib/dateTimeBr';
 
 /** Campos alinhados ao modelo Pleito (API) para exportação completa. */
 interface ContractPleito {
@@ -78,24 +81,6 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function formatDateTime(dateStr: string | null | undefined) {
-  if (!dateStr) return '';
-  const raw = String(dateStr).trim();
-  const only = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const d = only
-    ? new Date(Number(only[1]), Number(only[2]) - 1, Number(only[3]), 12, 0, 0, 0)
-    : new Date(raw);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function numOrEmpty(v: number | null | undefined): number | string {
   if (v == null || Number.isNaN(Number(v))) return '';
   return Number(v);
@@ -130,8 +115,8 @@ function pleitoToXlsxRow(p: ContractPleito): (string | number)[] {
     p.reportsBilling ?? '',
     p.engineer ?? '',
     p.supervisor ?? '',
-    p.createdAt ? formatDateTime(p.createdAt) : '',
-    p.updatedAt ? formatDateTime(p.updatedAt) : ''
+    p.createdAt ? formatDateTimeBr(p.createdAt) : '',
+    p.updatedAt ? formatDateTimeBr(p.updatedAt) : ''
   ];
 }
 
@@ -212,7 +197,10 @@ export default function CronogramaMensalPage() {
   });
 
   const allPleitos = (Array.isArray(pleitosData) ? pleitosData : (pleitosData as { data?: ContractPleito[] })?.data) || [];
-  const pleitos = allPleitos.filter((p) => (p.reportsBilling || '').trim() !== PLEITO_HISTORY_MARKER);
+  const pleitos = allPleitos.filter((p) => {
+    const marker = (p.reportsBilling || '').trim();
+    return marker !== PLEITO_HISTORY_MARKER && !marker.startsWith(PLEITO_HISTORY_MARKER);
+  });
 
   const rows = useMemo(() => {
     return pleitos.filter((p) => selectedIds.has(p.id));
@@ -234,38 +222,17 @@ export default function CronogramaMensalPage() {
     toast.success('Arquivo XLSX gerado.');
   };
 
-  const loadLogoBase64 = (): Promise<string | null> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const c = document.createElement('canvas');
-        c.width = img.width;
-        c.height = img.height;
-        const ctx = c.getContext('2d');
-        if (!ctx) {
-          resolve(null);
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        try {
-          resolve(c.toDataURL('image/png'));
-        } catch {
-          resolve(null);
-        }
-      };
-      img.onerror = () => resolve(null);
-      img.src = '/logobranca.png';
-    });
-  };
-
   const exportPdf = async () => {
     if (rows.length === 0) {
       toast.error('Não há ordens para exportar.');
       return;
     }
     try {
-      const logoBase64 = await loadLogoBase64();
+      const logoBase64 = await loadPdfBrandingLogoDataUrl({
+        contextLabels: [contract?.name, contract?.number],
+        maxW: 16,
+        maxH: 14,
+      });
       const pdf = new jsPDF('l', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -359,7 +326,13 @@ export default function CronogramaMensalPage() {
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
   if (loadingUser) {
-    return <Loading message="Carregando..." fullScreen size="lg" />;
+    return (
+      <ProtectedRoute route="/ponto/contratos" contractId={contractId}>
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
   }
 
   if (loadingContract || !contractId) {
@@ -416,7 +389,7 @@ export default function CronogramaMensalPage() {
           </div>
 
           {loadingPleitos ? (
-            <Loading />
+            <CadastroListLoading message="Carregando cronograma..." />
           ) : selectedIds.size === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">
               Nenhuma ordem de serviço selecionada. No contrato, marque as OS na tabela e use &quot;Gerar cronograma mensal&quot;.

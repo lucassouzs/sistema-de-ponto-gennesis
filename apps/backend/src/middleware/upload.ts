@@ -88,3 +88,28 @@ export const uploadImport = multer({
     fieldSize: parseInt(process.env.MAX_FIELD_SIZE || String(20 * 1024 * 1024)) // permitir campos maiores (20MB por padrão) para JSON 'matrix'
   }
 });
+
+// Configuração do multer para upload de anexos de ASO (PDF ou imagem)
+const fileFilterAso = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+  const nameLower = (file.originalname || '').toLowerCase();
+
+  const mimetypeOk =
+    file.mimetype === 'application/pdf' || (!!file.mimetype && file.mimetype.startsWith('image/'));
+  const extensionOk = allowedExtensions.some((ext) => nameLower.endsWith(ext));
+
+  if (mimetypeOk || extensionOk) {
+    return cb(null, true);
+  }
+
+  cb(new Error('Envie um arquivo PDF ou imagem (JPG, PNG, WEBP)'));
+};
+
+export const uploadAsoAttachment = multer({
+  storage,
+  fileFilter: fileFilterAso,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB
+    files: 1,
+  }
+});

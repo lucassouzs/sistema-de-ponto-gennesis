@@ -5,6 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
+import type { MultiSelectSearchOption } from '@/components/ui/MultiSelectSearchDropdown';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export type PaymentConditionRow = {
   id: string;
@@ -48,6 +51,16 @@ export function formatPaymentConditionDisplay(
   return extra ? `${r.label} — ${extra}` : r.label;
 }
 
+export function resolvePaymentConditionMeta(
+  code: string,
+  rows: PaymentConditionRow[] | undefined
+): { parcelCount: number; parcelDueDays: number[] } {
+  const row = (rows || []).find((r) => r.code === code);
+  const parcelCount = row?.parcelCount && row.parcelCount >= 1 ? row.parcelCount : 1;
+  const parcelDueDays = normalizeParcelDueDaysClient(row?.parcelDueDays);
+  return { parcelCount, parcelDueDays };
+}
+
 type Props = {
   paymentType: 'AVISTA' | 'BOLETO';
   value: string;
@@ -56,6 +69,7 @@ type Props = {
   id?: string;
   className?: string;
   showCreate?: boolean;
+  hideFocus?: boolean;
 };
 
 export function PaymentConditionSelect({
@@ -65,7 +79,8 @@ export function PaymentConditionSelect({
   disabled,
   id,
   className,
-  showCreate = true
+  showCreate = true,
+  hideFocus = false
 }: Props) {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
@@ -99,6 +114,26 @@ export function PaymentConditionSelect({
     return [...rows].sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label, 'pt-BR'));
   }, [data]);
 
+  const dropdownOptions = useMemo((): MultiSelectSearchOption[] => {
+    const list: MultiSelectSearchOption[] = options.map((o) => {
+      const display = formatPaymentConditionDisplay(o);
+      const summary = formatParcelSummary(o.parcelCount ?? 1, o.parcelDueDays);
+      return {
+        value: o.code,
+        label: display,
+        searchText: `${o.label} ${o.code} ${summary}`
+      };
+    });
+    if (value && !options.some((o) => o.code === value)) {
+      list.unshift({
+        value,
+        label: `${value} (legado)`,
+        searchText: value
+      });
+    }
+    return list;
+  }, [options, value]);
+
   const syncModalDaysLength = (n: number, prev: string[]) => {
     const next = [...prev];
     while (next.length < n) next.push(next[next.length - 1] ?? '30');
@@ -123,9 +158,8 @@ export function PaymentConditionSelect({
     }
   });
 
-  const selectClass =
-    className ||
-    'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60';
+  /** Classes de layout do wrapper (ex.: flex-1). Não use estilos de input/borda aqui. */
+  const wrapperClass = className?.trim() ? className : 'flex-1 min-w-0';
 
   const submitModal = () => {
     if (!newLabel.trim()) {
@@ -160,40 +194,41 @@ export function PaymentConditionSelect({
   return (
     <div className="space-y-2">
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-        <select
-          id={id}
+        <SingleSelectSearchDropdown
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
+          options={dropdownOptions}
           disabled={disabled || isLoading}
-          className={`${selectClass} flex-1 min-w-0`}
-        >
-          {value && !options.some((o) => o.code === value) && (
-            <option value={value}>{value} (legado)</option>
-          )}
-          {options.length === 0 && !isLoading ? (
-            <option value="">Nenhuma condição — cadastre em Cadastros</option>
-          ) : (
-            options.map((o) => (
-              <option key={o.id} value={o.code}>
-                {formatPaymentConditionDisplay(o)}
-              </option>
-            ))
-          )}
-        </select>
+          allowEmpty={dropdownOptions.length === 0}
+          placeholder={
+            isLoading
+              ? 'Carregando...'
+              : dropdownOptions.length === 0
+                ? 'Nenhuma condição — cadastre em Cadastros'
+                : 'Selecione...'
+          }
+          searchPlaceholder="Pesquisar..."
+          emptyOptionsMessage="Nenhuma condição cadastrada."
+          emptySearchMessage="Nenhuma condição encontrada."
+          noFocusRing
+          hideFocus={hideFocus}
+          className={wrapperClass}
+        />
         {showCreate && !disabled && (
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 border border-blue-500/40 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 whitespace-nowrap"
+            aria-label="Nova condição de pagamento"
+            title="Nova condição"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-600 bg-red-50 text-red-800 transition-colors hover:bg-red-100 focus:outline-none dark:border-red-500 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950/60"
           >
-            <Plus className="w-4 h-4" />
-            Nova condição
+            <Plus className="h-4 w-4" />
           </button>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Nova condição de pagamento</h4>
@@ -278,7 +313,7 @@ export function PaymentConditionSelect({
               </button>
             </div>
           </div>
-        </div>
+        </AppModalOverlay>
       )}
     </div>
   );

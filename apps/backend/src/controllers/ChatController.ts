@@ -2,8 +2,17 @@ import { Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
 import { ChatService } from '../services/ChatService';
+import { readFuelStoredPhoto } from '../lib/fuelPhotoStorage';
+import {
+  gennecyChatAssistant,
+  getGennecyBotUserId,
+  resolveGennecyInvokeMode,
+  shouldProcessGennecyMessage,
+} from '../services/GennecyChatAssistantService';
+import { GENNECY_FUEL_MENU_MESSAGE, isGennecyFuelMenuMessage } from '../services/GennecyFuelFlowService';
 import multer from 'multer';
 import { prisma } from '../lib/prisma';
+import { getActiveGroupCallForChat } from '../realtime/wsCallSignaling';
 
 const chatService = new ChatService();
 
@@ -418,6 +427,34 @@ export class ChatController {
     }
   }
 
+  /** Abre (ou cria) conversa direta com a assistente Gennecy. */
+  async openGennecyDirectChat(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const initiatorId = req.user?.id;
+      if (!initiatorId) throw createError('Usuário não autenticado', 401);
+
+      const botId = await getGennecyBotUserId();
+      const chat = await chatService.getOrCreateDirectChat(initiatorId, botId);
+
+      const lastBotMessage = await prisma.message.findFirst({
+        where: { chatId: chat.id, senderId: botId },
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      });
+      const needsMenu =
+        !lastBotMessage?.content || !isGennecyFuelMenuMessage(lastBotMessage.content);
+      if (needsMenu) {
+        void gennecyChatAssistant
+          .postGennecyReply(chat.id, initiatorId, GENNECY_FUEL_MENU_MESSAGE)
+          .catch((err) => console.error('[Gennecy] welcome', err));
+      }
+
+      res.json({ success: true, data: chat });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
   /**
    * Cria um grupo com múltiplos participantes (suporta multipart com foto opcional)
    */
@@ -559,8 +596,48 @@ export class ChatController {
       if (!userId) throw createError('Usuário não autenticado', 401);
 
       const { id } = req.params;
-      const chat = await chatService.getDirectChatById(id, userId);
+      const sinceRaw = req.query.since as string | undefined;
+      const since =
+        sinceRaw && !Number.isNaN(Date.parse(sinceRaw)) ? new Date(sinceRaw) : undefined;
+      const chat = await chatService.getDirectChatById(id, userId, since ? { since } : undefined);
       res.json({ success: true, data: chat });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /**
+   * Chamada WebRTC em grupo ainda ativa (para banner “Entrar” no chat).
+   */
+  async getActiveNativeCall(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+
+      const { id } = req.params;
+      const chat = await chatService.getDirectChatById(id, userId);
+      if (chat.chatType !== 'GROUP') {
+        res.json({ success: true, data: { active: false } });
+        return;
+      }
+
+      const active = getActiveGroupCallForChat(id);
+      if (!active) {
+        res.json({ success: true, data: { active: false } });
+        return;
+      }
+
+      const userInCall = active.joinedUserIds.includes(userId);
+      res.json({
+        success: true,
+        data: {
+          active: true,
+          callId: active.callId,
+          video: active.video,
+          joinedUserIds: active.joinedUserIds,
+          userInCall,
+        },
+      });
     } catch (error: any) {
       next(error);
     }
@@ -574,8 +651,9 @@ export class ChatController {
       const userId = req.user?.id;
       if (!userId) throw createError('Usuário não autenticado', 401);
 
-      const { chatId, content } = req.body;
-      if (!chatId || !content) throw createError('ID do chat e conteúdo são obrigatórios', 400);
+      const { chatId } = req.body;
+      const rawContent = typeof req.body.content === 'string' ? req.body.content : '';
+      if (!chatId) throw createError('ID do chat é obrigatório', 400);
 
       const rawReply = req.body.replyToId != null ? String(req.body.replyToId).trim() : '';
       const replyToId = rawReply.length > 0 ? rawReply : undefined;
@@ -594,15 +672,47 @@ export class ChatController {
         }
       }
 
+      if (!rawContent.trim() && attachments.length === 0) {
+        throw createError('Informe uma mensagem ou anexo', 400);
+      }
+
+      const content = rawContent.trim() || '(anexo)';
+
       const message = await chatService.sendDirectMessage({
         chatId,
         senderId: userId,
         content,
         attachments,
-        replyToId
+        replyToId,
+        topicId: req.body.topicId != null ? String(req.body.topicId).trim() || undefined : undefined
       });
 
-      res.json({ success: true, message: 'Mensagem enviada', data: message });
+      const hasAttachments = attachments.length > 0;
+      const gennecyMode = await resolveGennecyInvokeMode(chatId, userId, content, {
+        hasAttachments,
+      });
+      const gennecyProcessing = await shouldProcessGennecyMessage(chatId, userId, content, {
+        hasAttachments,
+      });
+      if (gennecyProcessing) {
+        void gennecyChatAssistant
+          .processOutgoingMessage({
+            chatId,
+            senderId: userId,
+            content,
+            messageId: message.id,
+            hasAttachments,
+          })
+          .catch((err) => console.error('[Gennecy] async', err));
+      }
+
+      res.json({
+        success: true,
+        message: 'Mensagem enviada',
+        data: message,
+        gennecyProcessing,
+        gennecyMode,
+      });
     } catch (error: any) {
       next(error);
     }
@@ -617,21 +727,13 @@ export class ChatController {
       if (!userId) throw createError('Usuário não autenticado', 401);
 
       const rawUrl = String(req.query.url || '').trim();
-      if (!rawUrl) throw createError('URL do anexo é obrigatória', 400);
+      const rawFileKey = String(req.query.fileKey || '').trim();
+      if (!rawUrl && !rawFileKey) throw createError('URL do anexo é obrigatória', 400);
 
-      const targetUrl = rawUrl.startsWith('/')
-        ? `${req.protocol}://${req.get('host')}${rawUrl}`
-        : rawUrl;
-
-      const upstream = await fetch(targetUrl);
-      if (!upstream.ok) {
-        throw createError(`Não foi possível baixar o anexo (${upstream.status})`, 400);
-      }
-
-      const contentType = upstream.headers.get('content-type') || 'application/octet-stream';
       const fallbackNameFromUrl = (() => {
+        if (!rawUrl) return 'anexo';
         try {
-          const parsed = new URL(targetUrl);
+          const parsed = new URL(rawUrl.startsWith('/') ? `http://local${rawUrl}` : rawUrl);
           const last = parsed.pathname.split('/').filter(Boolean).pop();
           return last || 'anexo';
         } catch {
@@ -642,10 +744,19 @@ export class ChatController {
         String(req.query.fileName || fallbackNameFromUrl)
       );
 
-      const data = Buffer.from(await upstream.arrayBuffer());
-      res.setHeader('Content-Type', contentType);
+      const stored = await readFuelStoredPhoto({
+        fileUrl: rawUrl || undefined,
+        fileKey: rawFileKey || undefined,
+        fileName,
+      });
+
+      if (!stored) {
+        throw createError('Não foi possível baixar o anexo', 404);
+      }
+
+      res.setHeader('Content-Type', stored.contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-      res.status(200).send(data);
+      res.status(200).send(stored.buffer);
     } catch (error: any) {
       next(error);
     }
@@ -821,6 +932,100 @@ export class ChatController {
       const { id } = req.params;
       const chat = await chatService.removeGroupAvatar(id, userId);
       res.json({ success: true, message: 'Foto removida', data: chat });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Lista tópicos de uma conversa */
+  async listChatTopics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+      const { chatId } = req.params;
+      const topics = await chatService.listChatTopics(chatId, userId);
+      const canDeleteTopics = chatService.canDeleteChatTopics(req.user?.email ?? '');
+      res.json({ success: true, data: topics, canDeleteTopics });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Cria um tópico na conversa */
+  async createChatTopic(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+      const { chatId } = req.params;
+      const title = typeof req.body.title === 'string' ? req.body.title : '';
+      const initialMessage =
+        typeof req.body.initialMessage === 'string' ? req.body.initialMessage : undefined;
+      const topic = await chatService.createChatTopic(chatId, userId, title, initialMessage);
+      res.status(201).json({ success: true, data: topic });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Fixa ou desfixa um tópico */
+  async setChatTopicPinned(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+      const { chatId, topicId } = req.params;
+      const isPinned = Boolean(req.body?.isPinned);
+      const topic = await chatService.setChatTopicPinned(chatId, topicId, userId, isPinned);
+      res.json({ success: true, data: topic });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Reordena tópicos fixados e/ou não fixados */
+  async reorderChatTopics(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+      const { chatId } = req.params;
+      const pinnedIds = Array.isArray(req.body?.pinnedIds)
+        ? req.body.pinnedIds.map(String)
+        : undefined;
+      const unpinnedIds = Array.isArray(req.body?.unpinnedIds)
+        ? req.body.unpinnedIds.map(String)
+        : undefined;
+      const topics = await chatService.reorderChatTopics(chatId, userId, {
+        pinnedIds,
+        unpinnedIds
+      });
+      res.json({ success: true, data: topics });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Renomeia um tópico */
+  async renameChatTopic(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) throw createError('Usuário não autenticado', 401);
+      const { chatId, topicId } = req.params;
+      const title = typeof req.body.title === 'string' ? req.body.title : '';
+      const topic = await chatService.renameChatTopic(chatId, topicId, userId, title);
+      res.json({ success: true, data: topic });
+    } catch (error: any) {
+      next(error);
+    }
+  }
+
+  /** Exclui um tópico (apenas usuários autorizados) */
+  async deleteChatTopic(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user?.id;
+      const userEmail = req.user?.email;
+      if (!userId || !userEmail) throw createError('Usuário não autenticado', 401);
+      const { chatId, topicId } = req.params;
+      await chatService.deleteChatTopic(chatId, topicId, userId, userEmail);
+      res.json({ success: true, message: 'Tópico excluído' });
     } catch (error: any) {
       next(error);
     }

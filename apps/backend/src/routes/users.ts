@@ -1,7 +1,9 @@
 import express from 'express';
 import { pathToModuleKey, PERMISSION_ACCESS_ACTION } from '@sistema-ponto/permission-modules';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { requireEmployeesModuleAccess } from '../middleware/permissionAuth';
 import { UserController } from '../controllers/UserController';
+import { UserActivityController } from '../controllers/UserActivityController';
 import { getBirthdayEmployees } from '../controllers/EmployeeController';
 import { importEmployees, importEmployeesPreview, importEmployeesBulk } from '../controllers/EmployeeImportController';
 import { uploadImport, handleUploadError } from '../middleware/upload';
@@ -11,6 +13,7 @@ import { Response, NextFunction } from 'express';
 
 const router = express.Router();
 const userController = new UserController();
+const userActivityController = new UserActivityController();
 const CHANGE_EMPLOYEE_PASSWORD_MODULE_KEY = pathToModuleKey('/ponto/controle/alterar-senha-funcionarios');
 
 // Todas as rotas precisam de autenticação
@@ -20,28 +23,29 @@ router.use(authenticate);
 router.get('/birthdays', authorize('EMPLOYEE'), getBirthdayEmployees);
 
 // Rota para preview/validação de importação (DEVE vir antes de /:id)
-router.post('/import/preview', authorize('EMPLOYEE'), uploadImport.single('file'), handleUploadError, importEmployeesPreview);
+router.post('/import/preview', requireEmployeesModuleAccess, uploadImport.single('file'), handleUploadError, importEmployeesPreview);
 
 // Rota para importação em massa a partir de dados processados (DEVE vir antes de /:id)
-router.post('/import/bulk', authorize('EMPLOYEE'), importEmployeesBulk);
+router.post('/import/bulk', requireEmployeesModuleAccess, importEmployeesBulk);
 
 // Rota para importação em massa (DEVE vir antes de /:id)
-router.post('/import', authorize('EMPLOYEE'), uploadImport.single('file'), handleUploadError, importEmployees);
+router.post('/import', requireEmployeesModuleAccess, uploadImport.single('file'), handleUploadError, importEmployees);
 
 // Rota para verificar se CPF existe (DEVE vir antes de /:id)
-router.get('/check-cpf', authorize('EMPLOYEE'), userController.checkCpfExists);
+router.get('/check-cpf', requireEmployeesModuleAccess, userController.checkCpfExists);
 
 // Rota para verificar se email existe (DEVE vir antes de /:id)
-router.get('/check-email', authorize('EMPLOYEE'), userController.checkEmailExists);
+router.get('/check-email', requireEmployeesModuleAccess, userController.checkEmailExists);
 
-// Rotas para funcionários - agora todos têm acesso
-router.get('/', authorize('EMPLOYEE'), userController.getAllUsers);
+// Rotas para funcionários — exige permissão no módulo Funcionários
+router.get('/', requireEmployeesModuleAccess, userController.getAllUsers);
 router.get('/me/employee', userController.getMyEmployeeData);
 router.put('/me/employee', userController.updateMyEmployeeData);
-router.post('/', authorize('EMPLOYEE'), userController.createUser);
+router.post('/me/page-view', userActivityController.recordPageView);
+router.post('/', requireEmployeesModuleAccess, userController.createUser);
 
 // Rotas para funcionários
-router.get('/department/:department', authorize('EMPLOYEE'), userController.getUsersByDepartment);
+router.get('/department/:department', requireEmployeesModuleAccess, userController.getUsersByDepartment);
 
 // Rotas com parâmetros (DEVEM vir por último)
 router.put(
@@ -75,8 +79,14 @@ router.put(
   },
   userController.updateUserPassword
 );
-router.get('/:id', authorize('EMPLOYEE'), userController.getUserById);
-router.put('/:id', authorize('EMPLOYEE'), userController.updateUser);
-router.delete('/:id', authorize('EMPLOYEE'), userController.deleteUser);
+router.get(
+  '/:id/activity/insights',
+  requireEmployeesModuleAccess,
+  userActivityController.getUserActivityInsights.bind(userActivityController)
+);
+router.get('/:id/activity', requireEmployeesModuleAccess, userActivityController.getUserActivity);
+router.get('/:id', requireEmployeesModuleAccess, userController.getUserById);
+router.put('/:id', requireEmployeesModuleAccess, userController.updateUser);
+router.delete('/:id', requireEmployeesModuleAccess, userController.deleteUser);
 
 export default router;

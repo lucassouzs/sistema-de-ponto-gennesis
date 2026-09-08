@@ -25,6 +25,26 @@ router.get('/overview', (req, res, next) =>
   contractController.getOverview(req, res, next)
 );
 
+router.get('/gastos-operacionais', (req, res, next) =>
+  contractController.getGastosOperacionais(req, res, next)
+);
+
+router.get('/gastos-operacionais/naturezas-config', (req, res, next) =>
+  contractController.getGastosOperacionaisNaturezasConfig(req, res, next)
+);
+
+router.put('/gastos-operacionais/naturezas-config', (req, res, next) =>
+  contractController.putGastosOperacionaisNaturezasConfig(req, res, next)
+);
+
+router.get('/gastos-operacionais/natureza-solicitacoes', (req, res, next) =>
+  contractController.getGastosOperacionaisNaturezaSolicitacoes(req, res, next)
+);
+
+router.get('/sheets-financial-summary', (req, res, next) =>
+  contractController.getSheetsFinancialSummary(req, res, next)
+);
+
 router.post('/', (req, res, next) =>
   contractController.createContract(req, res, next)
 );
@@ -69,6 +89,10 @@ router.get('/:contractId/annual-values', (req, res, next) =>
 router.put('/:contractId/annual-values/:year', (req, res, next) =>
   annualValueController.setAnnualValue(req, res, next)
 );
+router.get('/:contractId/totvs-total-pago', (req, res, next) =>
+  contractController.getTotvsTotalPago(req, res, next)
+);
+
 router.get('/:contractId/addenda', (req, res, next) =>
   addendumController.listByContract(req, res, next)
 );

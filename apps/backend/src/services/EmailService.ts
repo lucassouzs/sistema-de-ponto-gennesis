@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import { APP_NAME } from '../lib/appBranding';
 
 interface EmailOptions {
   to: string;
@@ -197,7 +198,7 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(email: string, name: string, resetToken: string, resetUrl: string): Promise<void> {
-    const subject = 'Redefinição de Senha - Gennesis Attendance';
+    const subject = `Redefinição de Senha - ${APP_NAME}`;
     const html = `
       <!DOCTYPE html>
       <html>
@@ -210,7 +211,7 @@ class EmailService {
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
           <h1 style="color: #dc2626; margin-top: 0;">Redefinição de Senha</h1>
           <p>Olá, <strong>${name}</strong>!</p>
-          <p>Recebemos uma solicitação para redefinir a senha da sua conta no sistema Gennesis Engenharia.</p>
+          <p>Recebemos uma solicitação para redefinir a senha da sua conta no ${APP_NAME}.</p>
           <p>Para redefinir sua senha, clique no botão abaixo:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${resetUrl}" style="background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Redefinir Senha</a>
@@ -222,7 +223,7 @@ class EmailService {
           <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
           <p style="font-size: 12px; color: #6b7280; margin: 0;">
             Este é um email automático, por favor não responda.<br>
-            Gennesis Engenharia
+            ${APP_NAME} — Gennesis Engenharia
           </p>
         </div>
       </body>

@@ -191,7 +191,21 @@ export class PaymentConditionController {
       const { id } = req.params;
       const row = await prisma.paymentCondition.findUnique({ where: { id } });
       if (!row) throw createError('Condição não encontrada', 404);
-      if (row.isSystem) throw createError('Condição padrão do sistema não pode ser excluída', 400);
+      if (row.isSystem) {
+        throw createError('Condição padrão do sistema não pode ser excluída', 400);
+      }
+
+      const [ocCount, mapCount] = await Promise.all([
+        prisma.purchaseOrder.count({ where: { paymentCondition: row.code } }),
+        prisma.quoteMapSupplier.count({ where: { paymentCondition: row.code } })
+      ]);
+      if (ocCount > 0 || mapCount > 0) {
+        throw createError(
+          'Esta condição está em uso em ordens de compra ou mapas de cotação e não pode ser excluída',
+          400
+        );
+      }
+
       await prisma.paymentCondition.delete({ where: { id } });
       res.json({ success: true, message: 'Condição excluída' });
     } catch (error) {

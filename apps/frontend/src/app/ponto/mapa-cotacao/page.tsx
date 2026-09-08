@@ -1,44 +1,98 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { FileSpreadsheet, FileText, Plus, Search, Truck, Upload, X } from 'lucide-react';
+import { FileSpreadsheet, RotateCcw, Truck, Wrench, X } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
+import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { PaymentConditionSelect } from '@/components/oc/PaymentConditionSelect';
-import { materialItemLabel, materialItemSubtitle } from '../gerenciar-materiais/_lib/display';
+import { PaymentConditionSelect, type PaymentConditionRow } from '@/components/oc/PaymentConditionSelect';
+import { OC_PIX_KEY_TYPE_OPTIONS } from '@/components/oc/OcPurchaseOrderFormFields';
+import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
+import {
+  FinancialControlAttachmentsField,
+  uploadNamedAttachments,
+} from '@/components/financeiro/FinancialControlAttachmentsField';
+import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
+import { cadastroListClasses } from '@/components/ui/RowActionMenu';
+import { getListTableRowClassName } from '@/components/ui/listTableUi';
+import {
+  formatUnitPriceBr,
+  maskCurrencyInputBrOrEmpty,
+  maskUnitPriceInputBr,
+  parseUnitPriceInputBr,
+} from '@/lib/maskCurrencyBr';
+import {
+  materialItemLabel,
+  materialProductCode,
+  rmContractDisplay,
+  rmOsDisplay,
+  rmSolicitante,
+} from '../gerenciar-materiais/_lib/display';
+import { formatRmListDisplayId } from '../gerenciar-materiais/_lib/rmListDisplay';
+import type { MaterialRequest as MaterialRequestBase } from '../gerenciar-materiais/_lib/types';
+import {
+  getCoveredRmItemIds,
+  getRmItemCoverageCounts,
+  rmHasOpenItemsForProcurement,
+} from '@/lib/rmProcurementCoverage';
+import { buildSupplierPaymentPrefill } from '@/lib/supplierPaymentPrefill';
 
 type MaterialRequestItem = {
   id: string;
+  status?: string | null;
   quantity: number;
   unit: string;
   observation?: string;
   notes?: string;
+  /** Referência da RM (quanto deveria pagar) — só exibição no mapa, não vai pra OC. */
+  unitPrice?: number | null;
+  totalPrice?: number | null;
+  avgPaidUnitPrice?: number | null;
   material: {
     id: string;
     name?: string | null;
     code?: string;
     sinapiCode?: string | null;
     description?: string;
+    avgPaidUnitPrice?: number | null;
   };
 };
 
-type MaterialRequest = {
-  id: string;
-  requestNumber?: string;
-  createdAt: string;
+function itemAvgPaidUnitPrice(item: MaterialRequestItem): number | null {
+  const raw = item.avgPaidUnitPrice ?? item.material?.avgPaidUnitPrice ?? null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100) / 100;
+}
+
+/** Valor unitário de referência da RM (média como padrão; pode ter sido alterado na solicitação). */
+function itemReferenceUnitPrice(item: MaterialRequestItem): number | null {
+  if (item.unitPrice != null && item.unitPrice !== undefined) {
+    const fromRm = Number(item.unitPrice);
+    if (Number.isFinite(fromRm) && fromRm >= 0) return Math.round(fromRm * 100) / 100;
+  }
+  return itemAvgPaidUnitPrice(item);
+}
+
+type MaterialRequest = MaterialRequestBase & {
   status: 'APPROVED' | string;
   items: MaterialRequestItem[];
 };
 
 type PurchaseOrderLite = {
+  status: string;
   materialRequestId?: string;
   materialRequest?: { id?: string };
+  supplierId?: string;
+  supplier?: { id?: string };
+  items?: Array<{ materialRequestItemId?: string | null }>;
 };
 
 type Supplier = {
@@ -46,6 +100,13 @@ type Supplier = {
   code: string;
   name: string;
   isActive: boolean;
+  bank?: string | null;
+  agency?: string | null;
+  account?: string | null;
+  accountDigit?: string | null;
+  pixKeyType?: string | null;
+  pixKey?: string | null;
+  tradeName?: string | null;
 };
 
 type PurchaseOrderCreateInput = {
@@ -69,43 +130,20 @@ type PurchaseOrderCreateInput = {
 };
 
 function parseCurrencyBR(input: string): number | null {
-  const t = input.trim().replace(/\s/g, '');
-  if (!t) return null;
+  return parseUnitPriceInputBr(input);
+}
 
-  // Aceita formatos:
-  // - BR: 1.234,56 (ponto milhar + vírgula decimal)
-  // - ou número puro: 1234,56
-  // - ou padrão americano: 1234.56 (ponto decimal)
-  const hasComma = t.includes(',');
-  const hasDot = t.includes('.');
-
-  let normalized = t;
-  if (hasComma && hasDot) {
-    // Ex: 1.234,56
-    normalized = t.replace(/\./g, '').replace(',', '.');
-  } else if (hasComma) {
-    // Ex: 1234,56
-    normalized = t.replace(',', '.');
-  } else if (hasDot) {
-    const parts = t.split('.');
-    // Ex: 1234.56 (1 ponto e até 2 casas decimais) => ponto é decimal
-    if (parts.length === 2 && parts[1].length <= 2) {
-      normalized = t;
-    } else {
-      // Ex: 1.234.567 (pontos como milhar)
-      normalized = t.replace(/\./g, '');
-    }
-  }
-
-  // remove qualquer caractere estranho e garante formato numérico
-  normalized = normalized.replace(/[^0-9.-]/g, '');
-
-  const n = parseFloat(normalized);
-  return Number.isFinite(n) ? n : null;
+function parseMapUnitPrice(input: string): number | null {
+  return parseUnitPriceInputBr(input);
 }
 
 function formatCurrencyBR(v: number): string {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+}
+
+/** Preço unitário da cotação: até 5 casas (ex. R$ 0,03230). */
+function formatMapUnitPriceBR(v: number): string {
+  return formatUnitPriceBr(v);
 }
 
 function formatDateTimeBR(dateString: string) {
@@ -116,12 +154,371 @@ function formatDateTimeBR(dateString: string) {
   });
 }
 
+const mapFieldCls =
+  'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm tabular-nums text-gray-900 placeholder:text-gray-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100';
+
+const mapClickDisplayCls =
+  'mx-auto inline-flex h-8 min-w-[4.5rem] max-w-[8rem] items-center justify-center rounded-lg px-2 text-center text-sm font-medium tabular-nums text-gray-900 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-gray-100 dark:hover:bg-gray-700/60';
+
+const mapClickInputCls = `${mapFieldCls} mx-auto block max-w-[9.5rem] text-center`;
+
+function MapFreightCell({
+  value,
+  onChange,
+  ariaLabel,
+  borderClassName = '',
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  ariaLabel: string;
+  borderClassName?: string;
+}) {
+  const amount = parseMapUnitPrice(value);
+  const isEmpty = amount == null;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const showInput = isEmpty || editing;
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing]);
+
+  const commit = (next = draft) => {
+    onChange(next);
+    setEditing(false);
+  };
+
+  const fillCls =
+    'absolute inset-0 flex flex-col items-center justify-center px-2 bg-transparent';
+
+  return (
+    <td className={`relative h-px p-0 align-middle ${borderClassName}`}>
+      {showInput ? (
+        <div className={fillCls}>
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="numeric"
+            aria-label={ariaLabel}
+            value={draft}
+            placeholder="R$ 0,00"
+            onChange={(e) => setDraft(maskCurrencyInputBrOrEmpty(e.target.value))}
+            onBlur={() => commit()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setDraft(value);
+                setEditing(false);
+              }
+            }}
+            className={mapClickInputCls}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className={`${fillCls} text-sm font-medium tabular-nums text-gray-900 transition-colors hover:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500 dark:text-gray-100 dark:hover:bg-gray-700/40`}
+          aria-label={ariaLabel}
+          title="Clique para editar"
+        >
+          {formatCurrencyBR(amount!)}
+        </button>
+      )}
+    </td>
+  );
+}
+
+function MapSupplierPriceCell({
+  value,
+  onChange,
+  ariaLabel,
+  isWinner,
+  quantity,
+  borderClassName = '',
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  ariaLabel: string;
+  isWinner: boolean;
+  quantity: number;
+  borderClassName?: string;
+}) {
+  const unitPrice = parseMapUnitPrice(value);
+  const isEmpty = unitPrice == null;
+  const itemTotal = unitPrice == null ? null : unitPrice * quantity;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const showInput = isEmpty || editing;
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (!showInput) return;
+    if (!editing && isEmpty) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing, showInput, isEmpty]);
+
+  const commit = (next = draft) => {
+    const parsed = parseMapUnitPrice(next);
+    onChange(parsed == null ? '' : formatMapUnitPriceBR(parsed));
+    setEditing(false);
+  };
+
+  const totalCls = isWinner
+    ? 'text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400/90'
+    : 'text-xs tabular-nums text-gray-500 dark:text-gray-400';
+  const unitCls = isWinner
+    ? 'text-sm font-medium tabular-nums text-green-700 dark:text-green-300'
+    : 'text-sm font-medium tabular-nums text-gray-900 dark:text-gray-100';
+  const fillCls = `absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 ${
+    isWinner ? 'bg-green-50 dark:bg-green-950/35' : 'bg-transparent'
+  }`;
+
+  return (
+    <td
+      className={`relative h-px p-0 align-middle ${borderClassName} ${
+        isWinner ? 'bg-green-50 dark:bg-green-950/35' : ''
+      }`}
+    >
+      {showInput ? (
+        <div className={fillCls}>
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="decimal"
+            aria-label={ariaLabel}
+            value={draft}
+            placeholder="R$ 0,00"
+            onChange={(e) => setDraft(maskUnitPriceInputBr(e.target.value))}
+            onBlur={() => commit()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commit();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setDraft(value);
+                setEditing(false);
+              }
+            }}
+            className={`${mapClickInputCls} ${
+              isWinner
+                ? 'border-green-300 text-green-800 dark:border-green-700 dark:text-green-200'
+                : ''
+            }`}
+          />
+          {(() => {
+            const draftPrice = parseMapUnitPrice(draft);
+            if (draftPrice == null) return null;
+            return (
+              <p className={totalCls}>{formatCurrencyBR(draftPrice * quantity)}</p>
+            );
+          })()}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            const n = parseMapUnitPrice(value);
+            setDraft(n == null ? '' : maskUnitPriceInputBr(formatMapUnitPriceBR(n)));
+            setEditing(true);
+          }}
+          className={`${fillCls} transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500 ${
+            isWinner
+              ? 'hover:bg-green-100/60 dark:hover:bg-green-900/40'
+              : 'hover:bg-gray-50 dark:hover:bg-gray-700/40'
+          }`}
+          aria-label={ariaLabel}
+          title="Clique para editar"
+        >
+          <span className={unitCls}>
+            {unitPrice == null ? '—' : formatMapUnitPriceBR(unitPrice)}
+          </span>
+          <span className={totalCls}>
+            {itemTotal == null ? '—' : formatCurrencyBR(itemTotal)}
+          </span>
+        </button>
+      )}
+    </td>
+  );
+}
+
+function MapClickToEditNumber({
+  value,
+  min,
+  max,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+  ariaLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (!editing) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing]);
+
+  const commit = () => {
+    const n = parseFloat(draft.replace(',', '.'));
+    if (!Number.isNaN(n)) {
+      onChange(Math.min(Math.max(n, min), max));
+    }
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className={mapClickDisplayCls}
+        aria-label={ariaLabel}
+        title="Clique para editar"
+      >
+        {value}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="number"
+      min={min}
+      max={max}
+      step="any"
+      aria-label={ariaLabel}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          setDraft(String(value));
+          setEditing(false);
+        }
+      }}
+      className={`${mapClickInputCls} [appearance:textfield] [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+    />
+  );
+}
+
+const mapPaymentSegmentCls = (active: boolean) =>
+  `w-full rounded-lg border px-3 py-2.5 text-center text-sm font-medium transition-colors focus:outline-none ${
+    active
+      ? 'border-red-600 bg-red-50 text-red-800 dark:border-red-500 dark:bg-red-950/40 dark:text-red-200'
+      : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700/80'
+  }`;
+
+const mapLabelCls = 'mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300';
+
 const OC_TYPE_AVISTA = 'AVISTA';
 const OC_TYPE_BOLETO = 'BOLETO';
+const OC_TYPE_CARTAO = 'CARTAO';
 
 function paymentConditionDefault(paymentType: string): string {
-  if (paymentType === OC_TYPE_AVISTA) return 'AVISTA';
+  if (paymentType === OC_TYPE_AVISTA || paymentType === OC_TYPE_CARTAO) return 'AVISTA';
   return 'BOLETO_30';
+}
+
+function maskCpfInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+}
+
+function maskCnpjInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 14);
+  return digits
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+/** Celular BR: (DD) 9XXXX-XXXX */
+function maskCelularInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+  if (digits.length <= 7) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function maskPixKeyByType(pixKeyType: string, raw: string): string {
+  const type = pixKeyType.trim().toUpperCase();
+  if (type === 'CPF') return maskCpfInput(raw);
+  if (type === 'CNPJ') return maskCnpjInput(raw);
+  if (type === 'CELULAR') return maskCelularInput(raw);
+  return raw;
+}
+
+function pixKeyInputPlaceholder(pixKeyType: string): string {
+  const type = pixKeyType.trim().toUpperCase();
+  if (type === 'CPF') return '000.000.000-00';
+  if (type === 'CNPJ') return '00.000.000/0001-00';
+  if (type === 'CELULAR') return '(00) 90000-0000';
+  return 'Informe a chave PIX';
+}
+
+function pixKeyInputMaxLength(pixKeyType: string): number | undefined {
+  const type = pixKeyType.trim().toUpperCase();
+  if (type === 'CPF') return 14;
+  if (type === 'CNPJ') return 18;
+  if (type === 'CELULAR') return 15;
+  return undefined;
+}
+
+function emptyPaymentDraft() {
+  return {
+    paymentType: OC_TYPE_AVISTA,
+    paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
+    paymentDetails: '',
+    pixKeyType: '',
+    pixKey: '',
+    observations: '',
+    amountToPayStr: '',
+    attachments: [] as Array<{ url: string; name: string }>,
+  };
 }
 
 function scoreItem(params: {
@@ -138,17 +535,23 @@ export default function MapaCotacaoPage() {
   const queryClient = useQueryClient();
 
   const [selectedRequestId, setSelectedRequestId] = useState<string>('');
-  const [supplierSearch, setSupplierSearch] = useState('');
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<string>>(new Set());
   const [freightBySupplier, setFreightBySupplier] = useState<Record<string, string>>({});
   const [unitPriceBySupplierItem, setUnitPriceBySupplierItem] = useState<Record<string, string>>({});
 
   const [quoteMapId, setQuoteMapId] = useState<string>('');
+  const [showCorrectionConfirm, setShowCorrectionConfirm] = useState(false);
+  const [correctionNote, setCorrectionNote] = useState('');
 
-  const [generateSupplierIds, setGenerateSupplierIds] = useState<Set<string>>(new Set());
+  const [ocModalSupplierId, setOcModalSupplierId] = useState<string | null>(null);
+  /** Fornecedores cuja OC acabou de ser gerada nesta sessão (antes do refetch das OCs) */
+  const [generatedOcSupplierIds, setGeneratedOcSupplierIds] = useState<Set<string>>(new Set());
 
   /** Quantidade a comprar na OC por item da SC (≤ solicitado na SC). Afeta totais e vencedor. */
   const [ocItemQtyByItemId, setOcItemQtyByItemId] = useState<Record<string, number>>({});
+
+  /** Nome/detalhe do item para o fornecedor (`supplierId:itemId`). Vai para notes do item da OC. */
+  const [supplierItemDetailByKey, setSupplierItemDetailByKey] = useState<Record<string, string>>({});
 
   const [paymentDraftBySupplier, setPaymentDraftBySupplier] = useState<
     Record<
@@ -157,11 +560,15 @@ export default function MapaCotacaoPage() {
         paymentType: string;
         paymentCondition: string;
         paymentDetails: string;
+        pixKeyType: string;
+        pixKey: string;
         observations: string;
         amountToPayStr: string;
+        attachments: Array<{ url: string; name: string }>;
       }
     >
   >({});
+  const [uploadingOcAttachments, setUploadingOcAttachments] = useState(false);
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -174,47 +581,157 @@ export default function MapaCotacaoPage() {
   const { data: requestsData, isLoading: loadingRequests } = useQuery({
     queryKey: ['material-requests-approved-map'],
     queryFn: async () => {
-      const res = await api.get('/material-requests', { params: { status: 'APPROVED', limit: 500 } });
+      const res = await api.get('/material-requests', {
+        params: { status: 'APPROVED', limit: 200, summary: '1' },
+      });
       return res.data;
-    }
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: ordersData, isLoading: loadingOrders } = useQuery({
-    queryKey: ['purchase-orders', 'list-full'],
+  const { data: ordersData } = useQuery({
+    queryKey: ['purchase-orders', 'list-summary'],
     queryFn: async () => {
-      const res = await api.get('/purchase-orders', { params: { limit: 500 } });
+      const res = await api.get('/purchase-orders', { params: { limit: 500, summary: '1' } });
       return res.data;
+    },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: boletoPaymentConditions } = useQuery({
+    queryKey: ['payment-conditions', 'BOLETO'],
+    queryFn: async () => {
+      const res = await api.get('/payment-conditions', {
+        params: { paymentType: 'BOLETO', activeOnly: 'true' }
+      });
+      return (res.data?.data || []) as PaymentConditionRow[];
     }
   });
 
   const allOrders: PurchaseOrderLite[] = ordersData?.data || [];
 
-  /** Mesma regra da aba "RMs aprovadas" em Gerenciar materiais: aprovadas e ainda sem OC */
-  const materialRequestIdsWithOc = useMemo(() => {
-    const s = new Set<string>();
+  const rawApprovedRequestsForCoverage: MaterialRequest[] =
+    requestsData?.data?.requests || requestsData?.data || [];
+
+  /** RMs cujos itens já estão todos cobertos por OC ativa (não entram no seletor). */
+  const materialRequestIdsFullyCovered = useMemo(() => {
+    const ordersByRm = new Map<string, PurchaseOrderLite[]>();
     for (const o of allOrders) {
       const mid = o.materialRequestId ?? o.materialRequest?.id;
-      if (mid) s.add(mid);
+      if (!mid) continue;
+      const list = ordersByRm.get(mid) ?? [];
+      list.push(o);
+      ordersByRm.set(mid, list);
+    }
+    const s = new Set<string>();
+    for (const r of rawApprovedRequestsForCoverage) {
+      if (r.status !== 'APPROVED') continue;
+      const orders = ordersByRm.get(r.id) ?? [];
+      if (!rmHasOpenItemsForProcurement(r, orders)) s.add(r.id);
     }
     return s;
-  }, [allOrders]);
+  }, [allOrders, rawApprovedRequestsForCoverage]);
 
-  const rawApprovedRequests: MaterialRequest[] = requestsData?.data?.requests || requestsData?.data || [];
+  const rawApprovedRequests: MaterialRequest[] = rawApprovedRequestsForCoverage;
 
+  /**
+   * Lista elegível: RMs aprovadas com itens ainda sem OC ativa.
+   * Mantém a RM selecionada mesmo após a 1ª OC, para permitir gerar OC dos demais fornecedores vencedores.
+   */
   const approvedRequests = useMemo(
     () =>
       rawApprovedRequests.filter(
-        (r) => r.status === 'APPROVED' && !materialRequestIdsWithOc.has(r.id)
+        (r) =>
+          r.status === 'APPROVED' &&
+          (r.id === selectedRequestId || !materialRequestIdsFullyCovered.has(r.id))
       ),
-    [rawApprovedRequests, materialRequestIdsWithOc]
+    [rawApprovedRequests, materialRequestIdsFullyCovered, selectedRequestId]
   );
 
-  const { data: suppliersData, isLoading: loadingSuppliers } = useQuery({
+  const materialRequestOptions = useMemo(() => {
+    const ordersByRm = new Map<string, PurchaseOrderLite[]>();
+    for (const o of allOrders) {
+      const mid = o.materialRequestId ?? o.materialRequest?.id;
+      if (!mid) continue;
+      const list = ordersByRm.get(mid) ?? [];
+      list.push(o);
+      ordersByRm.set(mid, list);
+    }
+
+    return approvedRequests.map((r) => {
+      const rm = formatRmListDisplayId(r.requestNumber) || r.id.slice(0, 8);
+      const os = rmOsDisplay(r);
+      const contract = rmContractDisplay(r);
+      const solicitante = rmSolicitante(r)?.name?.trim() || '';
+      const costCenter = r.costCenter?.name?.trim() || '';
+      const date = r.createdAt ? formatDateTimeBR(r.createdAt) : '';
+      const orders = ordersByRm.get(r.id) ?? [];
+      const counts = getRmItemCoverageCounts(
+        {
+          id: r.id,
+          status: String(r.status || ''),
+          items: r.items,
+          _count: (r as unknown as { _count?: { items?: number } })._count,
+        },
+        orders
+      );
+      const { total: totalCount, pending: pendingCount, cancelled: cancelledCount } = counts;
+
+      let qtyText: string | null = null;
+      if (totalCount != null && pendingCount != null) {
+        if (pendingCount > 0) {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${pendingCount} pendente${
+            pendingCount === 1 ? '' : 's'
+          }`;
+        } else if (cancelledCount != null && cancelledCount > 0) {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'} · ${cancelledCount} cancelado${
+            cancelledCount === 1 ? '' : 's'
+          }`;
+        } else {
+          qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'}`;
+        }
+      } else if (pendingCount != null && pendingCount > 0) {
+        qtyText = `${pendingCount} ${pendingCount === 1 ? 'item pendente' : 'itens pendentes'}`;
+      } else if (cancelledCount != null && cancelledCount > 0) {
+        qtyText = `${cancelledCount} ${cancelledCount === 1 ? 'item cancelado' : 'itens cancelados'}`;
+      } else if (totalCount != null) {
+        qtyText = `${totalCount} ${totalCount === 1 ? 'item' : 'itens'}`;
+      }
+      const peopleDateLine = [solicitante || null, date || null]
+        .filter(Boolean)
+        .join(' - ');
+
+      return {
+        value: r.id,
+        label: contract !== '—' ? `RM ${rm} - ${contract}` : `RM ${rm}`,
+        description:
+          [qtyText, peopleDateLine || null].filter(Boolean).join('\n') || undefined,
+        searchText: [
+          rm,
+          os,
+          contract,
+          solicitante,
+          costCenter,
+          date,
+          r.description,
+          r.id,
+        ]
+          .filter(Boolean)
+          .join(' '),
+      };
+    });
+  }, [approvedRequests, allOrders]);
+
+  const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-map'],
     queryFn: async () => {
       const res = await api.get('/suppliers', { params: { limit: 500 } });
       return res.data;
-    }
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const suppliers: Supplier[] = useMemo(
@@ -222,23 +739,60 @@ export default function MapaCotacaoPage() {
     [suppliersData?.data]
   );
 
-  const filteredSuppliers = useMemo(() => {
-    const q = supplierSearch.trim().toLowerCase();
-    if (!q) return suppliers;
-    return suppliers.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.code && s.code.toLowerCase().includes(q))
+  const supplierOptions = useMemo(
+    () =>
+      suppliers.map((s) => ({
+        value: s.id,
+        label: s.code ? `${s.code} - ${s.name}` : s.name,
+        searchText: `${s.code ?? ''} ${s.name}`,
+      })),
+    [suppliers]
+  );
+
+  const { data: selectedRequestFull, isLoading: loadingSelectedRequest } = useQuery({
+    queryKey: ['material-request-detail', selectedRequestId],
+    queryFn: async () => {
+      const res = await api.get(`/material-requests/${selectedRequestId}`);
+      return (res.data?.data ?? res.data) as MaterialRequest;
+    },
+    enabled: !!selectedRequestId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const selectedRequestRaw =
+    selectedRequestFull?.id === selectedRequestId ? selectedRequestFull : null;
+
+  const coveredItemIdsForSelected = useMemo(() => {
+    if (!selectedRequestId) return new Set<string>();
+    const orders = allOrders.filter(
+      (o) => (o.materialRequestId ?? o.materialRequest?.id) === selectedRequestId
     );
-  }, [suppliers, supplierSearch]);
+    const summaryRequest = rawApprovedRequestsForCoverage.find((r) => r.id === selectedRequestId);
+    const requestForCoverage = selectedRequestRaw ?? summaryRequest;
+    if (!requestForCoverage) {
+      return getCoveredRmItemIds({ id: selectedRequestId, status: 'APPROVED' }, orders);
+    }
+    return getCoveredRmItemIds(
+      {
+        id: requestForCoverage.id,
+        status: String(requestForCoverage.status || ''),
+        items: requestForCoverage.items,
+        _count: (requestForCoverage as { _count?: { items?: number } })._count,
+        purchaseOrders: (requestForCoverage as { purchaseOrders?: PurchaseOrderLite[] }).purchaseOrders,
+      },
+      orders
+    );
+  }, [allOrders, selectedRequestId, selectedRequestRaw, rawApprovedRequestsForCoverage]);
 
-  const selectedSuppliersOrdered = useMemo(() => {
-    return suppliers
-      .filter((s) => selectedSupplierIds.has(s.id))
-      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  }, [suppliers, selectedSupplierIds]);
-
-  const selectedRequest = approvedRequests.find((r) => r.id === selectedRequestId) || null;
+  /** Itens ainda sem OC ativa — mapa de cotação só trabalha com estes. */
+  const selectedRequest = useMemo(() => {
+    if (!selectedRequestRaw) return null;
+    const openItems = (selectedRequestRaw.items ?? []).filter(
+      (i) => !coveredItemIdsForSelected.has(i.id) && i.status !== 'CANCELLED'
+    );
+    return { ...selectedRequestRaw, items: openItems };
+  }, [selectedRequestRaw, coveredItemIdsForSelected]);
 
   useEffect(() => {
     if (!selectedRequestId) return;
@@ -258,7 +812,7 @@ export default function MapaCotacaoPage() {
       return;
     }
     setOcItemQtyByItemId(
-      Object.fromEntries(selectedRequest.items.map((i) => [i.id, Number(i.quantity)]))
+      Object.fromEntries((selectedRequest.items ?? []).map((i) => [i.id, Number(i.quantity)]))
     );
   }, [selectedRequest?.id]);
 
@@ -266,12 +820,27 @@ export default function MapaCotacaoPage() {
   useEffect(() => {
     if (!selectedRequestId) return;
     setSelectedSupplierIds(new Set());
-    setGenerateSupplierIds(new Set());
     setFreightBySupplier({});
     setUnitPriceBySupplierItem({});
+    setSupplierItemDetailByKey({});
     setPaymentDraftBySupplier({});
-    setSupplierSearch('');
+    setOcModalSupplierId(null);
+    setGeneratedOcSupplierIds(new Set());
   }, [selectedRequestId]);
+
+  /** Se a cobertura mudou (ex.: item devolvido à RM), libera gerar OC de novo para o fornecedor. */
+  const openItemIdsKey = useMemo(
+    () =>
+      (selectedRequest?.items ?? [])
+        .map((i) => i.id)
+        .sort()
+        .join(','),
+    [selectedRequest?.items]
+  );
+
+  useEffect(() => {
+    setGeneratedOcSupplierIds(new Set());
+  }, [openItemIdsKey]);
 
   useEffect(() => {
     if (!selectedRequest) return;
@@ -338,8 +907,8 @@ export default function MapaCotacaoPage() {
 
       for (const supplierId of Array.from(selectedSupplierIds)) {
         const key = `${supplierId}:${item.id}`;
-        const unitPrice = parseCurrencyBR(unitPriceBySupplierItem[key] ?? '');
-        const freight = parseCurrencyBR(freightBySupplier[supplierId] ?? '') ?? 0;
+        const unitPrice = parseMapUnitPrice(unitPriceBySupplierItem[key] ?? '');
+        const freight = parseMapUnitPrice(freightBySupplier[supplierId] ?? '') ?? 0;
 
         const itemTotal = unitPrice == null ? null : unitPrice * quantity;
         const score = unitPrice == null ? null : scoreItem({ unitPrice, quantity, freight });
@@ -368,8 +937,8 @@ export default function MapaCotacaoPage() {
       const unitPriceCounts = new Map<number, number>();
       for (const p of perSupplier) {
         if (p.unitPrice == null) continue;
-        const cents = Math.round(p.unitPrice * 100);
-        unitPriceCounts.set(cents, (unitPriceCounts.get(cents) ?? 0) + 1);
+        const micros = Math.round(p.unitPrice * 100000);
+        unitPriceCounts.set(micros, (unitPriceCounts.get(micros) ?? 0) + 1);
       }
       let technicalTie = false;
       unitPriceCounts.forEach((count) => {
@@ -391,18 +960,6 @@ export default function MapaCotacaoPage() {
     return list;
   }, [selectedRequest, selectedSupplierIds, freightBySupplier, unitPriceBySupplierItem, ocItemQtyByItemId]);
 
-  useEffect(() => {
-    // quando winners mudarem, a seleção de geração "default" acompanha (apenas se ainda estiver vazia)
-    if (!selectedRequest) return;
-    if (!winnersByItem || winnersByItem.length === 0) return;
-    const anySelected = generateSupplierIds.size > 0;
-    if (anySelected) return;
-
-    const winnerSuppliers = new Set<string>();
-    for (const w of winnersByItem) winnerSuppliers.add(w.winnerSupplierId);
-    setGenerateSupplierIds(winnerSuppliers);
-  }, [selectedRequest, winnersByItem, unitPriceBySupplierItem]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const wonItemsBySupplier = useMemo(() => {
     const map: Record<string, typeof ocItems> = {};
     for (const s of Array.from(selectedSupplierIds)) map[s] = [];
@@ -420,12 +977,12 @@ export default function MapaCotacaoPage() {
   const computedSupplierTotals = useMemo(() => {
     const out: Record<string, { itemsTotal: number; freight: number; amountToPay: number }> = {};
     for (const supplierId of Array.from(selectedSupplierIds)) {
-      const freight = parseCurrencyBR(freightBySupplier[supplierId] ?? '') ?? 0;
+      const freight = parseMapUnitPrice(freightBySupplier[supplierId] ?? '') ?? 0;
       const items = wonItemsBySupplier[supplierId] ?? [];
       let itemsTotal = 0;
       for (const item of items) {
         const key = `${supplierId}:${item.id}`;
-        const unitPrice = parseCurrencyBR(unitPriceBySupplierItem[key] ?? '');
+        const unitPrice = parseMapUnitPrice(unitPriceBySupplierItem[key] ?? '');
         if (unitPrice == null) continue;
         const q = ocItemQtyByItemId[item.id] ?? Number(item.quantity);
         itemsTotal += unitPrice * q;
@@ -437,10 +994,63 @@ export default function MapaCotacaoPage() {
 
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const clearMapSelection = () => {
+    setSelectedRequestId('');
+    setQuoteMapId('');
+    setSelectedSupplierIds(new Set());
+    setOcModalSupplierId(null);
+    setFreightBySupplier({});
+    setUnitPriceBySupplierItem({});
+    setSupplierItemDetailByKey({});
+    setPaymentDraftBySupplier({});
+    setGeneratedOcSupplierIds(new Set());
+    setOcItemQtyByItemId({});
+  };
+
+  const selectedRequestLabel = useMemo(() => {
+    if (!selectedRequestId) return '';
+    const r = approvedRequests.find((x) => x.id === selectedRequestId);
+    if (!r) return '—';
+    return `RM ${formatRmListDisplayId(r.requestNumber)}`;
+  }, [approvedRequests, selectedRequestId]);
+
+  const sendToCorrectionMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch(`/material-requests/${id}/status`, {
+        status: 'IN_REVIEW',
+        correctionNote: note,
+      });
+      return res.data;
+    },
+    onSuccess: async () => {
+      toast.success('RM enviada para correção. O solicitante poderá editar os itens.');
+      setShowCorrectionConfirm(false);
+      setCorrectionNote('');
+      clearMapSelection();
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['material-requests-approved-map'] }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' }),
+        queryClient.invalidateQueries({ queryKey: ['approval-notification-counts'] }),
+      ]);
+    },
+    onError: (error: { response?: { data?: { message?: string } } }) => {
+      toast.error(error.response?.data?.message || 'Erro ao enviar RM para correção');
+    },
+  });
+
   const generateOrdersMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedRequest) throw new Error('Selecione uma requisição na fase RMs aprovadas.');
-      if (generateSupplierIds.size === 0) throw new Error('Selecione ao menos um fornecedor vencedor.');
+    mutationFn: async (supplierId: string) => {
+      if (!selectedRequest) throw new Error('Selecione uma requisição na fase RMs Aprovadas.');
+      if (generatedOcSupplierIds.has(supplierId)) {
+        throw new Error(
+          'OC já gerada para este fornecedor neste mapa. Se devolveu um item à RM, recarregue ou monte a cotação de novo.'
+        );
+      }
+      if ((wonItemsBySupplier[supplierId] ?? []).length === 0) {
+        throw new Error('Este fornecedor não venceu nenhum item da cotação.');
+      }
+      const suppliersToGenerate = [supplierId];
       setIsGenerating(true);
 
       try {
@@ -456,10 +1066,18 @@ export default function MapaCotacaoPage() {
         // 2) Salvar cotações + frete no banco (isso recalcula vencedor por item no backend)
         const selectedSupplierIdsArr = Array.from(selectedSupplierIds);
         const freightBySupplierPayload: Record<string, number> = {};
-        for (const supplierId of selectedSupplierIdsArr) {
-          const f = parseCurrencyBR(freightBySupplier[supplierId] ?? '');
-          if (f == null || f < 0) throw new Error(`Frete inválido para o fornecedor ${supplierId}`);
-          freightBySupplierPayload[supplierId] = f;
+        for (const sid of selectedSupplierIdsArr) {
+          const rawFrete = freightBySupplier[sid] ?? '';
+          const parsed = parseMapUnitPrice(rawFrete);
+          // Campo vazio = sem frete (0), igual ao resumo exibido na tela
+          const f = rawFrete.trim() === '' ? 0 : parsed;
+          if (f == null || f < 0) {
+            const nome = suppliers.find((s) => s.id === sid)?.name ?? 'fornecedor selecionado';
+            throw new Error(
+              `Frete inválido para "${nome}". Use um valor numérico válido (ex.: 0,00 ou 8,00).`
+            );
+          }
+          freightBySupplierPayload[sid] = f;
         }
 
         const unitPricesPayload: Array<{
@@ -468,15 +1086,15 @@ export default function MapaCotacaoPage() {
           unitPrice: number;
         }> = [];
 
-        for (const supplierId of selectedSupplierIdsArr) {
+        for (const sid of selectedSupplierIdsArr) {
           for (const item of selectedRequest.items) {
-            const key = `${supplierId}:${item.id}`;
-            const u = parseCurrencyBR(unitPriceBySupplierItem[key] ?? '');
+            const key = `${sid}:${item.id}`;
+            const u = parseMapUnitPrice(unitPriceBySupplierItem[key] ?? '');
             if (u == null || u < 0) continue; // se vazio, não conta para vitória
             unitPricesPayload.push({
-              supplierId,
+              supplierId: sid,
               materialRequestItemId: item.id,
-              unitPrice: u
+              unitPrice: u,
             });
           }
         }
@@ -492,48 +1110,85 @@ export default function MapaCotacaoPage() {
           supplierIds: selectedSupplierIdsArr,
           freightBySupplier: freightBySupplierPayload,
           unitPrices: unitPricesPayload,
-          itemQuantities: itemQuantitiesForSave
+          itemQuantities: itemQuantitiesForSave,
         });
 
-        // 3) Preparar pagamento somente para fornecedores marcados para gerar OC
-        const paymentBySupplierPayload: Array<{
-          supplierId: string;
-          paymentType: string;
-          paymentCondition: string;
-          paymentDetails?: string;
-          observations?: string;
-          amountToPay?: number;
-        }> = [];
+        // 3) Preparar pagamento do fornecedor da modal
+        const totals = computedSupplierTotals[supplierId];
+        const supplierName = suppliers.find((s) => s.id === supplierId)?.name ?? 'fornecedor';
+        const fallbackDraft = {
+          paymentType: OC_TYPE_AVISTA,
+          paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
+          paymentDetails: '',
+          pixKeyType: '',
+          pixKey: '',
+          observations: '',
+          amountToPayStr: totals ? String(totals.amountToPay) : '',
+          attachments: [],
+        };
 
-        for (const supplierId of Array.from(generateSupplierIds)) {
-          const totals = computedSupplierTotals[supplierId];
-          const fallbackDraft = {
-            paymentType: OC_TYPE_AVISTA,
-            paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-            paymentDetails: '',
-            observations: '',
-            amountToPayStr: totals ? String(totals.amountToPay) : ''
-          };
+        const draft = paymentDraftBySupplier[supplierId] ?? fallbackDraft;
+        const paymentType = draft.paymentType ?? OC_TYPE_AVISTA;
+        const paymentCondition = draft.paymentCondition ?? paymentConditionDefault(paymentType);
 
-          const draft = paymentDraftBySupplier[supplierId] ?? fallbackDraft;
-          const paymentType = draft.paymentType ?? OC_TYPE_AVISTA;
-          const paymentCondition = draft.paymentCondition ?? paymentConditionDefault(paymentType);
+        if (paymentType === OC_TYPE_AVISTA) {
+          if (!draft.paymentDetails?.trim()) {
+            throw new Error(`Informe os dados do pagamento para "${supplierName}".`);
+          }
+          if (!draft.pixKeyType?.trim()) {
+            throw new Error(`Informe o tipo de chave PIX para "${supplierName}".`);
+          }
+          const pixKey = (draft.pixKey || '').trim();
+          if (!pixKey) {
+            throw new Error(`Informe a chave PIX para "${supplierName}".`);
+          }
+          const pixDigits = pixKey.replace(/\D/g, '');
+          const pixType = draft.pixKeyType.trim().toUpperCase();
+          if (pixType === 'CPF' && pixDigits.length !== 11) {
+            throw new Error(
+              `Chave PIX (CPF) inválida para "${supplierName}". Informe os 11 dígitos.`
+            );
+          }
+          if (pixType === 'CNPJ' && pixDigits.length !== 14) {
+            throw new Error(
+              `Chave PIX (CNPJ) inválida para "${supplierName}". Informe os 14 dígitos.`
+            );
+          }
+        }
+        if (paymentType === OC_TYPE_CARTAO) {
+          if (!draft.paymentDetails?.trim()) {
+            throw new Error(`Informe os dados do pagamento para "${supplierName}".`);
+          }
+        }
 
-          paymentBySupplierPayload.push({
+        const paymentBySupplierPayload = [
+          {
             supplierId,
             paymentType,
             paymentCondition,
             paymentDetails: draft.paymentDetails?.trim() || undefined,
+            pixKeyType: paymentType === OC_TYPE_AVISTA ? draft.pixKeyType?.trim() || undefined : undefined,
+            pixKey: paymentType === OC_TYPE_AVISTA ? draft.pixKey?.trim() || undefined : undefined,
             observations: draft.observations?.trim() || undefined,
-            amountToPay: totals?.amountToPay
-          });
+            amountToPay: totals?.amountToPay,
+            attachments: draft.attachments?.length ? draft.attachments : undefined,
+          },
+        ];
+
+        // 4) Gerar a OC no backend
+        const itemNotesBySupplierItem: Record<string, string> = {};
+        const won = wonItemsBySupplier[supplierId] ?? [];
+        for (const item of won) {
+          const key = `${supplierId}:${item.id}`;
+          const detail = (supplierItemDetailByKey[key] ?? '').trim();
+          if (detail) itemNotesBySupplierItem[key] = detail;
         }
 
-        // 4) Gerar as OCs no backend
         const result = await api.post(`/quote-maps/${mapId}/generate`, {
-          generateSupplierIds: Array.from(generateSupplierIds),
+          generateSupplierIds: suppliersToGenerate,
           paymentBySupplier: paymentBySupplierPayload,
-          itemQuantities: itemQuantitiesForSave
+          itemQuantities: itemQuantitiesForSave,
+          itemNotesBySupplierItem,
         });
 
         return result.data;
@@ -541,25 +1196,28 @@ export default function MapaCotacaoPage() {
         setIsGenerating(false);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, supplierId) => {
+      setOcModalSupplierId(null);
+      setGeneratedOcSupplierIds((prev) => {
+        const next = new Set(prev);
+        next.add(supplierId);
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
-      toast.success('Mapa gerado e OCs criadas com sucesso!');
-      router.push('/ponto/ordem-de-compra');
+      queryClient.invalidateQueries({ queryKey: ['material-requests'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['material-requests-manage'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['material-requests-approved-map'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['material-request-detail'], refetchType: 'all' });
+      toast.success('OC gerada com sucesso!');
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || error?.message || 'Erro ao gerar OCs');
-    }
+      const apiMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message;
+      toast.error(apiMsg || 'Erro ao gerar OC', { duration: 8000 });
+    },
   });
-
-  if (loadingUser || loadingRequests || loadingSuppliers || loadingOrders) {
-    return (
-      <Loading
-        message="Carregando mapa de cotação..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
 
   const user = userData?.data || { name: 'Usuário', role: 'EMPLOYEE' };
 
@@ -568,6 +1226,16 @@ export default function MapaCotacaoPage() {
     sessionStorage.removeItem('token');
     router.push('/auth/login');
   };
+
+  if (loadingUser) {
+    return (
+      <ProtectedRoute route="/ponto/mapa-cotacao">
+        <MainLayout userRole={user.role || 'EMPLOYEE'} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute route="/ponto/mapa-cotacao">
@@ -578,686 +1246,948 @@ export default function MapaCotacaoPage() {
               Mapa de Cotação
             </h1>
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Compare preços por item entre fornecedores e gere OCs por vencedor.
+              Compare preços entre fornecedores e gere ordens de compra por vencedor.
             </p>
           </div>
 
           <Card>
-            <CardHeader className="border-b-0">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 sm:p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
-                    <Truck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <CardHeader className="border-b-0 pb-1">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex-shrink-0 rounded-lg bg-red-100 p-2 sm:p-3 dark:bg-red-950/40">
+                    <Truck className="h-5 w-5 text-red-600 sm:h-6 sm:w-6 dark:text-red-400" />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">RMs aprovadas</h2>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                      RM's Aprovadas
+                    </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Selecione uma requisição na fase RMs aprovadas para montar o mapa.
+                      Escolha a requisição e os fornecedores para montar o mapa
                     </p>
                   </div>
+                </div>
+                <div className={cadastroListClasses.cardToolbar}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCorrectionNote('');
+                      setShowCorrectionConfirm(true);
+                    }}
+                    disabled={!selectedRequestId || sendToCorrectionMutation.isPending}
+                    title={
+                      selectedRequestId
+                        ? 'Enviar RM para correção'
+                        : 'Selecione uma RM para enviar à correção'
+                    }
+                    aria-label="Enviar RM para correção"
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
+                  >
+                    <Wrench className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="hidden sm:inline">Correção</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearMapSelection}
+                    title="Limpar"
+                    aria-label="Limpar seleção"
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    <RotateCcw className="h-4 w-4" aria-hidden />
+                  </button>
                 </div>
               </div>
             </CardHeader>
 
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Requisição de Material *
-                  </label>
-                  <select
-                    value={selectedRequestId}
-                    onChange={(e) => setSelectedRequestId(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Selecione uma requisição (RMs aprovadas)</option>
-                    {approvedRequests.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.requestNumber || r.id.slice(0, 8)} ({formatDateTimeBR(r.createdAt)})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="min-w-0">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Fornecedores (comparação) *
-                  </label>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    <div className="min-w-0 flex flex-col gap-2">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden />
-                        <input
-                          type="search"
-                          value={supplierSearch}
-                          onChange={(e) => setSupplierSearch(e.target.value)}
-                          placeholder="Buscar por nome ou código..."
-                          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          autoComplete="off"
-                        />
-                      </div>
-                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 max-h-[260px] overflow-y-auto">
-                        {suppliers.length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum fornecedor cadastrado.</p>
-                        ) : filteredSuppliers.length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Nenhum fornecedor encontrado para &quot;{supplierSearch.trim()}&quot;.
-                          </p>
-                        ) : (
-                          filteredSuppliers.map((s) => (
-                            <label
-                              key={s.id}
-                              className="flex items-start gap-2 py-1.5 text-sm text-gray-700 dark:text-gray-300 cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 shrink-0 rounded border-gray-300 dark:border-gray-600"
-                                checked={selectedSupplierIds.has(s.id)}
-                                onChange={() => {
-                                  setSelectedSupplierIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(s.id)) next.delete(s.id);
-                                    else next.add(s.id);
-                                    return next;
-                                  });
-                                }}
-                              />
-                              <span className="min-w-0">
-                                <span className="block truncate font-medium">{s.name}</span>
-                                {s.code ? (
-                                  <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
-                                    Cód. {s.code}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 flex flex-col gap-2">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Selecionados{' '}
-                        <span className="font-normal text-gray-500 dark:text-gray-400">
-                          ({selectedSuppliersOrdered.length})
-                        </span>
-                      </p>
-                      <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 max-h-[304px] overflow-y-auto bg-gray-50/50 dark:bg-gray-900/30">
-                        {selectedSuppliersOrdered.length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Nenhum fornecedor selecionado. Marque na lista ao lado.
-                          </p>
-                        ) : (
-                          <ul className="space-y-2">
-                            {selectedSuppliersOrdered.map((s) => (
-                              <li
-                                key={s.id}
-                                className="flex items-start justify-between gap-2 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1.5 text-sm"
-                              >
-                                <span className="min-w-0">
-                                  <span className="block text-gray-900 dark:text-gray-100 truncate">{s.name}</span>
-                                  {s.code ? (
-                                    <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
-                                      {s.code}
-                                    </span>
-                                  ) : null}
-                                </span>
-                                <button
-                                  type="button"
-                                  title="Remover da comparação"
-                                  className="shrink-0 p-1 rounded text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors"
-                                  onClick={() => {
-                                    setSelectedSupplierIds((prev) => {
-                                      const next = new Set(prev);
-                                      next.delete(s.id);
-                                      return next;
-                                    });
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {!selectedRequest && (
-                <div className="p-4 pt-0">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Escolha uma requisição na fase RMs aprovadas para liberar a tela de cotação.
+            <CardContent className="pt-4">
+              {loadingRequests ? (
+                <CadastroListLoading message="Carregando RMs..." />
+              ) : approvedRequests.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50/80 px-6 py-12 text-center dark:border-gray-600 dark:bg-gray-900/30">
+                  <Truck className="mx-auto mb-3 h-10 w-10 text-gray-400 dark:text-gray-500" />
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Nenhuma requisição em RMs Aprovadas aguardando cotação
                   </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+                  <div className="min-w-0">
+                    <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Requisição de Material *
+                    </label>
+                    <SingleSelectSearchDropdown
+                      value={selectedRequestId}
+                      onChange={setSelectedRequestId}
+                      options={materialRequestOptions}
+                      allowEmpty={false}
+                      placeholder="Selecione uma requisição (RMs Aprovadas)"
+                      searchPlaceholder="Pesquisar..."
+                      emptyOptionsMessage="Nenhuma requisição disponível."
+                      emptySearchMessage="Nenhuma requisição encontrada."
+                      listMaxHeight={320}
+                      noFocusRing
+                      hideFocus
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <MultiSelectSearchDropdown
+                      label="Fornecedores"
+                      options={supplierOptions}
+                      selected={Array.from(selectedSupplierIds)}
+                      onChange={(ids) => setSelectedSupplierIds(new Set(ids))}
+                      placeholder="Selecione fornecedores para comparar..."
+                      searchPlaceholder="Pesquisar..."
+                      emptyOptionsMessage="Nenhum fornecedor cadastrado."
+                      emptySearchMessage="Nenhum fornecedor encontrado."
+                      listMaxHeight={280}
+                      noFocusRing
+                      hideFocus
+                    />
+                  </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {selectedRequest && (
-            <>
-              <Card>
-                <CardHeader className="border-b-0">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 sm:p-3 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
-                      <FileText className="w-6 h-6 text-green-700 dark:text-green-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cotações por item</h2>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Informe o preço unitário por fornecedor. Ajuste a quantidade a comprar por item (não pode exceder o solicitado na SC). O total e o vencedor são recalculados automaticamente.
-                      </p>
+              <Card className={cadastroListClasses.card}>
+                <CardHeader className={cadastroListClasses.cardHeader}>
+                  <div className={cadastroListClasses.cardHeaderRow}>
+                    <div className={cadastroListClasses.cardHeaderIconRow}>
+                      <div className="flex-shrink-0 rounded-lg bg-green-100 p-2 sm:p-3 dark:bg-green-900/30">
+                        <FileSpreadsheet className="h-5 w-5 text-green-700 sm:h-6 sm:w-6 dark:text-green-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                          Cotações
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Preços, quantidades e vencedor por item da SC
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {selectedSupplierIds.size === 0 ? (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Selecione pelo menos um fornecedor.</p>
+                  {!selectedRequestId ? (
+                    <div className="py-8 text-center">
+                      <FileSpreadsheet className="mx-auto mb-4 h-12 w-12 text-gray-400 dark:text-gray-500" />
+                      <p className="text-gray-500 dark:text-gray-400">Lista de cotações vazia</p>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        Escolha uma requisição de Material acima para ver os itens.
+                      </p>
+                    </div>
+                  ) : loadingSelectedRequest || !selectedRequest ? (
+                    <CadastroListLoading message="Carregando itens da RM..." />
                   ) : (
                     <>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-50 dark:bg-gray-700/50">
-                            <tr className="text-left">
-                              <th className="p-2 whitespace-nowrap">Item (SC)</th>
-                              {Array.from(selectedSupplierIds).map((supplierId) => {
-                                const sup = suppliers.find((x) => x.id === supplierId);
-                                return (
-                                  <th key={supplierId} className="p-2 whitespace-nowrap">
-                                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                                      {sup ? sup.name : supplierId}
-                                    </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                      Frete:
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={freightBySupplier[supplierId] ?? ''}
-                                      onChange={(e) => {
-                                        setFreightBySupplier((prev) => ({ ...prev, [supplierId]: e.target.value }));
-                                      }}
-                                      onBlur={() => {
-                                        const raw = freightBySupplier[supplierId] ?? '';
-                                        const formatted = formatCurrencyInputValue(raw);
-                                        setFreightBySupplier((prev) => ({ ...prev, [supplierId]: formatted }));
-                                      }}
-                                      placeholder="0,00"
-                                      className="mt-1 w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                  </th>
-                                );
-                              })}
-                              <th className="p-2 whitespace-nowrap">Vencedor</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                            {ocItems.map((item) => {
-                              const winner = winnersByItem.find((w) => w.itemId === item.id) || null;
-                              const winnerSupplier = suppliers.find((s) => s.id === winner?.winnerSupplierId);
-
-                              const unitLabel = item.unit || '-';
-                              const maxQty = Number(item.quantity);
-                              const qty = ocItemQtyByItemId[item.id] ?? maxQty;
-                              const matSub = materialItemSubtitle(item);
-
-                              return (
-                                <tr key={item.id} className="align-top">
-                                  <td className="p-2 min-w-[260px]">
-                                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                                      {materialItemLabel(item)}
-                                    </div>
-                                    {matSub ? (
-                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                                        {matSub}
-                                      </div>
-                                    ) : null}
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                      <span>
-                                        Solicitado na SC: {maxQty} {unitLabel}
+                  <div className="table-scroll">
+                          <table className={`${cadastroListClasses.table} min-w-[40rem] !table-auto text-sm`}>
+                            <thead className="border-b border-gray-200 dark:border-gray-700">
+                              <tr>
+                                <th className={`${cadastroListClasses.thCenter} w-12`}>Item</th>
+                                <th className={`${cadastroListClasses.th} whitespace-nowrap`}>Código</th>
+                                <th className={cadastroListClasses.th}>Material</th>
+                                <th className={cadastroListClasses.thCenter}>Unidade</th>
+                                <th className={cadastroListClasses.thCenter}>Qtd. RM</th>
+                                <th className={cadastroListClasses.thCenter}>Qtd. OC</th>
+                                <th
+                                  className={cadastroListClasses.thCenter}
+                                  title="Referência da RM — não entra na OC"
+                                >
+                                  Valor referência
+                                </th>
+                                {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
+                                  const sup = suppliers.find((x) => x.id === supplierId);
+                                  return (
+                                    <th
+                                      key={supplierId}
+                                      className={`${cadastroListClasses.thCenter} min-w-[8.5rem] normal-case tracking-normal border-l border-gray-200 dark:border-gray-700 ${
+                                        supplierIndex === supplierIds.length - 1
+                                          ? 'border-r border-gray-200 dark:border-gray-700'
+                                          : ''
+                                      }`}
+                                      title={sup?.name ?? supplierId}
+                                    >
+                                      <span className="block truncate text-gray-800 dark:text-gray-200">
+                                        {sup ? (sup.code ? `${sup.code} - ${sup.name}` : sup.name) : supplierId}
                                       </span>
-                                      <span className="text-gray-500">|</span>
-                                      <label className="inline-flex items-center gap-1">
-                                        <span className="whitespace-nowrap">Qtd. na OC:</span>
-                                        <input
-                                          type="number"
-                                          min={0.0001}
-                                          step="any"
-                                          max={maxQty}
-                                          value={qty}
-                                          onChange={(e) => {
-                                            const n = parseFloat(e.target.value);
-                                            if (Number.isNaN(n)) return;
-                                            const q = Math.min(Math.max(n, 0.0001), maxQty);
-                                            setOcItemQtyByItemId((prev) => ({ ...prev, [item.id]: q }));
-                                          }}
-                                          className="w-20 px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                        />
-                                        <span>{unitLabel}</span>
-                                      </label>
-                                    </div>
-                                  </td>
+                                    </th>
+                                  );
+                                })}
+                                <th className={cadastroListClasses.thCenter}>Vencedor</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                              {ocItems.map((item, itemIndex) => {
+                                const winner = winnersByItem.find((w) => w.itemId === item.id) || null;
+                                const winnerSupplier = suppliers.find((s) => s.id === winner?.winnerSupplierId);
+                                const unitLabel = item.unit || '-';
+                                const maxQty = Number(item.quantity);
+                                const qty = ocItemQtyByItemId[item.id] ?? maxQty;
+                                const refUnit = itemReferenceUnitPrice(item);
+                                const winnerUnit =
+                                  winner?.winnerSupplierId != null
+                                    ? parseMapUnitPrice(
+                                        unitPriceBySupplierItem[`${winner.winnerSupplierId}:${item.id}`] ?? ''
+                                      )
+                                    : null;
+                                const winnerTotal =
+                                  winnerUnit == null ? null : winnerUnit * qty;
 
-                                  {Array.from(selectedSupplierIds).map((supplierId) => {
-                                    const key = `${supplierId}:${item.id}`;
-                                    const unitPriceStr = unitPriceBySupplierItem[key] ?? '';
-                                    const unitPrice = parseCurrencyBR(unitPriceStr);
-                                    const freightRaw = freightBySupplier[supplierId] ?? '';
-                                    const freightParsed = parseCurrencyBR(freightRaw);
-                                    const freight = freightParsed ?? 0;
-                                    const itemTotal = unitPrice == null ? null : unitPrice * qty;
-                                    const score = unitPrice == null ? null : itemTotal! + freight;
-                                    const isWinner = winner?.winnerSupplierId === supplierId;
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className={getListTableRowClassName(false)}
+                                  >
+                                    <td className={`${cadastroListClasses.tdCenter} tabular-nums font-medium text-gray-800 dark:text-gray-200`}>
+                                      {itemIndex + 1}
+                                    </td>
+                                    <td className={`${cadastroListClasses.td} whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300`}>
+                                      {materialProductCode(item.material) || '—'}
+                                    </td>
+                                    <td className={cadastroListClasses.td}>
+                                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                                        {materialItemLabel(item)}
+                                      </p>
+                                    </td>
+                                    <td className={cadastroListClasses.tdCenter}>{unitLabel}</td>
+                                    <td className={`${cadastroListClasses.tdCenter} tabular-nums font-medium`}>
+                                      {maxQty}
+                                    </td>
+                                    <td className={cadastroListClasses.tdCenter}>
+                                      <MapClickToEditNumber
+                                        value={qty}
+                                        min={0.0001}
+                                        max={maxQty}
+                                        ariaLabel="Quantidade na OC"
+                                        onChange={(q) =>
+                                          setOcItemQtyByItemId((prev) => ({ ...prev, [item.id]: q }))
+                                        }
+                                      />
+                                    </td>
+                                    <td
+                                      className={`${cadastroListClasses.tdCenter} tabular-nums text-gray-600 dark:text-gray-300`}
+                                    >
+                                      {refUnit == null ? '—' : formatCurrencyBR(refUnit)}
+                                    </td>
 
-                                    return (
-                                      <td key={supplierId} className="p-2 whitespace-nowrap">
-                                        <input
-                                          type="text"
-                                          value={unitPriceStr}
-                                          onChange={(e) => {
+                                    {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
+                                      const key = `${supplierId}:${item.id}`;
+                                      const isWinner = winner?.winnerSupplierId === supplierId;
+                                      const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
+                                        supplierIndex === supplierIds.length - 1
+                                          ? 'border-r border-gray-200 dark:border-gray-700'
+                                          : ''
+                                      }`;
+
+                                      return (
+                                        <MapSupplierPriceCell
+                                          key={supplierId}
+                                          value={unitPriceBySupplierItem[key] ?? ''}
+                                          quantity={qty}
+                                          isWinner={isWinner}
+                                          borderClassName={borderCls}
+                                          ariaLabel={`Valor unitário ${suppliers.find((x) => x.id === supplierId)?.name ?? supplierId}`}
+                                          onChange={(next) => {
                                             setUnitPriceBySupplierItem((prev) => ({
                                               ...prev,
-                                              [key]: e.target.value
+                                              [key]: next,
                                             }));
                                           }}
-                                          onBlur={() => {
-                                            const raw = unitPriceBySupplierItem[key] ?? '';
-                                            const formatted = formatCurrencyInputValue(raw);
-                                            setUnitPriceBySupplierItem((prev) => ({ ...prev, [key]: formatted }));
-                                          }}
-                                          placeholder="0,00"
-                                          className={`w-28 px-2 py-1 border rounded-lg bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                            isWinner
-                                              ? 'border-green-500 ring-1 ring-green-200 dark:ring-green-400'
-                                              : 'border-gray-300 dark:border-gray-600'
-                                          }`}
                                         />
-                                        <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
-                                          Total do item: {itemTotal == null ? '-' : formatCurrencyBR(itemTotal)}
+                                      );
+                                    })}
+
+                                    <td className={cadastroListClasses.tdCenter}>
+                                      {winnerSupplier && winner ? (
+                                        <div className="flex min-w-0 flex-col items-center gap-0.5">
+                                          <span className="max-w-full truncate text-xs font-semibold text-green-700 dark:text-green-300">
+                                            {winnerSupplier.name}
+                                          </span>
+                                          <span className="text-sm font-medium tabular-nums text-green-700 dark:text-green-300">
+                                            {winnerUnit == null
+                                              ? '—'
+                                              : formatMapUnitPriceBR(winnerUnit)}
+                                          </span>
+                                          <span className="text-xs tabular-nums text-emerald-600 dark:text-emerald-400/90">
+                                            {winnerTotal == null
+                                              ? '—'
+                                              : formatCurrencyBR(winnerTotal)}
+                                          </span>
+                                          {winner.technicalTie ? (
+                                            <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                                              Empate técnico
+                                            </span>
+                                          ) : null}
                                         </div>
-                                        <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                                          Frete (fornecedor): {freightParsed == null ? '-' : formatCurrencyBR(freight)}
-                                        </div>
-                                        <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                                          Custo p/ vencer: {score == null ? '-' : formatCurrencyBR(score)}
-                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400 dark:text-gray-500">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                              {selectedSupplierIds.size > 0 ? (
+                                <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
+                                  <td
+                                    colSpan={7}
+                                    className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
+                                  >
+                                    Frete
+                                  </td>
+                                  {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
+                                    const sup = suppliers.find((x) => x.id === supplierId);
+                                    const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
+                                      supplierIndex === supplierIds.length - 1
+                                        ? 'border-r border-gray-200 dark:border-gray-700'
+                                        : ''
+                                    }`;
+                                    return (
+                                      <MapFreightCell
+                                        key={`frete-${supplierId}`}
+                                        value={freightBySupplier[supplierId] ?? ''}
+                                        borderClassName={borderCls}
+                                        ariaLabel={`Frete ${sup?.name ?? supplierId}`}
+                                        onChange={(next) => {
+                                          setFreightBySupplier((prev) => ({
+                                            ...prev,
+                                            [supplierId]: next,
+                                          }));
+                                        }}
+                                      />
+                                    );
+                                  })}
+                                  <td className={cadastroListClasses.tdCenter} />
+                                </tr>
+                              ) : null}
+                              {selectedSupplierIds.size > 0 ? (
+                                <tr className="border-t border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
+                                  <td
+                                    colSpan={7}
+                                    className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
+                                  >
+                                    Valor total
+                                  </td>
+                                  {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
+                                    const wonCount = (wonItemsBySupplier[supplierId] ?? []).length;
+                                    const totals = computedSupplierTotals[supplierId];
+                                    const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
+                                      supplierIndex === supplierIds.length - 1
+                                        ? 'border-r border-gray-200 dark:border-gray-700'
+                                        : ''
+                                    }`;
+                                    return (
+                                      <td
+                                        key={`total-${supplierId}`}
+                                        className={`${cadastroListClasses.tdCenter} ${borderCls}`}
+                                      >
+                                        {wonCount > 0 && totals ? (
+                                          <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                                            {formatCurrencyBR(totals.amountToPay)}
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                                        )}
                                       </td>
                                     );
                                   })}
-
-                                  <td className="p-2 whitespace-nowrap align-top">
-                                    {winnerSupplier && winner ? (
-                                      <div className="flex flex-col gap-1 items-start">
-                                        <span className="inline-flex items-center gap-2 px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs font-medium">
-                                          {winnerSupplier.name} (ganhou)
-                                        </span>
-                                        {winner.technicalTie ? (
-                                          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-                                            Empate Técnico
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-gray-500 dark:text-gray-400">—</span>
-                                    )}
-                                  </td>
+                                  <td className={cadastroListClasses.tdCenter} />
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="mt-4">
-                        <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
-                          Fornecedores vencedores (para gerar OC)
-                        </h3>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          {Array.from(selectedSupplierIds)
-                            .filter((sid) => (wonItemsBySupplier[sid] ?? []).length > 0)
-                            .map((sid) => {
-                              const sup = suppliers.find((s) => s.id === sid);
-                              const itemsWon = wonItemsBySupplier[sid] ?? [];
-                              const totals = computedSupplierTotals[sid];
-
-                              return (
-                                <div key={sid} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="min-w-0">
-                                      <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                                        {sup ? sup.name : sid}
-                                      </p>
-                                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        Frete: {totals ? formatCurrencyBR(totals.freight) : '—'} | Total itens: {totals ? formatCurrencyBR(totals.itemsTotal) : '—'}
-                                      </p>
-                                    </div>
-                                    <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                      <input
-                                        type="checkbox"
-                                        checked={generateSupplierIds.has(sid)}
-                                        onChange={() => {
-                                          setGenerateSupplierIds((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(sid)) next.delete(sid);
-                                            else next.add(sid);
-                                            return next;
-                                          });
-                                        }}
-                                      />
-                                      Gerar OC
-                                    </label>
-                                  </div>
-
-                                  <div className="mt-3">
-                                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                      Itens da SC (nesta OC):
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                                      Mesmo formato da criação manual de OC: quantidade e valor unitário valem também na
-                                      tabela acima.
-                                    </p>
-                                    <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-                                      <ul className="divide-y divide-gray-200 dark:divide-gray-600">
-                                        {itemsWon.map((item) => {
-                                          const unitLabel = item.unit || '-';
-                                          const maxQty = Number(item.quantity);
-                                          const qty = ocItemQtyByItemId[item.id] ?? maxQty;
-                                          const priceKey = `${sid}:${item.id}`;
-                                          const unitPriceStr = unitPriceBySupplierItem[priceKey] ?? '';
-                                          const sub = materialItemSubtitle(item);
-                                          return (
-                                            <li key={item.id} className="px-3 py-2 flex items-start gap-3">
-                                              <div className="min-w-0 flex-1">
-                                                <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
-                                                  {materialItemLabel(item)}
-                                                </p>
-                                                {sub ? (
-                                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">
-                                                    {sub}
-                                                  </p>
-                                                ) : null}
-                                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
-                                                  <span>
-                                                    Solicitado na SC: {maxQty} {unitLabel}
-                                                  </span>
-                                                  <span className="text-gray-400">|</span>
-                                                  <label className="inline-flex items-center gap-1.5">
-                                                    <span className="whitespace-nowrap">Qtd. na OC:</span>
-                                                    <input
-                                                      type="number"
-                                                      min={0.0001}
-                                                      step="any"
-                                                      max={maxQty}
-                                                      value={qty}
-                                                      onChange={(e) => {
-                                                        const n = parseFloat(e.target.value);
-                                                        if (Number.isNaN(n)) return;
-                                                        const q = Math.min(Math.max(n, 0.0001), maxQty);
-                                                        setOcItemQtyByItemId((prev) => ({ ...prev, [item.id]: q }));
-                                                      }}
-                                                      className="w-24 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                                    />
-                                                    <span>{unitLabel}</span>
-                                                  </label>
-                                                  <span className="text-gray-400">|</span>
-                                                  <label className="inline-flex items-center gap-1.5">
-                                                    <span className="whitespace-nowrap">Valor unit. (R$):</span>
-                                                    <input
-                                                      type="text"
-                                                      inputMode="decimal"
-                                                      placeholder="0,00"
-                                                      value={unitPriceStr}
-                                                      onChange={(e) => {
-                                                        setUnitPriceBySupplierItem((prev) => ({
-                                                          ...prev,
-                                                          [priceKey]: e.target.value
-                                                        }));
-                                                      }}
-                                                      onBlur={() => {
-                                                        const raw = unitPriceBySupplierItem[priceKey] ?? '';
-                                                        const formatted = formatCurrencyInputValue(raw);
-                                                        setUnitPriceBySupplierItem((prev) => ({
-                                                          ...prev,
-                                                          [priceKey]: formatted
-                                                        }));
-                                                      }}
-                                                      className="w-28 px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                                                    />
-                                                  </label>
-                                                </div>
-                                              </div>
-                                            </li>
-                                          );
-                                        })}
-                                      </ul>
-                                    </div>
-                                  </div>
-
-                                  {generateSupplierIds.has(sid) && (
-                                    <div className="mt-4 border-t border-gray-200 dark:border-gray-600 pt-4 space-y-3">
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo de pagamento</p>
-                                          <div className="flex flex-wrap gap-4">
-                                            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                              <input
-                                                type="radio"
-                                                name={`payType-${sid}`}
-                                                checked={(paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA) === OC_TYPE_AVISTA}
-                                                onChange={() => {
-                                                  setPaymentDraftBySupplier((prev) => ({
-                                                    ...prev,
-                                                    [sid]: {
-                                                      ...(prev[sid] ?? {}),
-                                                      paymentType: OC_TYPE_AVISTA,
-                                                      paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA)
-                                                    }
-                                                  }));
-                                                }}
-                                              />
-                                              À vista
-                                            </label>
-                                            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                                              <input
-                                                type="radio"
-                                                name={`payType-${sid}`}
-                                                checked={(paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA) === OC_TYPE_BOLETO}
-                                                onChange={() => {
-                                                  setPaymentDraftBySupplier((prev) => ({
-                                                    ...prev,
-                                                    [sid]: {
-                                                      ...(prev[sid] ?? {}),
-                                                      paymentType: OC_TYPE_BOLETO,
-                                                      paymentCondition: paymentConditionDefault(OC_TYPE_BOLETO)
-                                                    }
-                                                  }));
-                                                }}
-                                              />
-                                              Boleto
-                                            </label>
-                                          </div>
-                                        </div>
-
-                                        <div>
-                                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Condição</p>
-                                          <PaymentConditionSelect
-                                            key={`pc-${sid}-${paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA}`}
-                                            paymentType={
-                                              (paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA) === OC_TYPE_AVISTA
-                                                ? 'AVISTA'
-                                                : 'BOLETO'
-                                            }
-                                            value={
-                                              paymentDraftBySupplier[sid]?.paymentCondition ??
-                                              paymentConditionDefault(paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA)
-                                            }
-                                            onChange={(v) => {
-                                              setPaymentDraftBySupplier((prev) => ({
-                                                ...prev,
-                                                [sid]: {
-                                                  ...(prev[sid] ?? {
-                                                    paymentType: OC_TYPE_AVISTA,
-                                                    paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-                                                    paymentDetails: '',
-                                                    observations: '',
-                                                    amountToPayStr: ''
-                                                  }),
-                                                  paymentCondition: v
-                                                }
-                                              }));
+                              ) : null}
+                              {selectedSupplierIds.size > 0 ? (
+                                <tr className="border-t border-gray-200 dark:border-gray-700">
+                                  <td
+                                    colSpan={7}
+                                    className={`${cadastroListClasses.td} text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400`}
+                                  >
+                                    Ordem de compra
+                                  </td>
+                                  {Array.from(selectedSupplierIds).map((supplierId, supplierIndex, supplierIds) => {
+                                    const wonCount = (wonItemsBySupplier[supplierId] ?? []).length;
+                                    const totals = computedSupplierTotals[supplierId];
+                                    const alreadyHasOc = generatedOcSupplierIds.has(supplierId);
+                                    const borderCls = `border-l border-gray-200 dark:border-gray-700 ${
+                                      supplierIndex === supplierIds.length - 1
+                                        ? 'border-r border-gray-200 dark:border-gray-700'
+                                        : ''
+                                    }`;
+                                    return (
+                                      <td
+                                        key={`gerar-oc-${supplierId}`}
+                                        className={`${cadastroListClasses.tdCenter} ${borderCls}`}
+                                      >
+                                        {alreadyHasOc ? (
+                                          <span className="inline-flex h-8 items-center rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
+                                            OC gerada
+                                          </span>
+                                        ) : wonCount > 0 ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setPaymentDraftBySupplier((prev) => {
+                                                if (prev[supplierId]) return prev;
+                                                const suggested = totals
+                                                  ? formatCurrencyBR(totals.amountToPay)
+                                                  : '';
+                                                const bankPrefill = buildSupplierPaymentPrefill(
+                                                  suppliers.find((s) => s.id === supplierId) ?? {}
+                                                );
+                                                return {
+                                                  ...prev,
+                                                  [supplierId]: {
+                                                    ...emptyPaymentDraft(),
+                                                    amountToPayStr: suggested,
+                                                    paymentDetails: bankPrefill.paymentDetails,
+                                                    pixKeyType: bankPrefill.pixKeyType,
+                                                    pixKey: bankPrefill.pixKey,
+                                                  },
+                                                };
+                                              });
+                                              setOcModalSupplierId(supplierId);
                                             }}
-                                            disabled={(paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA) === OC_TYPE_AVISTA}
-                                          />
-                                        </div>
-                                      </div>
-
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                          Valor total (R$)
-                                        </p>
-                                        <input
-                                          type="text"
-                                          value={(() => {
-                                            const s = paymentDraftBySupplier[sid]?.amountToPayStr;
-                                            if (s !== undefined && s !== '') return s;
-                                            return totals ? formatCurrencyBR(totals.amountToPay) : '';
-                                          })()}
-                                          onChange={(e) => {
-                                            const v = e.target.value;
-                                            setPaymentDraftBySupplier((prev) => ({
-                                              ...prev,
-                                              [sid]: {
-                                                ...(prev[sid] ?? {
-                                                  paymentType: OC_TYPE_AVISTA,
-                                                  paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-                                                  paymentDetails: '',
-                                                  observations: '',
-                                                  amountToPayStr: ''
-                                                }),
-                                                amountToPayStr: v
-                                              }
-                                            }));
-                                          }}
-                                          onBlur={() => {
-                                            const raw = paymentDraftBySupplier[sid]?.amountToPayStr ?? (totals ? String(totals.amountToPay) : '');
-                                            const formatted = formatCurrencyInputValue(raw);
-                                            setPaymentDraftBySupplier((prev) => ({
-                                              ...prev,
-                                              [sid]: {
-                                                ...(prev[sid] ?? {
-                                                  paymentType: OC_TYPE_AVISTA,
-                                                  paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-                                                  paymentDetails: '',
-                                                  observations: '',
-                                                  amountToPayStr: ''
-                                                }),
-                                                amountToPayStr: formatted
-                                              }
-                                            }));
-                                          }}
-                                          placeholder="0,00"
-                                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        />
-                                      </div>
-
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                          Dados do pagamento
-                                        </p>
-                                        <textarea
-                                          value={paymentDraftBySupplier[sid]?.paymentDetails ?? ''}
-                                          onChange={(e) => {
-                                            const v = e.target.value;
-                                            setPaymentDraftBySupplier((prev) => ({
-                                              ...prev,
-                                              [sid]: {
-                                                ...(prev[sid] ?? {
-                                                  paymentType: OC_TYPE_AVISTA,
-                                                  paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-                                                  paymentDetails: '',
-                                                  observations: '',
-                                                  amountToPayStr: ''
-                                                }),
-                                                paymentDetails: v
-                                              }
-                                            }));
-                                          }}
-                                          rows={3}
-                                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          placeholder="Conta, PIX, agência, favorecido, etc."
-                                        />
-                                      </div>
-
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                          Observações
-                                        </p>
-                                        <textarea
-                                          value={paymentDraftBySupplier[sid]?.observations ?? ''}
-                                          onChange={(e) => {
-                                            const v = e.target.value;
-                                            setPaymentDraftBySupplier((prev) => ({
-                                              ...prev,
-                                              [sid]: {
-                                                ...(prev[sid] ?? {
-                                                  paymentType: OC_TYPE_AVISTA,
-                                                  paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
-                                                  paymentDetails: '',
-                                                  observations: '',
-                                                  amountToPayStr: ''
-                                                }),
-                                                observations: v
-                                              }
-                                            }));
-                                          }}
-                                          rows={2}
-                                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                          placeholder="Observações gerais da OC"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end gap-3 mt-6">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedRequestId('');
-                            setQuoteMapId('');
-                            setSupplierSearch('');
-                            setSelectedSupplierIds(new Set());
-                            setGenerateSupplierIds(new Set());
-                            setFreightBySupplier({});
-                            setUnitPriceBySupplierItem({});
-                            setPaymentDraftBySupplier({});
-                          }}
-                          className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                        >
-                          Limpar
-                        </button>
-                        <button
-                          type="button"
-                          disabled={generateSupplierIds.size === 0 || isGenerating}
-                          onClick={() => generateOrdersMutation.mutate()}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                        >
-                          {isGenerating ? 'Gerando...' : 'Gerar OCs vencedoras'}
-                        </button>
+                                            className="inline-flex h-8 items-center rounded-lg border border-red-200 bg-red-50 px-2.5 text-xs font-semibold text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                                          >
+                                            Gerar OC
+                                          </button>
+                                        ) : (
+                                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                                        )}
+                                      </td>
+                                    );
+                                  })}
+                                  <td className={cadastroListClasses.tdCenter} />
+                                </tr>
+                              ) : null}
+                            </tbody>
+                          </table>
                       </div>
                     </>
                   )}
                 </CardContent>
               </Card>
-            </>
-          )}
         </div>
+
+        {(() => {
+          const sid = ocModalSupplierId;
+          if (!sid) return null;
+          const sup = suppliers.find((s) => s.id === sid);
+          const totals = computedSupplierTotals[sid];
+          const itemsWon = wonItemsBySupplier[sid] ?? [];
+          const payType = paymentDraftBySupplier[sid]?.paymentType ?? OC_TYPE_AVISTA;
+          const paymentConditionValue =
+            paymentDraftBySupplier[sid]?.paymentCondition ?? paymentConditionDefault(payType);
+          const closeOcModal = () => {
+            if (isGenerating) return;
+            setOcModalSupplierId(null);
+          };
+
+          return (
+            <Modal
+              isOpen={Boolean(ocModalSupplierId)}
+              onClose={closeOcModal}
+              title={
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {`Gerar OC - ${sup?.name ?? 'Fornecedor'}`}
+                  </h3>
+                  {totals ? (
+                    <p className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      <span>
+                        Frete:{' '}
+                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                          {formatCurrencyBR(totals.freight)}
+                        </span>
+                      </span>
+                      <span>
+                        Itens:{' '}
+                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                          {formatCurrencyBR(totals.itemsTotal)}
+                        </span>
+                      </span>
+                      <span>
+                        Total OC:{' '}
+                        <span className="font-medium text-gray-800 dark:text-gray-200">
+                          {formatCurrencyBR(totals.amountToPay)}
+                        </span>
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
+              }
+              size="xl"
+              contentOverflowVisible
+            >
+              <div className="space-y-5">
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Itens da OC
+                  </h4>
+                  <div className="table-scroll rounded-lg border border-gray-200 dark:border-gray-700">
+                    <table className={`${cadastroListClasses.table} !table-auto text-sm`}>
+                      <thead className="border-b border-gray-200 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-900/40">
+                        <tr>
+                          <th className={`${cadastroListClasses.thCenter} w-12`}>Item</th>
+                          <th className={`${cadastroListClasses.th} whitespace-nowrap`}>Código</th>
+                          <th className={cadastroListClasses.th}>Material</th>
+                          <th className={`${cadastroListClasses.th} min-w-[12rem]`}>Detalhamento</th>
+                          <th className={cadastroListClasses.thCenter}>Unidade</th>
+                          <th className={cadastroListClasses.thCenter}>Qtd. OC</th>
+                          <th className={cadastroListClasses.thNumeric}>Valor unit.</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                        {itemsWon.map((item) => {
+                          const itemNo = ocItems.findIndex((i) => i.id === item.id) + 1;
+                          const unitLabel = item.unit || '-';
+                          const maxQty = Number(item.quantity);
+                          const qty = ocItemQtyByItemId[item.id] ?? maxQty;
+                          const priceKey = `${sid}:${item.id}`;
+                          const unitParsed = parseMapUnitPrice(
+                            unitPriceBySupplierItem[priceKey] ?? ''
+                          );
+                          const detailKey = `${sid}:${item.id}`;
+                          return (
+                            <tr key={item.id} className={getListTableRowClassName(false)}>
+                              <td
+                                className={`${cadastroListClasses.tdCenter} tabular-nums font-medium text-gray-800 dark:text-gray-200`}
+                              >
+                                {itemNo > 0 ? itemNo : '—'}
+                              </td>
+                              <td className={`${cadastroListClasses.td} whitespace-nowrap tabular-nums text-gray-700 dark:text-gray-300`}>
+                                {materialProductCode(item.material) || '—'}
+                              </td>
+                              <td className={cadastroListClasses.td}>
+                                <p className="font-medium text-gray-900 dark:text-gray-100">
+                                  {materialItemLabel(item)}
+                                </p>
+                              </td>
+                              <td className={cadastroListClasses.td}>
+                                <input
+                                  type="text"
+                                  value={supplierItemDetailByKey[detailKey] ?? ''}
+                                  onChange={(e) => {
+                                    const next = e.target.value;
+                                    setSupplierItemDetailByKey((prev) => ({
+                                      ...prev,
+                                      [detailKey]: next,
+                                    }));
+                                  }}
+                                  placeholder="Opcional"
+                                  className={`${mapFieldCls} min-w-[10rem]`}
+                                  aria-label={`Detalhamento do item para ${sup?.name ?? 'fornecedor'}`}
+                                />
+                              </td>
+                              <td className={cadastroListClasses.tdCenter}>{unitLabel}</td>
+                              <td
+                                className={`${cadastroListClasses.tdCenter} tabular-nums font-medium`}
+                              >
+                                {qty}
+                              </td>
+                              <td
+                                className={`${cadastroListClasses.tdNumeric} tabular-nums font-medium text-gray-900 dark:text-gray-100`}
+                              >
+                                {unitParsed == null ? '—' : formatMapUnitPriceBR(unitParsed)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Pagamento
+                  </h4>
+                  <div className="space-y-4">
+                <div>
+                  <span className={mapLabelCls}>Tipo de pagamento *</span>
+                  <div
+                    role="radiogroup"
+                    aria-label="Tipo de pagamento"
+                    className="grid max-w-md grid-cols-3 gap-2"
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={payType === OC_TYPE_AVISTA}
+                      onClick={() => {
+                        setPaymentDraftBySupplier((prev) => ({
+                          ...prev,
+                          [sid]: {
+                            ...(prev[sid] ?? emptyPaymentDraft()),
+                            paymentType: OC_TYPE_AVISTA,
+                            paymentCondition: paymentConditionDefault(OC_TYPE_AVISTA),
+                          },
+                        }));
+                      }}
+                      className={mapPaymentSegmentCls(payType === OC_TYPE_AVISTA)}
+                    >
+                      À vista
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={payType === OC_TYPE_CARTAO}
+                      onClick={() => {
+                        setPaymentDraftBySupplier((prev) => ({
+                          ...prev,
+                          [sid]: {
+                            ...(prev[sid] ?? emptyPaymentDraft()),
+                            paymentType: OC_TYPE_CARTAO,
+                            paymentCondition: paymentConditionDefault(OC_TYPE_CARTAO),
+                            pixKeyType: '',
+                            pixKey: '',
+                          },
+                        }));
+                      }}
+                      className={mapPaymentSegmentCls(payType === OC_TYPE_CARTAO)}
+                    >
+                      Cartão
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={payType === OC_TYPE_BOLETO}
+                      onClick={() => {
+                        setPaymentDraftBySupplier((prev) => ({
+                          ...prev,
+                          [sid]: {
+                            ...(prev[sid] ?? emptyPaymentDraft()),
+                            paymentType: OC_TYPE_BOLETO,
+                            paymentCondition: paymentConditionDefault(OC_TYPE_BOLETO),
+                            pixKeyType: '',
+                            pixKey: '',
+                          },
+                        }));
+                      }}
+                      className={mapPaymentSegmentCls(payType === OC_TYPE_BOLETO)}
+                    >
+                      Boleto
+                    </button>
+                  </div>
+                </div>
+
+                {payType === OC_TYPE_BOLETO ? (
+                  <div>
+                    <label htmlFor={`pc-modal-${sid}`} className={mapLabelCls}>
+                      Condição de pagamento *
+                    </label>
+                    <PaymentConditionSelect
+                      id={`pc-modal-${sid}`}
+                      key={`pc-modal-${sid}-${payType}`}
+                      paymentType="BOLETO"
+                      value={paymentConditionValue}
+                      onChange={(v) => {
+                        setPaymentDraftBySupplier((prev) => ({
+                          ...prev,
+                          [sid]: {
+                            ...(prev[sid] ?? emptyPaymentDraft()),
+                            paymentCondition: v,
+                          },
+                        }));
+                      }}
+                      hideFocus
+                    />
+                  </div>
+                ) : null}
+
+                <div>
+                  <label htmlFor={`amount-modal-${sid}`} className={mapLabelCls}>
+                    Valor total (R$) *
+                  </label>
+                  <input
+                    id={`amount-modal-${sid}`}
+                    type="text"
+                    inputMode="decimal"
+                    value={(() => {
+                      const s = paymentDraftBySupplier[sid]?.amountToPayStr;
+                      if (s !== undefined && s !== '') return s;
+                      return totals ? formatCurrencyBR(totals.amountToPay) : '';
+                    })()}
+                    onChange={(e) => {
+                      setPaymentDraftBySupplier((prev) => ({
+                        ...prev,
+                        [sid]: {
+                          ...(prev[sid] ?? emptyPaymentDraft()),
+                          amountToPayStr: e.target.value,
+                        },
+                      }));
+                    }}
+                    onBlur={() => {
+                      const raw =
+                        paymentDraftBySupplier[sid]?.amountToPayStr ??
+                        (totals ? String(totals.amountToPay) : '');
+                      const formatted = formatCurrencyInputValue(raw);
+                      setPaymentDraftBySupplier((prev) => ({
+                        ...prev,
+                        [sid]: {
+                          ...(prev[sid] ?? emptyPaymentDraft()),
+                          amountToPayStr: formatted,
+                        },
+                      }));
+                    }}
+                    placeholder="0,00"
+                    className={mapFieldCls}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor={`pay-details-modal-${sid}`} className={mapLabelCls}>
+                    Dados do pagamento{
+                      payType === OC_TYPE_AVISTA || payType === OC_TYPE_CARTAO ? ' *' : ''
+                    }
+                  </label>
+                  <textarea
+                    id={`pay-details-modal-${sid}`}
+                    value={paymentDraftBySupplier[sid]?.paymentDetails ?? ''}
+                    onChange={(e) => {
+                      setPaymentDraftBySupplier((prev) => ({
+                        ...prev,
+                        [sid]: {
+                          ...(prev[sid] ?? emptyPaymentDraft()),
+                          paymentDetails: e.target.value,
+                        },
+                      }));
+                    }}
+                    rows={3}
+                    placeholder={
+                      payType === OC_TYPE_AVISTA || payType === OC_TYPE_CARTAO
+                        ? 'Conta, agência, favorecido, etc.'
+                        : 'Conta, PIX, agência, favorecido, etc.'
+                    }
+                    className={`${mapFieldCls} min-h-[5rem] resize-y`}
+                  />
+                </div>
+
+                {payType === OC_TYPE_AVISTA ? (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(10rem,1fr)_minmax(0,2.2fr)]">
+                    <div>
+                      <label htmlFor={`pix-type-modal-${sid}`} className={mapLabelCls}>
+                        Tipo de Chave Pix *
+                      </label>
+                      <SingleSelectSearchDropdown
+                        value={paymentDraftBySupplier[sid]?.pixKeyType ?? ''}
+                        onChange={(v) => {
+                          setPaymentDraftBySupplier((prev) => {
+                            const current = prev[sid] ?? emptyPaymentDraft();
+                            return {
+                              ...prev,
+                              [sid]: {
+                                ...current,
+                                pixKeyType: v,
+                                pixKey: maskPixKeyByType(v, current.pixKey),
+                              },
+                            };
+                          });
+                        }}
+                        options={OC_PIX_KEY_TYPE_OPTIONS}
+                        allowEmpty
+                        placeholder="Selecione..."
+                        searchPlaceholder="Pesquisar..."
+                        noFocusRing
+                        hideFocus
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor={`pix-key-modal-${sid}`} className={mapLabelCls}>
+                        Chave Pix *
+                      </label>
+                      <input
+                        id={`pix-key-modal-${sid}`}
+                        type="text"
+                        value={paymentDraftBySupplier[sid]?.pixKey ?? ''}
+                        onChange={(e) => {
+                          const pixType = paymentDraftBySupplier[sid]?.pixKeyType ?? '';
+                          const next = maskPixKeyByType(pixType, e.target.value);
+                          setPaymentDraftBySupplier((prev) => ({
+                            ...prev,
+                            [sid]: {
+                              ...(prev[sid] ?? emptyPaymentDraft()),
+                              pixKey: next,
+                            },
+                          }));
+                        }}
+                        placeholder={pixKeyInputPlaceholder(
+                          paymentDraftBySupplier[sid]?.pixKeyType ?? ''
+                        )}
+                        maxLength={pixKeyInputMaxLength(
+                          paymentDraftBySupplier[sid]?.pixKeyType ?? ''
+                        )}
+                        className={mapFieldCls}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div>
+                  <label htmlFor={`obs-modal-${sid}`} className={mapLabelCls}>
+                    Observações
+                  </label>
+                  <textarea
+                    id={`obs-modal-${sid}`}
+                    value={paymentDraftBySupplier[sid]?.observations ?? ''}
+                    onChange={(e) => {
+                      setPaymentDraftBySupplier((prev) => ({
+                        ...prev,
+                        [sid]: {
+                          ...(prev[sid] ?? emptyPaymentDraft()),
+                          observations: e.target.value,
+                        },
+                      }));
+                    }}
+                    rows={2}
+                    placeholder="Observações gerais da OC"
+                    className={`${mapFieldCls} min-h-[4rem] resize-y`}
+                  />
+                </div>
+
+                <div>
+                  <span className={mapLabelCls}>Anexar arquivos</span>
+                  <FinancialControlAttachmentsField
+                    files={paymentDraftBySupplier[sid]?.attachments ?? []}
+                    uploading={uploadingOcAttachments}
+                    disabled={isGenerating}
+                    onFilesSelect={async (files) => {
+                      if (!files.length) return;
+                      setUploadingOcAttachments(true);
+                      try {
+                        const uploaded = await uploadNamedAttachments(
+                          '/purchase-orders/upload-attachment',
+                          files
+                        );
+                        setPaymentDraftBySupplier((prev) => {
+                          const current = prev[sid] ?? emptyPaymentDraft();
+                          return {
+                            ...prev,
+                            [sid]: {
+                              ...current,
+                              attachments: [...(current.attachments || []), ...uploaded],
+                            },
+                          };
+                        });
+                        toast.success(
+                          uploaded.length > 1
+                            ? `${uploaded.length} arquivos enviados`
+                            : 'Arquivo enviado'
+                        );
+                      } catch (e: unknown) {
+                        const err = e as { response?: { data?: { message?: string } }; message?: string };
+                        toast.error(
+                          err.response?.data?.message || err.message || 'Não foi possível enviar o arquivo'
+                        );
+                      } finally {
+                        setUploadingOcAttachments(false);
+                      }
+                    }}
+                    onRemove={(index) => {
+                      setPaymentDraftBySupplier((prev) => {
+                        const current = prev[sid] ?? emptyPaymentDraft();
+                        return {
+                          ...prev,
+                          [sid]: {
+                            ...current,
+                            attachments: (current.attachments || []).filter((_, i) => i !== index),
+                          },
+                        };
+                      });
+                    }}
+                  />
+                </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onClick={closeOcModal}
+                    disabled={isGenerating}
+                    className="inline-flex h-10 items-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isGenerating}
+                    onClick={() => generateOrdersMutation.mutate(sid)}
+                    className="inline-flex h-10 items-center rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
+                  >
+                    {isGenerating ? 'Gerando…' : 'Gerar OC'}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
+
+          <Modal
+            isOpen={showCorrectionConfirm}
+            onClose={() => {
+              if (sendToCorrectionMutation.isPending) return;
+              setShowCorrectionConfirm(false);
+              setCorrectionNote('');
+            }}
+            title="Enviar para correção"
+            size="sm"
+            confirmBeforeClose={false}
+          >
+            <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              Deseja enviar a {selectedRequestLabel || 'RM selecionada'} para correção? O solicitante
+              poderá editar, adicionar ou retirar itens. Depois precisará reenviar e a RM será
+              aprovada novamente.
+            </p>
+            <div className="mb-6">
+              <label
+                htmlFor="mapa-correction-note"
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Observação *
+              </label>
+              <textarea
+                id="mapa-correction-note"
+                value={correctionNote}
+                onChange={(e) => setCorrectionNote(e.target.value)}
+                rows={4}
+                maxLength={4000}
+                placeholder="Descreva o que precisa ser alterado..."
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500"
+                disabled={sendToCorrectionMutation.isPending}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCorrectionConfirm(false);
+                  setCorrectionNote('');
+                }}
+                disabled={sendToCorrectionMutation.isPending}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedRequestId) return;
+                  const note = correctionNote.trim();
+                  if (!note) {
+                    toast.error('Informe o que precisa ser alterado na correção');
+                    return;
+                  }
+                  sendToCorrectionMutation.mutate({ id: selectedRequestId, note });
+                }}
+                disabled={
+                  !selectedRequestId ||
+                  !correctionNote.trim() ||
+                  sendToCorrectionMutation.isPending
+                }
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {sendToCorrectionMutation.isPending ? 'Enviando…' : 'Enviar para correção'}
+              </button>
+            </div>
+          </Modal>
       </MainLayout>
     </ProtectedRoute>
   );

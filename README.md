@@ -1,25 +1,31 @@
-# Sistema de Controle de Ponto - Empresa de Engenharia
+# Gennesis — Plataforma de Gestão Empresarial
 
 ## 📋 Visão Geral
 
-Sistema completo para controle de frequência de colaboradores com:
-- Bater ponto com foto e geolocalização
-- Cálculos automáticos de horas extras, banco de horas e férias
-- Painel administrativo completo
-- Versão web e mobile
+Plataforma integrada da Gennesis para gestão do dia a dia de uma empresa de engenharia, reunindo em um único sistema:
+
+- **Departamento Pessoal** — funcionários, folha, férias, ausências, banco de horas e registros de ponto
+- **Engenharia e obras** — contratos, ordens de serviço, materiais, pleitos, fichas de demanda e central de chamados
+- **Suprimentos** — requisições, cotações, ordens de compra, estoque, frota e abastecimento
+- **Financeiro e métricas** — controle de NFs, receitas, gastos por contrato e balanço financeiro
+- **Contratos e licitações** — espelho de NF, PNCP, responsáveis técnicos (CREA), anuidades e ART/protocolos
+- **Jurídico** — processos trabalhistas e dashboards de acompanhamento
+- **Aprovações e integrações** — Fluig, solicitações internas, chat e central de ajuda
+
+Acesso por perfil e permissão por módulo, com versão web e app mobile.
 
 ## 🏗️ Arquitetura
 
 ### Estrutura do Projeto (Monorepo)
 ```
-sistema-ponto-engenharia/
+sistema-de-ponto-gennesis/
 ├── apps/
 │   ├── backend/          # API Node.js + Express + PostgreSQL
 │   ├── frontend/         # React + Next.js (Web)
 │   └── mobile/           # React Native (Mobile)
 ├── packages/
-│   ├── shared/           # Código compartilhado
-│   └── types/            # TypeScript types
+│   ├── permission-modules/  # Módulos e permissões compartilhados
+│   └── ...
 └── docs/                 # Documentação
 ```
 
@@ -58,7 +64,7 @@ sistema-ponto-engenharia/
 ```bash
 # Clone o repositório
 git clone <url-do-repositorio>
-cd sistema-ponto-engenharia
+cd sistema-de-ponto-gennesis
 
 # Instale todas as dependências
 npm run install:all
@@ -85,24 +91,39 @@ npm run dev
 
 ## 📱 Funcionalidades
 
-### Para Colaboradores
-- Bater ponto com foto e localização
-- Visualizar histórico de pontos
-- Consultar saldo de horas
-- Solicitar férias
+### Principal
+- Painel do sistema, caixa de aprovações e integração com Fluig
+- Solicitações internas, reserva de frota, abastecimento e chamados de manutenção
+- Central de ajuda com tutoriais do sistema
 
-### Para Administradores
-- Dashboard com métricas
-- Gestão de colaboradores
-- Relatórios de frequência
-- Configurações da empresa
-- Aprovação de solicitações
+### Departamento Pessoal
+- Cadastro de funcionários e externos, folha de pagamento e ausências
+- Férias, alterações de ponto, banco de horas e alocação
+- Segurança do trabalho (ASO) e central de atendimentos (WhatsApp)
 
-### Para RH
-- Relatórios detalhados
-- Cálculos de folha de pagamento
-- Gestão de férias
-- Análise de produtividade
+### Engenharia
+- Contratos, ordens de serviço, solicitação de materiais e pleitos
+- Fichas de demanda, recebimento de entregas e solicitação de ferramentas
+- Central de chamados, planos de manutenção e relatórios
+
+### Suprimentos
+- Requisições de materiais, mapa de cotação e ordens de compra
+- Controle de entregas, estoque e furo de estoque
+- Fila de abastecimento, gestão da frota e pedidos de ferramentas
+
+### Financeiro e métricas
+- Controle financeiro, receitas e pagamento da folha (borderô/CNAB)
+- Controle de NFs, entrada fiscal e balanço por contrato
+- Gastos operacionais e visão consolidada de contratos
+
+### Contratos, licitações e jurídico
+- Espelho de NF, licitações e consulta PNCP
+- Responsáveis técnicos, anuidades CREA e ART/protocolos
+- Processos trabalhistas e dashboards jurídicos
+
+### Registros de ponto (web e mobile)
+- Bater ponto com foto e geolocalização
+- Histórico de registros, banco de horas e solicitações relacionadas
 
 ## 🔒 Segurança
 
@@ -111,6 +132,7 @@ npm run dev
 - Upload seguro de fotos
 - Logs de auditoria
 - Criptografia de dados sensíveis
+- Permissões granulares por módulo e cargo
 
 ## 📊 Regras de Negócio
 

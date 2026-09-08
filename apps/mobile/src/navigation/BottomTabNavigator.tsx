@@ -1,72 +1,75 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Clock, CalendarClock, User } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme } from '../context/ThemeContext';
+import FloatingTabBar from './FloatingTabBar';
 
-// Screens
-import DashboardScreen from '../screens/RecordsScreen';
-import BankHoursScreen from '../screens/BankHoursScreen';
-import Screen2 from '../screens/ProfileScreen';
+import HomeScreen from '../screens/HomeScreen';
+import FuelRequestsScreen from '../screens/FuelRequestsScreen';
+import VehicleReservationsScreen from '../screens/VehicleReservationsScreen';
+import DpRequestsScreen from '../screens/DpRequestsScreen';
+import { usePermissions } from '../hooks/usePermissions';
 
 export type BottomTabParamList = {
   Home: undefined;
-  Dashboard: undefined;
-  Profile: undefined;
+  Combustivel: undefined;
+  Reservas: undefined;
+  DpRequests: undefined;
 };
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
 
 export default function BottomTabNavigator() {
-  const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
+  const { canSeeCombustivel, canSeeReservas, canSeeDpRequests } = usePermissions();
 
   return (
     <Tab.Navigator
-      initialRouteName="Dashboard"
+      initialRouteName="Home"
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      sceneContainerStyle={{
+        backgroundColor: 'transparent',
+      }}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textSecondary,
+        lazy: true,
         tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
-          paddingTop: 8,
-          height: 60 + (insets.bottom > 0 ? insets.bottom : 0),
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
+          height: 'auto',
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
+        tabBarBackground: () => null,
       }}
     >
       <Tab.Screen
         name="Home"
-        component={BankHoursScreen}
-        options={{
-          tabBarLabel: 'Banco de Horas',
-          tabBarIcon: ({ color, size }) => <CalendarClock size={size} color={color} />,
-        }}
+        component={HomeScreen}
+        options={{ title: 'Início' }}
       />
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{
-          tabBarLabel: 'Registros',
-          tabBarIcon: ({ color, size }) => <Clock size={size} color={color} />,
-        }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={Screen2}
-        options={{
-          tabBarLabel: 'Meu Perfil',
-          tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
-        }}
-      />
+      {canSeeCombustivel ? (
+        <Tab.Screen
+          name="Combustivel"
+          component={FuelRequestsScreen}
+          options={{ title: 'Abastecimento' }}
+        />
+      ) : null}
+      {canSeeReservas ? (
+        <Tab.Screen
+          name="Reservas"
+          component={VehicleReservationsScreen}
+          options={{ title: 'Frota' }}
+        />
+      ) : null}
+      {canSeeDpRequests ? (
+        <Tab.Screen
+          name="DpRequests"
+          component={DpRequestsScreen}
+          options={{ title: 'Solicitações' }}
+        />
+      ) : null}
     </Tab.Navigator>
   );
 }
-

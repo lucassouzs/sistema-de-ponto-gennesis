@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import api from '@/lib/api';
 import { normalizeCostCentersResponse } from '@/lib/costCenters';
+import { usePermissions } from '@/hooks/usePermissions';
 
 interface CostCenter {
   id?: string;
@@ -12,35 +14,44 @@ interface CostCenter {
 }
 
 /**
- * Hook para buscar centros de custo da API
- * Retorna os centros de custo com apenas o NOME (sem código)
- * Normaliza a resposta para sempre retornar arrays (filtros, listas, etc.)
+ * Hook para buscar centros de custo da API.
+ * Usuários UNB recebem só CCs UNB (filtrados no backend).
  */
 export function useCostCenters() {
+  const { isUnbUser, isLoading: permissionsLoading } = usePermissions();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['cost-centers'],
+    queryKey: ['cost-centers', isUnbUser ? 'unb' : 'all'],
     queryFn: async () => {
       const res = await api.get('/cost-centers', {
-        params: { isActive: 'true', limit: 2000 }
+        params: { isActive: 'true', limit: 2000 },
       });
       return normalizeCostCentersResponse(res.data);
     },
-    staleTime: 5 * 60 * 1000, // Cache por 5 minutos
+    enabled: !permissionsLoading,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const costCenters = normalizeCostCentersResponse(data) as unknown as CostCenter[];
+  const costCenters = useMemo(() => {
+    const list = normalizeCostCentersResponse(data) as unknown as CostCenter[];
+    const formattedCostCenters = list.map((cc) => ({
+      ...cc,
+      label: cc.name || String(cc.code || ''),
+      value: cc.name || String(cc.code || ''),
+    }));
 
-  const formattedCostCenters = costCenters.map(cc => ({
-    ...cc,
-    label: cc.name || String(cc.code || ''),
-    value: cc.name || String(cc.code || '')
-  }));
+    const seenLabels = new Set<string>();
+    return formattedCostCenters.filter((cc) => {
+      const label = cc.label || cc.name || String(cc.code || '');
+      if (seenLabels.has(label)) return false;
+      seenLabels.add(label);
+      return true;
+    });
+  }, [data]);
 
   return {
-    costCenters: formattedCostCenters,
-    isLoading,
+    costCenters,
+    isLoading: permissionsLoading || isLoading,
     error,
-    costCentersList: formattedCostCenters.map(cc => cc.label || cc.name || '')
+    costCentersList: costCenters.map((cc) => cc.label || cc.name || ''),
   };
 }
-

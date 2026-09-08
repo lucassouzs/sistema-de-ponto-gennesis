@@ -1,6 +1,15 @@
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
+
+async function hashPassword(password, rounds = 12) {
+  try {
+    const bcrypt = require('bcrypt');
+    return bcrypt.hash(password, rounds);
+  } catch {
+    const bcryptjs = require('bcryptjs');
+    return bcryptjs.hash(password, rounds);
+  }
+}
 
 async function createTestEmployee() {
   try {
@@ -11,7 +20,7 @@ async function createTestEmployee() {
     hireDate.setFullYear(hireDate.getFullYear() - 2);
     
     // Criar usuário
-    const hashedPassword = await bcrypt.hash('123456', 12);
+    const hashedPassword = await hashPassword('123456', 12);
     
     const user = await prisma.user.create({
       data: {

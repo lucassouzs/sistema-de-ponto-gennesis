@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Eye, EyeOff, Lock, CheckCircle } from 'lucide-react';
 import { Button } from './Button';
 import { Input } from './Input';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -28,6 +31,12 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm, { isParentOpen: isOpen });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -101,12 +110,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
+  return createPortal(
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[99999] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={requestClose} />
+      <div className="app-modal-panel relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-xl">
         <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
           <div className="flex items-center space-x-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -117,7 +127,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
             </h3>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
           >
             <X className="w-5 h-5" />
@@ -248,6 +258,9 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>,
+    document.body
   );
 };

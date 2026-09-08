@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import api from '@/lib/api';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 interface MedicalCertificateCardProps {
   onSuccess?: () => void;
@@ -22,6 +24,8 @@ const certificateTypes = [
   { value: 'PATERNITY', label: 'Paternidade' },
   { value: 'OTHER', label: 'Outros' }
 ];
+
+const certificateTypeSelectOptions = labeledToSelectOptions(certificateTypes);
 
 export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -147,18 +151,13 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
             <label className="block text-sm font-semibold text-gray-900 dark:text-gray-300 mb-2">
               Tipo de Ausência
             </label>
-            <select
+            <StringSingleSelectDropdown
               value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              className="input w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100"
-              required
-            >
-              {certificateTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.label}
-                </option>
-              ))}
-            </select>
+              onChange={(type) => setFormData({ ...formData, type })}
+              options={certificateTypeSelectOptions}
+              allowEmpty={false}
+              className="w-full"
+            />
           </div>
 
           {/* Campo para especificar tipo quando for "Outros" */}
@@ -220,7 +219,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="input w-full min-h-[100px] resize-none bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+              className="input w-full min-h-[100px] resize-none bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
               placeholder="Adicione observações sobre a ausência..."
             />
           </div>
@@ -237,7 +236,7 @@ export const MedicalCertificateCard: React.FC<MedicalCertificateCardProps> = ({ 
               type="file"
               onChange={handleFileChange}
               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/30 file:text-blue-700 dark:file:text-blue-400 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/30 file:text-blue-700 dark:file:text-blue-400 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
             />
             {file && (
               <div className="flex items-center gap-2 mt-2 text-sm text-green-600 dark:text-green-400">

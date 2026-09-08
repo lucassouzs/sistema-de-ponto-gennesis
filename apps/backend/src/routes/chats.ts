@@ -29,9 +29,34 @@ router.get('/direct', (req, res, next) =>
   chatController.getDirectChats(req, res, next)
 );
 
+// Tópicos dentro da conversa (rotas explícitas — antes de /direct/:id)
+router.get('/direct/:chatId/topics', (req, res, next) =>
+  chatController.listChatTopics(req, res, next)
+);
+router.post('/direct/:chatId/topics', (req, res, next) =>
+  chatController.createChatTopic(req, res, next)
+);
+router.patch('/direct/:chatId/topics/reorder', (req, res, next) =>
+  chatController.reorderChatTopics(req, res, next)
+);
+router.patch('/direct/:chatId/topics/:topicId/pin', (req, res, next) =>
+  chatController.setChatTopicPinned(req, res, next)
+);
+router.patch('/direct/:chatId/topics/:topicId', (req, res, next) =>
+  chatController.renameChatTopic(req, res, next)
+);
+router.delete('/direct/:chatId/topics/:topicId', (req, res, next) =>
+  chatController.deleteChatTopic(req, res, next)
+);
+
 // Abrir (ou criar) chat direto com um usuário
 router.post('/direct', (req, res, next) =>
   chatController.openDirectChat(req, res, next)
+);
+
+// Abrir (ou criar) conversa com a Gennecy
+router.post('/direct/gennecy', (req, res, next) =>
+  chatController.openGennecyDirectChat(req, res, next)
 );
 
 // Criar grupo (suporta upload de foto via multipart)
@@ -115,6 +140,11 @@ router.get('/direct/attachments/download', (req, res, next) =>
 // Marcar mensagens de chat direto como lidas
 router.patch('/direct/:id/read', (req, res, next) =>
   chatController.markAsRead(req, res, next)
+);
+
+// Chamada nativa em grupo em andamento (antes de GET /direct/:id)
+router.get('/direct/:id/active-native-call', (req, res, next) =>
+  chatController.getActiveNativeCall(req, res, next)
 );
 
 // Obter chat direto específico com mensagens

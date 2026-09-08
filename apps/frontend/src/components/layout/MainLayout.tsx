@@ -1,98 +1,280 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { MessageSquare } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import dynamic from 'next/dynamic';
+import { usePathname, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  readSidebarCollapsed,
+  shouldForceSidebarCollapsed,
+  SIDEBAR_TRANSITION_CLASS,
+} from '@/lib/sidebarStorage';
+import { SHOW_CHAT_FLOAT_BUTTON } from '@/lib/chatFloatButton';
 import { Sidebar } from './Sidebar';
-import { ChatWidget } from '../chat/ChatWidget';
-import api from '@/lib/api';
+import { TopNavbar } from './TopNavbar';
+import { ChangePasswordModal } from '@/components/ui/ChangePasswordModal';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useLogout } from '@/hooks/useLogout';
+import { useNativeWebRTCCall } from '@/hooks/useNativeWebRTCCall';
+import { useChatSounds } from '@/hooks/useChatSounds';
+import { NativeCallOverlay } from '@/components/conversas/NativeCallOverlay';
+import { NativeCallProvider } from '@/contexts/NativeCallContext';
+import { useModalOverlayObserver } from '@/hooks/useModalOverlayObserver';
+import { usePageActivityTracker } from '@/hooks/usePageActivityTracker';
+import { syncModalOpenClass } from '@/lib/modalBodyLock';
+import { MainLayoutShellContext } from './MainLayoutShellContext';
+import { isSociosBlockedCollaborationPath } from '@/lib/sociosCollaborationAccess';
+import { PageEnter } from './PageEnter';
+import { bootAuthenticatedPageReveal } from '@/lib/pageReveal';
+import { ImpersonationBanner } from './ImpersonationBanner';
+import { ScheduledNewsGate } from './ScheduledNewsGate';
+
+export { useIsInsideMainLayoutShell } from './MainLayoutShellContext';
+
+const ChatWidgetLazy = dynamic(
+  () => import('../chat/ChatWidget').then((m) => ({ default: m.ChatWidget })),
+  { ssr: false },
+);
 
 interface MainLayoutProps {
   children: React.ReactNode;
   userRole: 'EMPLOYEE';
   userName: string;
-  onLogout: () => void;
+  /** Opcional: se omitido, usa logout padrão (limpa sessão e vai para /auth/login). */
+  onLogout?: () => void;
+}
+
+function resolveInitialSidebarCollapsed(pathname: string | null): boolean {
+  if (shouldForceSidebarCollapsed(pathname)) return true;
+  return readSidebarCollapsed();
+}
+
+/** Adia WebRTC/sons para não competir com first paint pós-login. */
+function useDeferredRealtimeReady(delayMs = 2500): boolean {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const enable = () => {
+      if (!cancelled) setReady(true);
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(enable, { timeout: delayMs });
+    } else {
+      timeoutId = setTimeout(enable, delayMs);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) clearTimeout(timeoutId);
+    };
+  }, [delayMs]);
+
+  return ready;
 }
 
 export function MainLayout({ children, userRole, userName, onLogout }: MainLayoutProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  /** Esconder o FAB de Conversas enquanto o modal de recorte de foto está aberto (mesmo ícone pode confundir). */
-  const [hideConversasFabOverlay, setHideConversasFabOverlay] = useState(false);
-  const pathname = usePathname();
-  const { user } = usePermissions();
-
-  useEffect(() => {
-    const onFabVis = (e: Event) => {
-      const detail = (e as CustomEvent<{ hidden?: boolean }>).detail;
-      setHideConversasFabOverlay(!!detail?.hidden);
-    };
-    window.addEventListener('conversas-fab-visibility', onFabVis as EventListener);
-    return () => window.removeEventListener('conversas-fab-visibility', onFabVis as EventListener);
-  }, []);
-
-  const { data: unreadCount = 0 } = useQuery({
-    queryKey: ['chat-unread-count', user?.id],
-    queryFn: async () => {
-      const res = await api.get('/chats/direct');
-      const chats = (res.data?.data ?? []) as Array<{ messages?: Array<{ isRead: boolean; senderId: string }> }>;
-      const total = chats.reduce((acc, chat) => {
-        const unread = (chat.messages ?? []).filter(
-          (m) => !m.isRead && m.senderId !== user?.id
-        ).length;
-        return acc + unread;
-      }, 0);
-      return total;
-    },
-    enabled: !!user?.id,
-    refetchInterval: 5000,
-  });
-
-  // Função para detectar mudanças no estado do menu
-  const handleMenuToggle = (collapsed: boolean) => {
-    setIsCollapsed(collapsed);
-  };
+  const insideShell = useContext(MainLayoutShellContext);
+  // Páginas legadas ainda envolvem MainLayout; sob o layout de /ponto só repassam o conteúdo.
+  if (insideShell) {
+    return <>{children}</>;
+  }
 
   return (
-    <div className="min-h-[100dvh] bg-gray-50 dark:bg-gray-900">
-      {/* Sidebar */}
-      <Sidebar 
-        userRole={userRole} 
-        userName={userName} 
-        onLogout={onLogout}
-        onMenuToggle={handleMenuToggle}
-      />
-      
-      {/* Main Content */}
-      <div className={`transition-all duration-300 ease-in-out ${
-        isCollapsed ? 'lg:ml-20' : 'lg:ml-72'
-      }`}>
-        <main className="p-4 lg:p-8">
-          {children}
-        </main>
-      </div>
+    <MainLayoutShell
+      userRole={userRole}
+      userName={userName}
+      onLogout={onLogout}
+    >
+      {children}
+    </MainLayoutShell>
+  );
+}
 
-      {/* Chat Widget */}
-      <ChatWidget />
+function MainLayoutShell({ children, userRole, userName, onLogout }: MainLayoutProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const defaultLogout = useLogout();
+  const handleLogout = onLogout ?? defaultLogout;
+  const [isCollapsed, setIsCollapsed] = useState(() => resolveInitialSidebarCollapsed(pathname));
+  const [layoutSynced, setLayoutSynced] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [pageRevealReady, setPageRevealReady] = useState(false);
+  const [pageFromReload, setPageFromReload] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const { user, canAccessCollaborationTools, isLoading: permissionsLoading } = usePermissions();
+  const displayName = userName || user?.name || '';
+  const displayRole = (userRole || user?.role || 'EMPLOYEE') as MainLayoutProps['userRole'];
+  const realtimeReady = useDeferredRealtimeReady();
+  const realtimeUserId =
+    realtimeReady && canAccessCollaborationTools ? user?.id : undefined;
+  const nativeCall = useNativeWebRTCCall({ userId: realtimeUserId });
+  useChatSounds({ userId: realtimeUserId, callPhase: nativeCall.phase });
 
-      {/* Atalho flutuante Conversas — oculto durante modal de recorte da foto (CircularPhotoCropModal) */}
-      {pathname !== '/ponto/conversas' && !hideConversasFabOverlay && (
-        <Link
-          href="/ponto/conversas"
-          className="fixed bottom-6 right-6 z-[51] flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-lg transition-colors hover:bg-red-700 lg:bottom-8 lg:right-8"
-          aria-label="Abrir conversas"
-          title="Conversas"
+  useEffect(() => {
+    let cancelled = false;
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setPageRevealReady(true);
+    }, 1000);
+
+    void bootAuthenticatedPageReveal().then((result) => {
+      if (cancelled) return;
+      setPageFromReload(result.fromReload);
+      setPageRevealReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safety);
+    };
+  }, []);
+  useModalOverlayObserver();
+  usePageActivityTracker();
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add('app-shell-locked');
+    return () => {
+      root.classList.remove('app-shell-locked');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (permissionsLoading || canAccessCollaborationTools) return;
+    if (!isSociosBlockedCollaborationPath(pathname)) return;
+    router.replace('/ponto/home');
+  }, [permissionsLoading, canAccessCollaborationTools, pathname, router]);
+
+  useLayoutEffect(() => {
+    setIsCollapsed(resolveInitialSidebarCollapsed(pathname));
+    setLayoutSynced(true);
+    // Garante que a sidebar não fique bloqueada se um overlay ficou preso no DOM.
+    syncModalOpenClass();
+  }, [pathname]);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    const resetShellScroll = () => {
+      if (shell.scrollTop !== 0) shell.scrollTop = 0;
+      if (shell.scrollLeft !== 0) shell.scrollLeft = 0;
+    };
+
+    const onFocusIn = () => {
+      resetShellScroll();
+      requestAnimationFrame(resetShellScroll);
+    };
+
+    shell.addEventListener('focusin', onFocusIn, true);
+    return () => shell.removeEventListener('focusin', onFocusIn, true);
+  }, []);
+
+  const handleMenuToggle = useCallback((collapsed: boolean) => {
+    setIsCollapsed((prev) => (prev === collapsed ? prev : collapsed));
+  }, []);
+
+  const handleOpenChangePassword = useCallback(() => {
+    setIsChangePasswordOpen(true);
+  }, []);
+
+  const isFormularioEditorRoute =
+    pathname != null &&
+    /^\/ponto\/formularios\/[^/]+$/.test(pathname);
+
+  const isFullBleedRoute = pathname != null && (
+    pathname === '/ponto/conversas' ||
+    pathname.startsWith('/ponto/conversas/') ||
+    pathname === '/ponto/flow' ||
+    pathname.startsWith('/ponto/flow') ||
+    isFormularioEditorRoute
+  );
+
+  return (
+    <MainLayoutShellContext.Provider value={true}>
+      <NativeCallProvider value={nativeCall}>
+        <div
+          ref={shellRef}
+          className="app-theme-bg h-[100dvh] max-h-[100dvh] max-w-[100vw] overflow-hidden"
+          // Foco em elemento fora da área visível pode rolar este container mesmo com
+          // overflow hidden, escondendo a topbar e cortando a página.
+          onScroll={(event) => {
+            const el = event.currentTarget;
+            if (el.scrollTop !== 0) el.scrollTop = 0;
+            if (el.scrollLeft !== 0) el.scrollLeft = 0;
+          }}
         >
-          <MessageSquare className="h-6 w-6" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-white text-red-600 text-[11px] font-bold inline-flex items-center justify-center leading-none animate-chat-unread-badge">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </Link>
-      )}
-    </div>
+          <Sidebar
+            userRole={displayRole}
+            userName={displayName}
+            onLogout={handleLogout}
+            onMenuToggle={handleMenuToggle}
+            onOpenChangePassword={handleOpenChangePassword}
+          />
+
+          {/* Main Content — mesma duração/easing do painel tier 2 da sidebar */}
+          <div
+            className={`flex h-full min-h-0 min-w-0 max-w-full flex-col ${
+              layoutSynced ? `transition-[margin-left] ${SIDEBAR_TRANSITION_CLASS}` : ''
+            } ${isCollapsed ? 'lg:ml-20' : 'lg:ml-[23rem]'}`}
+          >
+            <TopNavbar
+              userName={displayName}
+              onLogout={handleLogout}
+              onOpenChangePassword={handleOpenChangePassword}
+            />
+            <ImpersonationBanner />
+            <main
+              className={
+                isFullBleedRoute
+                  ? 'app-page-scroll app-thin-scroll min-h-0 min-w-0 flex-1 overflow-hidden p-0'
+                  : 'app-page-scroll app-thin-scroll min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-4 sm:py-4 lg:p-8'
+              }
+            >
+              <PageEnter
+                ready={pageRevealReady}
+                fromReload={pageFromReload}
+                className={isFullBleedRoute ? 'h-full min-h-0' : ''}
+              >
+                {children}
+              </PageEnter>
+            </main>
+          </div>
+
+          {SHOW_CHAT_FLOAT_BUTTON && canAccessCollaborationTools ? <ChatWidgetLazy /> : null}
+
+          <NativeCallOverlay
+            call={nativeCall}
+            localAvatarUrl={user?.profilePhotoUrl ?? null}
+            localDisplayName={user?.name ?? null}
+          />
+
+          <ChangePasswordModal
+            isOpen={isChangePasswordOpen}
+            onClose={() => setIsChangePasswordOpen(false)}
+            onSuccess={() => {
+              setIsChangePasswordOpen(false);
+              queryClient.invalidateQueries({ queryKey: ['user'] });
+            }}
+          />
+          <ScheduledNewsGate userId={user?.id} />
+        </div>
+      </NativeCallProvider>
+    </MainLayoutShellContext.Provider>
   );
 }

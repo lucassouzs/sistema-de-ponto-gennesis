@@ -1,5 +1,6 @@
 'use client';
 
+// Deploy trigger: 2026-07-13-login-opts
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/providers/Providers';
@@ -16,18 +17,20 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
-        <title>Gennesis Attendance</title>
-        <meta name="description" content="Sistema completo para controle de frequência de colaboradores" />
-        <meta name="keywords" content="ponto, frequência, engenharia, controle, horas" />
-        <meta name="robots" content="noindex, nofollow" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/logoredonda.png" type="image/png" />
-        <link rel="shortcut icon" href="/logoredonda.png" type="image/png" />
+        <title>Gennesis Conecta | Plataforma de Gestão Gennesis Engenharia</title>
+        <meta name="description" content="Gennesis Conecta é a plataforma integrada de gestão da Gennesis Engenharia: ponto, frequência, financeiro, licitações e muito mais em um só lugar." />
+        <meta name="keywords" content="gennesis conecta, gennesis engenharia, ponto, frequência, engenharia, controle, horas, sistema de gestão" />
+        <meta name="robots" content="index, follow" />
+        <meta name="google-site-verification" content="8G3AX5qUg4QPPea1ghF6fZL0teE8VA2mnf9I-6obkoQ" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <link rel="icon" href="/logopv.png" type="image/png" />
+        <link rel="shortcut icon" href="/logopv.png" type="image/png" />
       </head>
       <body className={inter.className}>
-        <Favicon />
         <Providers>
+          <Favicon />
           {children}
+          <div id="dropdown-portal-root" />
         </Providers>
         <ToasterWrapper />
       </body>

@@ -1,0 +1,3 @@
+# unzip: extração de ZIPs jurídicos no Railway sem carregar o arquivo inteiro na RAM
+[phases.setup]
+nixPkgs = ["unzip"]

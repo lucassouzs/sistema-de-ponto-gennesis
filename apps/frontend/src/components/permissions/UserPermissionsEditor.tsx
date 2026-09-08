@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
-  ChevronDown,
+  Copy,
   FileText,
   LayoutDashboard,
   Layers,
+  MoreVertical,
+  RotateCcw,
   ShieldCheck,
   User,
   Wallet,
@@ -16,24 +18,37 @@ import {
   Package,
   FolderOpen,
   Clock,
-  SlidersHorizontal,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
 import {
   PERMISSION_ACCESS_ACTION,
   PERMISSION_CONTROLE_CATEGORY,
+  PERMISSION_CONTROLE_GROUP_ORDER,
   PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX,
+  PERMISSION_MODULE_KEYS_OPEN_ACCESS,
   PERMISSION_MODULES,
   pathToModuleKey,
   type PermissionModuleDef,
 } from '@sistema-ponto/permission-modules';
-import { Card, CardContent } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { Loading } from '@/components/ui/Loading';
+import { Modal } from '@/components/ui/Modal';
+import { AppUnderlineTabButton, AppUnderlineTabList } from '@/components/ui/AppTabButton';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import { MultiSelectSearchDropdown } from '@/components/ui/MultiSelectSearchDropdown';
+import { isGennecyBotUser } from '@/lib/gennecyBot';
+import { resolveApiMediaUrl } from '@/lib/resolveMediaUrl';
 import api from '@/lib/api';
 
 /** Orçamento e relatórios fotográficos: só pela aba «Contratos», não pela matriz «Acesso». */
-const HIDDEN_FROM_ACCESS_MATRIX = new Set(PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX);
+const HIDDEN_FROM_ACCESS_MATRIX = new Set<string>([
+  ...PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX,
+  ...PERMISSION_MODULE_KEYS_OPEN_ACCESS,
+  // Registros de Ponto: a página só aparece para funcionários com `requiresTimeClock`,
+  // não é controlada pela matriz de permissões.
+  pathToModuleKey('/ponto'),
+]);
 
 type PermissionItem = { module: string; action: string };
 
@@ -45,25 +60,44 @@ type ContractModuleFlags = {
 };
 
 type UserPermissionPayload = {
-  user: { id: string; name: string; email: string; employee?: { position?: string | null } };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    profilePhotoUrl?: string | null;
+    employee?: { position?: string | null };
+  };
   isAdmin: boolean;
   permissions: PermissionItem[];
   allowedContractIds: string[];
   dpApprovalContractIds?: string[];
+  restrictedDpApprovalCostCenterIds?: string[];
+  dpRequestViewCostCenterIds?: string[];
   contractModuleFlags?: Record<string, ContractModuleFlags>;
 };
 type PermissionUserListItem = {
   id: string;
   name: string;
   email: string;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
   employee?: { position?: string; department?: string };
 };
+
+function formatPermissionUserCpf(cpf?: string | null) {
+  const digits = (cpf || '').replace(/\D/g, '');
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  return cpf?.trim() || '—';
+}
 
 export type PermissionsTargetPreview = {
   id: string;
   name: string;
   email: string;
   position?: string;
+  profilePhotoUrl?: string | null;
 };
 
 function serializePermissionSet(s: Set<string>): string {
@@ -74,6 +108,16 @@ const CONTRACTS_MODULE_KEY = pathToModuleKey('/ponto/contratos');
 const EMPLOYEES_MODULE_KEY = pathToModuleKey('/ponto/funcionarios');
 /** Removido da UI (gestor por contrato na aba Contratos); ainda pode existir no banco até o próximo salvamento. */
 const DEPRECATED_DP_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-dp');
+const DEPRECATED_RM_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-requisicoes-materiais');
+const DEPRECATED_OC_GESTOR_APPROVE_CONTROLE_KEY = pathToModuleKey('/ponto/controle/aprovar-oc-gestor');
+const RESTRICTED_DP_APPROVE_KEY = pathToModuleKey('/ponto/controle/aprovar-solicitacoes-restritas-dp');
+const DP_REQUEST_VIEW_CC_KEY = pathToModuleKey('/ponto/controle/ver-solicitacoes-internas-cc');
+
+const DEPRECATED_CONTROLE_KEYS = new Set([
+  DEPRECATED_DP_APPROVE_CONTROLE_KEY,
+  DEPRECATED_RM_APPROVE_CONTROLE_KEY,
+  DEPRECATED_OC_GESTOR_APPROVE_CONTROLE_KEY,
+]);
 const CONTRACT_ACTIONS = ['ver', 'criar', 'editar', 'excluir'] as const;
 type ContractAction = (typeof CONTRACT_ACTIONS)[number];
 
@@ -101,9 +145,35 @@ function serializeFullBaseline(
   contractIds: Set<string>,
   employeeActions: Set<ContractAction>,
   dpApprovalContractIds: Set<string>,
-  moduleFlags: Record<string, ContractModuleFlags>
+  moduleFlags: Record<string, ContractModuleFlags>,
+  restrictedDpApprovalCostCenterIds: Set<string> = new Set(),
+  dpRequestViewCostCenterIds: Set<string> = new Set()
 ): string {
-  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}`;
+  return `${serializePermissionSet(selected)}|ca:${serializeContractActions(contractActions)}|cid:${serializeContractIds(contractIds)}|ea:${serializeContractActions(employeeActions)}|dp:${serializeContractIds(dpApprovalContractIds)}|mf:${serializeModuleFlags(moduleFlags)}|rdp:${serializeContractIds(restrictedDpApprovalCostCenterIds)}|vcc:${serializeContractIds(dpRequestViewCostCenterIds)}`;
+}
+
+const EMPTY_PERMISSION_BASELINE = serializeFullBaseline(
+  new Set(),
+  new Set(),
+  new Set(),
+  new Set(),
+  new Set(),
+  {},
+  new Set()
+);
+
+function isEmptyPermissionBaseline(
+  selected: Set<string>,
+  contractActions: Set<ContractAction>,
+  contractIds: Set<string>,
+  employeeActions: Set<ContractAction>
+): boolean {
+  return (
+    selected.size === 0 &&
+    contractActions.size === 0 &&
+    contractIds.size === 0 &&
+    employeeActions.size === 0
+  );
 }
 
 /** Mesmo formato retornado por GET /permissions/users/:id (alinha cache do React Query ao PUT). */
@@ -128,7 +198,7 @@ function buildPermissionsSnapshotForCache(
   }
   const out: PermissionItem[] = [];
   for (const module of Array.from(modules)) {
-    if (module === DEPRECATED_DP_APPROVE_CONTROLE_KEY) continue;
+    if (DEPRECATED_CONTROLE_KEYS.has(module)) continue;
     out.push({ module, action: PERMISSION_ACCESS_ACTION });
   }
   for (const action of Array.from(contractActions)) {
@@ -141,13 +211,16 @@ function buildPermissionsSnapshotForCache(
 }
 
 type ContractOption = { id: string; name: string; number: string };
+type CostCenterOption = { id: string; name: string; code?: string | null };
 
 const CATEGORY_ORDER = [
   'Principal',
-  'Painel de Controle',
   'Departamento Pessoal',
   'Financeiro',
+  'Métricas',
   'Engenharia',
+  'Contratos e Licitações',
+  'Jurídico',
   'Suprimentos',
   'Cadastros',
   'Registros de Ponto',
@@ -163,16 +236,19 @@ function inferCategoryFromHref(href: string): string {
   const h = href.replace(/\/$/, '') || '/';
   if (
     [
-      '/ponto/dashboard',
-      '/ponto/conversas-whatsapp',
+      '/ponto/painel-do-sistema',
       '/ponto/aprovacoes',
       '/ponto/financeiro/gestao-solicitacoes',
+      '/ponto/solicitacoes-dp',
       '/ponto/drive',
+      '/ponto/reserva-veiculos',
+      '/ponto/solicitar-combustivel',
+      '/ponto/entrega-logistica',
+      '/ponto/central-de-ajuda',
     ].some((p) => h === p)
   ) {
     return 'Principal';
   }
-  if (h === '/ponto/permissoes') return 'Painel de Controle';
   if (
     [
       '/ponto/funcionarios',
@@ -181,35 +257,72 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/gerenciar-atestados',
       '/ponto/solicitacoes',
       '/ponto/gerenciar-solicitacoes',
+      '/ponto/gerenciar-solicitacoes-dp',
+      '/ponto/conversas-whatsapp',
       '/ponto/ferias',
       '/ponto/gerenciar-ferias',
       '/ponto/gerenciar-feriados',
       '/ponto/banco-horas',
       '/relatorios/alocacao',
       '/ponto/aniversariantes',
+      '/ponto/seguranca-do-trabalho',
     ].some((p) => h === p)
   ) {
     return 'Departamento Pessoal';
+  }
+  if (
+    h === '/ponto/financeiro/analise-extrato' ||
+    h === '/ponto/financeiro/controle-nfs' ||
+    h === '/ponto/financeiro/nfs-recebidas' ||
+    h === '/ponto/contratos/controle-geral' ||
+    h === '/ponto/contratos/socios' ||
+    h === '/ponto/contratos/gastos-operacionais'
+  ) {
+    return 'Métricas';
   }
   if (h.startsWith('/ponto/financeiro')) return 'Financeiro';
   if (
     [
       '/ponto/orcamento',
       '/ponto/contratos',
-      '/ponto/contratos/controle-geral',
       '/ponto/contratos/relatorios',
       '/ponto/andamento-da-os',
+      '/ponto/sistema-gestao-os',
       '/ponto/pleitos-gerados',
+      '/ponto/aprovacao-fds',
+      '/ponto/recebimento-entregas',
+      '/ponto/solicitar-materiais',
+      '/ponto/solicitar-ferramentas',
     ].some((p) => h === p)
   ) {
     return 'Engenharia';
   }
   if (
+    h === '/ponto/espelho-nf' ||
+    h === '/ponto/licitacoes' ||
+    h === '/ponto/licitacoes-pncp' ||
+    h === '/ponto/contratos/medicao' ||
+    h === '/ponto/responsaveis-tecnicos' ||
+    h === '/ponto/controle-anuidade' ||
+    h === '/ponto/controle-pagamentos-art'
+  ) {
+    return 'Contratos e Licitações';
+  }
+  if (h === '/ponto/juridico/processos-ativos') return 'Jurídico';
+  if (
     [
-      '/ponto/solicitar-materiais',
       '/ponto/gerenciar-materiais',
       '/ponto/mapa-cotacao',
       '/ponto/ordem-de-compra',
+      '/ponto/estoque',
+      '/ponto/furo-estoque',
+      '/ponto/ajuste-estoque',
+      '/ponto/controle-entregas',
+      '/ponto/entregas-logistica',
+      '/ponto/fds-aprovadas',
+      '/ponto/solicitacoes-combustivel',
+      '/ponto/solicitacoes-reserva-veiculos',
+      '/ponto/solicitacoes-ferramentas',
     ].some((p) => h === p)
   ) {
     return 'Suprimentos';
@@ -219,8 +332,18 @@ function inferCategoryFromHref(href: string): string {
       '/ponto/centros-custo',
       '/ponto/materiais-construcao',
       '/ponto/fornecedores',
+      '/ponto/veiculos',
+      '/ponto/regioes-postos-combustivel',
       '/ponto/condicoes-pagamento',
       '/ponto/natureza-orcamentaria',
+      '/ponto/formularios',
+      '/ponto/prestadores-servico',
+      '/ponto/tomadores-servico',
+      '/ponto/contas-bancarias',
+      '/ponto/codigos-tributarios',
+      '/ponto/sistema-gestao-os/locais',
+      '/ponto/sistema-gestao-os/equipamentos',
+      '/ponto/sistema-gestao-os/tipos-servico',
     ].some((p) => h === p)
   ) {
     return 'Cadastros';
@@ -232,7 +355,14 @@ function inferCategoryFromHref(href: string): string {
 
 function moduleCategory(m: PermissionModuleDef): string {
   const c = (m as { category?: string }).category?.trim();
-  return c || inferCategoryFromHref(m.href);
+  const raw = c || inferCategoryFromHref(m.href);
+  if (raw === 'Contrações e Licitações' || raw === 'Contratações e Licitações') {
+    return 'Contratos e Licitações';
+  }
+  if (raw === 'Controle CREA') {
+    return 'Contratos e Licitações';
+  }
+  return raw;
 }
 
 /** Nome amigável — nunca exibe rota crua na UI (fallback se `name` vier como path). */
@@ -250,6 +380,7 @@ function displayModuleName(m: PermissionModuleDef): string {
 }
 
 function moduleIcon(href: string): LucideIcon {
+  if (href.startsWith('/ponto/controle')) return Settings;
   if (href.includes('dashboard')) return LayoutDashboard;
   if (href.includes('financeiro')) return Wallet;
   if (href.includes('contratos') || href.includes('orcamento') || href.includes('os') || href.includes('pleitos'))
@@ -265,8 +396,6 @@ function moduleIcon(href: string): LucideIcon {
     return FolderOpen;
   if (href === '/ponto') return Clock;
   if (href.startsWith('/relatorios')) return Layers;
-  if (href.startsWith('/ponto/controle')) return Settings;
-  if (href.includes('permissoes')) return SlidersHorizontal;
   if (href.includes('funcionarios') || href.includes('ferias') || href.includes('atestados')) return User;
   return Layers;
 }
@@ -339,113 +468,64 @@ export function UserPermissionsTabBar({
   className?: string;
 }) {
   const items = [
-    { id: 'gerais' as const, label: 'Acesso', icon: ShieldCheck, disabled: false as const },
-    { id: 'contratos' as const, label: 'Contratos', icon: FileText, disabled: !showContracts },
-    { id: 'controle' as const, label: 'Controle', icon: Settings, disabled: false as const },
+    { id: 'gerais' as const, label: 'Acesso', disabled: false as const },
+    { id: 'contratos' as const, label: 'Contratos', disabled: !showContracts },
+    { id: 'controle' as const, label: 'Controle', disabled: false as const },
   ];
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap gap-2 border-b border-gray-200 dark:border-gray-700">
+      <AppUnderlineTabList aria-label="Abas de permissões" centered={false}>
         {items.map((t) => {
-          const Icon = t.icon;
           const isActive = !t.disabled && activeTab === t.id;
           return (
-            <button
+            <AppUnderlineTabButton
               key={t.id}
-              type="button"
+              active={isActive}
               onClick={() => {
                 if (!t.disabled) onChange(t.id);
               }}
               disabled={t.disabled}
               aria-disabled={t.disabled}
               title={t.disabled ? 'Ative o módulo Contratos na aba Acesso' : undefined}
-              className={`flex items-center gap-2 px-4 py-2 font-medium transition-colors rounded-t-lg ${
-                t.disabled
-                  ? 'cursor-not-allowed text-gray-400 opacity-70 dark:text-gray-500'
-                  : isActive
-                    ? 'bg-red-600 text-white dark:bg-red-600'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
+              className="px-3 py-2 text-sm"
             >
-              <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : ''}`} />
               {t.label}
-            </button>
+            </AppUnderlineTabButton>
           );
         })}
-      </div>
+      </AppUnderlineTabList>
     </div>
   );
 }
 
-function UserSearchSelect({
-  users,
-  searchValue,
-  onSearchValueChange,
-  selectedUserId,
-  onSelectUserId,
+function PermissionPageHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  actions,
 }: {
-  users: PermissionUserListItem[];
-  searchValue: string;
-  onSearchValueChange: (value: string) => void;
-  selectedUserId: string;
-  onSelectUserId: (id: string) => void;
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  actions?: React.ReactNode;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedUser = useMemo(() => users.find((u) => u.id === selectedUserId) ?? null, [users, selectedUserId]);
-  const query = searchValue.trim().toLowerCase();
-  const filteredUsers = useMemo(() => {
-    if (!query) return users;
-    return users.filter((u) => u.name.toLowerCase().includes(query));
-  }, [users, query]);
-
   return (
-    <div className="relative w-full">
-      <input
-        type="text"
-        value={searchValue}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 120)}
-        onChange={(e) => {
-          onSearchValueChange(e.target.value);
-          onSelectUserId('');
-          if (!isOpen) setIsOpen(true);
-        }}
-        placeholder="Selecionar usuário..."
-        className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-      />
-      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-
-      {isOpen && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-          {filteredUsers.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">Nenhum funcionário encontrado.</div>
-          ) : (
-            filteredUsers.map((u) => {
-              const isSelected = u.id === selectedUserId || (!selectedUserId && selectedUser?.id === u.id);
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onSelectUserId(u.id);
-                    onSearchValueChange(u.name);
-                    setIsOpen(false);
-                  }}
-                  className={`block w-full px-3 py-2 text-left text-sm transition-colors ${
-                    isSelected
-                      ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                      : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {u.name}
-                </button>
-              );
-            })
-          )}
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center space-x-3">
+        <div className="shrink-0 rounded-lg bg-red-100 p-2 dark:bg-red-900/30 sm:p-3">
+          <Icon className="h-5 w-5 text-red-600 dark:text-red-400 sm:h-6 sm:w-6" aria-hidden />
         </div>
-      )}
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{subtitle}</p>
+        </div>
+      </div>
+      {actions ? (
+        <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -470,7 +550,7 @@ interface UserPermissionsEditorProps {
 
 export function UserPermissionsEditor({
   userId,
-  preview,
+  preview: _preview,
   onBack,
   hideTopNavigation = false,
   permissionTab: permissionTabProp,
@@ -486,13 +566,17 @@ export function UserPermissionsEditor({
   const [employeeActionsSet, setEmployeeActionsSet] = useState<Set<ContractAction>>(new Set());
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string>>(new Set());
   const [selectedDpApprovalContractIds, setSelectedDpApprovalContractIds] = useState<Set<string>>(new Set());
+  const [selectedRestrictedDpApprovalCostCenterIds, setSelectedRestrictedDpApprovalCostCenterIds] =
+    useState<Set<string>>(new Set());
+  const [selectedDpRequestViewCostCenterIds, setSelectedDpRequestViewCostCenterIds] =
+    useState<Set<string>>(new Set());
   const [contractModuleFlags, setContractModuleFlags] = useState<Record<string, ContractModuleFlags>>({});
-  const [copyFromUserIdGeneral, setCopyFromUserIdGeneral] = useState('');
-  const [copyFromUserIdContracts, setCopyFromUserIdContracts] = useState('');
-  const [copyGeneralSearch, setCopyGeneralSearch] = useState('');
-  const [copyContractsSearch, setCopyContractsSearch] = useState('');
-  const [isApplyingCopyGeneral, setIsApplyingCopyGeneral] = useState(false);
-  const [isApplyingCopyContracts, setIsApplyingCopyContracts] = useState(false);
+  const [permissionActionModal, setPermissionActionModal] = useState<'menu' | 'copy' | 'restore' | null>(
+    null
+  );
+  const [copyModalUserId, setCopyModalUserId] = useState('');
+  const [isApplyingCopy, setIsApplyingCopy] = useState(false);
+  const [isRestoringDefaults, setIsRestoringDefaults] = useState(false);
   const [internalTab, setInternalTab] = useState<PermissionEditorTab>('gerais');
   const tabsControlled = typeof onPermissionTabChange === 'function';
   const activeTab = tabsControlled ? (permissionTabProp ?? 'gerais') : internalTab;
@@ -507,11 +591,20 @@ export function UserPermissionsEditor({
   employeeActionsRef.current = employeeActionsSet;
   const selectedDpApprovalContractIdsRef = useRef(selectedDpApprovalContractIds);
   selectedDpApprovalContractIdsRef.current = selectedDpApprovalContractIds;
+  const selectedRestrictedDpApprovalCostCenterIdsRef = useRef(selectedRestrictedDpApprovalCostCenterIds);
+  selectedRestrictedDpApprovalCostCenterIdsRef.current = selectedRestrictedDpApprovalCostCenterIds;
+  const selectedDpRequestViewCostCenterIdsRef = useRef(selectedDpRequestViewCostCenterIds);
+  selectedDpRequestViewCostCenterIdsRef.current = selectedDpRequestViewCostCenterIds;
   const contractModuleFlagsRef = useRef(contractModuleFlags);
   contractModuleFlagsRef.current = contractModuleFlags;
 
   /** Serialização estável para comparar com o último estado vindo do servidor (evita PUT na hidratação). */
   const baselineSerializedRef = useRef<string | null>(null);
+  const hydratedRef = useRef(false);
+  /** Evita PUTs concorrentes (causa 409 na unique userId+module+action). */
+  const saveInFlightRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+  const emptyWipeToastAtRef = useRef(0);
 
   const {
     data: userPermissionData,
@@ -527,6 +620,8 @@ export function UserPermissionsEditor({
           permissions: UserPermissionPayload['permissions'];
           allowedContractIds: string[];
           dpApprovalContractIds?: string[];
+          restrictedDpApprovalCostCenterIds?: string[];
+          dpRequestViewCostCenterIds?: string[];
           contractModuleFlags?: Record<string, ContractModuleFlags>;
         };
         return {
@@ -540,6 +635,8 @@ export function UserPermissionsEditor({
           permissions: d.permissions ?? [],
           allowedContractIds: d.allowedContractIds ?? [],
           dpApprovalContractIds: d.dpApprovalContractIds ?? [],
+          restrictedDpApprovalCostCenterIds: d.restrictedDpApprovalCostCenterIds ?? [],
+          dpRequestViewCostCenterIds: d.dpRequestViewCostCenterIds ?? [],
           contractModuleFlags: d.contractModuleFlags ?? {},
         } as UserPermissionPayload;
       }
@@ -552,21 +649,41 @@ export function UserPermissionsEditor({
   const { data: contractsList = [] } = useQuery({
     queryKey: ['permission-contracts-list'],
     queryFn: async () => (await api.get('/permissions/contracts')).data?.data as ContractOption[],
-    enabled: (isPositionMode || !!userId) && !!userPermissionData && !userPermissionData.isAdmin,
-    refetchInterval: 12_000,
-    refetchOnWindowFocus: true,
+    enabled:
+      (isPositionMode || !!userId) &&
+      !!userPermissionData &&
+      !userPermissionData.isAdmin &&
+      activeTab === 'contratos',
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
+  const { data: costCentersList = [] } = useQuery({
+    queryKey: ['permission-cost-centers-list'],
+    queryFn: async () => (await api.get('/permissions/cost-centers')).data?.data as CostCenterOption[],
+    enabled:
+      (isPositionMode || !!userId) &&
+      !!userPermissionData &&
+      !userPermissionData.isAdmin &&
+      activeTab === 'controle',
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const [loadCopyUsers, setLoadCopyUsers] = useState(false);
   const { data: permissionUsers = [] } = useQuery({
     queryKey: ['permission-users'],
     queryFn: async () => (await api.get('/permissions/users')).data?.data as PermissionUserListItem[],
-    enabled: !isPositionMode && !!userId,
+    enabled: !isPositionMode && !!userId && loadCopyUsers,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
   const copyableUsers = useMemo(
     () =>
       permissionUsers.filter((u) => {
         if (u.id === userId) return false;
+        if (isGennecyBotUser(u)) return false;
         const position = (u.employee?.position || '').trim().toLowerCase();
         const name = (u.name || '').trim().toLowerCase();
         return position !== 'administrador' && name !== 'administrador';
@@ -574,30 +691,42 @@ export function UserPermissionsEditor({
     [permissionUsers, userId]
   );
 
+  const copyUserSelectOptions = useMemo(
+    () =>
+      copyableUsers.map((u) => {
+        const initials = u.name
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase();
+        const cpfLabel = formatPermissionUserCpf(u.cpf);
+        return {
+          value: u.id,
+          label: u.name,
+          description: cpfLabel,
+          searchText: `${u.name} ${u.cpf || ''} ${cpfLabel}`,
+          avatarUrl: resolveApiMediaUrl(u.profilePhotoUrl ?? null),
+          avatarFallback: initials || '?',
+        };
+      }),
+    [copyableUsers]
+  );
+
   useEffect(() => {
-    if (!userPermissionData?.permissions) {
-      setSelectedSet(new Set());
-      setContractActionsSet(new Set());
-      setEmployeeActionsSet(new Set());
-      setSelectedContractIds(new Set());
-      setSelectedDpApprovalContractIds(new Set());
-      setContractModuleFlags({});
-      baselineSerializedRef.current = serializeFullBaseline(
-        new Set(),
-        new Set(),
-        new Set(),
-        new Set(),
-        new Set(),
-        {}
-      );
-      return;
-    }
-    const perms = userPermissionData.permissions;
+    hydratedRef.current = false;
+    baselineSerializedRef.current = null;
+  }, [userId, positionTemplate]);
+
+  useEffect(() => {
+    if (!userPermissionData) return;
+    const perms = userPermissionData.permissions ?? [];
     const next = new Set<string>(
       perms.filter((p) => p.action === PERMISSION_ACCESS_ACTION).map((p) => p.module)
     );
-    next.delete(DEPRECATED_DP_APPROVE_CONTROLE_KEY);
+    DEPRECATED_CONTROLE_KEYS.forEach((k) => next.delete(k));
     PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => next.delete(k));
+    PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => next.delete(k));
     const nextContract = new Set<ContractAction>();
     const nextEmployee = new Set<ContractAction>();
     for (const p of perms) {
@@ -611,6 +740,8 @@ export function UserPermissionsEditor({
     const nextContractIds = new Set(userPermissionData.allowedContractIds ?? []);
     const rawDp = new Set(userPermissionData.dpApprovalContractIds ?? []);
     const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const nextRestrictedCc = new Set(userPermissionData.restrictedDpApprovalCostCenterIds ?? []);
+    const nextViewCc = new Set(userPermissionData.dpRequestViewCostCenterIds ?? []);
     const rawFlags = userPermissionData.contractModuleFlags ?? {};
     const emptyFlags = (): ContractModuleFlags => ({
       orcamento: false,
@@ -627,6 +758,8 @@ export function UserPermissionsEditor({
     setEmployeeActionsSet(nextEmployee);
     setSelectedContractIds(nextContractIds);
     setSelectedDpApprovalContractIds(nextDpApproval);
+    setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
+    setSelectedDpRequestViewCostCenterIds(nextViewCc);
     setContractModuleFlags(nextFlags);
     baselineSerializedRef.current = serializeFullBaseline(
       next,
@@ -634,12 +767,20 @@ export function UserPermissionsEditor({
       nextContractIds,
       nextEmployee,
       nextDpApproval,
-      nextFlags
+      nextFlags,
+      nextRestrictedCc,
+      nextViewCc
     );
+    hydratedRef.current = true;
   }, [userPermissionData]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!hydratedRef.current) {
+        const err = new Error('blocked-unhydrated');
+        err.name = 'BlockedUnhydratedPermissions';
+        throw err;
+      }
       const currentSelected = new Set(selectedSetRef.current);
       const currentContractActions = Array.from(contractActionsRef.current);
       const currentEmployeeActions = Array.from(employeeActionsRef.current);
@@ -659,7 +800,9 @@ export function UserPermissionsEditor({
         currentSelected.add(EMPLOYEES_MODULE_KEY);
       }
 
-      const basePermissions = Array.from(currentSelected).map((module) => ({ module }));
+      const basePermissions = Array.from(currentSelected)
+        .filter((module) => !DEPRECATED_CONTROLE_KEYS.has(module))
+        .map((module) => ({ module }));
       const contractActionPermissions = currentContractActions.map((action) => ({
         module: CONTRACTS_MODULE_KEY,
         action,
@@ -669,8 +812,24 @@ export function UserPermissionsEditor({
         action,
       }));
       const permissions = [...basePermissions, ...contractActionPermissions, ...employeeActionPermissions];
+      const wouldClearAll =
+        permissions.length === 0 &&
+        currentContractIds.length === 0 &&
+        baselineSerializedRef.current !== null &&
+        baselineSerializedRef.current !== EMPTY_PERMISSION_BASELINE;
+      if (wouldClearAll && !isPositionMode) {
+        const err = new Error('blocked-empty-wipe');
+        err.name = 'BlockedEmptyPermissionWipe';
+        throw err;
+      }
       const allowedContractIds = currentContractIds;
       const dpApprovalContractIds = Array.from(selectedDpApprovalContractIdsRef.current);
+      const restrictedDpApprovalCostCenterIds = currentSelected.has(RESTRICTED_DP_APPROVE_KEY)
+        ? Array.from(selectedRestrictedDpApprovalCostCenterIdsRef.current)
+        : [];
+      const dpRequestViewCostCenterIds = currentSelected.has(DP_REQUEST_VIEW_CC_KEY)
+        ? Array.from(selectedDpRequestViewCostCenterIdsRef.current)
+        : [];
       const contractModuleFlagsPayload = contractModuleFlagsRef.current;
       if (isPositionMode) {
         await api.put('/permissions/position-template', {
@@ -678,6 +837,8 @@ export function UserPermissionsEditor({
           permissions,
           allowedContractIds,
           dpApprovalContractIds,
+          restrictedDpApprovalCostCenterIds,
+          dpRequestViewCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       } else {
@@ -685,6 +846,8 @@ export function UserPermissionsEditor({
           permissions,
           allowedContractIds,
           dpApprovalContractIds,
+          restrictedDpApprovalCostCenterIds,
+          dpRequestViewCostCenterIds,
           contractModuleFlags: contractModuleFlagsPayload,
         });
       }
@@ -697,7 +860,9 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       await queryClient.invalidateQueries({ queryKey: ['permission-users'] });
       await queryClient.invalidateQueries({ queryKey: ['me-permissions'] });
@@ -722,12 +887,24 @@ export function UserPermissionsEditor({
             permissions: snapshot,
             allowedContractIds: Array.from(selectedContractIdsRef.current),
             dpApprovalContractIds: Array.from(selectedDpApprovalContractIdsRef.current),
+            restrictedDpApprovalCostCenterIds: Array.from(
+              selectedRestrictedDpApprovalCostCenterIdsRef.current
+            ),
+            dpRequestViewCostCenterIds: Array.from(selectedDpRequestViewCostCenterIdsRef.current),
             contractModuleFlags: updatedFlags,
           };
         });
       }
     },
     onError: (error: unknown) => {
+      if (error instanceof Error && error.name === 'BlockedUnhydratedPermissions') return;
+      if (error instanceof Error && error.name === 'BlockedEmptyPermissionWipe') {
+        const now = Date.now();
+        if (now - emptyWipeToastAtRef.current < 4000) return;
+        emptyWipeToastAtRef.current = now;
+        toast.error('As permissões não foram apagadas: lista vazia não é salva automaticamente.');
+        return;
+      }
       const msg =
         error && typeof error === 'object' && 'response' in error
           ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
@@ -739,9 +916,49 @@ export function UserPermissionsEditor({
   const { mutate: persistPermissions, mutateAsync: persistPermissionsAsync, isPending: isSavingPermissions } =
     saveMutation;
 
+  const enqueuePersistPermissions = useCallback(() => {
+    if (!hydratedRef.current) return;
+    if (
+      isEmptyPermissionBaseline(
+        selectedSetRef.current,
+        contractActionsRef.current,
+        selectedContractIdsRef.current,
+        employeeActionsRef.current
+      ) &&
+      baselineSerializedRef.current !== null &&
+      baselineSerializedRef.current !== EMPTY_PERMISSION_BASELINE &&
+      !isPositionMode
+    ) {
+      const now = Date.now();
+      if (now - emptyWipeToastAtRef.current >= 4000) {
+        emptyWipeToastAtRef.current = now;
+        toast.error('As permissões não foram apagadas: lista vazia não é salva automaticamente.');
+      }
+      return;
+    }
+    if (saveInFlightRef.current) {
+      saveQueuedRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    void (async () => {
+      try {
+        do {
+          saveQueuedRef.current = false;
+          await persistPermissionsAsync();
+        } while (saveQueuedRef.current);
+      } catch {
+        /* onError do mutation já exibe toast */
+      } finally {
+        saveInFlightRef.current = false;
+      }
+    })();
+  }, [isPositionMode, persistPermissionsAsync]);
+
   /** Salva automaticamente após alterações (debounce), sem disparar na sincronização inicial com o servidor. */
   useEffect(() => {
     if (loadingPermissions || permissionError) return;
+    if (!hydratedRef.current) return;
     if (baselineSerializedRef.current === null) return;
 
     const serialized = serializeFullBaseline(
@@ -750,7 +967,9 @@ export function UserPermissionsEditor({
       selectedContractIds,
       employeeActionsSet,
       selectedDpApprovalContractIds,
-      contractModuleFlags
+      contractModuleFlags,
+      selectedRestrictedDpApprovalCostCenterIds,
+      selectedDpRequestViewCostCenterIds
     );
     if (serialized === baselineSerializedRef.current) return;
 
@@ -761,10 +980,12 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
-      persistPermissions();
+      enqueuePersistPermissions();
     }, 450);
 
     return () => window.clearTimeout(t);
@@ -774,16 +995,19 @@ export function UserPermissionsEditor({
     employeeActionsSet,
     selectedContractIds,
     selectedDpApprovalContractIds,
+    selectedRestrictedDpApprovalCostCenterIds,
+    selectedDpRequestViewCostCenterIds,
     contractModuleFlags,
     loadingPermissions,
     permissionError,
-    persistPermissions,
+    enqueuePersistPermissions,
   ]);
 
   // Garante persistência ao sair da tela (ex.: botão Voltar externo/página pai),
   // mesmo que o debounce ainda não tenha disparado.
   useEffect(() => {
     return () => {
+      if (!hydratedRef.current) return;
       if (baselineSerializedRef.current === null) return;
       const latest = serializeFullBaseline(
         selectedSetRef.current,
@@ -791,14 +1015,18 @@ export function UserPermissionsEditor({
         selectedContractIdsRef.current,
         employeeActionsRef.current,
         selectedDpApprovalContractIdsRef.current,
-        contractModuleFlagsRef.current
+        contractModuleFlagsRef.current,
+        selectedRestrictedDpApprovalCostCenterIdsRef.current,
+        selectedDpRequestViewCostCenterIdsRef.current
       );
       if (latest === baselineSerializedRef.current) return;
-      persistPermissions();
+      enqueuePersistPermissions();
     };
-  }, [persistPermissions]);
+  }, [enqueuePersistPermissions]);
 
   const modulesByCategory = useMemo(() => {
+    const byName = (a: PermissionModuleDef, b: PermissionModuleDef) =>
+      displayModuleName(a).localeCompare(displayModuleName(b), 'pt-BR', { sensitivity: 'base' });
     const map = new Map<string, PermissionModuleDef[]>();
     for (const m of PERMISSION_MODULES) {
       const cat = moduleCategory(m);
@@ -808,21 +1036,45 @@ export function UserPermissionsEditor({
       list.push(m);
       map.set(cat, list);
     }
-    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({ category: c, modules: map.get(c)! }));
+    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({
+      category: c,
+      modules: [...(map.get(c) ?? [])].sort(byName),
+    }));
   }, []);
 
-  const controleModulesByCategory = useMemo(() => {
+  const controleModulesByGroup = useMemo(() => {
+    const byName = (a: PermissionModuleDef, b: PermissionModuleDef) =>
+      displayModuleName(a).localeCompare(displayModuleName(b), 'pt-BR', { sensitivity: 'base' });
     const map = new Map<string, PermissionModuleDef[]>();
     for (const m of PERMISSION_MODULES) {
       const cat = moduleCategory(m);
       if (cat !== PERMISSION_CONTROLE_CATEGORY) continue;
-      if (m.key === DEPRECATED_DP_APPROVE_CONTROLE_KEY) continue;
-      const list = map.get(cat) ?? [];
+      if (DEPRECATED_CONTROLE_KEYS.has(m.key)) continue;
+      const group = (m as PermissionModuleDef).group?.trim() || 'Geral';
+      const list = map.get(group) ?? [];
       list.push(m);
-      map.set(cat, list);
+      map.set(group, list);
     }
-    return CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({ category: c, modules: map.get(c)! }));
+    const ordered = PERMISSION_CONTROLE_GROUP_ORDER.filter((g) => map.has(g)).map((g) => ({
+      group: g,
+      modules: [...(map.get(g) ?? [])].sort(byName),
+    }));
+    const extras = [...map.keys()]
+      .filter((g) => !(PERMISSION_CONTROLE_GROUP_ORDER as readonly string[]).includes(g))
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+      .map((g) => ({ group: g, modules: [...(map.get(g) ?? [])].sort(byName) }));
+    return [...ordered, ...extras];
   }, []);
+
+  const restrictedCostCenterOptions = useMemo(
+    () =>
+      costCentersList.map((c) => ({
+        value: c.id,
+        label: c.name,
+        searchText: [c.name, c.code].filter(Boolean).join(' '),
+      })),
+    [costCentersList]
+  );
 
   const toggleModule = (key: string) => {
     setSelectedSet((prev) => {
@@ -835,6 +1087,9 @@ export function UserPermissionsEditor({
         }
         if (key === EMPLOYEES_MODULE_KEY) {
           setEmployeeActionsSet(new Set());
+        }
+        if (key === RESTRICTED_DP_APPROVE_KEY) {
+          setSelectedRestrictedDpApprovalCostCenterIds(new Set());
         }
       } else {
         n.add(key);
@@ -962,123 +1217,219 @@ export function UserPermissionsEditor({
     return source;
   };
 
-  const handleCopyGeneralFromUser = async () => {
-    if (!copyFromUserIdGeneral) return;
-    if (!isPositionMode && copyFromUserIdGeneral === userId) {
-      toast('Selecione outro usuário para copiar.');
-      return;
-    }
-    try {
-      setIsApplyingCopyGeneral(true);
-      const source = await fetchSourceUserPermissions(copyFromUserIdGeneral);
-      if (!source) {
-        toast.error('Não é possível copiar de usuário Administrador.');
-        return;
-      }
-      const nextGeneral = new Set<string>(
-        (source.permissions || [])
-          .filter((p) => p.action === PERMISSION_ACCESS_ACTION)
-          .map((p) => p.module)
-      );
-      nextGeneral.delete(DEPRECATED_DP_APPROVE_CONTROLE_KEY);
-      PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => nextGeneral.delete(k));
-      const nextContractActions = new Set<ContractAction>();
-      const nextEmployeeActions = new Set<ContractAction>();
-      for (const p of source.permissions || []) {
-        if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextContractActions.add(p.action as ContractAction);
-        }
-        if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextEmployeeActions.add(p.action as ContractAction);
-        }
-      }
-      setSelectedSet(nextGeneral);
-      setContractActionsSet(nextContractActions);
-      setEmployeeActionsSet(nextEmployeeActions);
-      const allowedSrc = new Set(source.allowedContractIds ?? []);
-      setSelectedDpApprovalContractIds(
-        new Set(
-          [...(source.dpApprovalContractIds ?? [])].filter(
-            (id) => allowedSrc.has(id) && selectedContractIdsRef.current.has(id)
-          )
-        )
-      );
-      toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
-    } catch (error) {
-      const msg =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(msg || 'Não foi possível copiar permissões de acesso.');
-    } finally {
-      setIsApplyingCopyGeneral(false);
-    }
+  const closePermissionActionModal = () => {
+    setPermissionActionModal(null);
+    setCopyModalUserId('');
   };
 
-  const handleCopyContractsFromUser = async () => {
-    if (!copyFromUserIdContracts) return;
-    if (!isPositionMode && copyFromUserIdContracts === userId) {
-      toast('Selecione outro usuário para copiar.');
-      return;
-    }
-    try {
-      setIsApplyingCopyContracts(true);
-      const source = await fetchSourceUserPermissions(copyFromUserIdContracts);
-      if (!source) {
-        toast.error('Não é possível copiar de usuário Administrador.');
-        return;
-      }
-      const nextContract = new Set<ContractAction>();
-      for (const p of source.permissions || []) {
-        if (p.module !== CONTRACTS_MODULE_KEY) continue;
-        if (CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
-          nextContract.add(p.action as ContractAction);
-        }
-      }
-      const nextContractIds = new Set(source.allowedContractIds || []);
-      const rawDp = new Set(source.dpApprovalContractIds || []);
-      const nextDp = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
-      const sourceHasContractsModule = (source.permissions || []).some((p) => p.module === CONTRACTS_MODULE_KEY);
-      const srcFlags = (source as UserPermissionPayload).contractModuleFlags ?? {};
-      const defaultFlags: ContractModuleFlags = {
-        orcamento: false,
-        relatorios: false,
-        ordemServico: false,
-        producaoSemanal: false,
-      };
-      const nextFlags: Record<string, ContractModuleFlags> = {};
-      for (const id of Array.from(nextContractIds)) {
-        nextFlags[id] = srcFlags[id] ?? { ...defaultFlags };
-      }
-      setContractActionsSet(nextContract);
-      setSelectedContractIds(nextContractIds);
-      setSelectedDpApprovalContractIds(nextDp);
-      setContractModuleFlags(nextFlags);
-      setSelectedSet((prev) => {
-        const next = new Set(prev);
-        if (sourceHasContractsModule || nextContract.size > 0 || nextContractIds.size > 0) {
-          next.add(CONTRACTS_MODULE_KEY);
-        } else {
-          next.delete(CONTRACTS_MODULE_KEY);
-        }
-        return next;
-      });
-      toast.success('Permissões de contratos copiadas. Salvamento automático em andamento.');
-    } catch (error) {
-      const msg =
-        error && typeof error === 'object' && 'response' in error
-          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-          : undefined;
-      toast.error(msg || 'Não foi possível copiar permissões de contratos.');
-    } finally {
-      setIsApplyingCopyContracts(false);
-    }
+  const openPermissionActionsMenu = () => {
+    setPermissionActionModal('menu');
   };
 
-  const handleRestoreDefaults = () => {
-    toast(
-      'Padrões por cargo podem ser ajustados pelo administrador no cadastro de cargos ou no fluxo de permissões do funcionário, quando disponível.'
+  const applyPermissionsPayload = (source: {
+    permissions: PermissionItem[];
+    allowedContractIds?: string[];
+    dpApprovalContractIds?: string[];
+    restrictedDpApprovalCostCenterIds?: string[];
+    dpRequestViewCostCenterIds?: string[];
+    contractModuleFlags?: Record<string, ContractModuleFlags>;
+  }) => {
+    const perms = source.permissions ?? [];
+    const next = new Set<string>(
+      perms.filter((p) => p.action === PERMISSION_ACCESS_ACTION).map((p) => p.module)
     );
+    DEPRECATED_CONTROLE_KEYS.forEach((k) => next.delete(k));
+    PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => next.delete(k));
+    PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => next.delete(k));
+    const nextContract = new Set<ContractAction>();
+    const nextEmployee = new Set<ContractAction>();
+    for (const p of perms) {
+      if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContract.add(p.action as ContractAction);
+      }
+      if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextEmployee.add(p.action as ContractAction);
+      }
+    }
+    const nextContractIds = new Set(source.allowedContractIds ?? []);
+    const rawDp = new Set(source.dpApprovalContractIds ?? []);
+    const nextDpApproval = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const nextRestrictedCc = new Set(source.restrictedDpApprovalCostCenterIds ?? []);
+    const nextViewCc = new Set(source.dpRequestViewCostCenterIds ?? []);
+    const rawFlags = source.contractModuleFlags ?? {};
+    const emptyFlags = (): ContractModuleFlags => ({
+      orcamento: false,
+      relatorios: false,
+      ordemServico: false,
+      producaoSemanal: false,
+    });
+    const nextFlags: Record<string, ContractModuleFlags> = {};
+    for (const id of Array.from(nextContractIds)) {
+      nextFlags[id] = rawFlags[id] ?? emptyFlags();
+    }
+    setSelectedSet(next);
+    setContractActionsSet(nextContract);
+    setEmployeeActionsSet(nextEmployee);
+    setSelectedContractIds(nextContractIds);
+    setSelectedDpApprovalContractIds(nextDpApproval);
+    setSelectedRestrictedDpApprovalCostCenterIds(nextRestrictedCc);
+    setSelectedDpRequestViewCostCenterIds(nextViewCc);
+    setContractModuleFlags(nextFlags);
+  };
+
+  const copyGeneralFromUser = async (sourceUserId: string) => {
+    if (!sourceUserId) return;
+    if (!isPositionMode && sourceUserId === userId) {
+      toast('Selecione outro usuário para copiar.');
+      return;
+    }
+    const source = await fetchSourceUserPermissions(sourceUserId);
+    if (!source) {
+      toast.error('Não é possível copiar de usuário Administrador.');
+      return;
+    }
+    const nextGeneral = new Set<string>(
+      (source.permissions || [])
+        .filter((p) => p.action === PERMISSION_ACCESS_ACTION)
+        .map((p) => p.module)
+    );
+    DEPRECATED_CONTROLE_KEYS.forEach((k) => nextGeneral.delete(k));
+    PERMISSION_MODULE_KEYS_MANAGED_ONLY_ON_CONTRACT_MATRIX.forEach((k) => nextGeneral.delete(k));
+    PERMISSION_MODULE_KEYS_OPEN_ACCESS.forEach((k) => nextGeneral.delete(k));
+    const nextContractActions = new Set<ContractAction>();
+    const nextEmployeeActions = new Set<ContractAction>();
+    for (const p of source.permissions || []) {
+      if (p.module === CONTRACTS_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContractActions.add(p.action as ContractAction);
+      }
+      if (p.module === EMPLOYEES_MODULE_KEY && CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextEmployeeActions.add(p.action as ContractAction);
+      }
+    }
+    setSelectedSet(nextGeneral);
+    setContractActionsSet(nextContractActions);
+    setEmployeeActionsSet(nextEmployeeActions);
+    const allowedSrc = new Set(source.allowedContractIds ?? []);
+    setSelectedDpApprovalContractIds(
+      new Set(
+        [...(source.dpApprovalContractIds ?? [])].filter(
+          (id) => allowedSrc.has(id) && selectedContractIdsRef.current.has(id)
+        )
+      )
+    );
+    setSelectedRestrictedDpApprovalCostCenterIds(
+      new Set(source.restrictedDpApprovalCostCenterIds ?? [])
+    );
+    setSelectedDpRequestViewCostCenterIds(new Set(source.dpRequestViewCostCenterIds ?? []));
+    toast.success('Permissões de acesso copiadas. Salvamento automático em andamento.');
+  };
+
+  const copyContractsFromUser = async (sourceUserId: string) => {
+    if (!sourceUserId) return;
+    if (!isPositionMode && sourceUserId === userId) {
+      toast('Selecione outro usuário para copiar.');
+      return;
+    }
+    const source = await fetchSourceUserPermissions(sourceUserId);
+    if (!source) {
+      toast.error('Não é possível copiar de usuário Administrador.');
+      return;
+    }
+    const nextContract = new Set<ContractAction>();
+    for (const p of source.permissions || []) {
+      if (p.module !== CONTRACTS_MODULE_KEY) continue;
+      if (CONTRACT_ACTIONS.includes(p.action as ContractAction)) {
+        nextContract.add(p.action as ContractAction);
+      }
+    }
+    const nextContractIds = new Set(source.allowedContractIds || []);
+    const rawDp = new Set(source.dpApprovalContractIds || []);
+    const nextDp = new Set(Array.from(rawDp).filter((id) => nextContractIds.has(id)));
+    const sourceHasContractsModule = (source.permissions || []).some((p) => p.module === CONTRACTS_MODULE_KEY);
+    const srcFlags = source.contractModuleFlags ?? {};
+    const defaultFlags: ContractModuleFlags = {
+      orcamento: false,
+      relatorios: false,
+      ordemServico: false,
+      producaoSemanal: false,
+    };
+    const nextFlags: Record<string, ContractModuleFlags> = {};
+    for (const id of Array.from(nextContractIds)) {
+      nextFlags[id] = srcFlags[id] ?? { ...defaultFlags };
+    }
+    setContractActionsSet(nextContract);
+    setSelectedContractIds(nextContractIds);
+    setSelectedDpApprovalContractIds(nextDp);
+    setContractModuleFlags(nextFlags);
+    setSelectedSet((prev) => {
+      const next = new Set(prev);
+      if (sourceHasContractsModule || nextContract.size > 0 || nextContractIds.size > 0) {
+        next.add(CONTRACTS_MODULE_KEY);
+      } else {
+        next.delete(CONTRACTS_MODULE_KEY);
+      }
+      return next;
+    });
+    toast.success('Permissões de contratos copiadas. Salvamento automático em andamento.');
+  };
+
+  const handleConfirmCopyFromUser = async () => {
+    if (!copyModalUserId) return;
+    try {
+      setIsApplyingCopy(true);
+      if (activeTab === 'contratos') {
+        await copyContractsFromUser(copyModalUserId);
+      } else {
+        await copyGeneralFromUser(copyModalUserId);
+      }
+      closePermissionActionModal();
+    } catch (error) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(msg || 'Não foi possível copiar permissões.');
+    } finally {
+      setIsApplyingCopy(false);
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    const position = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
+    if (!position) {
+      toast.error('Este funcionário não possui cargo definido.');
+      return;
+    }
+    try {
+      setIsRestoringDefaults(true);
+      const res = await api.get('/permissions/position-template', { params: { position } });
+      const data = res.data?.data as {
+        permissions?: PermissionItem[];
+        allowedContractIds?: string[];
+        dpApprovalContractIds?: string[];
+        restrictedDpApprovalCostCenterIds?: string[];
+        dpRequestViewCostCenterIds?: string[];
+        contractModuleFlags?: Record<string, ContractModuleFlags>;
+      };
+      applyPermissionsPayload({
+        permissions: data?.permissions ?? [],
+        allowedContractIds: data?.allowedContractIds ?? [],
+        dpApprovalContractIds: data?.dpApprovalContractIds ?? [],
+        restrictedDpApprovalCostCenterIds: data?.restrictedDpApprovalCostCenterIds ?? [],
+        dpRequestViewCostCenterIds: data?.dpRequestViewCostCenterIds ?? [],
+        contractModuleFlags: data?.contractModuleFlags ?? {},
+      });
+      toast.success('Padrões do cargo restaurados. Salvamento automático em andamento.');
+      closePermissionActionModal();
+    } catch (error) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : undefined;
+      toast.error(msg || 'Não foi possível restaurar os padrões do cargo.');
+    } finally {
+      setIsRestoringDefaults(false);
+    }
   };
 
   const hasPendingChanges =
@@ -1089,7 +1440,9 @@ export function UserPermissionsEditor({
       selectedContractIds,
       employeeActionsSet,
       selectedDpApprovalContractIds,
-      contractModuleFlags
+      contractModuleFlags,
+      selectedRestrictedDpApprovalCostCenterIds,
+      selectedDpRequestViewCostCenterIds
     ) !== baselineSerializedRef.current;
 
   const handleBackWithSave = async () => {
@@ -1163,10 +1516,6 @@ export function UserPermissionsEditor({
     );
   }
 
-  const displayName = userPermissionData?.user?.name ?? preview.name;
-  const displayPosition =
-    userPermissionData?.user?.employee?.position ?? preview.position ?? 'Sem cargo definido';
-
   const labelFor = (mod: PermissionModuleDef) => displayModuleName(mod);
 
   /** Em contratos, "Ver" representa o acesso ao módulo. */
@@ -1217,7 +1566,23 @@ export function UserPermissionsEditor({
   };
 
   const displayCategories =
-    activeTab === 'controle' ? controleModulesByCategory : modulesByCategory;
+    activeTab === 'controle'
+      ? controleModulesByGroup.map(({ group, modules }) => ({ category: group, modules }))
+      : modulesByCategory;
+
+  const employeePosition = (userPermissionData?.user?.employee?.position ?? _preview.position ?? '').trim();
+
+  const permissionActionsButton = !isPositionMode ? (
+    <button
+      type="button"
+      onClick={openPermissionActionsMenu}
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+      aria-label="Ações"
+      title="Ações"
+    >
+      <MoreVertical className="h-5 w-5" aria-hidden />
+    </button>
+  ) : undefined;
 
   return (
     <div className="w-full space-y-0">
@@ -1234,7 +1599,7 @@ export function UserPermissionsEditor({
         </div>
       )}
 
-      <Card className="relative w-full overflow-hidden border-gray-200/80 shadow-sm dark:border-gray-700/80" padding="none">
+      <Card className="relative w-full overflow-hidden border-gray-200/80 shadow-sm dark:border-gray-700/80">
         {isSavingPermissions ? (
           <div
             className="pointer-events-none absolute right-4 top-3 z-10 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-300"
@@ -1243,108 +1608,52 @@ export function UserPermissionsEditor({
             Salvando...
           </div>
         ) : null}
-        {/* Perfil */}
-        <div className="border-b border-gray-200 bg-white px-4 py-5 dark:border-gray-700 dark:bg-gray-800 sm:px-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-blue-500 bg-white text-sm font-bold text-blue-600 dark:border-blue-400 dark:bg-gray-800 dark:text-blue-400">
-                {displayName
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{displayName}</h2>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  <span className="text-gray-700 dark:text-gray-300">{displayPosition}</span>
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-              <button
-                type="button"
-                onClick={handleRestoreDefaults}
-                className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-              >
-                Restaurar padrões do cargo
-              </button>
-            </div>
-          </div>
-        </div>
 
         {!tabsControlled && (
           <UserPermissionsTabBar
             activeTab={activeTab}
             onChange={setActiveTab}
             showContracts={contractsTabAvailable}
-            className="w-full bg-white px-4 pb-0 pt-2 dark:bg-gray-800 sm:px-6"
+            className="mb-2 w-full"
           />
         )}
 
         {activeTab === 'gerais' || activeTab === 'controle' ? (
-          <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-            {activeTab === 'gerais' && !isPositionMode && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">Copiar permissões de acesso</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Copia as permissões de acesso do usuário selecionado.
-                    </p>
-                  </div>
-                  <div className="w-full sm:w-auto sm:min-w-[560px]">
-                    <div className="grid gap-2 sm:grid-cols-[1fr,auto] sm:items-center">
-                      <UserSearchSelect
-                        users={copyableUsers}
-                        searchValue={copyGeneralSearch}
-                        onSearchValueChange={setCopyGeneralSearch}
-                        selectedUserId={copyFromUserIdGeneral}
-                        onSelectUserId={setCopyFromUserIdGeneral}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyGeneralFromUser}
-                        disabled={!copyFromUserIdGeneral || isApplyingCopyGeneral}
-                        className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                      >
-                        {isApplyingCopyGeneral ? 'Copiando...' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {activeTab === 'controle' && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Ações administrativas que não são páginas do menu, como alterar permissões, auditoria, exportações e
-                  criar solicitações restritas. Você pode restringir essas ações independentemente do acesso às telas.
-                </p>
-              </div>
-            )}
+          <>
+            <CardHeader className="!border-b-0 pb-1">
+              <PermissionPageHeader
+                icon={activeTab === 'controle' ? Settings : ShieldCheck}
+                title={activeTab === 'controle' ? 'Controle' : 'Acesso'}
+                subtitle={
+                  activeTab === 'controle'
+                    ? 'Ações administrativas que não aparecem no menu.'
+                    : 'Defina quais módulos e ações este usuário pode usar.'
+                }
+                actions={activeTab === 'gerais' ? permissionActionsButton : undefined}
+              />
+            </CardHeader>
+            <CardContent className="space-y-5">
             {displayCategories.length === 0 ? (
               <div className="py-14 text-center text-sm text-gray-500 dark:text-gray-400">
                 Nenhum módulo disponível para configurar.
               </div>
             ) : (
               displayCategories.map(({ category, modules }) => (
-                <div key={category} className="border-t border-gray-100 first:border-t-0 dark:border-gray-700/80">
-                  <div className="overflow-x-auto pt-6 first:pt-4">
+                <div key={category} className="pt-5 first:pt-0">
+                  <div className="overflow-x-auto overscroll-x-contain">
                     {activeTab === 'controle' ? (
-                      <table className="w-full min-w-[320px] table-fixed text-sm">
+                      <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                             <th
                               scope="col"
-                              className="w-[72%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                              className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                             >
                               {category}
                             </th>
                             <th
                               scope="col"
-                              className="w-[28%] px-1 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
+                              className="w-28 pb-3 pl-4 pr-2 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
                             >
                               Liberado
                             </th>
@@ -1355,23 +1664,67 @@ export function UserPermissionsEditor({
                             const Icon = moduleIcon(mod.href);
                             const lbl = labelFor(mod);
                             const liberado = selectedSet.has(mod.key);
+                            const isRestrictedApprove = mod.key === RESTRICTED_DP_APPROVE_KEY;
+                            const isViewByCostCenter = mod.key === DP_REQUEST_VIEW_CC_KEY;
                             return (
                               <tr
                                 key={mod.key}
                                 className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                               >
-                                <td className="py-3.5 pl-1 pr-4">
+                                <td className="py-3.5 pr-4">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                       <Icon className="h-4 w-4 stroke-[1.5]" aria-hidden />
                                     </div>
-                                    <span className="min-w-0 font-medium leading-snug text-gray-900 dark:text-gray-100">
-                                      {lbl}
-                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <span className="min-w-0 font-medium leading-snug text-gray-900 dark:text-gray-100">
+                                        {lbl}
+                                      </span>
+                                      {isRestrictedApprove && liberado ? (
+                                        <div className="mt-2 max-w-xl">
+                                          <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Centros de custo que esta pessoa pode aprovar nas
+                                            solicitações internas restritas
+                                          </p>
+                                          <MultiSelectSearchDropdown
+                                            selected={Array.from(
+                                              selectedRestrictedDpApprovalCostCenterIds
+                                            )}
+                                            onChange={(ids) =>
+                                              setSelectedRestrictedDpApprovalCostCenterIds(new Set(ids))
+                                            }
+                                            options={restrictedCostCenterOptions}
+                                            placeholder="Selecionar centros de custo..."
+                                            searchPlaceholder="Pesquisar centro de custo..."
+                                            emptyOptionsMessage="Nenhum centro de custo ativo"
+                                            noFocusRing
+                                          />
+                                        </div>
+                                      ) : null}
+                                      {isViewByCostCenter && liberado ? (
+                                        <div className="mt-2 max-w-xl">
+                                          <p className="mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                            Centros de custo cujas solicitações internas esta
+                                            pessoa pode ver, além das que ela mesma criou
+                                          </p>
+                                          <MultiSelectSearchDropdown
+                                            selected={Array.from(selectedDpRequestViewCostCenterIds)}
+                                            onChange={(ids) =>
+                                              setSelectedDpRequestViewCostCenterIds(new Set(ids))
+                                            }
+                                            options={restrictedCostCenterOptions}
+                                            placeholder="Selecionar centros de custo..."
+                                            searchPlaceholder="Pesquisar centro de custo..."
+                                            emptyOptionsMessage="Nenhum centro de custo ativo"
+                                            noFocusRing
+                                          />
+                                        </div>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </td>
-                                <td className="px-1 py-3.5 text-center align-middle">
-                                  <div className="flex justify-center">
+                                <td className="py-3.5 pl-4 pr-2 text-right align-top">
+                                  <div className="inline-flex justify-end">
                                     <PermissionMatrixCheckbox
                                       checked={liberado}
                                       onCheckedChange={(next) => {
@@ -1388,12 +1741,12 @@ export function UserPermissionsEditor({
                         </tbody>
                       </table>
                     ) : (
-                      <table className="w-full min-w-[640px] table-fixed text-sm">
+                      <table className="w-full min-w-[640px] text-sm">
                         <thead>
                           <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                             <th
                               scope="col"
-                              className="w-[42%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                              className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                             >
                               {category}
                             </th>
@@ -1401,7 +1754,7 @@ export function UserPermissionsEditor({
                               <th
                                 key={h}
                                 scope="col"
-                                className="w-[14.5%] px-1 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
+                                className="w-32 px-3 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
                               >
                                 {h}
                               </th>
@@ -1425,7 +1778,7 @@ export function UserPermissionsEditor({
                                 key={mod.key}
                                 className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                               >
-                                <td className="py-3.5 pl-1 pr-4">
+                                <td className="py-3.5 pr-4">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                       <Icon className="h-4 w-4 stroke-[1.5]" />
@@ -1435,7 +1788,7 @@ export function UserPermissionsEditor({
                                     </span>
                                   </div>
                                 </td>
-                                <td className="px-1 py-3.5 text-center align-middle">
+                                <td className="px-3 py-3.5 text-center align-middle">
                                   <div className="flex justify-center">
                                     <PermissionMatrixCheckbox
                                       checked={verOn}
@@ -1456,7 +1809,7 @@ export function UserPermissionsEditor({
                                   </div>
                                 </td>
                                 {(['criar', 'editar', 'excluir'] as const).map((gran) => (
-                                  <td key={gran} className="px-1 py-3.5 text-center align-middle">
+                                  <td key={gran} className="px-3 py-3.5 text-center align-middle">
                                     <div className="flex justify-center">
                                       <PermissionMatrixCheckbox
                                         disabled={!granularRow}
@@ -1492,40 +1845,19 @@ export function UserPermissionsEditor({
                 </div>
               ))
             )}
-          </div>
+            </CardContent>
+          </>
         ) : (
-          <div className="bg-white px-4 pb-6 dark:bg-gray-800 sm:px-6">
-            {!isPositionMode && (
-              <div className="border-b border-gray-100 py-4 dark:border-gray-700/70">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm">
-                    <p className="font-medium text-gray-800 dark:text-gray-200">Copiar permissões de contratos</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Copia ações de contratos, contratos liberados e coluna Gestor do usuário selecionado.
-                    </p>
-                  </div>
-                  <div className="w-full sm:w-auto sm:min-w-[560px]">
-                    <div className="grid gap-2 sm:grid-cols-[1fr,auto] sm:items-center">
-                      <UserSearchSelect
-                        users={copyableUsers}
-                        searchValue={copyContractsSearch}
-                        onSearchValueChange={setCopyContractsSearch}
-                        selectedUserId={copyFromUserIdContracts}
-                        onSelectUserId={setCopyFromUserIdContracts}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCopyContractsFromUser}
-                        disabled={!copyFromUserIdContracts || isApplyingCopyContracts}
-                        className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-900/40"
-                      >
-                        {isApplyingCopyContracts ? 'Copiando...' : 'Copiar'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          <>
+            <CardHeader className="!border-b-0 pb-1">
+              <PermissionPageHeader
+                icon={FileText}
+                title="Contratos"
+                subtitle="Libere contratos e recursos específicos para este usuário."
+                actions={permissionActionsButton}
+              />
+            </CardHeader>
+            <CardContent>
             {!selectedSet.has(CONTRACTS_MODULE_KEY) ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
                 <p className="text-sm text-amber-800 dark:text-amber-200">
@@ -1539,13 +1871,13 @@ export function UserPermissionsEditor({
               </div>
             ) : (
               <div>
-                <div className="max-h-[min(28rem,60vh)] overflow-x-auto overflow-y-auto pt-2 sm:pt-4">
-                  <table className="w-full min-w-[760px] table-fixed text-sm">
+                <div className="overflow-x-auto overscroll-x-contain">
+                  <table className="w-full min-w-[760px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 align-bottom dark:border-gray-700/80">
                         <th
                           scope="col"
-                          className="w-[30%] pb-3 pl-1 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
+                          className="pb-3 pr-4 text-left text-lg font-bold leading-tight tracking-tight text-gray-900 dark:text-gray-100"
                         >
                           Contratos
                         </th>
@@ -1558,7 +1890,7 @@ export function UserPermissionsEditor({
                         <th
                           scope="col"
                           className="px-1 pb-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-400 dark:text-gray-500"
-                          title="Aprovar solicitações ao DP, criar rescisão/alteração de função-salário neste contrato"
+                          title="Gestor do contrato: aprova solicitações DP/FD, requisições de materiais e OCs na fase gestor deste contrato"
                         >
                           Gestor
                         </th>
@@ -1607,7 +1939,7 @@ export function UserPermissionsEditor({
                             key={c.id}
                             className="transition-colors hover:bg-gray-50/90 dark:hover:bg-gray-700/25"
                           >
-                            <td className="py-3.5 pl-1 pr-4">
+                            <td className="py-3.5 pr-4">
                               <div className="flex min-w-0 items-center gap-3">
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-100 bg-white text-gray-400 shadow-sm dark:border-gray-600 dark:bg-gray-800/80 dark:text-gray-500">
                                   <FileText className="h-4 w-4 stroke-[1.5]" />
@@ -1693,9 +2025,125 @@ export function UserPermissionsEditor({
                 </div>
               </div>
             )}
-          </div>
+            </CardContent>
+          </>
         )}
       </Card>
+
+      <Modal
+        isOpen={permissionActionModal === 'menu'}
+        onClose={closePermissionActionModal}
+        title="Permissões"
+        size="sm"
+      >
+        <p className="mb-5 text-sm text-gray-600 dark:text-gray-400">
+          Escolha como deseja alterar as permissões deste usuário.
+        </p>
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setLoadCopyUsers(true);
+              setPermissionActionModal('copy');
+            }}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 dark:hover:bg-red-500"
+          >
+            <Copy className="h-4 w-4 shrink-0" aria-hidden />
+            Copiar de outro usuário
+          </button>
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('restore')}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            <RotateCcw className="h-4 w-4 shrink-0" aria-hidden />
+            Restaurar padrões do cargo
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={permissionActionModal === 'copy'}
+        onClose={closePermissionActionModal}
+        title="Copiar permissões"
+        size="sm"
+        contentOverflowVisible
+      >
+        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+          {activeTab === 'contratos'
+            ? 'Copia ações, contratos liberados e coluna Gestor de outro usuário.'
+            : 'Copia as permissões de acesso e controle de outro usuário.'}
+        </p>
+        <StringSingleSelectDropdown
+          value={copyModalUserId || undefined}
+          onChange={(id) => {
+            setLoadCopyUsers(true);
+            setCopyModalUserId(id);
+          }}
+          options={copyUserSelectOptions}
+          placeholder="Selecionar usuário..."
+          searchPlaceholder="Pesquisar funcionário..."
+          emptyOptionsMessage={loadCopyUsers ? 'Nenhum funcionário encontrado.' : 'Carregando usuários...'}
+          allowEmpty={false}
+          matchTriggerWidth
+          className="w-full"
+        />
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('menu')}
+            disabled={isApplyingCopy}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmCopyFromUser}
+            disabled={!copyModalUserId || isApplyingCopy}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-500"
+          >
+            {isApplyingCopy ? 'Copiando...' : 'Confirmar cópia'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={permissionActionModal === 'restore'}
+        onClose={closePermissionActionModal}
+        confirmBeforeClose={false}
+        title="Restaurar padrões do cargo"
+        size="sm"
+      >
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          {employeePosition ? (
+            <>
+              As permissões atuais serão substituídas pelo template do cargo{' '}
+              <span className="font-medium text-gray-900 dark:text-gray-100">{employeePosition}</span>.
+            </>
+          ) : (
+            'Este funcionário não possui cargo definido. Defina o cargo antes de restaurar os padrões.'
+          )}
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={() => setPermissionActionModal('menu')}
+            disabled={isRestoringDefaults}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={handleRestoreDefaults}
+            disabled={!employeePosition || isRestoringDefaults}
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-red-500"
+          >
+            {isRestoringDefaults ? 'Restaurando...' : 'Restaurar'}
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

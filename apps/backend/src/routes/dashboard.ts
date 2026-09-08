@@ -1,10 +1,21 @@
 import express from 'express';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { SystemDashboardService } from '../services/SystemDashboardService';
 
 const router = express.Router();
 
 router.use(authenticate);
+
+// Endpoint para visão geral do sistema (OCs, RMs, combustível, logística, contratos, financeiro, auditoria)
+router.get('/overview', authorize('EMPLOYEE'), async (req: AuthRequest, res, next) => {
+  try {
+    const data = await SystemDashboardService.getOverview();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Endpoint para métricas administrativas - agora disponível para todos os funcionários
 router.get('/admin', authorize('EMPLOYEE'), async (req: AuthRequest, res, next) => {
@@ -703,10 +714,10 @@ router.get('/modules', authorize('EMPLOYEE'), async (req: AuthRequest, res, next
     const modules = [
       {
         id: 'dashboard',
-        name: 'Dashboard',
+        name: 'Painel do Sistema',
         description: 'Visão geral do sistema com métricas e estatísticas',
         icon: 'LayoutDashboard',
-        href: '/ponto/dashboard',
+        href: '/ponto/painel-do-sistema',
         category: 'Principal',
         permissions: ['EMPLOYEE']
       },
@@ -748,8 +759,8 @@ router.get('/modules', authorize('EMPLOYEE'), async (req: AuthRequest, res, next
       },
       {
         id: 'financial',
-        name: 'Financeiro',
-        description: 'Gerar borderô e CNAB400 para pagamentos',
+        name: 'Pagamento da Folha',
+        description: 'Borderô em PDF e remessa CNAB400 da folha',
         icon: 'DollarSign',
         href: '/ponto/financeiro',
         category: 'Financeiro',
@@ -775,20 +786,20 @@ router.get('/modules', authorize('EMPLOYEE'), async (req: AuthRequest, res, next
       },
       {
         id: 'point-corrections',
-        name: 'Alterações de ponto',
+        name: 'Alterações de Ponto',
         description: 'Solicitar e acompanhar alterações de marcação do ponto',
         icon: 'FileText',
         href: '/ponto/solicitacoes',
-        category: 'Alterações de ponto',
+        category: 'Alterações de Ponto',
         permissions: ['EMPLOYEE']
       },
       {
         id: 'manage-point-corrections',
-        name: 'Gerenciar alterações de ponto',
+        name: 'Gerenciar Alterações de Ponto',
         description: 'Analisar e aprovar alterações de marcação dos colaboradores',
         icon: 'FileText',
         href: '/ponto/gerenciar-solicitacoes',
-        category: 'Alterações de ponto',
+        category: 'Alterações de Ponto',
         permissions: ['ADMIN', 'PROJETOS']
       },
       {

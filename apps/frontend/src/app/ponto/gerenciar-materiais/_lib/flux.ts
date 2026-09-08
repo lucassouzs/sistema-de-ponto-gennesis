@@ -1,5 +1,5 @@
 import type { OcTab, PurchaseOrder } from '@/components/oc/OcPurchaseOrdersPanel';
-import { orderNeedsPaymentBoleto } from '@/components/oc/ocPaymentBoleto';
+import { showInAttachBoletoTab } from '@/components/oc/ocPaymentBoleto';
 import type { FluxTab } from './types';
 
 export function fluxTabToOcTab(f: FluxTab): OcTab {
@@ -30,5 +30,5 @@ export function fluxTabToOcTab(f: FluxTab): OcTab {
 }
 
 export function orderNeedsFinanceBoleto(o: PurchaseOrder): boolean {
-  return orderNeedsPaymentBoleto(o);
+  return showInAttachBoletoTab(o);
 }

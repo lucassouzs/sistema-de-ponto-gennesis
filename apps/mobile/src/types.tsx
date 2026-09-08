@@ -23,5 +23,7 @@ export interface User {
   role: 'EMPLOYEE' | 'ADMIN' | 'MANAGER';
   createdAt?: string;
   isActive?: boolean;
+  profilePhotoUrl?: string | null;
+  profilePhotoKey?: string | null;
   employee?: Employee;
 }

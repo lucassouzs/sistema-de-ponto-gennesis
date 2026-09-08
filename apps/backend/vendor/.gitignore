@@ -1,0 +1,5 @@
+# Artefatos do worker NF-e (SEFAZ) usados no Railway.
+# O JDK é gerado no build; o JAR versionado evita depender do Maven no deploy.
+*
+!.gitignore
+!nfe-distribuicao.jar

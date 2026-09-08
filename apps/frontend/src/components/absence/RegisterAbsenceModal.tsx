@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Calendar, User, FileText, AlertCircle, CheckCircle, Loader2, Search, ChevronDown } from 'lucide-react';
+import { X, CheckCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { SingleSelectSearchDropdown } from '@/components/ui/SingleSelectSearchDropdown';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+import { toPersonSelectOptions } from '@/lib/personSelectOptions';
 
 interface RegisterAbsenceModalProps {
   isOpen: boolean;
@@ -17,6 +21,8 @@ interface Employee {
   employeeId: string;
   position?: string | null;
   department?: string | null;
+  cpf?: string | null;
+  profilePhotoUrl?: string | null;
   user: {
     id: string;
     name: string;
@@ -34,8 +40,6 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
     observation: '',
     isMultiple: false
   });
-  const [employeeSearch, setEmployeeSearch] = useState('');
-  const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -68,6 +72,8 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
           employeeId: user.employee.employeeId || '',
           position: user.employee.position || null,
           department: user.employee.department || null,
+          cpf: user.cpf || null,
+          profilePhotoUrl: user.profilePhotoUrl || null,
           user: {
             id: user.id,
             name: user.name || '',
@@ -82,6 +88,20 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
   });
 
   const employees: Employee[] = employeesData || [];
+
+  const employeeSelectOptions = useMemo(
+    () =>
+      toPersonSelectOptions(
+        employees.map((emp) => ({
+          value: emp.id,
+          name: emp.user.name,
+          cpf: emp.cpf,
+          profilePhotoUrl: emp.profilePhotoUrl,
+          extraSearchText: [emp.position, emp.department, emp.employeeId].filter(Boolean).join(' '),
+        }))
+      ),
+    [employees]
+  );
 
   // Mutation para registrar falta única
   const registerSingleAbsence = useMutation({
@@ -126,7 +146,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
     }
   });
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setFormData({
       employeeId: '',
       date: '',
@@ -136,10 +156,10 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
       observation: '',
       isMultiple: false
     });
-    setEmployeeSearch('');
-    setShowEmployeeDropdown(false);
     onClose();
-  };
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(handleClose, { isParentOpen: isOpen });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,33 +207,13 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
 
   if (!isOpen) return null;
 
-  const selectedEmployee = employees.find(emp => emp.id === formData.employeeId);
   const isLoading = registerSingleAbsence.isPending || registerMultipleAbsences.isPending;
 
-  // Filtrar funcionários por busca (apenas nome, cargo e setor)
-  const filteredEmployees = employees.filter(emp => 
-    emp.user.name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-    (emp.position && emp.position.toLowerCase().includes(employeeSearch.toLowerCase())) ||
-    (emp.department && emp.department.toLowerCase().includes(employeeSearch.toLowerCase()))
-  );
-
-  const handleEmployeeSelect = (employeeId: string, employeeName: string) => {
-    setFormData({ ...formData, employeeId });
-    setEmployeeSearch(employeeName);
-    setShowEmployeeDropdown(false);
-  };
-
-  const handleEmployeeSearchChange = (value: string) => {
-    setEmployeeSearch(value);
-    setShowEmployeeDropdown(true);
-    if (value === '') {
-      setFormData({ ...formData, employeeId: '' });
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50 p-4">
+      <div className="absolute inset-0" onClick={requestClose} aria-hidden />
+      <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
@@ -225,7 +225,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
               </p>
             </div>
             <button
-              onClick={handleClose}
+              onClick={requestClose}
               className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               <X className="w-5 h-5" />
@@ -236,7 +236,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Seleção de funcionário */}
-            <div className="relative">
+            <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Funcionário *
               </label>
@@ -245,64 +245,16 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                   <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
                 </div>
               ) : (
-                <div className="relative">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                    <input
-                      type="text"
-                      value={employeeSearch}
-                      onChange={(e) => handleEmployeeSearchChange(e.target.value)}
-                      onFocus={() => setShowEmployeeDropdown(true)}
-                      placeholder="Digite para buscar funcionário..."
-                      className="w-full pl-10 pr-10 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-                    />
-                    <ChevronDown 
-                      className={`absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4 transition-transform cursor-pointer ${showEmployeeDropdown ? 'rotate-180' : ''}`}
-                      onClick={() => setShowEmployeeDropdown(!showEmployeeDropdown)}
-                    />
-                  </div>
-                  
-                  {/* Dropdown de funcionários */}
-                  {showEmployeeDropdown && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-10" 
-                        onClick={() => setShowEmployeeDropdown(false)}
-                      />
-                      <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        {filteredEmployees.length === 0 ? (
-                          <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                            Nenhum funcionário encontrado
-                          </div>
-                        ) : (
-                          filteredEmployees.map((employee) => (
-                            <button
-                              key={employee.id}
-                              type="button"
-                              onClick={() => handleEmployeeSelect(employee.id, employee.user.name)}
-                              className={`w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors ${
-                                formData.employeeId === employee.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                              }`}
-                            >
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {employee.user.name}
-                                </span>
-                                {(employee.position || employee.department) && (
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                    {employee.position && employee.department 
-                                      ? `${employee.position} de ${employee.department}`
-                                      : employee.position || employee.department}
-                                  </span>
-                                )}
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
+                <SingleSelectSearchDropdown
+                  value={formData.employeeId}
+                  onChange={(employeeId) => setFormData((current) => ({ ...current, employeeId }))}
+                  options={employeeSelectOptions}
+                  placeholder="Selecionar funcionário..."
+                  searchPlaceholder="Nome ou CPF..."
+                  emptyOptionsMessage="Nenhum funcionário disponível."
+                  allowEmpty
+                  emptyOptionLabel="Nenhum"
+                />
               )}
             </div>
 
@@ -337,7 +289,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                     onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                     required
                     max={new Date().toISOString().split('T')[0]}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
                 <div>
@@ -351,7 +303,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                     required
                     max={new Date().toISOString().split('T')[0]}
                     min={formData.startDate}
-                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                   />
                 </div>
               </div>
@@ -366,7 +318,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   required
                   max={new Date().toISOString().split('T')[0]}
-                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
+                  className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100"
                 />
               </div>
             )}
@@ -381,7 +333,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 placeholder="Ex: Falta sem justificativa, Falta por motivo pessoal..."
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
               />
             </div>
 
@@ -395,7 +347,7 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
                 onChange={(e) => setFormData({ ...formData, observation: e.target.value })}
                 placeholder="Observações adicionais (opcional)"
                 rows={3}
-                className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none"
+                className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 resize-none"
               />
             </div>
 
@@ -403,9 +355,9 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
             <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 type="button"
-                onClick={handleClose}
+                onClick={requestClose}
                 disabled={isLoading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Cancelar
               </button>
@@ -430,7 +382,9 @@ export function RegisterAbsenceModal({ isOpen, onClose }: RegisterAbsenceModalPr
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>
   );
 }
 

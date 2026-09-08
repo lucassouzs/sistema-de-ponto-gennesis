@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-/** Rota descontinuada — permissões por cargo são geridas no fluxo de funcionários/contratos. */
+/** Rota descontinuada — permissões de usuário são editadas em Funcionários (ou modelo por cargo em Contratos). */
 export default function PermissoesRedirectPage() {
-  redirect('/ponto/dashboard');
+  redirect('/ponto/funcionarios');
 }

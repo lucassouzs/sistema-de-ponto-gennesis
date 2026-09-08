@@ -1,30 +1,100 @@
 'use client';
 
 // Desabilitar prerendering
-export const dynamic = 'force-dynamic';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Moon, Sun, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, UserRound, Lock, AlertCircle, Moon, Sun, ArrowRight, MessageCircle, X } from 'lucide-react';
 import { authService } from '@/lib/auth';
+import { normalizeLoginIdentifierInput } from '@/lib/cpf';
 import { toast } from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/context/ThemeContext';
 import { Loading } from '@/components/ui/Loading';
-import api from '@/lib/api';
+import { useBrandingLogo } from '@/hooks/useBrandingLogo';
+import { persistUnbBranding } from '@/lib/unbBranding';
+import { APP_TITLE } from '@/lib/pageTitle';
+import { authTransitionCover, authTransitionLoginColdEnter, authTransitionRevealIfNeeded, peekAuthTransition } from '@/lib/authTransition';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 export default function LoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isDark, toggleTheme } = useTheme();
+  const { logoSrc, logoAlt } = useBrandingLogo();
   const [formData, setFormData] = useState({
-    email: '',
+    identifier: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [enterAnim, setEnterAnim] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      if (!authService.isAuthenticated()) {
+        if (!cancelled) setCheckingSession(false);
+        return;
+      }
+
+      try {
+        const user = await authService.getProfile();
+        if (cancelled) return;
+        const remember = Boolean(
+          typeof window !== 'undefined' && localStorage.getItem('token')
+        );
+        authService.setUser(user, remember);
+        queryClient.setQueryData(['user'], { success: true, data: user });
+        persistUnbBranding(user?.employee?.costCenter);
+        router.replace('/ponto/home');
+        // Mantém loading até a navegação; evita flash do formulário
+      } catch {
+        if (!cancelled) {
+          authService.clearAuth();
+          setCheckingSession(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, router]);
+
+  useEffect(() => {
+    if (checkingSession) return;
+
+    let cancelled = false;
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setEnterAnim(true);
+    }, 900);
+
+    void (async () => {
+      const fromLogout = peekAuthTransition() === 'to-login';
+      if (fromLogout) {
+        await authTransitionRevealIfNeeded();
+      } else {
+        await authTransitionLoginColdEnter();
+      }
+      if (!cancelled) setEnterAnim(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(safety);
+    };
+  }, [checkingSession]);
+
+  const supportWhatsAppDigits = '5561981622021';
+  const supportWhatsAppUrl = `https://wa.me/${supportWhatsAppDigits}?text=${encodeURIComponent(
+    `Olá! Esqueci minha senha do ${APP_TITLE} e preciso de ajuda para alterar.`
+  )}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,48 +103,26 @@ export default function LoginPage() {
 
     try {
       const loginResponse = await authService.login(formData, rememberMe);
-      // Limpar cache do React Query
-      queryClient.clear();
+      persistUnbBranding(loginResponse.user?.employee?.costCenter);
+      // Limpa permissões/listas da sessão anterior (evita flash de admin → funcionário)
+      queryClient.removeQueries({ queryKey: ['me-permissions'] });
+      queryClient.removeQueries({ queryKey: ['contracts'] });
+      queryClient.removeQueries({ queryKey: ['permission-contracts-list'] });
+      queryClient.removeQueries({ queryKey: ['permission-users'] });
+      // Hidrata o cache com o user do login — evita tela de loading esperando /auth/me
+      queryClient.setQueryData(['user'], {
+        success: true,
+        data: loginResponse.user,
+      });
       toast.success('Login realizado com sucesso!');
-      
-      // Verificar se o token foi salvo antes de fazer a chamada (localStorage ou sessionStorage)
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        // Se não tem token, redirecionar para /ponto por padrão
-        setTimeout(() => {
-          router.push('/ponto');
-        }, 500);
-        return;
-      }
-      
-      // Buscar dados do usuário para verificar cargo e se precisa bater ponto
-      // Usar um pequeno delay para garantir que o token está disponível
-      setTimeout(async () => {
-        try {
-          const userRes = await api.get('/auth/me');
-          const userData = userRes.data?.data;
-          const userPosition = userData?.employee?.position;
-          const requiresTimeClock = userData?.employee?.requiresTimeClock !== false;
-          
-          // Se for Administrador, redirecionar para dashboard
-          if (userPosition === 'Administrador') {
-            router.push('/ponto/dashboard');
-          } else {
-            // Outros funcionários vão para /ponto (a página mostra mensagem se não precisa bater ponto)
-            router.push('/ponto');
-          }
-        } catch (userError: any) {
-          console.error('Erro ao buscar dados do usuário:', userError);
-          // Se não conseguir buscar dados do usuário, redirecionar para /ponto por padrão
-          router.push('/ponto');
-        }
-      }, 300);
+      await authTransitionCover('to-app');
+      router.push('/ponto/home');
     } catch (error: any) {
       // Verificar se é erro de credenciais inválidas
       if (error.message?.includes('Credenciais inválidas') || 
           error.message?.includes('incorreta') ||
           error.message?.includes('inválidas')) {
-        setError('Email ou senha incorretos. Verifique suas credenciais e tente novamente.');
+        setError('E-mail, CPF ou senha incorretos. Verifique suas credenciais e tente novamente.');
       } else {
         setError(error.message || 'Erro ao fazer login');
       }
@@ -83,28 +131,39 @@ export default function LoginPage() {
     }
   };
 
+  const loginInputClassName =
+    'login-form-field w-full py-4 text-base rounded-lg border border-gray-300 bg-white text-gray-900 placeholder-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500';
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
+    const { name, value } = e.target;
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [name]: name === 'identifier' ? normalizeLoginIdentifierInput(value) : value,
     }));
-    // Limpar erro quando usuário começar a digitar
     if (error) {
       setError('');
     }
   };
 
+  if (checkingSession) {
+    return <Loading message="Restaurando sessão..." fullScreen size="lg" />;
+  }
+
   return (
-    <div className="min-h-screen flex flex-col relative bg-white dark:bg-gray-900">
+    <div
+      className={`app-theme-bg min-h-screen flex flex-col relative login-page-shell${
+        enterAnim ? ' login-page-shell--ready' : ''
+      }`}
+    >
       {/* Header */}
-      <header className="w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+      <header className="login-page-enter login-page-enter--header w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-24 relative">
             {/* Botão de trocar tema (esquerda) */}
             <div className="flex items-center w-1/3 justify-start">
               <button
                 onClick={toggleTheme}
-                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
                 title={isDark ? 'Modo Claro' : 'Modo Escuro'}
               >
                 {isDark ? (
@@ -119,11 +178,14 @@ export default function LoginPage() {
             </div>
 
             {/* Logo (centro) */}
-            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center">
+            <div className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center login-page-enter login-page-enter--logo">
               <img 
-                src={isDark ? "/logobranca.png" : "/logopv.png"} 
-                alt="Logo Gennesis Engenharia" 
-                className="h-14 w-auto object-contain"
+                src={logoSrc}
+                alt={logoAlt}
+                width={220}
+                height={56}
+                className="h-14 w-auto max-w-[220px] object-contain"
+                style={{ maxHeight: 56, maxWidth: 220, width: 'auto', height: 'auto' }}
               />
             </div>
 
@@ -159,27 +221,31 @@ export default function LoginPage() {
       )}
 
       {/* Formulário de Login - Centralizado */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
+      <div className="login-page-enter login-page-enter--body flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
-            Entrar na sua conta
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-8 text-center">
-            Digite suas credenciais para acessar o sistema
-          </p>
+          <div className="login-page-enter login-page-enter--title">
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 text-center">
+              Entrar na sua conta
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 mb-8 text-center">
+              Use seu e-mail ou CPF e a senha para acessar
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} method="post" action="#" className="login-page-enter login-page-enter--form space-y-6">
           <div>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
+              <UserRound className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 dark:text-gray-500" />
               <input
-                type="email"
-                name="email"
-                value={formData.email}
+                type="text"
+                name="identifier"
+                value={formData.identifier}
                 onChange={handleChange}
                 required
-                placeholder="Email"
-                className="w-full pl-12 pr-4 py-4 text-base bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                autoComplete="username"
+                inputMode="text"
+                placeholder="E-mail ou CPF"
+                className={`${loginInputClassName} pl-12 pr-4`}
               />
             </div>
           </div>
@@ -193,8 +259,9 @@ export default function LoginPage() {
                 value={formData.password}
                 onChange={handleChange}
                 required
+                autoComplete="current-password"
                 placeholder="Senha"
-                className="w-full pl-12 pr-12 py-4 text-base bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-100 focus:border-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                className={`${loginInputClassName} pl-12 pr-12`}
               />
               <button
                 type="button"
@@ -231,7 +298,7 @@ export default function LoginPage() {
               </label>
               <button
                 type="button"
-                onClick={() => router.push('/auth/forgot-password')}
+                onClick={() => setShowHelpModal(true)}
                 className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-500 font-medium transition-colors"
               >
                 Esqueceu a senha?
@@ -262,8 +329,53 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {showHelpModal && (
+        <AppModalOverlay
+          className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forgot-password-help-title"
+          onClick={() => setShowHelpModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 id="forgot-password-help-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Esqueceu a senha?
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(false)}
+                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              A recuperação automática foi desativada. Solicite a alteração de senha pelo WhatsApp:
+            </p>
+
+            <div className="mt-5">
+              <a
+                href={supportWhatsAppUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 hover:bg-green-700 text-white px-4 py-3 text-sm font-medium transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Solicitar via WhatsApp
+              </a>
+            </div>
+          </div>
+        </AppModalOverlay>
+      )}
+
       {/* Footer */}
-      <footer className="w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-10">
+      <footer className="w-full py-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="text-center text-base text-gray-600 dark:text-gray-400">
             Ao acessar sua conta, você reconhece que leu, entendeu e concorda integralmente com os{' '}

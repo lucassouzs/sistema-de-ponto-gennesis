@@ -189,7 +189,7 @@ export class PhotoService {
 
   async uploadPhotoFromBase64(base64Data: string, userId: string, contentType: string = 'image/jpeg'): Promise<PhotoUploadResult> {
     try {
-      const base64String = base64Data.replace(/^data:image\/[a-z]+;base64,/, '');
+      const base64String = base64Data.replace(/^data:image\/[a-z+]+;base64,/, '');
       const buffer = Buffer.from(base64String, 'base64');
       const photo = { buffer, size: buffer.length, mimetype: contentType, originalname: 'ponto.jpg' };
       return await this.uploadPhoto(photo, userId);
@@ -199,6 +199,74 @@ export class PhotoService {
       }
       throw new Error('Erro ao processar foto base64: erro desconhecido');
     }
+  }
+
+  async uploadReservationLaudoFromBase64(
+    base64Data: string,
+    userId: string,
+    contentType: string,
+    originalName: string
+  ): Promise<PhotoUploadResult> {
+    const allowedTypes = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+    if (!allowedTypes.has(contentType)) {
+      throw new Error('Tipo de laudo não permitido. Envie PDF ou imagem.');
+    }
+
+    const base64String = base64Data.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(base64String, 'base64');
+    const maxSize = 10 * 1024 * 1024;
+    if (buffer.length > maxSize) {
+      throw new Error('Laudo muito grande. Máximo permitido: 10MB');
+    }
+
+    const extMap: Record<string, string> = {
+      'application/pdf': 'pdf',
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp'
+    };
+    const ext = extMap[contentType] || 'pdf';
+    const fileName = `${uuidv4()}.${ext}`;
+    const relativeDir = path.join('uploads', 'vehicle-reservations', userId);
+    const absoluteDir = path.join(process.cwd(), 'apps', 'backend', relativeDir);
+
+    await fs.promises.mkdir(absoluteDir, { recursive: true });
+    const filePath = path.join(absoluteDir, fileName);
+    await fs.promises.writeFile(filePath, buffer);
+
+    const publicUrlBase = process.env.PUBLIC_BASE_URL || 'http://localhost:5000';
+    const key = path.join(relativeDir, fileName).replace(/\\/g, '/');
+    const url = `${publicUrlBase}/${key}`.replace(/\s/g, '%20');
+
+    if (!this.useLocal && this.s3) {
+      const s3Key = `vehicle-reservations/${userId}/${fileName}`;
+      const uploadParams = {
+        Bucket: this.bucketName,
+        Key: s3Key,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: 'private',
+        Metadata: {
+          userId,
+          uploadedAt: new Date().toISOString(),
+          originalName: originalName || fileName
+        }
+      } as AWS.S3.PutObjectRequest;
+      const result = await this.s3.upload(uploadParams).promise();
+      return {
+        url: result.Location,
+        key: s3Key,
+        size: buffer.length,
+        contentType
+      };
+    }
+
+    return {
+      url,
+      key,
+      size: buffer.length,
+      contentType
+    };
   }
 
   async getSignedUrl(key: string, expiresIn: number = 3600): Promise<string> {

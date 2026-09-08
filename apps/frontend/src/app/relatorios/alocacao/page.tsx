@@ -1,13 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Users, Search, Filter, ChevronDown, ChevronUp, X, Building2, FileText, Calendar, ListPlus, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { CadastroListLoading } from '@/components/ui/CadastroListSummary';
+import { Loading } from '@/components/ui/Loading';
 import api from '@/lib/api';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import { PayrollEmployee, PayrollFilters } from '@/types';
 import { 
   DEPARTMENTS_LIST, 
@@ -20,6 +24,39 @@ import {
 } from '@/constants/payrollFilters';
 import { useCostCenters } from '@/hooks/useCostCenters';
 import { CARGOS_LIST } from '@/constants/cargos';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
+
+const MONTH_FILTER_OPTIONS = labeledToSelectOptions([
+  { value: '1', label: 'Janeiro' },
+  { value: '2', label: 'Fevereiro' },
+  { value: '3', label: 'Março' },
+  { value: '4', label: 'Abril' },
+  { value: '5', label: 'Maio' },
+  { value: '6', label: 'Junho' },
+  { value: '7', label: 'Julho' },
+  { value: '8', label: 'Agosto' },
+  { value: '9', label: 'Setembro' },
+  { value: '10', label: 'Outubro' },
+  { value: '11', label: 'Novembro' },
+  { value: '12', label: 'Dezembro' },
+]);
+
+function filterWithEmpty(emptyLabel: string, items: string[]) {
+  return labeledToSelectOptions([
+    { value: '', label: emptyLabel },
+    ...items.map((item) => ({ value: item, label: item })),
+  ]);
+}
+
+const DEPARTMENT_FILTER_OPTIONS = filterWithEmpty('Todos os setores', DEPARTMENTS_LIST);
+const POSITION_FILTER_OPTIONS = filterWithEmpty('Todos os cargos', CARGOS_LIST);
+const COMPANY_FILTER_OPTIONS = filterWithEmpty('Todas as empresas', COMPANIES_LIST);
+const CLIENT_FILTER_OPTIONS = filterWithEmpty('Todos os tomadores', CLIENTS_LIST);
+const POLO_FILTER_OPTIONS = filterWithEmpty('Todos os polos', POLOS_LIST);
+const MODALITY_FILTER_OPTIONS = filterWithEmpty('Todas as modalidades', MODALITIES_LIST);
+const BANK_FILTER_OPTIONS = filterWithEmpty('Todos os bancos', BANKS_LIST);
+const ACCOUNT_TYPE_FILTER_OPTIONS = filterWithEmpty('Todos os tipos', ACCOUNT_TYPES_LIST);
 
 export default function AlocacaoPage() {
   const { costCentersList } = useCostCenters();
@@ -160,10 +197,13 @@ export default function AlocacaoPage() {
     }
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedEmployee(null);
-  };
+  }, []);
+
+  const { requestClose: requestCloseAllocationModal, confirmUi: allocationModalConfirmUi } =
+    useModalCloseConfirm(handleCloseModal, { isParentOpen: isModalOpen });
 
   const handlePreviousMonth = () => {
     if (modalCurrentMonth === 0) {
@@ -549,14 +589,7 @@ export default function AlocacaoPage() {
   }, [filters.month, filters.year]);
 
   if (loadingUser) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="loading-spinner w-8 h-8 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
-        </div>
-      </div>
-    );
+    return <Loading message="Carregando..." fullScreen size="lg" />;
   }
 
   const user = userData?.data || {
@@ -577,23 +610,21 @@ export default function AlocacaoPage() {
     // Isso estava causando muitas requisições simultâneas (erro 429)
     // Os dados agora são buscados sob demanda quando necessário (lazy loading)
   
-  // Opções de mês e ano
-  const monthOptions = [
-    { value: 1, label: 'Janeiro' },
-    { value: 2, label: 'Fevereiro' },
-    { value: 3, label: 'Março' },
-    { value: 4, label: 'Abril' },
-    { value: 5, label: 'Maio' },
-    { value: 6, label: 'Junho' },
-    { value: 7, label: 'Julho' },
-    { value: 8, label: 'Agosto' },
-    { value: 9, label: 'Setembro' },
-    { value: 10, label: 'Outubro' },
-    { value: 11, label: 'Novembro' },
-    { value: 12, label: 'Dezembro' }
-  ];
+  const yearFilterOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        Array.from({ length: 11 }, (_, i) => {
+          const year = currentYear - 5 + i;
+          return { value: String(year), label: String(year) };
+        })
+      ),
+    [currentYear]
+  );
 
-  const yearOptions = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+  const costCenterFilterOptions = useMemo(
+    () => filterWithEmpty('Todos os centros', costCentersList),
+    [costCentersList]
+  );
 
   return (
     <ProtectedRoute route="/relatorios/alocacao">
@@ -667,7 +698,7 @@ export default function AlocacaoPage() {
                     value={filters.search}
                     onChange={handleSearchChange}
                     placeholder="Digite nome, CPF, matrícula, setor, empresa ou qualquer informação..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   />
                 </div>
               </div>
@@ -678,40 +709,24 @@ export default function AlocacaoPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Mês
                   </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                    <select
-                      value={filters.month}
-                      onChange={handleMonthChange}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      {monthOptions.map(month => (
-                        <option key={month.value} value={month.value}>
-                          {month.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <StringSingleSelectDropdown
+                    value={String(filters.month)}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, month: parseInt(v, 10) }))}
+                    options={MONTH_FILTER_OPTIONS}
+                    allowEmpty={false}
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Ano
                   </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                    <select
-                      value={filters.year}
-                      onChange={handleYearChange}
-                      className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      {yearOptions.map(year => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <StringSingleSelectDropdown
+                    value={String(filters.year)}
+                    onChange={(v) => setFilters((prev) => ({ ...prev, year: parseInt(v, 10) }))}
+                    options={yearFilterOptions}
+                    allowEmpty={false}
+                  />
                 </div>
               </div>
 
@@ -730,63 +745,36 @@ export default function AlocacaoPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Setor
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.department}
-                            onChange={handleDepartmentChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os setores</option>
-                            {DEPARTMENTS_LIST.map(dept => (
-                              <option key={dept} value={dept}>
-                                {dept}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.department}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, department: v }))}
+                          options={DEPARTMENT_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Cargo
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.position}
-                            onChange={handlePositionChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os cargos</option>
-                            {CARGOS_LIST.map(cargo => (
-                              <option key={cargo} value={cargo}>
-                                {cargo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.position}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, position: v }))}
+                          options={POSITION_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Empresa
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.company}
-                            onChange={handleCompanyChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todas as empresas</option>
-                            {COMPANIES_LIST.map(company => (
-                              <option key={company} value={company}>
-                                {company}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.company}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, company: v }))}
+                          options={COMPANY_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
                     </div>
                   </div>
@@ -799,84 +787,48 @@ export default function AlocacaoPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Centro de Custo
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.costCenter}
-                            onChange={handleCostCenterChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os centros</option>
-                            {costCentersList.map(center => (
-                              <option key={center} value={center}>
-                                {center}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.costCenter}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, costCenter: v }))}
+                          options={costCenterFilterOptions}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Tomador
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.client}
-                            onChange={handleClientChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os tomadores</option>
-                            {CLIENTS_LIST.map(client => (
-                              <option key={client} value={client}>
-                                {client}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.client}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, client: v }))}
+                          options={CLIENT_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Polo
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.polo}
-                            onChange={handlePoloChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os polos</option>
-                            {POLOS_LIST.map(polo => (
-                              <option key={polo} value={polo}>
-                                {polo}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.polo}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, polo: v }))}
+                          options={POLO_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Modalidade
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.modality}
-                            onChange={handleModalityChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todas as modalidades</option>
-                            {MODALITIES_LIST.map(modality => (
-                              <option key={modality} value={modality}>
-                                {modality}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.modality}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, modality: v }))}
+                          options={MODALITY_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
                     </div>
                   </div>
@@ -889,42 +841,24 @@ export default function AlocacaoPage() {
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Banco
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.bank}
-                            onChange={handleBankChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os bancos</option>
-                            {BANKS_LIST.map(bank => (
-                              <option key={bank} value={bank}>
-                                {bank}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.bank}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, bank: v }))}
+                          options={BANK_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Tipo de Conta
                         </label>
-                        <div className="relative">
-                          <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 w-4 h-4" />
-                          <select
-                            value={filters.accountType}
-                            onChange={handleAccountTypeChange}
-                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                          >
-                            <option value="">Todos os tipos</option>
-                            {ACCOUNT_TYPES_LIST.map(type => (
-                              <option key={type} value={type}>
-                                {type}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StringSingleSelectDropdown
+                          value={filters.accountType}
+                          onChange={(v) => setFilters((prev) => ({ ...prev, accountType: v }))}
+                          options={ACCOUNT_TYPE_FILTER_OPTIONS}
+                          allowEmpty={false}
+                        />
                       </div>
                     </div>
                   </div>
@@ -951,7 +885,7 @@ export default function AlocacaoPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full">
                 <thead className="border-b border-gray-200 dark:border-gray-700">
                   <tr>
@@ -1001,23 +935,11 @@ export default function AlocacaoPage() {
                     </tr>
                   ) : loadingEmployees ? (
                     <tr>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap sticky left-0 bg-white dark:bg-gray-800 z-10 border-r border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
-                      </td>
-                      <td colSpan={getDaysUntilToday(filters.year, filters.month - 1).length} className="px-3 sm:px-6 py-4 text-center">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
-                      </td>
-                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-white dark:bg-gray-800 z-10 border-l border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center justify-center">
-                          <div className="loading-spinner w-6 h-6 mr-2" />
-                            <span className="text-gray-600 dark:text-gray-400">Carregando...</span>
-                        </div>
+                      <td
+                        colSpan={getDaysUntilToday(filters.year, filters.month - 1).length + 2}
+                        className="px-3 py-4 sm:px-6"
+                      >
+                        <CadastroListLoading message="Carregando..." />
                       </td>
                     </tr>
                   ) : !Array.isArray(employees) || employees.length === 0 ? (
@@ -1253,11 +1175,11 @@ export default function AlocacaoPage() {
 
         {/* Modal de Centro de Custo */}
         {isModalOpen && selectedEmployee && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40" onClick={handleCloseModal} />
+          <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40" onClick={requestCloseAllocationModal} />
             <div className="relative w-full max-w-4xl rounded-lg bg-white dark:bg-gray-800 p-6 shadow-lg max-h-[90vh] overflow-y-auto">
               <button
-                onClick={handleCloseModal}
+                onClick={requestCloseAllocationModal}
                 className="absolute top-3 right-3 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 <X className="h-6 w-6" />
@@ -1352,8 +1274,9 @@ export default function AlocacaoPage() {
 
               {/* Legenda removida */}
             </div>
-          </div>
+          </AppModalOverlay>
         )}
+        {allocationModalConfirmUi}
       </div>
       </MainLayout>
     </ProtectedRoute>

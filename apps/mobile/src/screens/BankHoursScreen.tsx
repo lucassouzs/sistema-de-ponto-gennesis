@@ -446,17 +446,18 @@ export default function BankHoursScreen() {
 const getStyles = (colors: any) => StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.screenRoot,
   },
   topSafeArea: {
     backgroundColor: colors.headerBackground,
   },
   container: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.screenRoot,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 100,
   },
   cardsContainer: {
     paddingHorizontal: 20,

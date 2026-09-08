@@ -3,21 +3,17 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { Upload, Download, AlertCircle, CheckCircle, X, Loader2, Edit2, Trash2, FileSpreadsheet, ArrowLeft } from 'lucide-react';
+import { Upload, Download, AlertCircle, CheckCircle, X, Loader2, Trash2, FileSpreadsheet } from 'lucide-react';
 import { CreateEmployeeForm } from '@/components/employee/CreateEmployeeForm';
 import { EmployeeList } from '@/components/employee/EmployeeList';
-import {
-  UserPermissionsEditor,
-  UserPermissionsTabBar,
-  type PermissionEditorTab,
-  type PermissionsTargetPreview,
-} from '@/components/permissions/UserPermissionsEditor';
 import { MainLayout } from '@/components/layout/MainLayout';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Loading } from '@/components/ui/Loading';
 import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 // Função para gerar e baixar modelo Excel
 const downloadExcelTemplate = () => {
@@ -93,15 +89,6 @@ export default function FuncionariosPage() {
   const { canCreateEmployees } = usePermissions();
   const [isCreateEmployeeOpen, setIsCreateEmployeeOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [permissionsTarget, setPermissionsTarget] = useState<PermissionsTargetPreview | null>(null);
-  const [permissionTab, setPermissionTab] = useState<PermissionEditorTab>('gerais');
-  const [showContractsTab, setShowContractsTab] = useState(false);
-
-  const closePermissionsEditor = () => {
-    setPermissionsTarget(null);
-    setPermissionTab('gerais');
-    setShowContractsTab(false);
-  };
 
   const { data: userData, isLoading: loadingUser } = useQuery({
     queryKey: ['user'],
@@ -117,74 +104,26 @@ export default function FuncionariosPage() {
     router.push('/auth/login');
   };
 
-  const handleEmployeeCreated = () => {
-    queryClient.invalidateQueries({ queryKey: ['employees'] });
-    setIsCreateEmployeeOpen(false);
-  };
-
-  const handleEmployeeUpdated = () => {
-    queryClient.invalidateQueries({ queryKey: ['employees'] });
-  };
-
   // Mostrar loading no padrão das outras páginas
-  if (loadingUser) {
-    return (
-      <Loading 
-        message="Carregando funcionários..."
-        fullScreen
-        size="lg"
-      />
-    );
-  }
-
   const user = userData?.data || {
     name: 'Usuário',
     role: 'EMPLOYEE'
   };
 
-  if (permissionsTarget) {
+  if (loadingUser) {
     return (
-      <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
-        <div className="w-full space-y-6">
-          <div className="relative flex min-h-[3.25rem] items-center justify-center py-1">
-            <button
-              type="button"
-              onClick={closePermissionsEditor}
-              className="absolute left-0 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-2 rounded-lg px-1 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-400 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            >
-              <ArrowLeft className="h-4 w-4 shrink-0" />
-              Voltar
-            </button>
-            <div className="w-full max-w-3xl px-14 text-center sm:px-20">
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-3xl">
-                Permissões de funcionário
-              </h1>
-              <p className="mt-1.5 text-sm text-gray-600 dark:text-gray-400">
-                Defina o que este colaborador pode acessar no sistema
-              </p>
-            </div>
-          </div>
-          <UserPermissionsTabBar
-            activeTab={permissionTab}
-            onChange={setPermissionTab}
-            showContracts={showContractsTab}
-            className="w-full pb-2"
-          />
-          <UserPermissionsEditor
-            userId={permissionsTarget.id}
-            preview={permissionsTarget}
-            onBack={closePermissionsEditor}
-            hideTopNavigation
-            permissionTab={permissionTab}
-            onPermissionTabChange={setPermissionTab}
-            onContractsTabAvailabilityChange={setShowContractsTab}
-          />
-        </div>
-      </MainLayout>
+      <ProtectedRoute route="/ponto/funcionarios">
+        <MainLayout userRole={user.role} userName={user.name} onLogout={handleLogout}>
+          <Loading message="Carregando..." fullScreen size="lg" />
+        </MainLayout>
+      </ProtectedRoute>
     );
   }
 
+  
+
   return (
+    <ProtectedRoute route="/ponto/funcionarios">
     <MainLayout 
       userRole={user.role} 
       userName={user.name} 
@@ -194,10 +133,10 @@ export default function FuncionariosPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            Funcionários
+            Funcionários e Externos
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Cadastre e gerencie os funcionários da empresa
+            Cadastre e gerencie os funcionários e externos da empresa
           </p>
         </div>
 
@@ -207,16 +146,6 @@ export default function FuncionariosPage() {
           showDeleteButton={true}
           onImportEmployees={canCreateEmployees ? () => setIsImportModalOpen(true) : undefined}
           onCreateEmployee={canCreateEmployees ? () => setIsCreateEmployeeOpen(true) : undefined}
-          onManagePermissions={(emp) => {
-            setPermissionTab('gerais');
-            setShowContractsTab(false);
-            setPermissionsTarget({
-              id: emp.id,
-              name: emp.name,
-              email: emp.email || '',
-              position: emp.employee?.position,
-            });
-          }}
         />
 
         {/* Modal de Criar Funcionário */}
@@ -239,6 +168,7 @@ export default function FuncionariosPage() {
 
       </div>
     </MainLayout>
+    </ProtectedRoute>
   );
 }
 
@@ -354,11 +284,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         return;
       }
 
-      // Buscar última matrícula do ano atual (será gerada no backend, aqui só para preview)
-      const currentYear = new Date().getFullYear().toString().slice(-2);
-      let nextSequence = 1;
-
-      // Processar cada linha
+      // Matrícula real é gerada no backend a partir da última do banco
       const processedRows: EmployeeRow[] = rows.map((row, index) => {
         const linha = index + 2; // +2 porque linha 1 é cabeçalho e arrays começam em 0
         const erros: string[] = [];
@@ -385,10 +311,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         if (emailStr && !emailRegex.test(emailStr)) {
           erros.push('Email inválido');
         }
-
-        // Gerar matrícula
-        const matriculaGerada = `${currentYear}${nextSequence.toString().padStart(4, '0')}`;
-        nextSequence++;
 
         return {
           linha,
@@ -425,7 +347,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
           },
           erros,
           isValid: erros.length === 0,
-          matriculaGerada
+          matriculaGerada: undefined
         };
       });
 
@@ -645,7 +567,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
             'Salário Família': parseCurrency(r.dados['Salário Família'] || ''),
             Periculosidade: parseCurrency(r.dados['Periculosidade'] || '0'),
             Insalubridade: parseCurrency(r.dados['Insalubridade'] || '0'),
-            matriculaGerada: r.matriculaGerada
           };
         })
       });
@@ -658,7 +579,21 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
         toast.success(`✅ ${data.data.sucessos} funcionário(s) importado(s) com sucesso!`);
         onSuccess();
       } else {
-        toast.error(`⚠️ ${data.data.sucessos} importado(s), ${data.data.erros} erro(s)`);
+        const detalhesErros: Array<{ linha?: number; nome?: string; erro?: string }> =
+          data.data.detalhes?.erros || [];
+        const preview = detalhesErros
+          .slice(0, 3)
+          .map((e) => {
+            const quem = e.nome ? ` (${e.nome})` : '';
+            return `Linha ${e.linha ?? '?'}${quem}: ${e.erro || 'Erro'}`;
+          })
+          .join('\n');
+        const extra =
+          detalhesErros.length > 3 ? `\n… e mais ${detalhesErros.length - 3} erro(s)` : '';
+        toast.error(
+          `${data.data.sucessos} importado(s), ${data.data.erros} erro(s)${preview ? `\n${preview}${extra}` : ''}`,
+          { duration: 10000 }
+        );
       }
     },
     onError: (error: any) => {
@@ -693,7 +628,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50">
       <div className="absolute inset-0" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
@@ -865,7 +800,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                   Revise e edite os dados antes de importar. Linhas em vermelho têm erros que precisam ser corrigidos.
                 </p>
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900">
+                <div className="table-scroll max-h-[500px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-lg bg-white dark:bg-gray-900">
                   <table className="w-full text-sm" style={{ minWidth: '2000px' }}>
                     <thead className="bg-gray-50/50 dark:bg-gray-800/50 sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800">
                       <tr>
@@ -1155,8 +1090,8 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                               </div>
                             </td>
                             <td className="px-3 py-3 whitespace-nowrap">
-                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                {row.matriculaGerada}
+                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                                Automática
                               </span>
                             </td>
                             <td className={`px-3 py-3 whitespace-nowrap text-center sticky right-0 z-20 ${!row.isValid ? 'bg-red-50/30 dark:bg-red-950/20' : 'bg-white dark:bg-gray-900'}`}>
@@ -1175,7 +1110,7 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                   </table>
                 </div>
                 
-                {/* Resumo de erros melhorado */}
+                {/* Resumo de erros do preview */}
                 {parsedRows.some(r => !r.isValid) && (
                   <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 rounded-lg border-2 border-red-300 dark:border-red-700 shadow-sm">
                     <div className="flex items-center space-x-2 mb-3">
@@ -1201,13 +1136,46 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
                     </div>
                   </div>
                 )}
+
+                {/* Erros retornados pelo servidor após importar */}
+                {result && result.erros > 0 && Array.isArray(result.detalhes?.erros) && (
+                  <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 rounded-lg border-2 border-red-300 dark:border-red-700 shadow-sm">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                      <p className="text-sm font-bold text-red-800 dark:text-red-200">
+                        {result.sucessos} importado(s), {result.erros} erro(s) na importação
+                      </p>
+                    </div>
+                    <div className="space-y-2 text-xs text-red-700 dark:text-red-300 max-h-40 overflow-y-auto">
+                      {result.detalhes.erros.map(
+                        (
+                          err: { linha?: number; nome?: string; erro?: string },
+                          idx: number
+                        ) => (
+                          <div
+                            key={idx}
+                            className="flex items-start space-x-2 p-2 bg-red-100 dark:bg-red-900/50 rounded border border-red-200 dark:border-red-800"
+                          >
+                            <span className="font-bold text-red-800 dark:text-red-300 min-w-[50px]">
+                              Linha {err.linha ?? '?'}:
+                            </span>
+                            <div className="flex-1">
+                              {err.nome ? <span className="font-medium">{err.nome} — </span> : null}
+                              <span>{err.erro || 'Erro desconhecido'}</span>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Botão Importar */}
               <div className="flex space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={onClose}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-700"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 bg-white dark:bg-gray-800"
                 >
                   Cancelar
                 </button>
@@ -1233,6 +1201,6 @@ function ImportEmployeesModal({ isOpen, onClose, onSuccess, onDownloadTemplate }
           )}
         </div>
       </div>
-    </div>
+    </AppModalOverlay>
   );
 }

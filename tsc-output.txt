@@ -1,0 +1,1 @@
+﻿src/components/oc/OcPurchaseOrdersPanel.tsx(3035,47): error TS2551: Property 'supplierId' does not exist on type 'PurchaseOrder'. Did you mean 'supplier'?

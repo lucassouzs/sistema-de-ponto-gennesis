@@ -1,14 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit, X, Save, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import { TOMADORES_LIST } from '@/constants/tomadores';
 import { CARGOS_AVAILABLE } from '@/constants/cargos';
 import { useCostCenters } from '@/hooks/useCostCenters';
+import { useModalCloseConfirm } from '@/hooks/useModalCloseConfirm';
 import api from '@/lib/api';
 import toast from 'react-hot-toast';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
+import {
+  EMPLOYEE_POLO_OPTIONS,
+  EMPLOYEE_MODALITY_OPTIONS,
+  EMPLOYEE_CATEGORIA_FINANCEIRA_OPTIONS,
+  EMPLOYEE_REGIME_OPTIONS,
+  selectTriggerErrorCls,
+} from '@/lib/selectOptionBuilders';
+import { AppModalOverlay } from '@/components/ui/AppModalOverlay';
 
 interface EmployeeFormData {
   // Dados do usuário
@@ -127,7 +137,10 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
     'Departamento Pessoal',
     'Engenharia',
     'Administrativo',
-    'Financeiro'
+    'Financeiro',
+    'Operacional',
+    'Segurança do Trabalho',
+    'Sócios',
   ];
 
   // Lista de cargos disponíveis (sem Administrador e sem Diretor)
@@ -253,6 +266,12 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
   });
 
   const queryClient = useQueryClient();
+
+  const closeForm = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
+  const { requestClose, confirmUi } = useModalCloseConfirm(closeForm);
 
   // Função para validar CPF
   const isValidCPF = (cpf: string): boolean => {
@@ -657,8 +676,9 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <>
+    <AppModalOverlay className="app-modal-overlay fixed inset-0 z-[2000] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
       <div className="relative w-full max-w-4xl mx-4 bg-white dark:bg-gray-800 rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
         <div className="px-8 py-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-between">
           <div>
@@ -666,7 +686,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
             <p className="text-sm text-gray-500 dark:text-gray-400">Atualize os dados do funcionário</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             aria-label="Fechar"
           >
@@ -691,7 +711,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       type="text"
                       value={formData.name}
                       onChange={(e) => handleInputChange('name', e.target.value)}
-                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
+                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-800 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
                         errors.name ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                       }`}
                       placeholder="Digite o nome completo"
@@ -715,10 +735,10 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                         onChange={(e) => handleEmailChange(e.target.value)}
                         className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
                           errors.email 
-                            ? 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-700 focus:ring-red-500' 
+                            ? 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-800 focus:ring-red-500' 
                             : !isCheckingEmail && formData.email && isValidEmail(formData.email.trim()) && !errors.email
                             ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20 focus:ring-green-500'
-                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-blue-500'
+                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-blue-500'
                         }`}
                         placeholder="email@exemplo.com"
                       />
@@ -752,10 +772,10 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                         onChange={(e) => handleCPFChange(e.target.value)}
                         className={`w-full px-3 py-2.5 border rounded-md focus:outline-none focus:ring-2 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
                           errors.cpf 
-                            ? 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-700 focus:ring-red-500' 
+                            ? 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-800 focus:ring-red-500' 
                             : formData.cpf.replace(/\D/g, '').length === 11 && isValidCPF(formData.cpf.replace(/\D/g, '')) && !errors.cpf
                             ? 'border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20 focus:ring-green-500'
-                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-blue-500'
+                            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-blue-500'
                         }`}
                         placeholder="000.000.000-00"
                         maxLength={14}
@@ -784,7 +804,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       type="date"
                       value={formData.birthDate}
                       onChange={(e) => handleInputChange('birthDate', e.target.value)}
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer dark:[&::-webkit-calendar-picker-indicator]:invert"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:cursor-pointer dark:[&::-webkit-calendar-picker-indicator]:invert"
                     />
                   </div>
                 </div>
@@ -803,18 +823,14 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Setor
                     </label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.sector}
-                      onChange={(e) => handleInputChange('sector', e.target.value)}
-                      className={`w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100 ${
-                        errors.sector ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
-                      }`}
-                    >
-                      <option value="">Selecione o departamento</option>
-                      {sectors.map(sector => (
-                        <option key={sector} value={sector}>{sector}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('sector', v)}
+                      options={sectors}
+                      placeholder="Selecione o departamento"
+                      emptyOptionLabel="Selecione o departamento"
+                      className={selectTriggerErrorCls(!!errors.sector)}
+                    />
                     {errors.sector && (
                       <p className="text-red-500 dark:text-red-400 text-sm mt-1 flex items-center">
                         <AlertCircle className="w-4 h-4 mr-1" />
@@ -827,18 +843,14 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Cargo
                     </label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.position}
-                      onChange={(e) => handleInputChange('position', e.target.value)}
-                      className={`w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100 ${
-                        errors.position ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
-                      }`}
-                    >
-                      <option value="">Selecione o cargo</option>
-                      {positions.map(position => (
-                        <option key={position} value={position}>{position}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('position', v)}
+                      options={positions}
+                      placeholder="Selecione o cargo"
+                      emptyOptionLabel="Selecione o cargo"
+                      className={selectTriggerErrorCls(!!errors.position)}
+                    />
                     {errors.position && (
                       <p className="text-red-500 dark:text-red-400 text-sm mt-1 flex items-center">
                         <AlertCircle className="w-4 h-4 mr-1" />
@@ -855,7 +867,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       type="date"
                       value={formData.hireDate}
                       onChange={(e) => handleInputChange('hireDate', e.target.value)}
-                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
+                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-800 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 ${
                         errors.hireDate ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                       }`}
                     />
@@ -869,87 +881,68 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Modalidade</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.modality}
-                      onChange={(e) => handleInputChange('modality', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione</option>
-                      <option value="CLT">CLT</option>
-                      <option value="MEI">MEI</option>
-                      <option value="ESTAGIARIO">Estagiário</option>
-                    </select>
+                      onChange={(v) => handleInputChange('modality', v)}
+                      options={EMPLOYEE_MODALITY_OPTIONS}
+                      placeholder="Selecione"
+                      emptyOptionLabel="Selecione"
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Regime</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.isRemote ? 'REMOTO' : 'PRESENCIAL'}
-                      onChange={(e) => handleInputChange('isRemote', e.target.value === 'REMOTO')}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="PRESENCIAL">Presencial</option>
-                      <option value="REMOTO">Remoto</option>
-                    </select>
+                      onChange={(v) => handleInputChange('isRemote', v === 'REMOTO')}
+                      options={EMPLOYEE_REGIME_OPTIONS}
+                      allowEmpty={false}
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Empresa</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.company}
-                      onChange={(e) => handleInputChange('company', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione a empresa</option>
-                      {companies.map(company => (
-                        <option key={company} value={company}>{company}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('company', v)}
+                      options={companies}
+                      placeholder="Selecione a empresa"
+                      emptyOptionLabel="Selecione a empresa"
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Centro de Custo</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.costCenter}
-                      onChange={(e) => handleInputChange('costCenter', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione um centro de custo</option>
-                      {costCentersList.map((center) => (
-                        <option key={center} value={center}>
-                          {center}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('costCenter', v)}
+                      options={costCentersList}
+                      placeholder="Selecione um centro de custo"
+                      emptyOptionLabel="Selecione um centro de custo"
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tomador</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.client}
-                      onChange={(e) => handleInputChange('client', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione um tomador</option>
-                      {TOMADORES_LIST.map((tomador) => (
-                        <option key={tomador} value={tomador}>{tomador}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('client', v)}
+                      options={TOMADORES_LIST}
+                      placeholder="Selecione um tomador"
+                      emptyOptionLabel="Selecione um tomador"
+                    />
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Polo</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.polo}
-                      onChange={(e) => handleInputChange('polo', e.target.value)}
-                      className={`w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100 ${
-                        errors.polo ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
-                      }`}
-                    >
-                      <option value="">Selecione o polo</option>
-                      <option value="BRASÍLIA">BRASÍLIA</option>
-                      <option value="GOIÁS">GOIÁS</option>
-                    </select>
+                      onChange={(v) => handleInputChange('polo', v)}
+                      options={EMPLOYEE_POLO_OPTIONS}
+                      placeholder="Selecione o polo"
+                      emptyOptionLabel="Selecione o polo"
+                      className={selectTriggerErrorCls(!!errors.polo)}
+                    />
                     {errors.polo && (
                       <p className="text-red-500 dark:text-red-400 text-xs mt-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1" />{errors.polo}</p>
                     )}
@@ -957,15 +950,14 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Categoria Financeira</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.categoriaFinanceira}
-                      onChange={(e) => handleInputChange('categoriaFinanceira', e.target.value)}
-                      className={`w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100 ${errors.categoriaFinanceira ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'}`}
-                    >
-                      <option value="">Selecione a categoria</option>
-                      <option value="CUSTO">CUSTO</option>
-                      <option value="DESPESA">DESPESA</option>
-                    </select>
+                      onChange={(v) => handleInputChange('categoriaFinanceira', v)}
+                      options={EMPLOYEE_CATEGORIA_FINANCEIRA_OPTIONS}
+                      placeholder="Selecione a categoria"
+                      emptyOptionLabel="Selecione a categoria"
+                      className={selectTriggerErrorCls(!!errors.categoriaFinanceira)}
+                    />
                     {errors.categoriaFinanceira && (
                       <p className="text-red-500 dark:text-red-400 text-xs mt-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1" />{errors.categoriaFinanceira}</p>
                     )}
@@ -1023,7 +1015,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.salary}
                       onChange={(e) => setFormData(prev => ({ ...prev, salary: maskCurrencyInput(e.target.value) }))}
                       inputMode="numeric"
-                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-700 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
+                      className={`w-full px-3 py-2.5 bg-white dark:bg-gray-800 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 ${
                         errors.salary ? 'border-red-500 dark:border-red-400' : 'border-gray-300 dark:border-gray-600'
                       }`}
                       placeholder="R$ 0,00"
@@ -1044,7 +1036,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.dailyFoodVoucher}
                       onChange={(e) => setFormData(prev => ({ ...prev, dailyFoodVoucher: maskCurrencyInput(e.target.value) }))}
                       inputMode="numeric"
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       placeholder="R$ 0,00"
                     />
                   </div>
@@ -1058,7 +1050,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.dailyTransportVoucher}
                       onChange={(e) => setFormData(prev => ({ ...prev, dailyTransportVoucher: maskCurrencyInput(e.target.value) }))}
                       inputMode="numeric"
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       placeholder="R$ 0,00"
                     />
                   </div>
@@ -1069,7 +1061,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.familySalary}
                       onChange={(e) => setFormData(prev => ({ ...prev, familySalary: maskCurrencyInput(e.target.value) }))}
                       inputMode="numeric"
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       placeholder="R$ 0,00"
                     />
                   </div>
@@ -1080,7 +1072,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.dangerPay}
                       onChange={(e) => setFormData(prev => ({ ...prev, dangerPay: maskPercentInput(e.target.value) }))}
                       inputMode="numeric"
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       placeholder="0%"
                     />
                   </div>
@@ -1091,7 +1083,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                       value={formData.unhealthyPay}
                       onChange={(e) => setFormData(prev => ({ ...prev, unhealthyPay: maskPercentInput(e.target.value) }))}
                       inputMode="numeric"
-                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                       placeholder="0%"
                     />
                   </div>
@@ -1111,33 +1103,27 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Banco</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.bank}
-                      onChange={(e)=>handleInputChange('bank', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione</option>
-                      {banks.map((b) => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('bank', v)}
+                      options={banks}
+                      placeholder="Selecione"
+                      emptyOptionLabel="Selecione"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de Conta</label>
-                    <select
+                    <StringSingleSelectDropdown
                       value={formData.accountType}
-                      onChange={(e)=>handleInputChange('accountType', e.target.value)}
-                      className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100"
-                    >
-                      <option value="">Selecione</option>
-                      {accountTypes.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => handleInputChange('accountType', v)}
+                      options={accountTypes}
+                      placeholder="Selecione"
+                      emptyOptionLabel="Selecione"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Agência</label>
-                    <input type="text" value={formData.agency} onChange={(e)=>handleInputChange('agency', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+                    <input type="text" value={formData.agency} onChange={(e)=>handleInputChange('agency', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
                   </div>
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -1155,7 +1141,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                               handleInputChange('operation', '');
                             }
                           }}
-                          className="h-4 w-4 text-blue-600 dark:text-blue-500 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                          className="h-4 w-4 text-blue-600 dark:text-blue-500 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800"
                         />
                         <label htmlFor="hasOperation" className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
                           Tem operação?
@@ -1167,7 +1153,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                         type="text" 
                         value={formData.operation} 
                         onChange={(e)=>handleInputChange('operation', e.target.value)} 
-                        className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" 
+                        className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" 
                         placeholder="01"
                       />
                     ) : (
@@ -1178,22 +1164,25 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Conta</label>
-                    <input type="text" value={formData.account} onChange={(e)=>handleInputChange('account', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+                    <input type="text" value={formData.account} onChange={(e)=>handleInputChange('account', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dígito</label>
-                    <input type="text" value={formData.digit} onChange={(e)=>handleInputChange('digit', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+                    <input type="text" value={formData.digit} onChange={(e)=>handleInputChange('digit', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de Chave</label>
-                    <select value={formData.pixKeyType} onChange={(e)=>handleInputChange('pixKeyType', e.target.value)} className="w-full px-3 py-2.5 pr-8 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none text-gray-900 dark:text-gray-100">
-                      <option value="">Selecione</option>
-                      {pixKeyTypes.map((t)=> (<option key={t} value={t}>{t}</option>))}
-                    </select>
+                    <StringSingleSelectDropdown
+                      value={formData.pixKeyType}
+                      onChange={(v) => handleInputChange('pixKeyType', v)}
+                      options={pixKeyTypes}
+                      placeholder="Selecione"
+                      emptyOptionLabel="Selecione"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Chave PIX</label>
-                    <input type="text" value={formData.pixKey} onChange={(e)=>handleInputChange('pixKey', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+                    <input type="text" value={formData.pixKey} onChange={(e)=>handleInputChange('pixKey', e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
                   </div>
                 </div>
               </div>
@@ -1204,7 +1193,7 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  className="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -1228,6 +1217,8 @@ export function EditEmployeeForm({ employee, onClose, visibleSections, onEmploye
               </div>
         </form>
       </div>
-    </div>
+    </AppModalOverlay>
+    {confirmUi}
+    </>
   );
 }

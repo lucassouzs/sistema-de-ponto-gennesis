@@ -9,7 +9,7 @@
 
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import { hashPassword } from '../src/lib/passwordHash';
 
 const prisma = new PrismaClient({
   datasources: {
@@ -67,7 +67,7 @@ async function main() {
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(ADMIN_DATA.password, 12);
+    const hashedPassword = await hashPassword(ADMIN_DATA.password);
     const hireDate = new Date();
 
     const { user, employee } = await prisma.$transaction(async (tx) => {

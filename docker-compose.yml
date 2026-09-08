@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: sistema-ponto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: DP
+    ports:
+      - "5432:5432"
+    volumes:
+      - sistema-ponto-pgdata:/var/lib/postgresql/data
+
+volumes:
+  sistema-ponto-pgdata:

@@ -1,18 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, FileText, Filter, Loader2, RotateCcw, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { StringSingleSelectDropdown } from '@/components/ui/StringSingleSelectDropdown';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { usePermissions } from '@/hooks/usePermissions';
 import api from '@/lib/api';
 import { COMPANIES_LIST } from '@/constants/payrollFilters';
 import { useCostCenters } from '@/hooks/useCostCenters';
+import { labeledToSelectOptions } from '@/lib/selectOptionBuilders';
 
 export default function FinanceiroPage() {
-  const { costCentersList } = useCostCenters();
+  const { costCenters } = useCostCenters();
   const currentDate = new Date();
   const currentMonth = currentDate.getMonth() + 1;
   const currentYear = currentDate.getFullYear();
@@ -41,6 +43,53 @@ export default function FinanceiroPage() {
   
   // Verificar se o usuário pode reabrir a folha (Financeiro ou Administrador)
   const canReopenPayroll = isDepartmentFinanceiro || userPosition === 'Administrador';
+
+  const companyFilterOptions = useMemo(
+    () =>
+      labeledToSelectOptions([
+        { value: '', label: 'Todas as empresas' },
+        ...COMPANIES_LIST.map((company) => ({ value: company, label: company })),
+      ]),
+    []
+  );
+
+  const costCenterFilterOptions = useMemo(
+    () =>
+      labeledToSelectOptions([
+        { value: '', label: 'Todos os centros de custo' },
+        ...costCenters.map((cc, index) => ({
+          value: cc.value,
+          label: cc.label,
+          searchText: `${cc.label} ${cc.id ?? cc.code ?? index}`,
+        })),
+      ]),
+    [costCenters]
+  );
+
+  const monthFilterOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        Array.from({ length: 12 }, (_, i) => {
+          const month = i + 1;
+          return {
+            value: String(month),
+            label: new Date(2024, month - 1).toLocaleString('pt-BR', { month: 'long' }),
+          };
+        })
+      ),
+    []
+  );
+
+  const yearFilterOptions = useMemo(
+    () =>
+      labeledToSelectOptions(
+        Array.from({ length: 10 }, (_, i) => {
+          const year = currentYear - 2 + i;
+          return { value: String(year), label: String(year) };
+        })
+      ),
+    [currentYear]
+  );
 
   // Função para reabrir a folha
   const handleReopenPayroll = async () => {
@@ -146,15 +195,15 @@ export default function FinanceiroPage() {
 
   return (
     <ProtectedRoute route="/ponto/financeiro">
-      <MainLayout userRole="EMPLOYEE" userName="" onLogout={() => {}}>
+      <MainLayout userRole="EMPLOYEE" userName="">
         <div className="space-y-6">
           {/* Header */}
           <div className="text-center">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-              Módulo Financeiro
+              Pagamento da Folha
             </h1>
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-              Gere borderôs de pagamento em PDF e arquivos CNAB400 para envio ao banco
+              Gere borderô em PDF e remessa CNAB400 para o banco após a folha ser finalizada.
             </p>
           </div>
 
@@ -231,18 +280,12 @@ export default function FinanceiroPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Empresa
                   </label>
-                  <select
+                  <StringSingleSelectDropdown
                     value={filters.company}
-                    onChange={(e) => setFilters({ ...filters, company: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="">Todas as empresas</option>
-                    {COMPANIES_LIST.map((company) => (
-                      <option key={company} value={company}>
-                        {company}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setFilters({ ...filters, company: v })}
+                    options={companyFilterOptions}
+                    allowEmpty={false}
+                  />
                 </div>
 
                 {/* Filtro de Centro de Custo */}
@@ -250,18 +293,12 @@ export default function FinanceiroPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Centro de Custo
                   </label>
-                  <select
+                  <StringSingleSelectDropdown
                     value={filters.costCenter}
-                    onChange={(e) => setFilters({ ...filters, costCenter: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="">Todos os centros de custo</option>
-                    {costCentersList.map((costCenter) => (
-                      <option key={costCenter} value={costCenter}>
-                        {costCenter}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(v) => setFilters({ ...filters, costCenter: v })}
+                    options={costCenterFilterOptions}
+                    allowEmpty={false}
+                  />
                 </div>
 
                 {/* Filtro de Mês */}
@@ -269,17 +306,12 @@ export default function FinanceiroPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Mês
                   </label>
-                  <select
-                    value={filters.month}
-                    onChange={(e) => setFilters({ ...filters, month: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
-                  >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                      <option key={month} value={month}>
-                        {new Date(2024, month - 1).toLocaleString('pt-BR', { month: 'long' })}
-                      </option>
-                    ))}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(filters.month)}
+                    onChange={(v) => setFilters({ ...filters, month: parseInt(v, 10) })}
+                    options={monthFilterOptions}
+                    allowEmpty={false}
+                  />
                 </div>
 
                 {/* Filtro de Ano */}
@@ -287,17 +319,12 @@ export default function FinanceiroPage() {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Ano
                   </label>
-                  <select
-                    value={filters.year}
-                    onChange={(e) => setFilters({ ...filters, year: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-800 dark:text-white"
-                  >
-                    {Array.from({ length: 10 }, (_, i) => currentYear - 2 + i).map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
+                  <StringSingleSelectDropdown
+                    value={String(filters.year)}
+                    onChange={(v) => setFilters({ ...filters, year: parseInt(v, 10) })}
+                    options={yearFilterOptions}
+                    allowEmpty={false}
+                  />
                 </div>
               </div>
 
@@ -386,7 +413,7 @@ export default function FinanceiroPage() {
                 </div>
 
                 {/* Tabela */}
-                <div className="overflow-x-auto">
+                <div className="table-scroll">
                   <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-800">
                       <tr>

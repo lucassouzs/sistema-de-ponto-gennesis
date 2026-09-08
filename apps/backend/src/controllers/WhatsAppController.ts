@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { Request, Response, NextFunction } from 'express';
 import { createError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
@@ -154,6 +156,12 @@ export class WhatsAppController {
           _count: {
             select: { messages: true, submissions: true }
           },
+          submissions: {
+            where: { type: 'MEDICAL_CERTIFICATE' },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { status: true }
+          },
           // O payload pode conter indicadores como escalonamento para atendente.
           // Usamos o payload na camada de mapeamento abaixo.
           messages: {
@@ -176,10 +184,12 @@ export class WhatsAppController {
         status: c.status,
         attendantRequested: !!(c.payload as any)?.attendantRequested,
         attendantInProgress: !!(c.payload as any)?.attendantInProgress,
+        attendantHandoffEver: !!(c.payload as any)?.attendantHandoffEver,
         updatedAt: c.updatedAt,
         createdAt: c.createdAt,
         messageCount: c._count.messages,
         submissionCount: c._count.submissions,
+        medicalCertificateStatus: c.submissions[0]?.status ?? null,
         lastMessage: c.messages[0]?.content?.substring(0, 80) || null,
         lastMessageAt: c.messages[0]?.createdAt || null
       }));
@@ -187,6 +197,61 @@ export class WhatsAppController {
       res.json({ success: true, data });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Lista de envios de atestado (1 item por submission), para fila do painel de atestados.
+   */
+  async listMedicalCertificateSubmissions(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const submissions = await prisma.whatsAppSubmission.findMany({
+        where: { type: 'MEDICAL_CERTIFICATE' },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          conversation: {
+            select: {
+              id: true,
+              phone: true,
+              flowStatus: true,
+              payload: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          }
+        }
+      });
+
+      const data = submissions.map((s) => {
+        const conversationPayload = (s.conversation.payload as any) ?? {};
+        const submissionPayload = (s.payload as any) ?? {};
+        const name =
+          ((submissionPayload?.name ??
+            submissionPayload?.requesterName ??
+            conversationPayload?.name ??
+            conversationPayload?.requesterName ??
+            conversationPayload?.waProfileName) as string | undefined) || null;
+
+        return {
+          id: s.id,
+          submissionId: s.id,
+          conversationId: s.conversation.id,
+          phone: s.conversation.phone,
+          name,
+          flowStatus: s.conversation.flowStatus,
+          conversationStatus: s.conversation.status,
+          status: s.status,
+          medicalCertificateStatus: s.status,
+          fileName: s.fileName,
+          createdAt: s.createdAt,
+          updatedAt: s.createdAt
+        };
+      });
+
+      return res.json({ success: true, data });
+    } catch (error) {
+      return next(error);
     }
   }
 
@@ -386,13 +451,24 @@ export class WhatsAppController {
       whatsAppBot.clearInactivityTimeoutsForConversation(conversation.id);
 
       const prevPayload = (conversation.payload as Record<string, unknown>) || {};
-      const keptContact: Record<string, string> = {};
+      const keptContact: Record<string, unknown> = {};
       const n = prevPayload.name;
       const r = prevPayload.requesterName;
       const w = prevPayload.waProfileName;
       if (typeof n === 'string' && n.trim()) keptContact.name = n.trim().slice(0, 120);
       if (typeof r === 'string' && r.trim()) keptContact.requesterName = r.trim().slice(0, 120);
       if (typeof w === 'string' && w.trim()) keptContact.waProfileName = w.trim().slice(0, 120);
+
+      // Histórico de atendimento humano: sem isso, conversas com atestado somem da aba "Encerradas"
+      // após encerrar (payload perde attendantRequested).
+      const hadHumanHandoff =
+        prevPayload.attendantHandoffEver === true ||
+        prevPayload.attendantRequested === true ||
+        prevPayload.attendantInProgress === true ||
+        (typeof prevPayload.attendantRequestedAt === 'string' && prevPayload.attendantRequestedAt.length > 0);
+      if (hadHumanHandoff) {
+        keptContact.attendantHandoffEver = true;
+      }
 
       await prisma.whatsAppConversation.update({
         where: { id: conversation.id },
@@ -423,6 +499,123 @@ export class WhatsAppController {
       });
     } catch (error) {
       next(error);
+    }
+  }
+
+  /**
+   * Finalizar análise de um envio de atestado.
+   * Move o submission de PENDING para PROCESSED.
+   */
+  async finalizeMedicalCertificateSubmission(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id, submissionId } = req.params;
+
+      const conversation = await prisma.whatsAppConversation.findUnique({
+        where: { id },
+        select: { id: true }
+      });
+      if (!conversation) {
+        throw createError('Conversa não encontrada', 404);
+      }
+
+      const submission = await prisma.whatsAppSubmission.findFirst({
+        where: {
+          id: submissionId,
+          conversationId: id,
+          type: 'MEDICAL_CERTIFICATE'
+        },
+        select: { id: true, status: true }
+      });
+
+      if (!submission) {
+        throw createError('Atestado não encontrado para esta conversa', 404);
+      }
+
+      if (submission.status !== 'PENDING') {
+        return res.json({
+          success: true,
+          message: 'Atestado já finalizado'
+        });
+      }
+
+      await prisma.whatsAppSubmission.update({
+        where: { id: submission.id },
+        data: { status: 'PROCESSED' as any }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Atestado finalizado com sucesso'
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  /**
+   * Download do arquivo de um envio de atestado (força attachment; evita abrir S3 em nova aba).
+   */
+  async downloadMedicalCertificateSubmissionFile(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id: conversationId, submissionId } = req.params;
+
+      const submission = await prisma.whatsAppSubmission.findFirst({
+        where: {
+          id: submissionId,
+          conversationId,
+          type: 'MEDICAL_CERTIFICATE'
+        }
+      });
+
+      if (!submission) {
+        throw createError('Atestado não encontrado', 404);
+      }
+
+      const fileNameRaw = submission.fileName?.trim() || 'atestado';
+      const safeFilename = fileNameRaw.replace(/[/\\?%*:|"<>]/g, '-').slice(0, 180);
+
+      if (submission.fileKey) {
+        const got = await metaWhatsApp.getObjectBuffer(submission.fileKey);
+        if (!got) {
+          throw createError('Não foi possível obter o arquivo', 500);
+        }
+        res.setHeader('Content-Type', got.contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+        return res.send(got.buffer);
+      }
+
+      const url = submission.fileUrl || '';
+      const marker = '/uploads/whatsapp-media/';
+      if (url.includes(marker)) {
+        const after = url.split(marker)[1]?.split('?')[0];
+        if (!after) {
+          throw createError('Arquivo não encontrado', 404);
+        }
+        const basename = path.basename(after);
+        const filePath = path.join(process.cwd(), 'apps', 'backend', 'uploads', 'whatsapp-media', basename);
+        if (!fs.existsSync(filePath)) {
+          throw createError('Arquivo não encontrado', 404);
+        }
+        const ext = path.extname(filePath).toLowerCase();
+        const contentType =
+          (
+            {
+              '.pdf': 'application/pdf',
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.png': 'image/png',
+              '.webp': 'image/webp',
+              '.gif': 'image/gif'
+            } as Record<string, string>
+          )[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+        return res.sendFile(filePath);
+      }
+
+      throw createError('Arquivo não disponível para download', 404);
+    } catch (error) {
+      return next(error);
     }
   }
 }

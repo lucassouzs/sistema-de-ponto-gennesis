@@ -1,0 +1,13 @@
+-- AlterTable
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "partyType" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "tradeName" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "stateRegistration" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "municipalRegistration" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "category" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "street" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "streetNumber" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "neighborhood" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "complement" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "poBox" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "fax" TEXT;
+ALTER TABLE "suppliers" ADD COLUMN IF NOT EXISTS "mobile" TEXT;

@@ -210,6 +210,26 @@ export class MetaWhatsAppService {
     }
   }
 
+  /**
+   * Baixa o objeto do bucket (anexos WhatsApp). Usado para download via API com Content-Disposition.
+   */
+  async getObjectBuffer(key: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+    if (!this.useS3 || !this.s3) return null;
+    try {
+      const obj = await this.s3.getObject({ Bucket: this.bucketName, Key: key }).promise();
+      if (!obj.Body) return null;
+      const body = obj.Body;
+      const buffer = Buffer.isBuffer(body) ? body : Buffer.from(body as ArrayBuffer);
+      return {
+        buffer,
+        contentType: obj.ContentType || 'application/octet-stream'
+      };
+    } catch (e) {
+      console.error('[MetaWhatsApp] getObjectBuffer:', e);
+      return null;
+    }
+  }
+
   /** Gera URL assinada para arquivo no S3 (válida por 7 dias) */
   async getSignedUrlForMedia(key: string): Promise<string | null> {
     if (!this.useS3 || !this.s3) return null;
